@@ -13,10 +13,12 @@ from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorCon
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     ATTEMPT_RETRY_EVENT,
     HANDOFF_RESUME_EVENT,
+    PIPELINE_RUN_REQUESTED_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
     make_attempt_retry_handler,
     make_handoff_resume_handler,
+    make_pipeline_run_requested_handler,
     make_supervisor_tick_handler,
     make_worker_launch_handler,
 )
@@ -94,6 +96,7 @@ async def initialize_workspace_plan_outbox_worker(
                 WORKER_LAUNCH_EVENT: make_worker_launch_handler(),
                 HANDOFF_RESUME_EVENT: make_handoff_resume_handler(),
                 ATTEMPT_RETRY_EVENT: make_attempt_retry_handler(),
+                PIPELINE_RUN_REQUESTED_EVENT: make_pipeline_run_requested_handler(),
             },
             poll_interval_seconds=_float_env(_POLL_ENV, 2.0),
             batch_size=_int_env(_BATCH_ENV, 10),

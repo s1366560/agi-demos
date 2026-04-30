@@ -30,12 +30,18 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     User,
+    WorkspaceDeploymentModel,
+    WorkspacePipelineRunModel,
+    WorkspacePipelineStageRunModel,
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_pipeline import (
+    SqlWorkspacePipelineRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_blackboard import (
     SqlWorkspacePlanBlackboard,
 )
@@ -48,6 +54,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox
 from src.infrastructure.agent.workspace.workspace_metadata_keys import ROOT_GOAL_TASK_ID, TASK_ROLE
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     HANDOFF_RESUME_EVENT,
+    PIPELINE_RUN_REQUESTED_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
 )
@@ -158,6 +165,64 @@ class WorkspacePlanIterationSummaryResponse(BaseModel):
     actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
 
 
+class WorkspacePipelineStageRunResponse(BaseModel):
+    id: str
+    run_id: str
+    stage: str
+    status: str
+    command: str | None = None
+    exit_code: int | None = None
+    stdout_preview: str | None = None
+    stderr_preview: str | None = None
+    log_ref: str | None = None
+    artifact_refs: list[str] = Field(default_factory=list)
+    duration_ms: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class WorkspacePipelineRunResponse(BaseModel):
+    id: str
+    provider: str
+    status: str
+    reason: str | None = None
+    node_id: str | None = None
+    attempt_id: str | None = None
+    commit_ref: str | None = None
+    stages: list[WorkspacePipelineStageRunResponse] = Field(default_factory=list)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+
+
+class WorkspaceDeploymentResponse(BaseModel):
+    id: str
+    provider: str
+    status: str
+    node_id: str | None = None
+    pipeline_run_id: str | None = None
+    command: str | None = None
+    pid: int | None = None
+    port: int | None = None
+    preview_url: str | None = None
+    health_url: str | None = None
+    restart_count: int = 0
+    last_healthy_at: datetime | None = None
+    rollback_ref: str | None = None
+    log_ref: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class WorkspaceDeliverySummaryResponse(BaseModel):
+    provider: str = "sandbox_native"
+    status: str = "not_configured"
+    latest_run: WorkspacePipelineRunResponse | None = None
+    recent_runs: list[WorkspacePipelineRunResponse] = Field(default_factory=list)
+    deployment: WorkspaceDeploymentResponse | None = None
+    actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
+
+
 class WorkspacePlanBlackboardEntryResponse(BaseModel):
     plan_id: str
     key: str
@@ -220,6 +285,7 @@ class WorkspacePlanSnapshotResponse(BaseModel):
     plan: WorkspacePlanResponse | None = None
     root_goal: WorkspacePlanRootGoalResponse | None = None
     iteration: WorkspacePlanIterationSummaryResponse | None = None
+    delivery: WorkspaceDeliverySummaryResponse | None = None
     blackboard: list[WorkspacePlanBlackboardEntryResponse] = Field(default_factory=list)
     outbox: list[WorkspacePlanOutboxItemResponse] = Field(default_factory=list)
     events: list[WorkspacePlanEventResponse] = Field(default_factory=list)
@@ -227,6 +293,10 @@ class WorkspacePlanSnapshotResponse(BaseModel):
 
 class WorkspacePlanActionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
+
+
+class WorkspacePlanPipelineRunRequest(WorkspacePlanActionRequest):
+    node_id: str | None = None
 
 
 class WorkspacePlanActionResultResponse(BaseModel):
@@ -362,7 +432,7 @@ def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
             current_attempt_id=node.current_attempt_id,
             workspace_task_id=node.workspace_task_id,
             priority=node.priority,
-            metadata=dict(node.metadata),
+            metadata=_node_response_metadata(node),
             created_at=node.created_at,
             updated_at=node.updated_at,
             completed_at=node.completed_at,
@@ -370,6 +440,59 @@ def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
         )
         for node in nodes
     ]
+
+
+def _node_response_metadata(node: PlanNode) -> dict[str, Any]:
+    metadata = dict(node.metadata)
+    _fill_pipeline_status_from_evidence(metadata)
+    return metadata
+
+
+def _fill_pipeline_status_from_evidence(metadata: dict[str, Any]) -> None:
+    refs = _metadata_string_values(
+        metadata.get("pipeline_evidence_refs"),
+        metadata.get("evidence_refs"),
+        metadata.get("execution_verifications"),
+        metadata.get("verification_evidence_refs"),
+    )
+    status, run_id = _pipeline_status_from_evidence_refs(refs)
+    if status and not _metadata_nonempty_string(metadata.get("pipeline_status")):
+        metadata["pipeline_status"] = status
+    if status and not _metadata_nonempty_string(metadata.get("pipeline_gate_status")):
+        metadata["pipeline_gate_status"] = status
+    if run_id and not _metadata_nonempty_string(metadata.get("pipeline_run_id")):
+        metadata["pipeline_run_id"] = run_id
+
+
+def _pipeline_status_from_evidence_refs(refs: list[str]) -> tuple[str | None, str | None]:
+    status: str | None = None
+    run_id: str | None = None
+    if "ci_pipeline:passed" in refs:
+        status = "success"
+    elif "ci_pipeline:failed" in refs:
+        status = "failed"
+    for ref in refs:
+        if ref.startswith("pipeline_run:success:"):
+            status = "success"
+            run_id = ref.removeprefix("pipeline_run:success:")
+        elif ref.startswith("pipeline_run:failed:"):
+            status = "failed"
+            run_id = ref.removeprefix("pipeline_run:failed:")
+    return status, run_id
+
+
+def _metadata_string_values(*raw_values: object) -> list[str]:
+    values: list[str] = []
+    for raw in raw_values:
+        if isinstance(raw, str) and raw:
+            values.append(raw)
+        elif isinstance(raw, list | tuple | set):
+            values.extend(str(item) for item in raw if item)
+    return list(dict.fromkeys(values))
+
+
+def _metadata_nonempty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def _to_plan_response(plan: Plan) -> WorkspacePlanResponse:
@@ -388,6 +511,115 @@ def _to_plan_response(plan: Plan) -> WorkspacePlanResponse:
         updated_at=plan.updated_at,
         nodes=_to_node_response(plan),
         counts=counts,
+    )
+
+
+async def _to_delivery_summary(
+    db: AsyncSession,
+    *,
+    plan: Plan,
+) -> WorkspaceDeliverySummaryResponse:
+    repo = SqlWorkspacePipelineRepository(db)
+    runs = await repo.latest_runs(plan_id=plan.id, limit=5)
+    stages = await repo.stages_for_runs([run.id for run in runs])
+    deployments = await repo.latest_deployments(plan_id=plan.id, limit=1)
+    stage_map: dict[str, list[WorkspacePipelineStageRunModel]] = {}
+    for stage in stages:
+        stage_map.setdefault(stage.run_id, []).append(stage)
+    run_responses = [_to_pipeline_run_response(run, stage_map.get(run.id, [])) for run in runs]
+    deployment_response = _to_deployment_response(deployments[0]) if deployments else None
+    latest_run = run_responses[0] if run_responses else None
+    status = latest_run.status if latest_run is not None else "not_configured"
+    if deployment_response is not None and deployment_response.status in {"unhealthy", "failed"}:
+        status = deployment_response.status
+    return WorkspaceDeliverySummaryResponse(
+        provider=latest_run.provider if latest_run is not None else "sandbox_native",
+        status=status,
+        latest_run=latest_run,
+        recent_runs=run_responses,
+        deployment=deployment_response,
+        actions={
+            "request_pipeline": _action(
+                enabled=plan.status is not PlanStatus.COMPLETED,
+                label="Run pipeline",
+                reason="The plan is already complete."
+                if plan.status is PlanStatus.COMPLETED
+                else None,
+            ),
+            "restart_preview": _action(
+                enabled=deployment_response is not None,
+                label="Restart preview",
+                reason=None if deployment_response is not None else "No preview deployment exists.",
+            ),
+            "rollback_preview": _action(
+                enabled=bool(deployment_response and deployment_response.rollback_ref),
+                label="Rollback preview",
+                reason=None
+                if deployment_response and deployment_response.rollback_ref
+                else "No rollback reference is available.",
+                requires_confirmation=True,
+            ),
+        },
+    )
+
+
+def _to_pipeline_run_response(
+    run: WorkspacePipelineRunModel,
+    stages: list[WorkspacePipelineStageRunModel],
+) -> WorkspacePipelineRunResponse:
+    return WorkspacePipelineRunResponse(
+        id=run.id,
+        provider=run.provider,
+        status=run.status,
+        reason=run.reason,
+        node_id=run.node_id,
+        attempt_id=run.attempt_id,
+        commit_ref=run.commit_ref,
+        stages=[_to_pipeline_stage_response(stage) for stage in stages],
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        created_at=run.created_at,
+    )
+
+
+def _to_pipeline_stage_response(
+    stage: WorkspacePipelineStageRunModel,
+) -> WorkspacePipelineStageRunResponse:
+    return WorkspacePipelineStageRunResponse(
+        id=stage.id,
+        run_id=stage.run_id,
+        stage=stage.stage,
+        status=stage.status,
+        command=stage.command,
+        exit_code=stage.exit_code,
+        stdout_preview=stage.stdout_preview,
+        stderr_preview=stage.stderr_preview,
+        log_ref=stage.log_ref,
+        artifact_refs=list(stage.artifact_refs_json or []),
+        duration_ms=stage.duration_ms,
+        started_at=stage.started_at,
+        completed_at=stage.completed_at,
+    )
+
+
+def _to_deployment_response(deployment: WorkspaceDeploymentModel) -> WorkspaceDeploymentResponse:
+    return WorkspaceDeploymentResponse(
+        id=deployment.id,
+        provider=deployment.provider,
+        status=deployment.status,
+        node_id=deployment.node_id,
+        pipeline_run_id=deployment.pipeline_run_id,
+        command=deployment.command,
+        pid=deployment.pid,
+        port=deployment.port,
+        preview_url=deployment.preview_url,
+        health_url=deployment.health_url,
+        restart_count=deployment.restart_count,
+        last_healthy_at=deployment.last_healthy_at,
+        rollback_ref=deployment.rollback_ref,
+        log_ref=deployment.log_ref,
+        created_at=deployment.created_at,
+        updated_at=deployment.updated_at,
     )
 
 
@@ -1725,6 +1957,7 @@ async def get_workspace_plan_snapshot(
         )
         event_items = list(event_result.scalars().all())
         root_goal = await _load_root_goal_response(db, workspace_id=workspace_id, plan=plan)
+        delivery = await _to_delivery_summary(db, plan=plan)
         return WorkspacePlanSnapshotResponse(
             workspace_id=workspace_id,
             plan=_to_plan_response(plan),
@@ -1736,6 +1969,7 @@ async def get_workspace_plan_snapshot(
                 outbox_items=outbox_items,
                 event_items=event_items,
             ),
+            delivery=delivery,
             blackboard=[_to_blackboard_response(entry) for entry in blackboard_entries],
             outbox=[_to_outbox_response(item) for item in outbox_items],
             events=[_to_event_response(item) for item in event_items],
@@ -1880,6 +2114,95 @@ async def trigger_workspace_plan_next_iteration(
         )
     except Exception as exc:
         raise _map_error(exc) from exc
+
+
+@router.post("/delivery/run-pipeline", response_model=WorkspacePlanActionResultResponse)
+async def request_workspace_plan_pipeline_run(
+    workspace_id: str,
+    body: WorkspacePlanPipelineRunRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Request a harness-native CI/CD run for the selected or active delivery node."""
+    try:
+        await _ensure_workspace_access(
+            workspace_id=workspace_id,
+            request=request,
+            db=db,
+            current_user=current_user,
+        )
+        plan = await SqlPlanRepository(db).get_by_workspace(workspace_id)
+        if plan is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan_not_found")
+        node = _pipeline_target_node(plan, body.node_id)
+        if node is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="pipeline_target_node_not_found",
+            )
+        outbox = await SqlWorkspacePlanOutboxRepository(db).enqueue(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            event_type=PIPELINE_RUN_REQUESTED_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "plan_id": plan.id,
+                "node_id": node.id,
+                "attempt_id": node.current_attempt_id,
+                "reason": body.reason or "operator requested harness-native pipeline",
+            },
+            metadata={"source": "workspace_plan.operator_delivery_run_pipeline"},
+        )
+        await db.commit()
+        await _publish_plan_updated_event(
+            request=request,
+            workspace_id=workspace_id,
+            plan_id=plan.id,
+            node_id=node.id,
+            outbox_id=outbox.id,
+            action="operator_delivery_pipeline_requested",
+        )
+        return WorkspacePlanActionResultResponse(
+            ok=True,
+            message="Harness-native pipeline run requested.",
+            plan_id=plan.id,
+            node_id=node.id,
+            outbox_id=outbox.id,
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+def _pipeline_target_node(plan: Plan, node_id: str | None) -> PlanNode | None:
+    if node_id:
+        return plan.nodes.get(PlanNodeId(node_id))
+    candidates = [
+        node
+        for node in plan.nodes.values()
+        if node.kind.value in {"task", "verify"}
+        and dict(node.metadata or {}).get("pipeline_required") is True
+    ]
+    if not candidates:
+        candidates = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda node: (
+            0
+            if node.execution
+            in {
+                TaskExecution.REPORTED,
+                TaskExecution.VERIFYING,
+                TaskExecution.RUNNING,
+                TaskExecution.DISPATCHED,
+            }
+            else 1,
+            node.priority,
+            node.updated_at or node.created_at,
+        )
+    )
+    return candidates[0]
 
 
 @router.post("/nodes/{node_id}/request-replan", response_model=WorkspacePlanActionResultResponse)

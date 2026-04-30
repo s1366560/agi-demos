@@ -6,12 +6,13 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shlex
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,8 +41,10 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
 from src.domain.model.workspace_plan import (
     HandoffPackage,
     HandoffReason,
+    Plan,
     PlanNode,
     PlanNodeId,
+    PlanStatus,
     TaskExecution,
     TaskIntent,
 )
@@ -65,6 +68,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repos
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
     SqlWorkspaceMemberRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_pipeline import (
+    SqlWorkspacePipelineRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
@@ -99,6 +105,12 @@ from src.infrastructure.agent.workspace_plan.iteration_review import (
 )
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxHandler
+from src.infrastructure.agent.workspace_plan.pipeline import (
+    SANDBOX_NATIVE_PROVIDER,
+    PipelineContractSpec,
+    SandboxNativePipelineProvider,
+    build_pipeline_contract_from_metadata,
+)
 from src.infrastructure.agent.workspace_plan.supervisor import (
     AgentPoolProvider,
     AttemptContextProvider,
@@ -111,10 +123,18 @@ from src.infrastructure.agent.workspace_plan.system_actor import (
     persisted_attempt_leader_agent_id,
 )
 
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+
 SUPERVISOR_TICK_EVENT = "supervisor_tick"
 WORKER_LAUNCH_EVENT = "worker_launch"
 HANDOFF_RESUME_EVENT = "handoff_resume"
 ATTEMPT_RETRY_EVENT = "attempt_retry"
+PIPELINE_RUN_REQUESTED_EVENT = "pipeline_run_requested"
+PIPELINE_STAGE_EXECUTE_EVENT = "pipeline_stage_execute"
+DEPLOYMENT_REQUESTED_EVENT = "deployment_requested"
+DEPLOYMENT_HEALTH_CHECK_EVENT = "deployment_health_check"
+PIPELINE_LOGS_SYNC_EVENT = "pipeline_logs_sync"
 logger = logging.getLogger(__name__)
 _WORKER_LAUNCH_MAX_ACTIVE_ENV = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE"
 _WORKER_LAUNCH_DEFER_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS"
@@ -1239,6 +1259,428 @@ def make_attempt_retry_handler() -> WorkspacePlanOutboxHandler:
     return make_handoff_resume_handler()
 
 
+def make_pipeline_run_requested_handler() -> WorkspacePlanOutboxHandler:  # noqa: C901, PLR0915
+    """Build a handler that runs harness-native CI/CD in the project sandbox."""
+
+    async def _handle(  # noqa: C901, PLR0912, PLR0915
+        item: WorkspacePlanOutboxModel,
+        session: AsyncSession,
+    ) -> None:
+        payload = dict(item.payload_json or {})
+        workspace_id = _payload_string(payload, "workspace_id") or item.workspace_id
+        plan_id = _payload_string(payload, "plan_id") or item.plan_id
+        node_id = _payload_string(payload, "node_id")
+        attempt_id = _payload_string(payload, "attempt_id")
+        if not plan_id or not node_id:
+            raise ValueError("pipeline_run_requested requires plan_id and node_id")
+
+        plan_repo = SqlPlanRepository(session)
+        plan = await plan_repo.get(plan_id)
+        if plan is None or plan.workspace_id != workspace_id:
+            raise ValueError(f"workspace plan {plan_id} not found for workspace {workspace_id}")
+        node = plan.nodes.get(PlanNodeId(node_id))
+        if node is None:
+            raise ValueError(f"workspace plan node {node_id} not found")
+
+        workspace_repo = SqlWorkspaceRepository(session)
+        workspace = await workspace_repo.find_by_id(workspace_id)
+        if workspace is None:
+            raise ValueError(f"workspace {workspace_id} not found")
+
+        root_metadata = await _pipeline_root_metadata(
+            session=session,
+            workspace_id=workspace_id,
+            payload=payload,
+        )
+        workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
+        if resolve_workspace_type(root_metadata, workspace_metadata) != "software_development":
+            await _mark_pipeline_skipped(
+                session=session,
+                plan=plan,
+                node=node,
+                reason="workspace is not software_development",
+            )
+            return
+
+        contract = _pipeline_contract_for_workspace(
+            project_id=workspace.project_id,
+            workspace_metadata=workspace_metadata,
+            root_metadata=root_metadata,
+        )
+        if contract.provider != SANDBOX_NATIVE_PROVIDER:
+            await _suspend_plan_for_pipeline(
+                session=session,
+                plan=plan,
+                node=node,
+                reason=f"unsupported pipeline provider: {contract.provider}",
+            )
+            return
+
+        pipeline_repo = SqlWorkspacePipelineRepository(session)
+        latest = await pipeline_repo.latest_run_for_node(
+            plan_id=plan_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+        )
+        if latest is not None and latest.status in {"running", "success"}:
+            await _reflect_existing_pipeline_run(
+                session=session,
+                plan=plan,
+                node=node,
+                run_id=latest.id,
+                status=latest.status,
+            )
+            return
+
+        contract_model = await pipeline_repo.ensure_contract(
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            provider=contract.provider,
+            code_root=contract.code_root,
+            commands=contract.commands_json(),
+            env=contract.env,
+            trigger_policy={
+                "trigger": "verification_gate",
+                "node_id": node_id,
+                "attempt_id": attempt_id,
+            },
+            timeout_seconds=contract.timeout_seconds,
+            auto_deploy=contract.auto_deploy,
+            preview_port=contract.preview_port,
+            health_url=contract.health_url,
+            metadata={"source": "workspace_plan.pipeline_run_requested"},
+        )
+        run = await pipeline_repo.create_run(
+            contract_id=contract_model.id,
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+            commit_ref=_pipeline_commit_ref(node),
+            provider=contract.provider,
+            metadata={"reason": payload.get("reason") or "pipeline_gate_required"},
+        )
+        await _mark_pipeline_running(session=session, plan=plan, node=node, run_id=run.id)
+
+        provider = SandboxNativePipelineProvider(
+            _WorkspaceSandboxCommandRunner(
+                project_id=workspace.project_id,
+                tenant_id=workspace.tenant_id,
+            )
+        )
+        stage_results = []
+        evidence_refs: list[str] = []
+        failure_reason: str | None = None
+        deployment_status: str | None = None
+        deployment_pid: int | None = None
+        preview_url = _pipeline_preview_url(contract.health_url, contract.preview_port)
+
+        for stage in contract.stages:
+            stage_row = await pipeline_repo.create_stage_run(
+                run_id=run.id,
+                workspace_id=workspace_id,
+                stage=stage.stage,
+                command=stage.command,
+                metadata={"required": stage.required},
+            )
+            stage_result = await provider.run_stage(contract, stage)
+            stage_results.append(stage_result)
+            await pipeline_repo.finish_stage_run(
+                stage_row,
+                status=stage_result.status,
+                exit_code=stage_result.exit_code,
+                stdout_preview=stage_result.stdout_preview,
+                stderr_preview=stage_result.stderr_preview,
+                log_ref=stage_result.log_ref,
+                artifact_refs=list(stage_result.artifact_refs),
+                metadata={"duration_ms_observed": stage_result.duration_ms},
+            )
+            if stage_result.passed:
+                evidence_refs.append(f"pipeline_stage:{stage.stage}:passed")
+            else:
+                evidence_refs.append(f"pipeline_stage:{stage.stage}:failed")
+            if stage.stage == "deploy" and stage_result.passed:
+                deployment_status = "running"
+                deployment_pid = _first_int(stage_result.stdout_preview)
+            if stage.stage == "health":
+                deployment_status = "healthy" if stage_result.passed else "unhealthy"
+                evidence_refs.append(
+                    "deployment_health:passed"
+                    if stage_result.passed
+                    else "deployment_health:failed"
+                )
+            if not stage_result.passed and stage.required:
+                failure_reason = f"stage {stage.stage} failed with exit {stage_result.exit_code}"
+                break
+
+        run_status = "success" if failure_reason is None else "failed"
+        evidence_refs.insert(
+            0,
+            f"ci_pipeline:{'passed' if run_status == 'success' else 'failed'}",
+        )
+        evidence_refs.append(f"pipeline_run:{run_status}:{run.id}")
+        if preview_url:
+            evidence_refs.append(f"preview_url:{preview_url}")
+        await pipeline_repo.finish_run(
+            run,
+            status=run_status,
+            reason=failure_reason,
+            metadata={"stage_count": len(stage_results)},
+        )
+        if deployment_status or contract.auto_deploy:
+            await pipeline_repo.upsert_deployment(
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                node_id=node_id,
+                pipeline_run_id=run.id,
+                provider=contract.provider,
+                status=deployment_status or ("skipped" if not contract.deploy_command else "running"),
+                command=contract.deploy_command,
+                pid=deployment_pid,
+                port=contract.preview_port,
+                preview_url=preview_url,
+                health_url=contract.health_url,
+                rollback_ref=_pipeline_commit_ref(node),
+                log_ref=None,
+                metadata={"pipeline_status": run_status},
+            )
+        await _finish_pipeline_on_node(
+            session=session,
+            plan=plan,
+            node=node,
+            run_id=run.id,
+            status=run_status,
+            reason=failure_reason,
+            evidence_refs=evidence_refs,
+            preview_url=preview_url,
+            health_url=contract.health_url,
+        )
+        await SqlWorkspacePlanOutboxRepository(session).enqueue(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            event_type=SUPERVISOR_TICK_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "plan_id": plan_id,
+                "node_id": node_id,
+                "pipeline_run_id": run.id,
+                "pipeline_status": run_status,
+            },
+            metadata={"source": "workspace_plan.pipeline_run_completed"},
+        )
+
+    return _handle
+
+
+async def _pipeline_root_metadata(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    root_task_id = (
+        _payload_string(payload, ROOT_GOAL_TASK_ID)
+        or _payload_string(payload, "root_goal_task_id")
+        or await _resolve_root_task_id(session, workspace_id, payload)
+    )
+    if not root_task_id:
+        return {}
+    task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
+    if task is None or task.workspace_id != workspace_id:
+        return {}
+    return dict(task.metadata or {})
+
+
+def _pipeline_contract_for_workspace(
+    *,
+    project_id: str,
+    workspace_metadata: dict[str, Any],
+    root_metadata: dict[str, Any],
+) -> PipelineContractSpec:
+    from src.infrastructure.agent.workspace.code_context import load_workspace_code_context
+
+    code_context = load_workspace_code_context(
+        project_id=project_id,
+        root_metadata=root_metadata,
+        workspace_metadata=workspace_metadata,
+    )
+    return build_pipeline_contract_from_metadata(
+        workspace_metadata=workspace_metadata,
+        fallback_code_root=code_context.sandbox_code_root,
+    )
+
+
+async def _mark_pipeline_skipped(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    reason: str,
+) -> None:
+    metadata = dict(node.metadata or {})
+    metadata.update(
+        {
+            "pipeline_status": "skipped",
+            "pipeline_gate_status": "skipped",
+            "pipeline_skip_reason": reason,
+            "pipeline_required": False,
+        }
+    )
+    plan.replace_node(
+        replace(node, execution=TaskExecution.REPORTED, metadata=metadata, updated_at=datetime.now(UTC))
+    )
+    await SqlPlanRepository(session).save(plan)
+
+
+async def _suspend_plan_for_pipeline(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    reason: str,
+) -> None:
+    metadata = dict(node.metadata or {})
+    metadata.update(
+        {
+            "pipeline_status": "suspended",
+            "pipeline_gate_status": "suspended",
+            "pipeline_stop_reason": reason,
+        }
+    )
+    plan.replace_node(replace(node, execution=TaskExecution.IDLE, metadata=metadata))
+    plan = replace(plan, status=PlanStatus.SUSPENDED, updated_at=datetime.now(UTC))
+    await SqlPlanRepository(session).save(plan)
+
+
+async def _reflect_existing_pipeline_run(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    run_id: str,
+    status: str,
+) -> None:
+    metadata = dict(node.metadata or {})
+    metadata.update(
+        {
+            "pipeline_run_id": run_id,
+            "pipeline_status": status,
+            "pipeline_gate_status": status,
+        }
+    )
+    if status == "success":
+        metadata["pipeline_evidence_refs"] = _merge_string_values(
+            metadata.get("pipeline_evidence_refs"),
+            ["ci_pipeline:passed", f"pipeline_run:success:{run_id}"],
+        )
+        execution = TaskExecution.REPORTED
+    else:
+        execution = node.execution
+    plan.replace_node(replace(node, execution=execution, metadata=metadata))
+    await SqlPlanRepository(session).save(plan)
+
+
+async def _mark_pipeline_running(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    run_id: str,
+) -> None:
+    metadata = dict(node.metadata or {})
+    metadata.update(
+        {
+            "pipeline_run_id": run_id,
+            "pipeline_status": "running",
+            "pipeline_gate_status": "running",
+            "pipeline_started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        }
+    )
+    plan.replace_node(replace(node, execution=TaskExecution.IDLE, metadata=metadata))
+    await SqlPlanRepository(session).save(plan)
+
+
+async def _finish_pipeline_on_node(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    run_id: str,
+    status: str,
+    reason: str | None,
+    evidence_refs: list[str],
+    preview_url: str | None,
+    health_url: str | None,
+) -> None:
+    metadata = dict(node.metadata or {})
+    metadata.update(
+        {
+            "pipeline_run_id": run_id,
+            "pipeline_status": status,
+            "pipeline_gate_status": status,
+            "pipeline_finished_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "pipeline_last_summary": reason or "harness-native CI/CD pipeline passed",
+            "pipeline_evidence_refs": _merge_string_values(
+                metadata.get("pipeline_evidence_refs"),
+                evidence_refs,
+            ),
+            "execution_verifications": _merge_string_values(
+                metadata.get("execution_verifications"),
+                evidence_refs,
+            ),
+            "evidence_refs": _merge_string_values(metadata.get("evidence_refs"), evidence_refs),
+        }
+    )
+    if preview_url:
+        metadata["preview_url"] = preview_url
+    if health_url:
+        metadata["health_url"] = health_url
+    plan.replace_node(
+        replace(
+            node,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.REPORTED,
+            metadata=metadata,
+            updated_at=datetime.now(UTC),
+        )
+    )
+    await SqlPlanRepository(session).save(plan)
+
+
+def _pipeline_commit_ref(node: PlanNode) -> str | None:
+    feature = node.feature_checkpoint
+    if feature is not None and feature.commit_ref:
+        return feature.commit_ref
+    metadata = dict(node.metadata or {})
+    for value in _merge_string_values(metadata.get("evidence_refs"), []):
+        if value.startswith("commit_ref:"):
+            return value.removeprefix("commit_ref:")
+    return None
+
+
+def _pipeline_preview_url(health_url: str | None, port: int | None) -> str | None:
+    if health_url:
+        return health_url
+    if port:
+        return f"http://127.0.0.1:{port}"
+    return None
+
+
+def _merge_string_values(existing: object, values: Iterable[str]) -> list[str]:
+    output: list[str] = []
+    if isinstance(existing, str) and existing:
+        output.append(existing)
+    elif isinstance(existing, Iterable) and not isinstance(existing, (bytes, dict)):
+        output.extend(str(item) for item in existing if item)
+    output.extend(str(item) for item in values if item)
+    return list(dict.fromkeys(output))
+
+
+def _first_int(value: str) -> int | None:
+    match = re.search(r"\b(\d+)\b", value)
+    return int(match.group(1)) if match else None
+
+
 async def _attach_handoff_to_plan_node(
     *,
     session: AsyncSession,
@@ -1476,10 +1918,10 @@ async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
         base_ref=base_ref,
     )
     try:
-        result = await _WorkspaceSandboxCommandRunner(project_id=workspace.project_id).run_command(
-            command,
-            timeout=120,
-        )
+        result = await _WorkspaceSandboxCommandRunner(
+            project_id=workspace.project_id,
+            tenant_id=workspace.tenant_id,
+        ).run_command(command, timeout=120)
     except Exception as exc:
         return _worktree_setup_note(
             status="failed",
@@ -1657,6 +2099,7 @@ def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:
         if workspace is not None and getattr(workspace, "project_id", None):
             sandbox = _WorkspaceSandboxCommandRunner(
                 project_id=workspace.project_id,
+                tenant_id=getattr(workspace, "tenant_id", None),
                 allowed_commands=_node_allowed_sandbox_commands(node),
             )
         if node.workspace_task_id:
@@ -1694,9 +2137,11 @@ class _WorkspaceSandboxCommandRunner:
         self,
         *,
         project_id: str,
+        tenant_id: str | None = None,
         allowed_commands: set[str] | None = None,
     ) -> None:
         self._project_id = project_id
+        self._tenant_id = tenant_id
         self._allowed_commands = allowed_commands
 
     async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
@@ -1709,12 +2154,23 @@ class _WorkspaceSandboxCommandRunner:
         from src.infrastructure.agent.state.agent_worker_state import (
             _resolve_project_sandbox_id,
             get_mcp_sandbox_adapter,
+            set_mcp_sandbox_adapter,
         )
 
         adapter = get_mcp_sandbox_adapter()
         if adapter is None:
-            raise RuntimeError("MCP sandbox adapter is not initialized")
-        sandbox_id = await _resolve_project_sandbox_id(self._project_id)
+            adapter = await _api_process_sandbox_adapter()
+            set_mcp_sandbox_adapter(adapter)
+        sandbox_id = await _resolve_project_sandbox_id(
+            self._project_id,
+            tenant_id=self._tenant_id,
+        )
+        if not sandbox_id:
+            sandbox_id = await _ensure_project_sandbox_for_runner(
+                project_id=self._project_id,
+                tenant_id=self._tenant_id,
+                adapter=adapter,
+            )
         if not sandbox_id:
             raise RuntimeError(f"no sandbox found for project {self._project_id}")
 
@@ -1739,6 +2195,57 @@ class _WorkspaceSandboxCommandRunner:
         if self._allowed_commands is None:
             return True
         return command in self._allowed_commands or _is_structural_sandbox_command(command)
+
+
+async def _api_process_sandbox_adapter() -> MCPSandboxAdapter:
+    """Return the API-process sandbox adapter when no agent-worker adapter exists."""
+
+    from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
+        ensure_sandbox_sync,
+        get_sandbox_adapter,
+    )
+
+    adapter = get_sandbox_adapter()
+    await ensure_sandbox_sync()
+    return adapter
+
+
+async def _ensure_project_sandbox_for_runner(
+    *,
+    project_id: str,
+    tenant_id: str | None,
+    adapter: MCPSandboxAdapter,
+) -> str | None:
+    """Create or recover a project sandbox for harness-owned command execution."""
+
+    if not tenant_id:
+        with contextlib.suppress(Exception):
+            await adapter.sync_from_docker()
+            return await adapter.get_sandbox_id_by_project(project_id)
+        return None
+
+    from src.application.services.project_sandbox_lifecycle_service import (
+        ProjectSandboxLifecycleService,
+    )
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+        SqlProjectSandboxRepository,
+    )
+
+    async with async_session_factory() as db:
+        sandbox_repo = SqlProjectSandboxRepository(db)
+        lifecycle = ProjectSandboxLifecycleService(
+            repository=sandbox_repo,
+            sandbox_adapter=adapter,
+        )
+        info = await lifecycle.get_or_create_sandbox(
+            project_id=project_id,
+            tenant_id=tenant_id,
+        )
+        await db.commit()
+        return info.sandbox_id
 
 
 def _node_allowed_sandbox_commands(node: PlanNode) -> set[str]:
@@ -1838,6 +2345,7 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
         "last_worker_report_artifacts",
         "last_worker_report_verifications",
         "preflight_checks",
+        "pipeline_evidence_refs",
     ):
         value = metadata.get(key)
         if isinstance(value, list):
@@ -1852,10 +2360,16 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
         "last_attempt_status",
         "last_worker_report_summary",
         "last_worker_report_type",
+        "pipeline_status",
+        "preview_url",
+        "health_url",
     ):
         value = metadata.get(key)
         if isinstance(value, str) and value:
             artifacts[key] = value
+    code_context = metadata.get("code_context")
+    if isinstance(code_context, Mapping):
+        artifacts["code_context"] = dict(code_context)
     return stdout, artifacts
 
 
@@ -2115,11 +2629,17 @@ def _string_set(values: Iterable[str | None]) -> frozenset[str]:
 
 __all__ = [
     "ATTEMPT_RETRY_EVENT",
+    "DEPLOYMENT_HEALTH_CHECK_EVENT",
+    "DEPLOYMENT_REQUESTED_EVENT",
     "HANDOFF_RESUME_EVENT",
+    "PIPELINE_LOGS_SYNC_EVENT",
+    "PIPELINE_RUN_REQUESTED_EVENT",
+    "PIPELINE_STAGE_EXECUTE_EVENT",
     "SUPERVISOR_TICK_EVENT",
     "WORKER_LAUNCH_EVENT",
     "make_attempt_retry_handler",
     "make_handoff_resume_handler",
+    "make_pipeline_run_requested_handler",
     "make_supervisor_tick_handler",
     "make_worker_launch_handler",
 ]

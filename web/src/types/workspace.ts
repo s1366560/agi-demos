@@ -38,6 +38,30 @@ export interface WorkspaceCodeContext {
   agents_excerpt?: string | undefined;
 }
 
+export interface WorkspaceDeliveryCicdStageConfig {
+  stage: string;
+  command: string;
+  required?: boolean | undefined;
+  timeout_seconds?: number | undefined;
+}
+
+export interface WorkspaceDeliveryCicdConfig {
+  provider?: string | undefined;
+  code_root?: string | undefined;
+  stages?: WorkspaceDeliveryCicdStageConfig[] | undefined;
+  env?: Record<string, string> | undefined;
+  timeout_seconds?: number | undefined;
+  auto_deploy?: boolean | undefined;
+  preview_port?: number | undefined;
+  health_url?: string | undefined;
+  health_command?: string | undefined;
+  install_command?: string | undefined;
+  lint_command?: string | undefined;
+  test_command?: string | undefined;
+  build_command?: string | undefined;
+  deploy_command?: string | undefined;
+}
+
 export type WorkspaceMetadata = Record<string, unknown> & {
   workspace_use_case?: WorkspaceUseCase | undefined;
   workspace_type?: WorkspaceType | undefined;
@@ -46,6 +70,7 @@ export type WorkspaceMetadata = Record<string, unknown> & {
   autonomy_profile?: WorkspaceAutonomyProfile | undefined;
   sandbox_code_root?: string | undefined;
   code_context?: WorkspaceCodeContext | undefined;
+  delivery_cicd?: WorkspaceDeliveryCicdConfig | undefined;
 };
 
 export type TopologyNodeType =
@@ -306,11 +331,70 @@ export interface WorkspacePlanIterationSummary {
   actions: Record<string, WorkspacePlanActionCapability>;
 }
 
+export interface WorkspacePipelineStageRun {
+  id: string;
+  run_id: string;
+  stage: string;
+  status: string;
+  command?: string | null | undefined;
+  exit_code?: number | null | undefined;
+  stdout_preview?: string | null | undefined;
+  stderr_preview?: string | null | undefined;
+  log_ref?: string | null | undefined;
+  artifact_refs: string[];
+  duration_ms?: number | null | undefined;
+  started_at?: string | null | undefined;
+  completed_at?: string | null | undefined;
+}
+
+export interface WorkspacePipelineRun {
+  id: string;
+  provider: string;
+  status: string;
+  reason?: string | null | undefined;
+  node_id?: string | null | undefined;
+  attempt_id?: string | null | undefined;
+  commit_ref?: string | null | undefined;
+  stages: WorkspacePipelineStageRun[];
+  started_at?: string | null | undefined;
+  completed_at?: string | null | undefined;
+  created_at: string;
+}
+
+export interface WorkspaceDeployment {
+  id: string;
+  provider: string;
+  status: string;
+  node_id?: string | null | undefined;
+  pipeline_run_id?: string | null | undefined;
+  command?: string | null | undefined;
+  pid?: number | null | undefined;
+  port?: number | null | undefined;
+  preview_url?: string | null | undefined;
+  health_url?: string | null | undefined;
+  restart_count: number;
+  last_healthy_at?: string | null | undefined;
+  rollback_ref?: string | null | undefined;
+  log_ref?: string | null | undefined;
+  created_at: string;
+  updated_at?: string | null | undefined;
+}
+
+export interface WorkspacePlanDeliverySummary {
+  provider: string;
+  status: string;
+  latest_run?: WorkspacePipelineRun | null | undefined;
+  recent_runs: WorkspacePipelineRun[];
+  deployment?: WorkspaceDeployment | null | undefined;
+  actions: Record<string, WorkspacePlanActionCapability>;
+}
+
 export interface WorkspacePlanSnapshot {
   workspace_id: string;
   plan: WorkspacePlan | null;
   root_goal?: WorkspacePlanRootGoal | null | undefined;
   iteration?: WorkspacePlanIterationSummary | null | undefined;
+  delivery?: WorkspacePlanDeliverySummary | null | undefined;
   blackboard: WorkspacePlanBlackboardEntry[];
   outbox: WorkspacePlanOutboxItem[];
   events: WorkspacePlanEvent[];

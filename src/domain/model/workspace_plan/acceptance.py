@@ -23,6 +23,10 @@ class CriterionKind(str, Enum):
     * ``FILE_EXISTS`` — assert a file exists (and optionally non-empty)
     * ``REGEX``       — regex-match an artifact blob / output string
     * ``BROWSER_E2E`` — require browser-run evidence for a named user path
+    * ``CI_PIPELINE`` — require a harness-native CI pipeline run
+    * ``PIPELINE_STAGE`` — require a named CI/CD pipeline stage
+    * ``DEPLOYMENT_HEALTH`` — require preview deployment health evidence
+    * ``PREVIEW_E2E`` — require preview URL end-to-end evidence
     * ``LLM_JUDGE``   — ask an LLM judge; requires ``min_confidence``
     * ``CUSTOM``      — call a registered custom verifier by name
     """
@@ -32,6 +36,10 @@ class CriterionKind(str, Enum):
     FILE_EXISTS = "file_exists"
     REGEX = "regex"
     BROWSER_E2E = "browser_e2e"
+    CI_PIPELINE = "ci_pipeline"
+    PIPELINE_STAGE = "pipeline_stage"
+    DEPLOYMENT_HEALTH = "deployment_health"
+    PREVIEW_E2E = "preview_e2e"
     LLM_JUDGE = "llm_judge"
     CUSTOM = "custom"
 
@@ -66,6 +74,12 @@ class AcceptanceCriterion:
             self.spec.get("name") or self.spec.get("path")
         ):
             raise ValueError("CriterionKind.BROWSER_E2E requires spec.name or spec.path")
+        if self.kind is CriterionKind.PIPELINE_STAGE and not self.spec.get("stage"):
+            raise ValueError("CriterionKind.PIPELINE_STAGE requires spec.stage")
+        if self.kind is CriterionKind.PREVIEW_E2E and not (
+            self.spec.get("name") or self.spec.get("path")
+        ):
+            raise ValueError("CriterionKind.PREVIEW_E2E requires spec.name or spec.path")
         if self.kind is CriterionKind.LLM_JUDGE:
             conf = self.spec.get("min_confidence")
             if not isinstance(conf, (int, float)) or not 0.0 < conf <= 1.0:

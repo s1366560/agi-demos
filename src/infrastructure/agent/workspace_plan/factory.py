@@ -138,6 +138,26 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
                     "next_iteration": payload.get("next_iteration"),
                 },
             )
+        if event_type == "pipeline_run_requested":
+            await SqlWorkspacePlanOutboxRepository(db).enqueue(
+                plan_id=node.plan_id,
+                workspace_id=workspace_id,
+                event_type="pipeline_run_requested",
+                payload={
+                    "workspace_id": workspace_id,
+                    "plan_id": node.plan_id,
+                    "node_id": node.id,
+                    "attempt_id": _payload_string(payload, "attempt_id")
+                    or node.current_attempt_id,
+                    "reason": payload.get("reason") or "pipeline_gate_required",
+                },
+                metadata={
+                    "source_event_type": event_type,
+                    "node_id": node.id,
+                    "attempt_id": _payload_string(payload, "attempt_id")
+                    or node.current_attempt_id,
+                },
+            )
         if event_type == "dispatch_deferred_concurrency_limit":
             await SqlWorkspacePlanOutboxRepository(db).enqueue(
                 plan_id=node.plan_id,

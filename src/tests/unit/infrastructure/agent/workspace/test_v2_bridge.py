@@ -323,6 +323,68 @@ async def test_kickoff_creates_durable_plan_and_outbox(
     assert outbox_items[0].metadata_json == {"source": "v2_bridge"}
 
 
+async def test_kickoff_passes_software_context_to_planner_for_pipeline_gate(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace(db_session)
+    workspace = await db_session.get(WorkspaceModel, "ws-abc")
+    assert workspace is not None
+    workspace.metadata_json = {
+        "workspace_type": "software_development",
+        "workspace_use_case": "programming",
+    }
+    await db_session.flush()
+
+    class _SprintDecomposer:
+        async def decompose(
+            self,
+            query: str,
+            conversation_context: str | None = None,
+        ) -> DecompositionResult:
+            return DecompositionResult(
+                subtasks=(
+                    SubTask(id="research", description="Research current state"),
+                    SubTask(id="plan", description="Plan a bounded change"),
+                    SubTask(id="implement", description="Implement the code change"),
+                    SubTask(id="test", description="Run the verification pipeline"),
+                ),
+                reasoning=f"query={query}; context={conversation_context}",
+                is_decomposed=True,
+            )
+
+    with (
+        _patch_session_factory(db_session),
+        patch.object(
+            v2_bridge,
+            "_build_workspace_task_decomposer",
+            new=AsyncMock(return_value=_SprintDecomposer()),
+        ) as decomposer_builder,
+    ):
+        started = await kickoff_v2_plan(
+            workspace_id="ws-abc",
+            title="Ship a software change",
+            description="Run CI evidence before review",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    assert started is True
+    extra_context = decomposer_builder.await_args.kwargs["extra_context"]
+    assert "Software workspace planning contract:" in extra_context
+    plan = await SqlPlanRepository(db_session).get_by_workspace("ws-abc")
+    assert plan is not None
+    task_nodes = [node for node in plan.nodes.values() if node.parent_id == plan.goal_id]
+    assert {
+        node.metadata.get("iteration_phase"): node.metadata.get("pipeline_required")
+        for node in task_nodes
+    } == {
+        "research": None,
+        "plan": None,
+        "implement": True,
+        "test": True,
+    }
+
+
 async def test_kickoff_skips_duplicate_plan_for_completed_root(
     db_session: AsyncSession,
 ) -> None:

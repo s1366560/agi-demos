@@ -555,6 +555,17 @@ export const workspacePlanService = {
     });
     return response.json() as Promise<WorkspacePlanActionResult>;
   },
+
+  requestPipelineRun: async (
+    workspaceId: string,
+    options: { reason?: string; nodeId?: string | null } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/delivery/run-pipeline`, {
+      reason: options.reason ?? null,
+      node_id: options.nodeId ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
 };
 
 export const workspaceTopologyService = {

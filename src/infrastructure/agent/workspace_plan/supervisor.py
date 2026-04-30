@@ -31,6 +31,7 @@ from typing import Any
 
 from src.domain.model.workspace_plan import (
     Capability,
+    CriterionKind,
     FeatureCheckpoint,
     GoalProgress,
     Plan,
@@ -89,6 +90,12 @@ _ITERATION_LOOP_DEFAULT_MAX_SUBTASKS = 6
 _ITERATION_REVIEW_MIN_CONFIDENCE = 0.6
 _ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
 _CHANGE_EVIDENCE_PHASES = {"implement", "test", "deploy"}
+_PIPELINE_CRITERION_KINDS = {
+    CriterionKind.CI_PIPELINE,
+    CriterionKind.PIPELINE_STAGE,
+    CriterionKind.DEPLOYMENT_HEALTH,
+    CriterionKind.PREVIEW_E2E,
+}
 _SCRUM_ARTIFACT_BY_PHASE = {
     "research": "product_discovery",
     "plan": "sprint_backlog",
@@ -247,6 +254,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 )
                 verifies_ran += 1
                 if report.passed:
+                    if _should_request_pipeline_after_verification(node, ctx.artifacts):
+                        pipeline_node = _node_with_pipeline_request(node, report)
+                        plan.replace_node(pipeline_node)
+                        await self._emit_event(
+                            errors,
+                            workspace_id,
+                            pipeline_node,
+                            "pipeline_run_requested",
+                            {
+                                "attempt_id": report.attempt_id,
+                                "summary": "harness-native CI/CD evidence required",
+                                "reason": "pipeline_gate_missing",
+                            },
+                        )
+                        continue
                     accepted_node = _node_with_verification_evidence(
                         node,
                         report,
@@ -259,6 +281,20 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         )
                     )
                     nodes_done += 1
+                elif _should_request_pipeline_from_report(node, report):
+                    pipeline_node = _node_with_pipeline_request(node, report)
+                    plan.replace_node(pipeline_node)
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        pipeline_node,
+                        "pipeline_run_requested",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "summary": report.summary(),
+                            "reason": "pipeline_criterion_missing",
+                        },
+                    )
                 elif report.hard_fail:
                     plan.replace_node(
                         _force_intent(
@@ -1239,6 +1275,11 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "retry_last_reason",
         "terminal_attempt_status",
         "terminal_attempt_reconciled_at",
+        "pipeline_status",
+        "pipeline_gate_status",
+        "pipeline_run_id",
+        "pipeline_evidence_refs",
+        "pipeline_last_summary",
     }
 )
 
@@ -1286,6 +1327,77 @@ def _is_retryable_infrastructure_report(report: VerificationReport) -> bool:
         if result.criterion.spec.get("name") == _RETRYABLE_INFRASTRUCTURE_CRITERION:
             return True
     return False
+
+
+def _should_request_pipeline_after_verification(
+    node: PlanNode,
+    artifacts: Mapping[str, Any],
+) -> bool:
+    if not _node_requires_pipeline_gate(node):
+        return False
+    if _node_has_pipeline_success(node, artifacts):
+        return False
+    return _pipeline_gate_status(node) not in {"requested", "running"}
+
+
+def _should_request_pipeline_from_report(node: PlanNode, report: VerificationReport) -> bool:
+    if _pipeline_gate_status(node) in {"requested", "running"}:
+        return False
+    for result in report.failed_required:
+        if result.criterion.kind in _PIPELINE_CRITERION_KINDS:
+            return True
+    return _node_requires_pipeline_gate(node) and not report.hard_fail
+
+
+def _node_requires_pipeline_gate(node: PlanNode) -> bool:
+    if node.kind is PlanNodeKind.GOAL:
+        return False
+    raw_required = node.metadata.get("pipeline_required")
+    if isinstance(raw_required, bool):
+        return raw_required
+    return False
+
+
+def _node_has_pipeline_success(node: PlanNode, artifacts: Mapping[str, Any]) -> bool:
+    values = set(_string_list(node.metadata.get("pipeline_evidence_refs")))
+    values.update(_string_list(node.metadata.get("execution_verifications")))
+    values.update(_string_list(artifacts.get("pipeline_evidence_refs")))
+    values.update(_string_list(artifacts.get("execution_verifications")))
+    return "ci_pipeline:passed" in values or any(
+        value.startswith("pipeline_run:success:") for value in values
+    )
+
+
+def _pipeline_gate_status(node: PlanNode) -> str:
+    value = node.metadata.get("pipeline_status") or node.metadata.get("pipeline_gate_status")
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
+def _node_with_pipeline_request(node: PlanNode, report: VerificationReport) -> PlanNode:
+    metadata = dict(node.metadata)
+    request_count = _coerce_positive_int(metadata.get("pipeline_request_count")) + 1
+    metadata.update(
+        {
+            "pipeline_required": True,
+            "pipeline_provider": metadata.get("pipeline_provider") or "sandbox_native",
+            "pipeline_status": "requested",
+            "pipeline_gate_status": "requested",
+            "pipeline_request_count": request_count,
+            "pipeline_requested_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "last_verification_summary": report.summary(),
+            "last_verification_passed": False,
+            "last_verification_hard_fail": False,
+        }
+    )
+    if report.attempt_id:
+        metadata["last_verification_attempt_id"] = report.attempt_id
+    return replace(
+        node,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.IDLE,
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
 
 
 def _node_with_retry_backoff(node: PlanNode, report: VerificationReport) -> PlanNode:
@@ -1385,6 +1497,12 @@ def _node_with_verification_evidence(
         metadata["verified_git_diff_summary"] = git_diff_summary
     if test_commands:
         metadata["verified_test_commands"] = list(test_commands)
+    pipeline_status, pipeline_run_id = _pipeline_status_from_refs(refs)
+    if pipeline_status:
+        metadata["pipeline_status"] = pipeline_status
+        metadata["pipeline_gate_status"] = pipeline_status
+    if pipeline_run_id:
+        metadata["pipeline_run_id"] = pipeline_run_id
     if artifacts:
         _copy_verification_artifacts(metadata, artifacts)
 
@@ -1418,6 +1536,23 @@ def _report_evidence_refs(report: VerificationReport) -> list[str]:
     return list(dict.fromkeys(refs))
 
 
+def _pipeline_status_from_refs(refs: list[str]) -> tuple[str | None, str | None]:
+    status: str | None = None
+    run_id: str | None = None
+    if "ci_pipeline:passed" in refs:
+        status = "success"
+    elif "ci_pipeline:failed" in refs:
+        status = "failed"
+    for ref in refs:
+        if ref.startswith("pipeline_run:success:"):
+            status = "success"
+            run_id = ref.removeprefix("pipeline_run:success:")
+        elif ref.startswith("pipeline_run:failed:"):
+            status = "failed"
+            run_id = ref.removeprefix("pipeline_run:failed:")
+    return status, run_id
+
+
 def _copy_verification_artifacts(
     metadata: dict[str, Any],
     artifacts: Mapping[str, Any],
@@ -1426,6 +1561,7 @@ def _copy_verification_artifacts(
         "candidate_artifacts",
         "last_worker_report_artifacts",
         "execution_artifacts",
+        "pipeline_evidence_refs",
     ):
         values = _string_list(artifacts.get(key))
         if values:

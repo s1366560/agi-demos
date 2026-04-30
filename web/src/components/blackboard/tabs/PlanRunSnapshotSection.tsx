@@ -60,6 +60,7 @@ import {
 
 import type {
   WorkspacePlanActionCapability,
+  WorkspacePlanDeliverySummary,
   WorkspacePlanIterationSummary,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
@@ -314,6 +315,104 @@ function IterationLoopPanel({
   );
 }
 
+function DeliveryPanel({
+  delivery,
+  isActionPending,
+  onRunPipeline,
+}: {
+  delivery: WorkspacePlanDeliverySummary | null | undefined;
+  isActionPending: boolean;
+  onRunPipeline: () => void;
+}) {
+  if (!delivery) {
+    return null;
+  }
+  const run = delivery.latest_run;
+  const deployment = delivery.deployment;
+  const requestAction = delivery.actions.request_pipeline;
+  const tone =
+    delivery.status === 'success' || delivery.status === 'healthy'
+      ? 'text-status-text-success'
+      : delivery.status === 'failed' || delivery.status === 'unhealthy'
+        ? 'text-status-text-error'
+        : 'text-status-text-info';
+
+  return (
+    <div className="border-t border-border-separator px-4 py-4 dark:border-border-dark">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+            <PackageCheck className="h-4 w-4" aria-hidden />
+            Delivery / CI/CD
+          </div>
+          <div className={`mt-2 text-xs font-semibold uppercase ${tone}`}>{delivery.status}</div>
+          <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+            Provider {delivery.provider}
+            {run ? ` · run ${shortId(run.id)} · ${run.status}` : ' · no pipeline run yet'}
+          </p>
+          {run?.reason && (
+            <p className="mt-1 break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
+              {run.reason}
+            </p>
+          )}
+          {deployment?.preview_url && (
+            <a
+              href={deployment.preview_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-status-text-info hover:underline"
+            >
+              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{deployment.preview_url}</span>
+            </a>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <StatBadge label="Pipeline" value={run?.status ?? 'none'} />
+          <StatBadge label="Health" value={deployment?.status ?? 'none'} />
+          <StatBadge label="Restarts" value={String(deployment?.restart_count ?? 0)} />
+          <button
+            type="button"
+            className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
+            disabled={isActionPending || !actionEnabled(requestAction)}
+            title={actionDisabledReason(requestAction, 'Pipeline run is not available.')}
+            onClick={onRunPipeline}
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Run pipeline
+          </button>
+        </div>
+      </div>
+
+      {run && run.stages.length > 0 && (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {run.stages.map((stage) => {
+            const stageTone =
+              stage.status === 'success'
+                ? 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark'
+                : stage.status === 'failed'
+                  ? 'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark'
+                  : 'border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted';
+            return (
+              <div key={stage.id} className={`min-w-0 rounded-md border px-3 py-2 ${stageTone}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs font-semibold uppercase">{stage.stage}</span>
+                  <span className="shrink-0 font-mono text-[11px]">
+                    {stage.exit_code ?? '-'}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 break-words text-[11px] leading-4">
+                  {stage.stderr_preview || stage.stdout_preview || stage.command || stage.status}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PlanRunSnapshotSection({
   workspaceId,
   tenantId,
@@ -458,6 +557,7 @@ export function PlanRunSnapshotSection({
   const blackboard = useMemo(() => snapshot?.blackboard ?? [], [snapshot]);
   const rootGoal = snapshot?.root_goal ?? null;
   const iteration = snapshot?.iteration ?? null;
+  const delivery = snapshot?.delivery ?? null;
   const stage = planStage(snapshot);
   const doneCount = countDone(runnableNodes);
   const rootUnitCount = rootGoal ? 1 : 0;
@@ -707,6 +807,30 @@ export function PlanRunSnapshotSection({
     }
   };
 
+  const runDeliveryPipeline = async () => {
+    const action = delivery?.actions.request_pipeline;
+    if (!actionEnabled(action)) {
+      setActionError(action?.reason ?? 'Pipeline run is not available.');
+      return;
+    }
+    setIsActionPending(true);
+    setActionError(null);
+    setActionMessage(null);
+    try {
+      const reason = reasonOrFallback(operatorReason, DEFAULT_NODE_ACTION_REASON);
+      const result = await workspacePlanService.requestPipelineRun(workspaceId, {
+        reason,
+        nodeId: selectedNode?.id ?? null,
+      });
+      setActionMessage(result.message);
+      await loadSnapshot({ silent: true });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
   return (
     <section className="rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt">
       <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-start lg:justify-between">
@@ -837,6 +961,11 @@ export function PlanRunSnapshotSection({
             iteration={iteration}
             isActionPending={isActionPending}
             onAction={(actionId) => void runIterationAction(actionId)}
+          />
+          <DeliveryPanel
+            delivery={delivery}
+            isActionPending={isActionPending}
+            onRunPipeline={() => void runDeliveryPipeline()}
           />
 
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">

@@ -12,6 +12,7 @@ import {
   Database,
   Loader2,
   RotateCcw,
+  Rocket,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
@@ -426,6 +427,136 @@ export const WorkspaceSettingsPanel: React.FC<{
                 {t('workspaceSettings.codeContext.codeRootInvalid')}
               </p>
             ) : null}
+          </SettingsSection>
+
+          <SettingsSection
+            icon={<Rocket size={16} aria-hidden />}
+            title="Delivery / CI/CD"
+            description="Sandbox-native pipeline, preview deployment, and health-check settings."
+          >
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Field label="Provider" htmlFor="workspace-delivery-provider">
+                <Input
+                  id="workspace-delivery-provider"
+                  value={draft.deliveryProvider}
+                  onChange={(event) => {
+                    updateDraft('deliveryProvider', event.target.value);
+                  }}
+                  placeholder="sandbox_native"
+                />
+              </Field>
+              <Field label="Timeout seconds" htmlFor="workspace-delivery-timeout">
+                <Input
+                  id="workspace-delivery-timeout"
+                  type="number"
+                  min={1}
+                  value={draft.deliveryTimeoutSeconds}
+                  onChange={(event) => {
+                    updateDraft('deliveryTimeoutSeconds', Number(event.target.value) || 600);
+                  }}
+                />
+              </Field>
+              <Field label="Preview port" htmlFor="workspace-delivery-port">
+                <Input
+                  id="workspace-delivery-port"
+                  type="number"
+                  min={1}
+                  value={draft.deliveryPreviewPort}
+                  onChange={(event) => {
+                    updateDraft('deliveryPreviewPort', Number(event.target.value) || 3000);
+                  }}
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Field label="Health URL" htmlFor="workspace-delivery-health-url">
+                <Input
+                  id="workspace-delivery-health-url"
+                  value={draft.deliveryHealthUrl}
+                  onChange={(event) => {
+                    updateDraft('deliveryHealthUrl', event.target.value);
+                  }}
+                  placeholder="http://127.0.0.1:3000"
+                />
+              </Field>
+              <SwitchField
+                label="Auto preview deploy"
+                checked={draft.deliveryAutoDeploy}
+                onChange={(checked) => {
+                  updateDraft('deliveryAutoDeploy', checked);
+                }}
+              />
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Field label="Install command" htmlFor="workspace-delivery-install">
+                <TextArea
+                  id="workspace-delivery-install"
+                  value={draft.deliveryInstallCommand}
+                  onChange={(event) => {
+                    updateDraft('deliveryInstallCommand', event.target.value);
+                  }}
+                  placeholder="pnpm install --frozen-lockfile"
+                  rows={3}
+                />
+              </Field>
+              <Field label="Lint command" htmlFor="workspace-delivery-lint">
+                <TextArea
+                  id="workspace-delivery-lint"
+                  value={draft.deliveryLintCommand}
+                  onChange={(event) => {
+                    updateDraft('deliveryLintCommand', event.target.value);
+                  }}
+                  placeholder="pnpm lint"
+                  rows={3}
+                />
+              </Field>
+              <Field label="Test command" htmlFor="workspace-delivery-test">
+                <TextArea
+                  id="workspace-delivery-test"
+                  value={draft.deliveryTestCommand}
+                  onChange={(event) => {
+                    updateDraft('deliveryTestCommand', event.target.value);
+                  }}
+                  placeholder="pnpm test"
+                  rows={3}
+                />
+              </Field>
+              <Field label="Build command" htmlFor="workspace-delivery-build">
+                <TextArea
+                  id="workspace-delivery-build"
+                  value={draft.deliveryBuildCommand}
+                  onChange={(event) => {
+                    updateDraft('deliveryBuildCommand', event.target.value);
+                  }}
+                  placeholder="pnpm build"
+                  rows={3}
+                />
+              </Field>
+              <Field label="Deploy command" htmlFor="workspace-delivery-deploy">
+                <TextArea
+                  id="workspace-delivery-deploy"
+                  value={draft.deliveryDeployCommand}
+                  onChange={(event) => {
+                    updateDraft('deliveryDeployCommand', event.target.value);
+                  }}
+                  placeholder="pnpm start --host 0.0.0.0 --port 3000"
+                  rows={3}
+                />
+              </Field>
+              <Field label="Health command" htmlFor="workspace-delivery-health-command">
+                <TextArea
+                  id="workspace-delivery-health-command"
+                  value={draft.deliveryHealthCommand}
+                  onChange={(event) => {
+                    updateDraft('deliveryHealthCommand', event.target.value);
+                  }}
+                  placeholder="curl -fsS http://127.0.0.1:3000 >/dev/null"
+                  rows={3}
+                />
+              </Field>
+            </div>
           </SettingsSection>
 
           <SettingsSection

@@ -90,6 +90,7 @@ class LLMGoalPlanner(GoalPlannerPort):
     async def plan(self, goal: GoalSpec, ctx: PlanningContext) -> Plan:
         plan_id = self._new_id("plan")
         goal_node_id = PlanNodeId(self._new_id("node"))
+        pipeline_required = _planning_context_requires_pipeline(ctx)
         plan = Plan(
             id=plan_id,
             workspace_id=goal.workspace_id,
@@ -133,6 +134,7 @@ class LLMGoalPlanner(GoalPlannerPort):
                         f"{goal.title}\n{goal.description}",
                         node_id=PlanNodeId(node_id),
                         sequence=1,
+                        pipeline_required=pipeline_required,
                     ),
                 )
             )
@@ -173,6 +175,7 @@ class LLMGoalPlanner(GoalPlannerPort):
                         st.description,
                         node_id=nid,
                         sequence=sequence,
+                        pipeline_required=pipeline_required,
                     ),
                 )
             )
@@ -225,6 +228,7 @@ class LLMGoalPlanner(GoalPlannerPort):
         )
         if not sub or len(sub) < 2:
             return plan
+        pipeline_required = _planning_context_requires_pipeline(ctx)
         id_map: dict[str, PlanNodeId] = {st.id: PlanNodeId(self._new_id("node")) for st in sub}
         for sequence, st in enumerate(sub, start=1):
             nid = id_map[st.id]
@@ -255,6 +259,7 @@ class LLMGoalPlanner(GoalPlannerPort):
                         st.description,
                         node_id=nid,
                         sequence=sequence,
+                        pipeline_required=pipeline_required,
                     ),
                 )
             )
@@ -360,6 +365,7 @@ def _planner_node_metadata(
     *,
     node_id: PlanNodeId | None = None,
     sequence: int | None = None,
+    pipeline_required: bool = False,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {"acceptance_source": "planner_structural_v1"}
     phase = _iteration_phase_for_sequence(sequence)
@@ -367,6 +373,10 @@ def _planner_node_metadata(
     metadata["iteration_phase"] = phase
     metadata["iteration_loop"] = "scrum_feedback_loop_v1"
     metadata["scrum_artifact"] = _SCRUM_ARTIFACT_BY_PHASE[phase]
+    if pipeline_required and phase in {"implement", "test", "deploy", "review"}:
+        metadata["pipeline_required"] = True
+        metadata["pipeline_provider"] = "sandbox_native"
+        metadata["pipeline_gate"] = "harness_native_cicd_v1"
     metadata["next_iteration_policy"] = (
         "After review feedback is recorded, create a new bounded sprint plan instead of "
         "expanding the current plan indefinitely."
@@ -383,6 +393,11 @@ def _planner_node_metadata(
     if commands:
         metadata["verification_commands"] = commands
     return metadata
+
+
+def _planning_context_requires_pipeline(ctx: PlanningContext) -> bool:
+    value = ctx.conversation_context or ""
+    return "Software workspace planning contract:" in value
 
 
 def _iteration_phase_for_sequence(sequence: int | None) -> str:

@@ -168,6 +168,32 @@ def _make_plan(workspace_id: str) -> Plan:
     return plan
 
 
+def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> None:
+    plan = _make_plan("workspace-plan-api")
+    task = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            task,
+            metadata={
+                **task.metadata,
+                "evidence_refs": [
+                    "ci_pipeline:passed",
+                    "pipeline_stage:test:passed",
+                    "pipeline_run:success:pipeline-run-1",
+                ],
+            },
+        )
+    )
+
+    task_response = next(
+        node for node in workspace_plans._to_node_response(plan) if node.id == "task-api"
+    )
+
+    assert task_response.metadata["pipeline_status"] == "success"
+    assert task_response.metadata["pipeline_gate_status"] == "success"
+    assert task_response.metadata["pipeline_run_id"] == "pipeline-run-1"
+
+
 @pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     db_session: AsyncSession,

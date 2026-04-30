@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import shlex
+from collections.abc import Mapping
 from typing import Any, Protocol
 
 from src.domain.model.workspace_plan import (
@@ -340,6 +341,153 @@ class BrowserE2ECriterionRunner(CriterionRunner):
         )
 
 
+class PipelineCriterionRunner(CriterionRunner):
+    """Validates structured harness-native CI/CD evidence."""
+
+    async def run(
+        self, criterion: AcceptanceCriterion, ctx: VerificationContext
+    ) -> CriterionResult:
+        values = _pipeline_evidence_values(ctx)
+        if _has_pipeline_success_evidence(ctx):
+            refs = [
+                value
+                for value in values
+                if value.startswith(("ci_pipeline:", "pipeline_run:", "pipeline_stage:"))
+            ]
+            return CriterionResult(
+                criterion=criterion,
+                passed=True,
+                confidence=1.0,
+                message="harness-native CI pipeline passed",
+                evidence=tuple(EvidenceRef(kind="pipeline", ref=value) for value in refs),
+            )
+        if "ci_pipeline:failed" in values or _first_prefixed(values, "pipeline_run:failed:"):
+            return CriterionResult(
+                criterion=criterion,
+                passed=False,
+                confidence=0.75,
+                message="harness-native CI pipeline failed; route through recovery",
+            )
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=0.7,
+            message="missing harness-native CI pipeline evidence",
+        )
+
+
+class PipelineStageCriterionRunner(CriterionRunner):
+    """Requires a named pipeline stage to have passed."""
+
+    async def run(
+        self, criterion: AcceptanceCriterion, ctx: VerificationContext
+    ) -> CriterionResult:
+        stage = str(criterion.spec.get("stage") or "").strip()
+        values = _pipeline_evidence_values(ctx)
+        passed_ref = f"pipeline_stage:{stage}:passed"
+        failed_ref = f"pipeline_stage:{stage}:failed"
+        if passed_ref in values:
+            return CriterionResult(
+                criterion=criterion,
+                passed=True,
+                confidence=1.0,
+                message=f"pipeline stage passed: {stage}",
+                evidence=(EvidenceRef(kind="pipeline_stage", ref=passed_ref),),
+            )
+        if failed_ref in values:
+            return CriterionResult(
+                criterion=criterion,
+                passed=False,
+                confidence=0.75,
+                message=f"pipeline stage failed: {stage}",
+            )
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=0.7,
+            message=f"missing pipeline stage evidence: {stage}",
+        )
+
+
+class DeploymentHealthCriterionRunner(CriterionRunner):
+    """Requires preview deployment health evidence."""
+
+    async def run(
+        self, criterion: AcceptanceCriterion, ctx: VerificationContext
+    ) -> CriterionResult:
+        values = _pipeline_evidence_values(ctx)
+        if "deployment_health:passed" in values:
+            refs = [
+                value
+                for value in values
+                if value.startswith(("deployment_health:", "deployment:", "preview_url:"))
+            ]
+            return CriterionResult(
+                criterion=criterion,
+                passed=True,
+                confidence=1.0,
+                message="preview deployment is healthy",
+                evidence=tuple(EvidenceRef(kind="deployment", ref=value) for value in refs),
+            )
+        if "deployment_health:failed" in values:
+            return CriterionResult(
+                criterion=criterion,
+                passed=False,
+                confidence=0.75,
+                message="preview deployment health check failed",
+            )
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=0.7,
+            message="missing preview deployment health evidence",
+        )
+
+
+class PreviewE2ECriterionRunner(CriterionRunner):
+    """Requires preview URL, deployment health, and browser E2E evidence."""
+
+    async def run(
+        self, criterion: AcceptanceCriterion, ctx: VerificationContext
+    ) -> CriterionResult:
+        scenario = str(criterion.spec.get("name") or criterion.spec.get("path") or "").strip()
+        values = _pipeline_evidence_values(ctx) | _artifact_text_values(
+            ctx,
+            "browser_e2e",
+            "execution_verifications",
+            "last_worker_report_verifications",
+            "candidate_verifications",
+            "evidence_refs",
+        )
+        missing: list[str] = []
+        scenario_ref = f"preview_e2e:{scenario}"
+        if scenario_ref not in values and f"browser_e2e:{scenario}" not in values:
+            missing.append(scenario_ref)
+        if not _first_prefixed(values, "preview_url:"):
+            missing.append("preview_url")
+        if "deployment_health:passed" not in values:
+            missing.append("deployment_health:passed")
+        if missing:
+            return CriterionResult(
+                criterion=criterion,
+                passed=False,
+                confidence=0.7,
+                message=f"missing preview e2e evidence: {', '.join(missing)}",
+            )
+        return CriterionResult(
+            criterion=criterion,
+            passed=True,
+            confidence=1.0,
+            message=f"preview e2e evidence recorded: {scenario}",
+            evidence=tuple(
+                EvidenceRef(kind="preview_e2e", ref=value)
+                for value in values
+                if value.startswith(("preview_e2e:", "browser_e2e:", "preview_url:"))
+                or value == "deployment_health:passed"
+            ),
+        )
+
+
 class _InconclusiveRunner(CriterionRunner):
     """Returns a neutral result so unknown kinds never silently pass."""
 
@@ -370,6 +518,10 @@ class AcceptanceCriterionVerifier(VerifierPort):
             CriterionKind.REGEX: RegexCriterionRunner(),
             CriterionKind.SCHEMA: SchemaCriterionRunner(),
             CriterionKind.BROWSER_E2E: BrowserE2ECriterionRunner(),
+            CriterionKind.CI_PIPELINE: PipelineCriterionRunner(),
+            CriterionKind.PIPELINE_STAGE: PipelineStageCriterionRunner(),
+            CriterionKind.DEPLOYMENT_HEALTH: DeploymentHealthCriterionRunner(),
+            CriterionKind.PREVIEW_E2E: PreviewE2ECriterionRunner(),
         }
         self._fallback = _InconclusiveRunner()
 
@@ -398,6 +550,9 @@ class AcceptanceCriterionVerifier(VerifierPort):
         clean_worktree_guard = await _clean_worktree_after_commit_guard(ctx)
         if clean_worktree_guard is not None:
             results.append(clean_worktree_guard)
+        pipeline_guard = await _pipeline_gate_guard(ctx)
+        if pipeline_guard is not None:
+            results.append(pipeline_guard)
         for crit in ctx.node.acceptance_criteria:
             runner = self._runners.get(crit.kind, self._fallback)
             try:
@@ -418,7 +573,7 @@ class AcceptanceCriterionVerifier(VerifierPort):
         )
 
 
-def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult | None:
+def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult | None:  # noqa: PLR0911
     """Prevent stale or blocked worker reports from satisfying weak criteria."""
 
     criterion = AcceptanceCriterion(
@@ -439,6 +594,8 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             message=f"worker report type {report_type!r} is not a completion report",
         )
     if attempt_status in {"blocked", "cancelled", "rejected"}:
+        if ctx.attempt_id is None and _has_pipeline_success_evidence(ctx):
+            return None
         return CriterionResult(
             criterion=criterion,
             passed=False,
@@ -587,7 +744,9 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
     )
 
 
-async def _clean_worktree_after_commit_guard(ctx: VerificationContext) -> CriterionResult | None:
+async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
+    ctx: VerificationContext,
+) -> CriterionResult | None:
     """When a checkpoint reports a commit, ensure no extra changes were left behind."""
 
     if ctx.sandbox is None or not _required_change_refs(ctx):
@@ -611,10 +770,16 @@ async def _clean_worktree_after_commit_guard(ctx: VerificationContext) -> Criter
         required=True,
         description="committed feature checkpoints must not leave uncommitted changes",
     )
-    code_root = _sandbox_code_root(ctx)
-    command = "git status --short"
-    if code_root:
-        command = f"git -C {shlex.quote(code_root)} status --short"
+    git_root = _clean_worktree_git_root(ctx)
+    if not git_root:
+        suffix = " after pipeline success" if _has_pipeline_success_evidence(ctx) else ""
+        return CriterionResult(
+            criterion=criterion,
+            passed=True,
+            confidence=0.4,
+            message=f"clean worktree check skipped: code root unavailable{suffix}",
+        )
+    command = f"git -C {shlex.quote(git_root)} status --short"
     try:
         result = await ctx.sandbox.run_command(command, timeout=15)
     except Exception as exc:
@@ -650,6 +815,25 @@ async def _clean_worktree_after_commit_guard(ctx: VerificationContext) -> Criter
         confidence=1.0,
         message="clean worktree after commit",
     )
+
+
+async def _pipeline_gate_guard(ctx: VerificationContext) -> CriterionResult | None:
+    if not _requires_pipeline_gate(ctx):
+        return None
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CI_PIPELINE,
+        spec={},
+        required=True,
+        description="software workspace tasks require harness-native CI/CD evidence",
+    )
+    return await PipelineCriterionRunner().run(criterion, ctx)
+
+
+def _requires_pipeline_gate(ctx: VerificationContext) -> bool:
+    raw_required = ctx.node.metadata.get("pipeline_required")
+    if isinstance(raw_required, bool):
+        return raw_required
+    return False
 
 
 def _required_change_refs(ctx: VerificationContext) -> set[str]:
@@ -707,6 +891,26 @@ def _structured_verification_evidence(ctx: VerificationContext) -> set[str]:
     return evidence
 
 
+def _pipeline_evidence_values(ctx: VerificationContext) -> set[str]:
+    return _artifact_text_values(
+        ctx,
+        "pipeline_evidence_refs",
+        "pipeline_evidence",
+        "delivery_evidence_refs",
+        "evidence_refs",
+        "execution_verifications",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "candidate_artifacts",
+        "candidate_verifications",
+    )
+
+
+def _has_pipeline_success_evidence(ctx: VerificationContext) -> bool:
+    values = _pipeline_evidence_values(ctx)
+    return "ci_pipeline:passed" in values or _first_prefixed(values, "pipeline_run:success:") is not None
+
+
 def _has_structured_verification_ref(evidence: set[str], expected_ref: str) -> bool:
     return any(
         value == expected_ref
@@ -723,14 +927,19 @@ def _has_structured_verification_ref(evidence: set[str], expected_ref: str) -> b
 def _artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:
     values: set[str] = set()
     for key in keys:
-        raw = ctx.artifacts.get(key)
-        if isinstance(raw, str) and raw:
-            values.add(raw)
-        elif isinstance(raw, list):
-            values.update(str(item) for item in raw if item)
-        elif isinstance(raw, dict):
-            values.update(str(item) for item in raw.values() if item)
+        values.update(_text_values(ctx.artifacts.get(key)))
+        values.update(_text_values(ctx.node.metadata.get(key)))
     return values
+
+
+def _text_values(raw: object) -> set[str]:
+    if isinstance(raw, str) and raw:
+        return {raw}
+    if isinstance(raw, list | tuple | set):
+        return {str(item) for item in raw if item}
+    if isinstance(raw, dict):
+        return {str(item) for item in raw.values() if item}
+    return set()
 
 
 def _first_prefixed(values: set[str], prefix: str) -> str | None:
@@ -752,9 +961,29 @@ def _artifact_text(ctx: VerificationContext, key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _clean_worktree_git_root(ctx: VerificationContext) -> str | None:
+    code_root = _sandbox_code_root(ctx)
+    checkpoint = ctx.node.feature_checkpoint
+    if checkpoint is not None and checkpoint.worktree_path:
+        worktree_path = checkpoint.worktree_path.strip()
+        if "${sandbox_code_root}" in worktree_path:
+            if code_root:
+                return worktree_path.replace("${sandbox_code_root}", code_root)
+            return None
+        return worktree_path
+    return code_root
+
+
 def _sandbox_code_root(ctx: VerificationContext) -> str | None:
-    raw = ctx.node.metadata.get("code_context")
-    if not isinstance(raw, dict):
+    for raw in (ctx.node.metadata.get("code_context"), ctx.artifacts.get("code_context")):
+        value = _sandbox_code_root_value(raw)
+        if value:
+            return value
+    return None
+
+
+def _sandbox_code_root_value(raw: object) -> str | None:
+    if not isinstance(raw, Mapping):
         return None
     value = raw.get("sandbox_code_root")
     return value if isinstance(value, str) and value.strip() else None

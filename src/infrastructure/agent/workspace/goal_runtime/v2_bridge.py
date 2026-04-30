@@ -135,10 +135,16 @@ async def kickoff_v2_plan(
                     },
                 )
                 return True
+            planning_context = await _workspace_planning_contract_context(
+                db,
+                workspace_id,
+                root_task_id=root_task_id,
+            )
             decomposer = await _build_workspace_task_decomposer(
                 db,
                 workspace_id,
                 root_task_id=root_task_id,
+                extra_context=planning_context,
             )
             orchestrator = build_sql_orchestrator(db, decomposer=decomposer)
             plan = await orchestrator.start_goal(
@@ -146,6 +152,7 @@ async def kickoff_v2_plan(
                 title=title,
                 description=description,
                 created_by=created_by,
+                conversation_context=planning_context,
                 start_supervisor=False,
             )
             _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
@@ -221,6 +228,7 @@ async def _build_workspace_task_decomposer(
     workspace_id: str,
     *,
     root_task_id: str | None = None,
+    extra_context: str | None = None,
 ) -> TaskDecomposerProtocol | None:
     """Build the same LLM-backed decomposer V2 needs to produce a real DAG."""
     try:
@@ -247,6 +255,11 @@ async def _build_workspace_task_decomposer(
             root_metadata=root_metadata,
             workspace_metadata=workspace.metadata,
         )
+        if extra_context is None:
+            extra_context = _workspace_iteration_decomposition_context(
+                workspace_type=workspace_type,
+                max_subtasks=max_subtasks,
+            )
         return _WorkspacePlanTaskDecomposerAdapter(
             TaskDecomposer(
                 llm_client=llm_client,
@@ -257,10 +270,7 @@ async def _build_workspace_task_decomposer(
                     max_subtasks=max_subtasks,
                 ),
             ),
-            extra_context=_workspace_iteration_decomposition_context(
-                workspace_type=workspace_type,
-                max_subtasks=max_subtasks,
-            ),
+            extra_context=extra_context,
         )
     except Exception:
         logger.warning(
@@ -269,6 +279,31 @@ async def _build_workspace_task_decomposer(
             exc_info=True,
         )
         return None
+
+
+async def _workspace_planning_contract_context(
+    db: AsyncSession,
+    workspace_id: str,
+    *,
+    root_task_id: str | None = None,
+) -> str | None:
+    workspace = await SqlWorkspaceRepository(db).find_by_id(workspace_id)
+    if workspace is None:
+        return None
+    root_metadata: Mapping[str, Any] | None = None
+    if root_task_id:
+        root_task = await SqlWorkspaceTaskRepository(db).find_by_id(root_task_id)
+        if root_task is not None and root_task.workspace_id == workspace_id:
+            root_metadata = root_task.metadata
+    workspace_type = resolve_workspace_type(root_metadata, workspace.metadata)
+    max_subtasks = _workspace_decomposer_max_subtasks(
+        root_metadata=root_metadata,
+        workspace_metadata=workspace.metadata,
+    )
+    return _workspace_iteration_decomposition_context(
+        workspace_type=workspace_type,
+        max_subtasks=max_subtasks,
+    )
 
 
 def _workspace_decomposer_max_subtasks(

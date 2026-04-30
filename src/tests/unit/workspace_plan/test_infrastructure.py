@@ -896,7 +896,10 @@ class TestVerifier:
     async def test_verifier_accepts_feature_checkpoint_git_and_test_evidence(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
-            metadata={"write_set": ["src/app.py"]},
+            metadata={
+                "write_set": ["src/app.py"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
             feature_checkpoint=FeatureCheckpoint(
                 feature_id="feature-1",
                 sequence=1,
@@ -975,7 +978,10 @@ class TestVerifier:
 
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
-            metadata={"write_set": ["src/app.py"]},
+            metadata={
+                "write_set": ["src/app.py"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
             feature_checkpoint=FeatureCheckpoint(
                 feature_id="feature-1",
                 sequence=1,
@@ -997,6 +1003,79 @@ class TestVerifier:
 
         assert rep.passed
         assert any(result.message == "clean worktree after commit" for result in rep.results)
+
+    async def test_verifier_uses_artifact_code_context_for_clean_worktree(self) -> None:
+        commands: list[str] = []
+
+        class CleanSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                commands.append(command)
+                return {"exit_code": 0, "stdout": "", "stderr": ""}
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={"write_set": ["src/app.py"]},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:abc123", "git_diff_summary:1 file changed"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            sandbox=CleanSandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert commands == ["git -C /workspace/my-evo status --short"]
+
+    async def test_verifier_prefers_feature_worktree_for_clean_worktree(self) -> None:
+        commands: list[str] = []
+
+        class CleanSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                commands.append(command)
+                return {"exit_code": 0, "stdout": "", "stderr": ""}
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "write_set": ["src/app.py"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+                worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-1",
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:abc123", "git_diff_summary:1 file changed"],
+            },
+            sandbox=CleanSandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert commands == [
+            "git -C /workspace/my-evo/../.memstack/worktrees/attempt-1 status --short"
+        ]
 
     async def test_verifier_does_not_hard_fail_when_clean_worktree_check_unavailable(
         self,
@@ -1030,6 +1109,45 @@ class TestVerifier:
         assert rep.passed
         assert any(
             result.message.startswith("clean worktree check skipped")
+            for result in rep.results
+        )
+
+    async def test_verifier_skips_broad_clean_worktree_after_pipeline_success_without_code_root(
+        self,
+    ) -> None:
+        class DirtySandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                return {"exit_code": 0, "stdout": " M my-evo\n?? .cache/\n", "stderr": ""}
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "write_set": ["docs/pipeline-gate-loaded-code-smoke.md"],
+                "pipeline_required": True,
+                "pipeline_evidence_refs": ["ci_pipeline:passed"],
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Pipeline doc",
+                expected_artifacts=("docs/pipeline-gate-loaded-code-smoke.md",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:abc123", "git_diff_summary:1 file changed"],
+            },
+            sandbox=DirtySandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(
+            result.message == "clean worktree check skipped: code root unavailable after pipeline success"
             for result in rep.results
         )
 

@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import src.infrastructure.agent.workspace_plan.outbox_handlers as outbox_handlers
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.domain.model.workspace_plan import (
     Capability,
@@ -258,6 +259,64 @@ async def test_workspace_sandbox_runner_blocks_commands_outside_harness_allowlis
     assert result["exit_code"] == 126
     assert result["stdout"] == ""
     assert "not allowed by workspace harness" in result["stderr"]
+
+
+@pytest.mark.asyncio
+async def test_workspace_sandbox_runner_uses_api_adapter_when_agent_worker_uninitialized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str, dict[str, object], float]] = []
+    registered: list[object] = []
+
+    class FakeAdapter:
+        async def call_tool(
+            self,
+            sandbox_id: str,
+            tool_name: str,
+            arguments: dict[str, object],
+            *,
+            timeout: float,
+        ) -> dict[str, object]:
+            calls.append((sandbox_id, tool_name, arguments, timeout))
+            return {"content": [{"type": "text", "text": "pipeline ok"}], "is_error": False}
+
+    async def fake_api_adapter() -> FakeAdapter:
+        return FakeAdapter()
+
+    async def fake_resolve(project_id: str, *, tenant_id: str | None = None) -> str:
+        assert project_id == "project-1"
+        assert tenant_id == "tenant-1"
+        return "sandbox-1"
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.get_mcp_sandbox_adapter",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.set_mcp_sandbox_adapter",
+        lambda adapter: registered.append(adapter),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state._resolve_project_sandbox_id",
+        fake_resolve,
+    )
+    monkeypatch.setattr(outbox_handlers, "_api_process_sandbox_adapter", fake_api_adapter)
+
+    runner = _WorkspaceSandboxCommandRunner(project_id="project-1", tenant_id="tenant-1")
+    result = await runner.run_command("echo pipeline ok", timeout=30)
+
+    assert result["exit_code"] == 0
+    assert result["stdout"] == "pipeline ok"
+    assert result["stderr"] == ""
+    assert registered
+    assert calls == [
+        (
+            "sandbox-1",
+            "bash",
+            {"command": "echo pipeline ok", "timeout": 30},
+            35.0,
+        )
+    ]
 
 
 def test_structural_sandbox_commands_allow_git_status_in_code_root() -> None:

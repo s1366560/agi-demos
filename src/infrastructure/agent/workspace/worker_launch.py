@@ -191,6 +191,12 @@ def _build_worker_system_context(
                     "commit_ref:<sha> if committed, otherwise "
                     "git_diff_summary:<changed files and verification state>."
                 ),
+                "harness_pipeline_gate": (
+                    "For software implement/test/deploy/review tasks, the workspace harness "
+                    "will run sandbox-native CI/CD after your completion report. Do not treat "
+                    "self-reported tests as the final gate; provide enough context for the "
+                    "harness pipeline and wait for durable pipeline evidence in follow-up work."
+                ),
                 "tool": "workspace_report_complete",
                 "argument": "verifications",
                 "example": (
@@ -216,6 +222,11 @@ def _build_worker_system_context(
                     "If you changed files, workspace_report_complete MUST also include "
                     "commit_ref:<sha> or git_diff_summary:<changed files and verification state> "
                     "in artifacts or verifications."
+                ),
+                (
+                    "For deploy/review work, include preview URL, health-check command/result, "
+                    "and rollback or stop notes when available; final acceptance requires "
+                    "harness-native pipeline/deployment evidence."
                 ),
                 "Call workspace_report_blocked if a hard blocker cannot be recovered.",
             ],
@@ -438,7 +449,9 @@ def _build_worker_brief(
         "Add the concrete test/build/browser evidence refs after them. If you changed "
         "files, also include commit_ref:<sha> or git_diff_summary:<changed files and "
         "verification state> in artifacts or verifications; otherwise the verifier will "
-        "reject the attempt."
+        "reject the attempt. For software delivery phases, the harness will run the final "
+        "sandbox-native CI/CD gate after your report, so include preview, health, and "
+        "rollback details when they exist."
     )
 
     return "\n\n".join(sections)

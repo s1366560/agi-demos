@@ -93,6 +93,17 @@ export interface SettingsDraft {
   requiresExternalArtifact: boolean;
   minimumVerificationGrade: WorkspaceVerificationGrade;
   requiredArtifactPrefixes: string;
+  deliveryProvider: string;
+  deliveryTimeoutSeconds: number;
+  deliveryAutoDeploy: boolean;
+  deliveryPreviewPort: number;
+  deliveryHealthUrl: string;
+  deliveryHealthCommand: string;
+  deliveryInstallCommand: string;
+  deliveryLintCommand: string;
+  deliveryTestCommand: string;
+  deliveryBuildCommand: string;
+  deliveryDeployCommand: string;
   rawMetadata: string;
 }
 
@@ -102,6 +113,7 @@ export function syncDraftFromWorkspace(workspace: Workspace): SettingsDraft {
   const policy = profile.completion_policy ?? {};
   const workspaceUseCase = getWorkspaceUseCase(workspace);
   const sandboxCodeRoot = getSandboxCodeRoot(workspace) ?? '';
+  const delivery = metadata.delivery_cicd ?? {};
 
   return {
     name: workspace.name,
@@ -114,6 +126,17 @@ export function syncDraftFromWorkspace(workspace: Workspace): SettingsDraft {
     requiresExternalArtifact: policy.requires_external_artifact ?? false,
     minimumVerificationGrade: policy.minimum_verification_grade ?? 'warn',
     requiredArtifactPrefixes: formatPrefixDraft(policy.required_artifact_prefixes),
+    deliveryProvider: asString(delivery.provider) || 'sandbox_native',
+    deliveryTimeoutSeconds: asNumber(delivery.timeout_seconds, 600),
+    deliveryAutoDeploy: delivery.auto_deploy ?? true,
+    deliveryPreviewPort: asNumber(delivery.preview_port, 3000),
+    deliveryHealthUrl: asString(delivery.health_url),
+    deliveryHealthCommand: asString(delivery.health_command),
+    deliveryInstallCommand: asString(delivery.install_command),
+    deliveryLintCommand: asString(delivery.lint_command),
+    deliveryTestCommand: asString(delivery.test_command),
+    deliveryBuildCommand: asString(delivery.build_command),
+    deliveryDeployCommand: asString(delivery.deploy_command),
     rawMetadata: prettyJson(metadata),
   };
 }
@@ -169,6 +192,21 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
       metadata.code_context = nextCodeContext;
     }
   }
+  metadata.delivery_cicd = {
+    ...(metadata.delivery_cicd ?? {}),
+    provider: draft.deliveryProvider || 'sandbox_native',
+    code_root: normalizedCodeRoot || undefined,
+    timeout_seconds: Math.max(1, draft.deliveryTimeoutSeconds || 600),
+    auto_deploy: draft.deliveryAutoDeploy,
+    preview_port: Math.max(1, draft.deliveryPreviewPort || 3000),
+    health_url: draft.deliveryHealthUrl.trim() || undefined,
+    health_command: draft.deliveryHealthCommand.trim() || undefined,
+    install_command: draft.deliveryInstallCommand.trim() || undefined,
+    lint_command: draft.deliveryLintCommand.trim() || undefined,
+    test_command: draft.deliveryTestCommand.trim() || undefined,
+    build_command: draft.deliveryBuildCommand.trim() || undefined,
+    deploy_command: draft.deliveryDeployCommand.trim() || undefined,
+  };
 
   return { metadata, error: null };
 }
@@ -209,4 +247,19 @@ function formatPrefixDraft(value: unknown): string {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string').join(', ')
     : '';
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
 }

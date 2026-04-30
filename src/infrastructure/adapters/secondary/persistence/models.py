@@ -3322,6 +3322,171 @@ class WorkspacePlanOutboxModel(Base):
     )
 
 
+class WorkspacePipelineContractModel(Base):
+    """Harness-native CI/CD contract for a workspace plan."""
+
+    __tablename__ = "workspace_pipeline_contracts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    plan_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="sandbox_native")
+    code_root: Mapped[str | None] = mapped_column(String, nullable=True)
+    commands_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    env_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    trigger_policy_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
+    auto_deploy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    preview_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    health_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "plan_id",
+            name="uq_workspace_pipeline_contract_workspace_plan",
+        ),
+        Index("ix_workspace_pipeline_contracts_workspace", "workspace_id"),
+        Index("ix_workspace_pipeline_contracts_plan", "plan_id"),
+    )
+
+
+class WorkspacePipelineRunModel(Base):
+    """One harness-native CI/CD run for a plan node or attempt."""
+
+    __tablename__ = "workspace_pipeline_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    contract_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspace_pipeline_contracts.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    plan_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=True
+    )
+    node_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    commit_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="sandbox_native")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_pipeline_runs_workspace_created", "workspace_id", "created_at"),
+        Index("ix_workspace_pipeline_runs_plan_node", "plan_id", "node_id"),
+        Index("ix_workspace_pipeline_runs_attempt", "attempt_id"),
+        Index("ix_workspace_pipeline_runs_status", "status"),
+    )
+
+
+class WorkspacePipelineStageRunModel(Base):
+    """Stage-level result inside a workspace pipeline run."""
+
+    __tablename__ = "workspace_pipeline_stage_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspace_pipeline_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    stage: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    command: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stdout_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stderr_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    log_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    artifact_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_pipeline_stage_runs_run", "run_id"),
+        Index("ix_workspace_pipeline_stage_runs_workspace_status", "workspace_id", "status"),
+    )
+
+
+class WorkspaceDeploymentModel(Base):
+    """Preview runtime managed by the workspace harness."""
+
+    __tablename__ = "workspace_deployments"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    plan_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("workspace_plans.id", ondelete="CASCADE"), nullable=True
+    )
+    node_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    pipeline_run_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("workspace_pipeline_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="sandbox_native")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    command: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    process_group_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    preview_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    health_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    restart_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_healthy_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rollback_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    log_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_workspace_deployments_workspace_created", "workspace_id", "created_at"),
+        Index("ix_workspace_deployments_plan_node", "plan_id", "node_id"),
+        Index("ix_workspace_deployments_pipeline_run", "pipeline_run_id"),
+        Index("ix_workspace_deployments_status", "status"),
+    )
+
+
 class PendingReviewModel(Base):
     """HITL ``blocking_human_only`` pending review (Track B P2-3 phase-2)."""
 
