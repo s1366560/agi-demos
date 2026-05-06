@@ -342,6 +342,83 @@ class DIContainer:
     def cron_job_service(self) -> CronJobService:
         return self._cron.cron_job_service()
 
+    # === Reflection (friction → playbook loop) ===
+
+    async def reflection_service(self, project_id: str) -> Any:
+        """Build a per-project ``ReflectionService``.
+
+        Uses Redis-backed friction ledger when a redis client is available;
+        falls back to a process-singleton in-memory ledger otherwise. The
+        playbook repository is currently in-memory (singleton across all
+        projects) until ``SqlPlaybookRepository`` ships.
+        """
+        from src.application.services.reflection_factory import (
+            build_litellm_reflector,
+            build_reflection_service,
+            default_in_memory_ledger,
+            default_in_memory_playbooks,
+        )
+        from src.infrastructure.adapters.secondary.cache.redis_friction_ledger import (
+            RedisFrictionLedger,
+        )
+
+        del project_id  # ledger is keyed per project at append/query time
+
+        redis_client = self._infra.redis()
+        ledger: Any = (
+            RedisFrictionLedger(redis_client)
+            if redis_client is not None
+            else default_in_memory_ledger()
+        )
+
+        provider_config = await self.ai_service_factory().resolve_provider()
+        litellm_client = self.ai_service_factory().create_llm_client(provider_config)
+        reflector = build_litellm_reflector(litellm_client)
+
+        return build_reflection_service(
+            ledger=ledger,
+            playbooks=default_in_memory_playbooks(),
+            reflector=reflector,
+        )
+
+    def reflection_runner(self) -> Any:
+        """Singleton ``ReflectionRunner`` driven by all-projects sweep.
+
+        Lifecycle is owned by the caller (FastAPI lifespan). Construction is
+        cheap; ``start()`` must be invoked once the event loop is up.
+        """
+        existing = getattr(self, "_reflection_runner", None)
+        if existing is not None:
+            return existing
+
+        from src.application.services.reflection_runner import ReflectionRunner
+
+        async def _all_active_project_ids() -> list[str]:
+            session_factory = self._session_factory
+            if session_factory is None:
+                return []
+            from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
+                SqlProjectRepository,
+            )
+
+            async with session_factory() as session:
+                repo = SqlProjectRepository(session)
+                # No "list all" method on the port; fall back to public projects
+                # which is the safest superset for periodic sweeps. Operators
+                # can swap this for a tenant-scoped iteration later.
+                projects = await repo.find_public_projects(limit=500)
+                return [p.id for p in projects]
+
+        async def _service_for(project_id: str) -> Any:
+            return await self.reflection_service(project_id)
+
+        runner = ReflectionRunner(
+            project_ids_provider=_all_active_project_ids,
+            service_factory=_service_for,
+        )
+        self._reflection_runner = runner  # type: ignore[attr-defined]
+        return runner
+
     # === Project Container delegates ===
 
     def project_repository(self) -> ProjectRepository:

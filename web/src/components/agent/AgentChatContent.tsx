@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { message } from 'antd';
-import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot } from 'lucide-react';
+import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot, Folder } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
@@ -74,6 +74,9 @@ import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
+
+import { EvidenceBundleDrawer } from './evidence/EvidenceBundleDrawer';
+import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
 import type {
   AgentTask,
@@ -740,11 +743,90 @@ ${content}`;
     }, []);
 
     // Status bar with layout mode selector
+    const [evidenceOpen, setEvidenceOpen] = useState(false);
+
+    // Pull all current artifacts and filter to this conversation. Map.values() is
+    // a fresh iterator each render, so we memoize the filtered array.
+    const allArtifactsMap = useSandboxStore((s) => s.artifacts);
+    const conversationArtifacts = useMemo(() => {
+      if (!activeConversationId) return [];
+      return Array.from(allArtifactsMap.values()).filter(
+        (a) => a.conversationId === activeConversationId
+      );
+    }, [allArtifactsMap, activeConversationId]);
+
+    const sandboxConnectionStatus = useSandboxStore((s) => s.connectionStatus);
+    const currentTool = useSandboxStore((s) => s.currentTool);
+    const suggestionsCount = suggestions.length;
+
+    const workspaceStatusSlots = useMemo(() => {
+      const slots: Parameters<typeof WorkspaceStatusBar>[0] = {};
+      if (isStreaming) {
+        slots.llm = { label: 'LLM', value: 'streaming', tone: 'running' };
+      }
+      if (sandboxConnectionStatus && sandboxConnectionStatus !== 'idle') {
+        const tone: 'ok' | 'error' | 'running' =
+          sandboxConnectionStatus === 'connected'
+            ? 'ok'
+            : sandboxConnectionStatus === 'error'
+              ? 'error'
+              : 'running';
+        slots.sandbox = {
+          label: 'Sandbox',
+          value: currentTool
+            ? `${sandboxConnectionStatus} · ${currentTool}`
+            : sandboxConnectionStatus,
+          tone,
+        };
+      }
+      if (suggestionsCount > 0 || doomLoopDetected) {
+        slots.hitl = {
+          label: 'HITL',
+          value: doomLoopDetected
+            ? 'doom-loop'
+            : `${suggestionsCount} suggestion${suggestionsCount === 1 ? '' : 's'}`,
+          tone: doomLoopDetected ? 'error' : 'warning',
+        };
+      }
+      if (conversationArtifacts.length > 0) {
+        slots.friction = {
+          label: 'Evidence',
+          value: `${conversationArtifacts.length} artifact${
+            conversationArtifacts.length === 1 ? '' : 's'
+          }`,
+          tone: 'idle',
+          hint: 'Open the Evidence drawer to inspect screenshots, diffs, test runs and logs',
+        };
+      }
+      return slots;
+    }, [
+      isStreaming,
+      sandboxConnectionStatus,
+      currentTool,
+      suggestionsCount,
+      doomLoopDetected,
+      conversationArtifacts.length,
+    ]);
+
     const statusBarWithLayout = (
-      <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
-        <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
-        <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
-          {activeConversationId && timeline.length > 0 && (
+      <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
+        <WorkspaceStatusBar {...workspaceStatusSlots} />
+        <div className="flex items-center min-w-0">
+          <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
+          <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
+            {conversationArtifacts.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setEvidenceOpen(true)}
+                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                title={t('evidence.open', 'Evidence')}
+                aria-label={t('evidence.open', 'Evidence')}
+                data-testid="open-evidence-drawer"
+              >
+                <Folder size={14} />
+              </button>
+            )}
+            {activeConversationId && timeline.length > 0 && (
             <button
               type="button"
               onClick={() => {
@@ -805,7 +887,8 @@ ${content}`;
               )}
             </div>
           )}
-          <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />
+            <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />
+          </div>
         </div>
       </div>
     );
@@ -958,6 +1041,13 @@ ${content}`;
       >
         {/* Keyboard shortcut overlay (Cmd+/) */}
         <ShortcutOverlay />
+
+        {/* Evidence bundle drawer */}
+        <EvidenceBundleDrawer
+          open={evidenceOpen}
+          onClose={() => setEvidenceOpen(false)}
+          artifacts={conversationArtifacts}
+        />
 
         {/* First-time user onboarding tour */}
         {showOnboarding && !activeConversationId && (
