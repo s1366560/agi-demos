@@ -25,6 +25,7 @@ import {
 } from '../../services/playbookService';
 
 const LIMIT = 200;
+const POLL_INTERVAL_MS = 30_000;
 
 const VERDICT_LABELS: Record<ReflectionVerdict['action'], string> = {
   create: 'Created',
@@ -135,27 +136,45 @@ export const PlaybookLibrary: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (projectId === undefined) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [pbs, vds] = await Promise.all([
-        playbookService.listPlaybooks(projectId, LIMIT),
-        playbookService.listReflectionVerdicts(projectId, LIMIT),
-      ]);
-      setPlaybooks(pbs);
-      setVerdicts(vds);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const load = useCallback(
+    async (silent: boolean = false) => {
+      if (projectId === undefined) return;
+      if (!silent) setLoading(true);
+      setError(null);
+      try {
+        const [pbs, vds] = await Promise.all([
+          playbookService.listPlaybooks(projectId, LIMIT),
+          playbookService.listReflectionVerdicts(projectId, LIMIT),
+        ]);
+        setPlaybooks(pbs);
+        setVerdicts(vds);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [projectId],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Background refresh: the reflection loop runs out-of-band, so poll
+  // periodically while the page is visible to keep the view fresh
+  // without requiring a dedicated project-event channel.
+  useEffect(() => {
+    if (projectId === undefined) return;
+    const handle = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void load(true);
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      window.clearInterval(handle);
+    };
+  }, [projectId, load]);
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
