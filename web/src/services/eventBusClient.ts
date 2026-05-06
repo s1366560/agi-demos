@@ -80,7 +80,15 @@ const DEFAULT_OPTIONS: {
   heartbeatInterval: number;
   connectionTimeout: number;
 } = {
-  url: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/events/ws`,
+  url: (() => {
+    // Allow override for split-deployment topologies where the API host
+    // differs from the page origin (e.g. dev pointing at a remote API).
+    // Falls back to same-origin via Vite proxy / production reverse proxy.
+    const override = import.meta.env.VITE_API_HOST;
+    const host = (typeof override === 'string' && override) || window.location.host;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${host}/api/v1/events/ws`;
+  })(),
   autoReconnect: true,
   maxReconnectAttempts: 5,
   reconnectDelay: 1000,

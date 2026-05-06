@@ -392,6 +392,41 @@ class DIContainer:
             verdict_log=SqlReflectionVerdictRepository(session),
         )
 
+    def lane_experience_service(self, *, session: AsyncSession) -> Any:
+        """Build a session-scoped ``LaneExperienceService``.
+
+        Reuses the same friction ledger as ``reflection_service`` (Redis or
+        in-memory fallback) and a SQL-backed ``PlaybookRepository`` bound to
+        the caller's session.
+
+        The caller owns the DB session lifecycle. The returned service has
+        no transactional side effects (read-only on both ports), so callers
+        do not need to commit when they only call ``build``.
+        """
+        from src.application.services.lane_experience_service import (
+            LaneExperienceService,
+        )
+        from src.application.services.reflection_factory import (
+            default_in_memory_ledger,
+        )
+        from src.infrastructure.adapters.secondary.cache.redis_friction_ledger import (
+            RedisFrictionLedger,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository import (
+            SqlPlaybookRepository,
+        )
+
+        redis_client = self._infra.redis()
+        ledger: Any = (
+            RedisFrictionLedger(redis_client)
+            if redis_client is not None
+            else default_in_memory_ledger()
+        )
+        return LaneExperienceService(
+            friction_ledger=ledger,
+            playbook_repository=SqlPlaybookRepository(session),
+        )
+
     def reflection_runner(self) -> Any:
         """Singleton ``ReflectionRunner`` driven by an all-tenants sweep.
 

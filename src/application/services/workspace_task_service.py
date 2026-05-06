@@ -289,29 +289,14 @@ class WorkspaceTaskService:
                 task.blocker_reason = None
             saved = await self._workspace_task_repo.save(task)
             await self._reconcile_root_goal_if_needed(saved)
-            # Fire-and-forget friction ingestion. No-op unless
-            # ``configure_friction_ingest`` has been called at startup.
-            try:
-                from src.application.services.friction_runtime import (
-                    record_lane_change,
-                )
-
-                await record_lane_change(
-                    project_id=workspace.project_id,
-                    task_id=saved.id,
-                    from_lane=previous_status.value,
-                    to_lane=status.value,
-                    metadata={
-                        "workspace_id": workspace.id,
-                        "actor_type": actor_type,
-                    },
-                )
-            except Exception:
-                logger.exception(
-                    "record_lane_change failed for task=%s ws=%s",
-                    saved.id,
-                    workspace.id,
-                )
+            await self._record_lane_change_safely(
+                project_id=workspace.project_id,
+                workspace_id=workspace.id,
+                task_id=saved.id,
+                from_lane=previous_status.value,
+                to_lane=status.value,
+                actor_type=actor_type,
+            )
             return saved
 
         task.updated_at = datetime.now(UTC)
@@ -656,6 +641,61 @@ class WorkspaceTaskService:
         now = datetime.now(UTC)
         task.updated_at = now
         task.completed_at = now if target == WorkspaceTaskStatus.DONE else None
+
+    async def _record_lane_change_safely(
+        self,
+        *,
+        project_id: str,
+        workspace_id: str,
+        task_id: str,
+        from_lane: str,
+        to_lane: str,
+        actor_type: str | None,
+    ) -> None:
+        """Fire-and-forget friction ingestion for a lane transition.
+
+        No-op unless ``configure_friction_ingest`` has been called at
+        startup. Failures increment ``friction_ingest_failed_total`` but
+        never propagate — task status updates must not fail because the
+        friction ledger is unavailable.
+        """
+        try:
+            from src.application.services.friction_runtime import (
+                record_lane_change,
+            )
+
+            await record_lane_change(
+                project_id=project_id,
+                task_id=task_id,
+                from_lane=from_lane,
+                to_lane=to_lane,
+                metadata={
+                    "workspace_id": workspace_id,
+                    "actor_type": actor_type,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "record_lane_change failed for task=%s ws=%s",
+                task_id,
+                workspace_id,
+            )
+            try:
+                from src.infrastructure.telemetry.metrics import (
+                    increment_counter,
+                )
+
+                increment_counter(
+                    "friction_ingest_failed_total",
+                    "Number of failed friction ledger writes from "
+                    "workspace lane transitions.",
+                    attributes={"from_lane": from_lane, "to_lane": to_lane},
+                )
+            except Exception:
+                logger.debug(
+                    "friction_ingest_failed_total counter unavailable",
+                    exc_info=True,
+                )
 
     async def _reconcile_root_goal_if_needed(self, task: WorkspaceTask) -> None:
         root_goal_task_id = self._root_goal_task_id(task)

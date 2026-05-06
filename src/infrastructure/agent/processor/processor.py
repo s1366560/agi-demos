@@ -352,6 +352,9 @@ class SessionProcessor:
         # Runtime hook state
         self._session_instructions: list[str] = []
         self._response_instructions: list[str] = []
+        # Guards concurrent writes to ``_session_instructions`` (e.g. multiple
+        # callers racing to inject lane JIT guidance at session start).
+        self._session_instructions_lock = asyncio.Lock()
         self._tool_reminder_issued_for_streak = False
 
         # Forced skill context for loop reinforcement
@@ -459,6 +462,32 @@ class SessionProcessor:
                 item = raw_item.strip()
                 if item and item not in target:
                     target.append(item)
+
+    async def add_runtime_guidance(self, text: str) -> bool:
+        """Append a runtime guidance block to the session-level instructions.
+
+        Public, async-safe alternative to direct ``_session_instructions``
+        mutation. The block is rendered into the ``[Runtime Guidance]``
+        system message at the start of every LLM step.
+
+        Idempotent: identical (whitespace-stripped) blocks are not appended
+        twice within the same session. Concurrent callers are serialized
+        through ``_session_instructions_lock`` so the underlying list stays
+        consistent even when multiple injection sites fire in parallel.
+
+        Returns ``True`` if the block was newly appended, ``False`` if the
+        input was empty or already present.
+        """
+        if not isinstance(text, str):
+            return False
+        cleaned = text.strip()
+        if not cleaned:
+            return False
+        async with self._session_instructions_lock:
+            if cleaned in self._session_instructions:
+                return False
+            self._session_instructions.append(cleaned)
+            return True
 
     def _build_runtime_guidance_message(self) -> dict[str, str] | None:
         """Build a system message from accumulated runtime instructions."""

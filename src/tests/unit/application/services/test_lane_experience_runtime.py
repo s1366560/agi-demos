@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.application.services.lane_experience_runtime import inject_lane_jit_context
 from src.application.services.lane_experience_service import LaneJitContext
 
 
 class _StubProcessor:
+    """Mimics the public ``add_runtime_guidance`` contract on ``SessionProcessor``."""
+
     def __init__(self) -> None:
-        self._session_instructions: list[str] = []
+        self.calls: list[str] = []
+
+    async def add_runtime_guidance(self, text: str) -> bool:
+        cleaned = text.strip()
+        if not cleaned or cleaned in self.calls:
+            return False
+        self.calls.append(cleaned)
+        return True
 
 
 def _ctx(headline: str = "Lane 'Todo' just received the card.") -> LaneJitContext:
@@ -19,23 +30,26 @@ def _ctx(headline: str = "Lane 'Todo' just received the card.") -> LaneJitContex
     )
 
 
-def test_inject_appends_rendered_guidance() -> None:
+@pytest.mark.asyncio
+async def test_inject_appends_rendered_guidance() -> None:
     proc = _StubProcessor()
-    rendered = inject_lane_jit_context(proc, _ctx())
+    rendered = await inject_lane_jit_context(proc, _ctx())
     assert rendered.startswith("Lane 'Todo'")
-    assert proc._session_instructions == [rendered]
+    assert proc.calls == [rendered]
 
 
-def test_inject_is_idempotent() -> None:
+@pytest.mark.asyncio
+async def test_inject_is_idempotent() -> None:
     proc = _StubProcessor()
     ctx = _ctx()
-    inject_lane_jit_context(proc, ctx)
-    inject_lane_jit_context(proc, ctx)
-    assert len(proc._session_instructions) == 1
+    await inject_lane_jit_context(proc, ctx)
+    await inject_lane_jit_context(proc, ctx)
+    assert len(proc.calls) == 1
 
 
-def test_inject_allows_distinct_guidance_blocks() -> None:
+@pytest.mark.asyncio
+async def test_inject_allows_distinct_guidance_blocks() -> None:
     proc = _StubProcessor()
-    inject_lane_jit_context(proc, _ctx("Lane 'Todo' just received the card."))
-    inject_lane_jit_context(proc, _ctx("Lane 'Dev' just received the card."))
-    assert len(proc._session_instructions) == 2
+    await inject_lane_jit_context(proc, _ctx("Lane 'Todo' just received the card."))
+    await inject_lane_jit_context(proc, _ctx("Lane 'Dev' just received the card."))
+    assert len(proc.calls) == 2

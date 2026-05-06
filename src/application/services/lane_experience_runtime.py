@@ -1,8 +1,8 @@
 """Glue between :class:`LaneExperienceService` and the agent runtime.
 
-The ``SessionProcessor`` already exposes ``_session_instructions``, a list of
-strings that get rendered into the ``[Runtime Guidance]`` system message at
-the start of every LLM step. We funnel the lane JIT context through that
+The ``SessionProcessor`` exposes the public ``add_runtime_guidance(text)``
+coroutine which appends to ``_session_instructions`` under an asyncio lock
+and de-duplicates idempotently. We funnel the lane JIT context through that
 hook so the integration stays non-invasive and the processor itself stays
 unaware of lane semantics.
 
@@ -17,14 +17,18 @@ from typing import Protocol
 from src.application.services.lane_experience_service import LaneJitContext
 
 
-class _SupportsSessionInstructions(Protocol):
-    """Structural protocol satisfied by ``SessionProcessor``."""
+class _SupportsRuntimeGuidance(Protocol):
+    """Structural protocol satisfied by ``SessionProcessor``.
 
-    _session_instructions: list[str]
+    Any object exposing an async ``add_runtime_guidance(text)`` returning
+    a truthy value when the block was newly appended satisfies this.
+    """
+
+    async def add_runtime_guidance(self, text: str) -> bool: ...
 
 
-def inject_lane_jit_context(
-    processor: _SupportsSessionInstructions,
+async def inject_lane_jit_context(
+    processor: _SupportsRuntimeGuidance,
     context: LaneJitContext,
 ) -> str:
     """Append the rendered JIT context to the processor's runtime guidance.
@@ -33,8 +37,8 @@ def inject_lane_jit_context(
     rendered string so callers can log / surface it on the workbench.
     """
     rendered = context.render()
-    if rendered and rendered not in processor._session_instructions:
-        processor._session_instructions.append(rendered)
+    if rendered:
+        await processor.add_runtime_guidance(rendered)
     return rendered
 
 

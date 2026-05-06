@@ -51,6 +51,17 @@ def reset_friction_ingest() -> None:
     _lane_order = ()
 
 
+def get_friction_ledger() -> FrictionLedger | None:
+    """Return the process-level friction ledger if configured.
+
+    Used by read paths (e.g. ``LaneExperienceService``) that share the
+    same ledger as the ingest path. Returns ``None`` when
+    ``configure_friction_ingest`` has not been called (typical in unit
+    tests and minimal runtimes).
+    """
+    return _ledger
+
+
 async def record_lane_change(
     *,
     project_id: str,
@@ -103,6 +114,7 @@ async def record_lane_change(
 
 __all__ = [
     "configure_friction_ingest",
+    "get_friction_ledger",
     "record_lane_change",
     "reset_friction_ingest",
 ]
