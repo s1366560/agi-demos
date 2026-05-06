@@ -184,6 +184,8 @@ ignore = [
 # High cyclomatic complexity files (progressively refactor)
 "src/application/services/agent_service.py" = ["C901", "S110", "PIE790", "ANN401"]
 "src/infrastructure/agent/core/react_agent.py" = ["C901", "ANN401"]
+"src/infrastructure/agent/core/react_agent_prompt_mixin.py" = ["ANN401"]
+"src/infrastructure/agent/core/react_agent_routing_mixin.py" = ["ANN401"]
 "src/infrastructure/agent/processor/processor.py" = ["C901", "ANN401"]
 
 # Infrastructure modules that use subprocess (agent tools, MCP)
