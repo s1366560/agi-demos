@@ -290,6 +290,9 @@ const Support = lazy(() => import('./pages/project/Support').then((m) => ({ defa
 const Blackboard = lazy(() =>
   import('./pages/project/Blackboard').then((m) => ({ default: m.Blackboard }))
 );
+const PlaybookLibrary = lazy(() =>
+  import('./pages/project/PlaybookLibrary').then((m) => ({ default: m.PlaybookLibrary }))
+);
 
 // Schema pages
 const SchemaOverview = lazy(() => import('./pages/project/schema/SchemaOverview'));
@@ -1694,6 +1697,14 @@ function App() {
                   element={
                     <Suspense fallback={<PageLoader />}>
                       <Blackboard />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="playbooks"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <PlaybookLibrary />
                     </Suspense>
                   }
                 />
