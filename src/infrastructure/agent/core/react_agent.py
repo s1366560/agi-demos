@@ -79,6 +79,7 @@ _react_bg_tasks: set[asyncio.Task[Any]] = set()
 # Re-exported from ``react_agent_profile`` for backward compatibility.
 # Anything new should import directly from ``react_agent_profile``.
 from .react_agent_composition_mixin import CompositionMixin  # noqa: E402
+from .react_agent_hook_mixin import HookMixin  # noqa: E402
 from .react_agent_profile import (  # noqa: E402, F401  (re-export for back-compat)
     AgentRuntimeProfile,  # pyright: ignore[reportUnusedImport]
     _register_selected_agent_session,  # pyright: ignore[reportUnusedImport]
@@ -92,7 +93,14 @@ from .react_agent_tool_policy import (  # noqa: E402
 )
 
 
-class ReActAgent(RoutingMixin, PromptMixin, StreamMixin, SubAgentRunnerMixin, CompositionMixin):
+class ReActAgent(
+    RoutingMixin,
+    PromptMixin,
+    StreamMixin,
+    SubAgentRunnerMixin,
+    CompositionMixin,
+    HookMixin,
+):
     _WORKSPACE_ROOT_TOOL_BYPASS_NAMES: ClassVar[frozenset[str]] = WORKSPACE_ROOT_TOOL_BYPASS_NAMES
 
     """
@@ -809,140 +817,6 @@ class ReActAgent(RoutingMixin, PromptMixin, StreamMixin, SubAgentRunnerMixin, Co
             skill_names=[s.name for s in (self.skills or [])],
             provider_options=_provider_opts,
         )
-
-    async def _notify_runtime_hook(
-        self,
-        hook_name: str,
-        payload: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Dispatch one runtime hook via the shared plugin registry."""
-        effective_payload = dict(payload or {})
-        plugin_registry = getattr(self.config, "plugin_registry", None)
-        if plugin_registry is None:
-            return effective_payload
-
-        try:
-            result = await plugin_registry.apply_hook(
-                hook_name,
-                payload=effective_payload,
-                runtime_overrides=getattr(self.config, "runtime_hook_overrides", []),
-            )
-            for diagnostic in result.diagnostics:
-                log_level = logging.ERROR if diagnostic.level == "error" else logging.WARNING
-                logger.log(
-                    log_level,
-                    "[ReActAgent] Runtime hook %s diagnostic [%s]: %s",
-                    hook_name,
-                    diagnostic.plugin_name,
-                    diagnostic.message,
-                )
-            return dict(result.payload)
-        except Exception:
-            logger.warning("[ReActAgent] Runtime hook %r failed", hook_name, exc_info=True)
-            return effective_payload
-
-    async def _apply_before_prompt_build_hook(
-        self,
-        *,
-        processed_user_message: str,
-        conversation_context: list[dict[str, str]],
-        project_id: str,
-        tenant_id: str,
-        conversation_id: str,
-        effective_mode: str,
-        matched_skill: Skill | None,
-        selected_agent: Agent,
-    ) -> tuple[str | None, list[dict[str, Any]]]:
-        """Allow runtime hooks to refine prompt-bound memory context."""
-        hook_payload = await self._notify_runtime_hook(
-            "before_prompt_build",
-            {
-                "project_id": project_id,
-                "tenant_id": tenant_id,
-                "conversation_id": conversation_id,
-                "mode": effective_mode,
-                "user_message": processed_user_message,
-                "conversation_context": list(conversation_context),
-                "memory_context": self._stream_memory_context,
-                "memory_runtime": self._memory_runtime,
-                "matched_skill_name": matched_skill.name if matched_skill else None,
-                "selected_agent_id": selected_agent.id,
-                "selected_agent_name": selected_agent.name,
-            },
-        )
-        memory_context = hook_payload.get("memory_context", self._stream_memory_context)
-        if memory_context is not None and not isinstance(memory_context, str):
-            memory_context = self._stream_memory_context
-        self._stream_memory_context = cast(str | None, memory_context)
-        emitted_events = hook_payload.get("emitted_events")
-        return self._stream_memory_context, (
-            list(emitted_events) if isinstance(emitted_events, list) else []
-        )
-
-    async def _notify_context_overflow_hook(
-        self,
-        *,
-        tenant_id: str,
-        project_id: str,
-        conversation_id: str,
-        conversation_context: list[dict[str, str]],
-        context_result: Any,
-    ) -> list[dict[str, Any]]:
-        """Emit a runtime hook when context overflow causes compression."""
-        hook_payload = await self._notify_runtime_hook(
-            "on_context_overflow",
-            {
-                "tenant_id": tenant_id,
-                "project_id": project_id,
-                "conversation_id": conversation_id,
-                "conversation_context": list(conversation_context),
-                "memory_runtime": self._memory_runtime,
-                "compression_level": context_result.compression_strategy.value,
-                "summary_text": context_result.summary,
-                "original_message_count": context_result.original_message_count,
-                "final_message_count": context_result.final_message_count,
-                "summarized_message_count": context_result.summarized_message_count,
-                "estimated_tokens": context_result.estimated_tokens,
-            },
-        )
-        emitted_events = hook_payload.get("emitted_events")
-        return list(emitted_events) if isinstance(emitted_events, list) else []
-
-    async def _notify_after_turn_complete_hook(
-        self,
-        *,
-        processed_user_message: str,
-        final_content: str,
-        project_id: str,
-        tenant_id: str,
-        conversation_id: str,
-        conversation_context: list[dict[str, str]],
-        matched_skill: Skill | None,
-        success: bool,
-        execution_time_ms: int = 0,
-        tool_call_count: int = 0,
-        llm_client_override: Any | None = None,
-    ) -> list[dict[str, Any]]:
-        """Emit a runtime hook after turn completion side effects finish."""
-        hook_payload = await self._notify_runtime_hook(
-            "after_turn_complete",
-            {
-                "project_id": project_id,
-                "tenant_id": tenant_id,
-                "conversation_id": conversation_id,
-                "conversation_context": list(conversation_context),
-                "user_message": processed_user_message,
-                "final_content": final_content,
-                "memory_runtime": self._memory_runtime,
-                "matched_skill_name": matched_skill.name if matched_skill else None,
-                "success": success,
-                "execution_time_ms": execution_time_ms,
-                "tool_call_count": tool_call_count,
-                "llm_client_override": llm_client_override,
-            },
-        )
-        emitted_events = hook_payload.get("emitted_events")
-        return list(emitted_events) if isinstance(emitted_events, list) else []
 
     def _get_current_tools(
         self,
