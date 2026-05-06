@@ -1,8 +1,16 @@
-"""Intent Gate: Lightweight pre-classification for routing decisions.
+"""Intent Gate: structural pre-classification for routing decisions.
 
-Pattern-based classifier that can short-circuit routing decisions
-before entering the full ReAct loop. No LLM calls -- pure keyword
-and regex matching for fast, deterministic routing.
+Per the project's top-level Agent First rule (see AGENTS.md), subjective
+routing verdicts MUST be made by an agent via a tool-call, not by a
+hardcoded keyword/regex heuristic over natural language. Therefore the
+default IntentGate ships with NO patterns and always returns ``None``,
+allowing the LLM-driven routing in ReActAgent._decide_execution_path()
+to make the decision.
+
+The IntentPattern API is preserved so that explicit, **structural**
+patterns (e.g. slash-commands like ``/plan``) can be wired in by callers
+who want a deterministic short-circuit. Such patterns are objective —
+they match a user-typed control sigil, not a semantic guess at intent.
 """
 
 from __future__ import annotations
@@ -50,73 +58,15 @@ class IntentGate:
 
     @staticmethod
     def _default_patterns() -> list[IntentPattern]:
-        """Built-in intent patterns."""
-        return [
-            # Plan mode signals -- user explicitly wants planning
-            IntentPattern(
-                name="explicit_plan",
-                path=ExecutionPath.PLAN_MODE,
-                keywords=(
-                    "make a plan",
-                    "create a plan",
-                    "plan this",
-                    "plan mode",
-                    "let's plan",
-                    "write a plan",
-                    "design a plan",
-                ),
-                confidence=0.9,
-            ),
-            IntentPattern(
-                name="complex_task",
-                path=ExecutionPath.PLAN_MODE,
-                keywords=(),
-                confidence=0.8,
-                regex=re.compile(
-                    r"(?:implement|build|create|develop|design)"
-                    + r"\s+(?:a\s+)?"
-                    + r"(?:full|complete|entire|comprehensive)\s+",
-                    re.IGNORECASE,
-                ),
-            ),
-            # Simple Q&A -- still REACT_LOOP but with higher confidence
-            IntentPattern(
-                name="simple_question",
-                path=ExecutionPath.REACT_LOOP,
-                keywords=(),
-                confidence=0.8,
-                regex=re.compile(
-                    r"^(?:what|who|when|where|how|why|is|are|can"
-                    + r"|does|do|will|would|should)\s+.{5,80}\??$",
-                    re.IGNORECASE,
-                ),
-            ),
-            # Direct tool usage patterns -- REACT_LOOP with good confidence
-            IntentPattern(
-                name="direct_search",
-                path=ExecutionPath.REACT_LOOP,
-                keywords=(
-                    "search for",
-                    "find me",
-                    "look up",
-                    "search memory",
-                    "query the",
-                ),
-                confidence=0.8,
-            ),
-            IntentPattern(
-                name="direct_web",
-                path=ExecutionPath.REACT_LOOP,
-                keywords=(
-                    "browse to",
-                    "open url",
-                    "scrape",
-                    "fetch the page",
-                    "web search",
-                ),
-                confidence=0.8,
-            ),
-        ]
+        """Built-in intent patterns.
+
+        Defangs prior keyword/regex-based intent classification per the
+        Agent First rule. Returns an empty list so the gate never makes a
+        subjective verdict on natural-language content. Callers that need
+        a structural short-circuit (e.g. slash-commands) should pass
+        ``patterns=[...]`` explicitly.
+        """
+        return []
 
     def classify(
         self,

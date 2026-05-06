@@ -25,53 +25,33 @@ class TestIntentGate:
         assert gate.classify("\n\t") is None
 
     def test_classify_explicit_plan_keywords(self) -> None:
-        """Messages with plan keywords route to PLAN_MODE."""
-        gate = IntentGate()
+        """Default IntentGate has no patterns; natural language returns None.
 
-        result = gate.classify("make a plan for the migration")
-        assert result is not None
-        assert result.path == ExecutionPath.PLAN_MODE
-        assert result.confidence == 0.9
-        assert result.reason == "Intent gate: explicit_plan"
+        Per Agent First, plan-mode verdicts come from the LLM-driven
+        ReActAgent routing, not from keyword classification here.
+        """
+        gate = IntentGate()
+        assert gate.classify("make a plan for the migration") is None
 
     def test_classify_complex_task_regex(self) -> None:
-        """Complex task descriptions route to PLAN_MODE via regex."""
+        """Default IntentGate has no patterns; complex prose returns None."""
         gate = IntentGate()
-
-        result = gate.classify("implement a full authentication system")
-        assert result is not None
-        assert result.path == ExecutionPath.PLAN_MODE
-        assert result.confidence == 0.8
+        assert gate.classify("implement a full authentication system") is None
 
     def test_classify_simple_question_regex(self) -> None:
-        """Simple questions route to REACT_LOOP with 0.8 confidence."""
+        """Default IntentGate has no patterns; questions return None."""
         gate = IntentGate()
-
-        result = gate.classify("What is the weather today?")
-        assert result is not None
-        assert result.path == ExecutionPath.REACT_LOOP
-        assert result.confidence == 0.8
-        assert "simple_question" in (result.metadata or {}).get("pattern_name", "")
+        assert gate.classify("What is the weather today?") is None
 
     def test_classify_direct_search(self) -> None:
-        """Search keywords route to REACT_LOOP with 0.8 confidence."""
+        """Default IntentGate has no patterns; search prose returns None."""
         gate = IntentGate()
-
-        result = gate.classify("search for memory about cats")
-        assert result is not None
-        assert result.path == ExecutionPath.REACT_LOOP
-        assert result.confidence == 0.8
-        assert (result.metadata or {}).get("pattern_name") == ("direct_search")
+        assert gate.classify("search for memory about cats") is None
 
     def test_classify_direct_web(self) -> None:
-        """Web-related keywords route to REACT_LOOP with 0.8 confidence."""
+        """Default IntentGate has no patterns; web prose returns None."""
         gate = IntentGate()
-
-        result = gate.classify("browse to the documentation page")
-        assert result is not None
-        assert result.path == ExecutionPath.REACT_LOOP
-        assert result.confidence == 0.8
-        assert (result.metadata or {}).get("pattern_name") == "direct_web"
+        assert gate.classify("browse to the documentation page") is None
 
     def test_classify_no_match_returns_none(self) -> None:
         """Messages without matching patterns return None."""
@@ -141,39 +121,67 @@ class TestIntentGate:
         assert (result.metadata or {}).get("pattern_name") == "high"
 
     def test_default_patterns_not_empty(self) -> None:
-        """Default IntentGate has patterns loaded."""
+        """Default IntentGate ships empty under Agent First; natural language returns None."""
         gate = IntentGate()
-
-        # Verify default patterns exist by checking known classifications
-        assert gate.classify("make a plan for testing") is not None
-        assert gate.classify("What is Python?") is not None
+        assert gate.classify("make a plan for testing") is None
+        assert gate.classify("What is Python?") is None
 
     def test_routing_decision_metadata(self) -> None:
-        """Returned decision includes intent_gate metadata."""
-        gate = IntentGate()
+        """Custom patterns surface intent_gate metadata."""
+        patterns = [
+            IntentPattern(
+                name="explicit_plan",
+                path=ExecutionPath.PLAN_MODE,
+                keywords=("/plan",),
+                confidence=0.9,
+            ),
+        ]
+        gate = IntentGate(patterns=patterns)
 
-        result = gate.classify("make a plan for deployment")
+        result = gate.classify("/plan deploy")
         assert result is not None
         assert result.metadata is not None
         assert result.metadata["intent_gate"] is True
         assert result.metadata["pattern_name"] == "explicit_plan"
 
     def test_keyword_match_case_insensitive(self) -> None:
-        """Keyword matching is case-insensitive via normalization."""
-        gate = IntentGate()
+        """Custom keyword matching is case-insensitive via normalization."""
+        patterns = [
+            IntentPattern(
+                name="plan_cmd",
+                path=ExecutionPath.PLAN_MODE,
+                keywords=("make a plan",),
+                confidence=0.9,
+            ),
+        ]
+        gate = IntentGate(patterns=patterns)
 
         result = gate.classify("Make A Plan for the feature")
         assert result is not None
         assert result.path == ExecutionPath.PLAN_MODE
 
     def test_regex_pattern_matching(self) -> None:
-        """Regex-only patterns (no keywords) match correctly."""
-        gate = IntentGate()
+        """Regex-only custom patterns match correctly."""
+        import re as _re
+
+        patterns = [
+            IntentPattern(
+                name="complex_task",
+                path=ExecutionPath.PLAN_MODE,
+                keywords=(),
+                confidence=0.8,
+                regex=_re.compile(
+                    r"(?:implement|build)\s+(?:a\s+)?(?:full|complete)\s+",
+                    _re.IGNORECASE,
+                ),
+            ),
+        ]
+        gate = IntentGate(patterns=patterns)
 
         result = gate.classify("build a complete REST API for user management")
         assert result is not None
         assert result.path == ExecutionPath.PLAN_MODE
-        assert (result.metadata or {}).get("pattern_name") == ("complex_task")
+        assert (result.metadata or {}).get("pattern_name") == "complex_task"
 
     def test_available_skills_parameter_accepted(self) -> None:
         """The _available_skills parameter is accepted without error."""

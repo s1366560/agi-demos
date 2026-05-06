@@ -87,27 +87,51 @@ class ConnectionManager:
 
     async def disconnect(self, session_id: str) -> None:
         """Clean up a disconnected session."""
+        # Cancel and collect tasks under the lock, then await them outside
+        # the lock so that bridge/status coroutines can run their cleanup
+        # (which may need to acquire `_lock`) without deadlocking.
         async with self._lock:
             user_id = self.session_users.get(session_id)
-            self._cancel_session_tasks(session_id)
+            cancelled_tasks = self._cancel_session_tasks(session_id)
             self.status_subscriptions.pop(session_id, None)
             self._remove_project_subscriptions(session_id)
             self._remove_conversation_subscriptions(session_id)
             self._remove_user_session(user_id, session_id)
             self.active_connections.pop(session_id, None)
             self.session_users.pop(session_id, None)
+
+        # Await cancellation outside the lock. ``return_exceptions=True``
+        # ensures one misbehaving task does not break cleanup of others;
+        # CancelledError is the normal outcome here and is suppressed.
+        if cancelled_tasks:
+            try:
+                await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+            except Exception:
+                logger.exception(
+                    "[WS] Error awaiting cancelled tasks during disconnect",
+                    extra={"session_id": session_id},
+                )
+
         await self.dispatcher_manager.cleanup_session(session_id)
         total_sessions = len(self.active_connections)
         logger.info(f"[WS] Session {session_id[:8]}... disconnected. Total: {total_sessions}")
 
-    def _cancel_session_tasks(self, session_id: str) -> None:
-        """Cancel bridge and status monitoring tasks for a session."""
+    def _cancel_session_tasks(self, session_id: str) -> list[asyncio.Task[None]]:
+        """Cancel bridge and status monitoring tasks for a session.
+
+        Returns the list of cancelled tasks so the caller can await them
+        outside the lock.
+        """
+        cancelled: list[asyncio.Task[None]] = []
         for task_dict_name in ("bridge_tasks", "status_tasks"):
             task_dict = getattr(self, task_dict_name)
             if session_id in task_dict:
                 for task in task_dict[session_id].values():
-                    task.cancel()
+                    if not task.done():
+                        task.cancel()
+                        cancelled.append(task)
                 del task_dict[session_id]
+        return cancelled
 
     def _remove_project_subscriptions(self, session_id: str) -> None:
         """Remove lifecycle state subscriptions for a session."""

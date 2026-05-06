@@ -175,7 +175,7 @@ class TestToolConverter:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_execute_wrapper_handles_error(self):
-        """Test execute wrapper handles errors gracefully."""
+        """Tool exceptions return a structured, redacted error (no raw message leak)."""
 
         class ErrorTool:
             description = "Error tool"
@@ -190,8 +190,12 @@ class TestToolConverter:
 
         result = await definitions[0].execute(input="test")
 
-        assert "Error executing tool error_tool" in result
-        assert "Tool error" in result
+        # New contract: structured dict, no raw exception text leaked to LLM.
+        assert isinstance(result, dict)
+        assert result["error"] == "tool_execution_failed"
+        assert result["tool"] == "error_tool"
+        # Raw exception message must NOT appear in the LLM-facing payload.
+        assert "Tool error" not in str(result)
 
     @pytest.mark.unit
     def test_convert_tools_schema_dict_visibility_model(self):
@@ -295,7 +299,7 @@ class TestToolConverter:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_execute_wrapper_no_execute_method_error(self):
-        """Test error when tool has no execute method."""
+        """Tool with no execute method returns the structured, redacted error."""
 
         class NoMethodTool:
             description = "No method tool"
@@ -308,5 +312,8 @@ class TestToolConverter:
 
         result = await definitions[0].execute(input="test")
 
-        assert "Error executing tool nomethod_tool" in result
-        assert "has no execute method" in result
+        assert isinstance(result, dict)
+        assert result["error"] == "tool_execution_failed"
+        assert result["tool"] == "nomethod_tool"
+        # Internal exception text must NOT be exposed.
+        assert "has no execute method" not in str(result)

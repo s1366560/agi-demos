@@ -56,28 +56,7 @@ def _make_result(name: str = "agent", success: bool = True) -> SubAgentResult:
 
 @pytest.mark.unit
 class TestTaskDecomposerInit:
-    """Test TaskDecomposer initialization in ReActAgent."""
-
-    def test_no_decomposer_without_llm_client(self):
-        agent = _make_react_agent(subagents=[_make_subagent()])
-        assert agent._task_decomposer is None
-
-    def test_no_decomposer_without_subagents(self):
-        llm = MagicMock()
-        agent = _make_react_agent(llm_client=llm)
-        assert agent._task_decomposer is None
-
-    def test_decomposer_created_with_llm_and_subagents(self):
-        llm = MagicMock()
-        sa = _make_subagent("researcher")
-        agent = _make_react_agent(llm_client=llm, subagents=[sa])
-        assert agent._task_decomposer is not None
-
-    def test_decomposer_has_agent_names(self):
-        llm = MagicMock()
-        agents = [_make_subagent("researcher"), _make_subagent("coder")]
-        agent = _make_react_agent(llm_client=llm, subagents=agents)
-        assert agent._task_decomposer._agent_names == ["researcher", "coder"]
+    """Test ReActAgent initialization (post task-decomposer removal)."""
 
     def test_result_aggregator_always_created(self):
         agent = _make_react_agent()

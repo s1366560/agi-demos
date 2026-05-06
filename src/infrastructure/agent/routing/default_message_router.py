@@ -79,17 +79,46 @@ class DefaultMessageRouter:
         context_value = getattr(context, field_name, None)
         return context_value == binding.scope_id
 
+    # Caps to mitigate catastrophic backtracking (ReDoS). A binding
+    # filter pattern is operator-supplied, but message content is
+    # user-supplied; the product of the two is the danger surface.
+    _MAX_FILTER_PATTERN_LEN = 200
+    _MAX_FILTER_CONTENT_LEN = 4096
+
     @staticmethod
     def _matches_filter(binding: MessageBinding, message: Message) -> bool:
         if binding.filter_pattern is None:
             return True
 
+        pattern = binding.filter_pattern
+        content = message.content or ""
+
+        if len(pattern) > DefaultMessageRouter._MAX_FILTER_PATTERN_LEN:
+            logger.warning(
+                "Binding %s filter_pattern too long (%d > %d); skipping",
+                binding.id,
+                len(pattern),
+                DefaultMessageRouter._MAX_FILTER_PATTERN_LEN,
+            )
+            return False
+
+        if len(content) > DefaultMessageRouter._MAX_FILTER_CONTENT_LEN:
+            # Truncate rather than skip so a long legitimate message still
+            # gets a chance to match the pattern's prefix.
+            content = content[: DefaultMessageRouter._MAX_FILTER_CONTENT_LEN]
+
         try:
-            return re.search(binding.filter_pattern, message.content or "") is not None
+            return re.search(pattern, content) is not None
         except re.error:
             logger.debug(
                 "Invalid regex in binding %s: %s",
                 binding.id,
-                binding.filter_pattern,
+                pattern,
+            )
+            return False
+        except Exception:
+            logger.exception(
+                "Regex evaluation failed for binding %s",
+                binding.id,
             )
             return False

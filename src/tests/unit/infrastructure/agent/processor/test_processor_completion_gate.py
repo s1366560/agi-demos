@@ -68,6 +68,10 @@ class TestProcessorCompletionGate:
                 "step_count": 1,
                 "tenant_id": None,
                 "project_id": None,
+                "runtime_context": {},
+                "task_authority": None,
+                "workspace_id": None,
+                "workspace_session_role": None,
                 "result": "STOP",
             },
         )

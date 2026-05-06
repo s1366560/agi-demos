@@ -33,6 +33,14 @@ async def publish_workspace_event(
 ) -> None:
     """Publish workspace-scoped event to unified Redis event bus."""
     if redis_client is None:
+        # Loud failure: events going through this helper after a successful
+        # DB commit are user-observable; silently dropping them creates an
+        # inconsistency between persisted state and live UI/agent
+        # subscribers. Surface it so ops can alert on this metric in prod.
+        logger.error(
+            "[WorkspaceEvents] redis_client is None; event dropped",
+            extra={"workspace_id": workspace_id, "event_type": event_type.value},
+        )
         return
 
     envelope = EventEnvelope.wrap(
@@ -63,6 +71,11 @@ async def publish_workspace_event_with_retry(
 ) -> None:
     """Publish a workspace event with short bounded retries for transient broker failures."""
     if redis_client is None:
+        # See note in publish_workspace_event: this should be loud.
+        logger.error(
+            "[WorkspaceEvents] redis_client is None; event dropped (with_retry)",
+            extra={"workspace_id": workspace_id, "event_type": event_type.value},
+        )
         return
 
     envelope = EventEnvelope.wrap(

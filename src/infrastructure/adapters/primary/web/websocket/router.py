@@ -49,6 +49,14 @@ async def agent_websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="API key for authentication"),
     session_id: str | None = Query(None, description="Client session ID for multi-tab support"),
+    # TODO(P0-6): This DB session is bound to the connection lifetime and
+    # is shared across every message handler invocation on this socket.
+    # Two long-running handlers (e.g. agent stream + sandbox bridge) may
+    # interleave queries on the same SQLAlchemy AsyncSession, which is
+    # NOT concurrency-safe and can corrupt the session state. The proper
+    # fix is to remove this dependency and have message_router.route()
+    # open a fresh `async_session_factory()` per message inside an
+    # `async with` block, propagating the session via MessageContext.
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """

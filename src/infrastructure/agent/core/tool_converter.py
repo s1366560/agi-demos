@@ -8,11 +8,14 @@ Supports both legacy class-based tools (AgentToolBase subclasses) and new
 
 from __future__ import annotations
 
+import logging
 from typing import Any, cast
 
 from src.infrastructure.agent.tools.define import ToolInfo
 
 from .processor import ToolDefinition
+
+logger = logging.getLogger(__name__)
 
 
 def _is_tool_visible_to_model(tool: Any) -> bool:
@@ -93,8 +96,20 @@ def _make_execute_wrapper(tool_instance: Any, tool_name: str) -> Any:
                     return await result
                 return result
             return method(**kwargs)
-        except Exception as e:
-            return f"Error executing tool {tool_name}: {e!s}"
+        except Exception:
+            # Do NOT leak the raw exception text to the LLM: it can
+            # contain stack traces, file paths, secrets pulled from env
+            # vars, or third-party API error bodies. Log fully on the
+            # server, return a structured, safe error to the model.
+            logger.exception(
+                "[tool_converter] tool execution failed",
+                extra={"tool": tool_name},
+            )
+            return {
+                "error": "tool_execution_failed",
+                "tool": tool_name,
+                "message": "Tool raised an exception. See server logs for details.",
+            }
 
     return execute_wrapper
 
@@ -126,8 +141,16 @@ def _make_toolinfo_execute_wrapper(tool_info: ToolInfo) -> Any:
         )
         try:
             return await tool_info.execute(ctx, **kwargs)
-        except Exception as e:
-            return f"Error executing tool {tool_info.name}: {e!s}"
+        except Exception:
+            logger.exception(
+                "[tool_converter] ToolInfo execution failed",
+                extra={"tool": tool_info.name},
+            )
+            return {
+                "error": "tool_execution_failed",
+                "tool": tool_info.name,
+                "message": "Tool raised an exception. See server logs for details.",
+            }
 
     return execute_wrapper
 

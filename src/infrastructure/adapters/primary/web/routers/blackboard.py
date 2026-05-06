@@ -37,7 +37,9 @@ from src.domain.model.workspace.blackboard_file import BlackboardFile
 from src.domain.model.workspace.blackboard_post import BlackboardPost, BlackboardPostStatus
 from src.domain.model.workspace.blackboard_reply import BlackboardReply
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.workspace_events import publish_workspace_event
+from src.infrastructure.adapters.primary.web.routers.workspace_events import (
+    publish_workspace_event_with_retry,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
@@ -86,6 +88,54 @@ def _blackboard_event_metadata(tenant_id: str, project_id: str) -> dict[str, Any
         "project_id": project_id,
         **BLACKBOARD_OWNERSHIP_METADATA,
     }
+
+
+# TODO(P0-3 outbox): The pattern below is best-effort: DB commit happens
+# inside the request handler, then we publish to Redis here. If Redis is
+# down or the publish fails after retries, the event is permanently lost
+# and subscribers (UI, agents) will see DB state without the corresponding
+# event. The robust fix is a transactional outbox (write event row in the
+# same DB transaction; a dispatcher relays to Redis). Tracking issue:
+# blackboard event-bus consistency.
+async def _publish_blackboard_event(
+    redis_client: Any,  # noqa: ANN401 -- redis client type varies; structural duck-typing
+    *,
+    workspace_id: str,
+    event_type: AgentEventType,
+    payload: dict[str, Any],
+    metadata: dict[str, Any],
+) -> None:
+    """Publish a blackboard workspace event with retries; never raise.
+
+    The caller has already committed the DB transaction; raising here
+    would surface as a 500 to the client even though their write
+    succeeded. We retry transient broker failures and log loudly on
+    permanent failure so the gap is observable.
+    """
+    try:
+        await publish_workspace_event_with_retry(
+            redis_client,
+            workspace_id=workspace_id,
+            event_type=event_type,
+            payload=payload,
+            metadata=metadata,
+        )
+    except Exception:
+        # Logged with stack so ops can correlate to dropped event metric.
+        import logging as _logging
+
+        _logging.getLogger(__name__).exception(
+            "[Blackboard] event publish failed after retries; event dropped",
+            extra={
+                "workspace_id": workspace_id,
+                "event_type": event_type.value,
+            },
+        )
+
+
+# Alias used by the existing call sites in this router. Routes to
+# the with-retry, never-raise helper above.
+publish_workspace_event = _publish_blackboard_event
 
 
 def _blackboard_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
