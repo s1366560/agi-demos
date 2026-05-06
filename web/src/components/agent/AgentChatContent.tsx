@@ -54,6 +54,7 @@ import {
 } from '../../utils/exportConversation';
 import { WorkspaceGroupChatPanel } from '../workspace/chat/WorkspaceGroupChatPanel';
 
+import { AgentProgressBar } from './AgentProgressBar';
 import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
@@ -69,12 +70,10 @@ import { RightPanel } from './RightPanel';
 import { SandboxSection } from './SandboxSection';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
+import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
-
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
-import { AgentProgressBar } from './AgentProgressBar';
-import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 
 import type {
   AgentTask,
