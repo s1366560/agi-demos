@@ -4,8 +4,10 @@
 
 import { memo } from 'react';
 
+import { useAgentV3Store } from '../../../stores/agentV3';
 import { AgentSection, ReasoningLogCard } from '../chat/MessageStream';
 
+import { PlanReviewGate } from './PlanReviewGate';
 import { TimeBadge } from './shared';
 
 import type { TimelineEvent } from '../../../types/agent';
@@ -16,6 +18,7 @@ interface WorkPlanItemProps {
 
 export const WorkPlanItem = memo(
   function WorkPlanItem({ event }: WorkPlanItemProps) {
+    const conversationId = useAgentV3Store((s) => s.activeConversationId);
     if (event.type !== 'work_plan') return null;
 
     return (
@@ -27,6 +30,7 @@ export const WorkPlanItem = memo(
             completed={event.status === 'completed'}
             expanded={event.status !== 'completed'}
           />
+          <PlanReviewGate conversationId={conversationId ?? undefined} event={event} />
         </AgentSection>
         <div className="pl-12">
           <TimeBadge timestamp={event.timestamp} />

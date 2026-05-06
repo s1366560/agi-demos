@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 
 import { formatDuration } from '../../../utils/date';
+import { MultiSourceResultsCard } from '../results/MultiSourceResultsCard';
 import { isAgentTool, AgentToolStepCard } from '../timeline-items/AgentToolCards';
 
 import { useMCPAppOpen } from './useMCPAppOpen';
@@ -431,6 +432,9 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
 
     return (
       <div className="pb-2 rounded-md">
+        {/* Aggregated multi-source view (only renders when 2+ search/RAG steps detected) */}
+        <MultiSourceResultsCard steps={steps} />
+
         {/* Summary header */}
         <button
           type="button"
