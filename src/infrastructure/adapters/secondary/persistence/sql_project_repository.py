@@ -69,9 +69,15 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
         )
         query = query.offset(offset).limit(limit)
 
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_projects = result.scalars().all()
         return [d for p in db_projects if (d := self._to_domain(p)) is not None]
+
+    async def list_active_projects(self, limit: int = 1000, offset: int = 0) -> list[Project]:
+        """List every project across all tenants (no soft-delete column today)."""
+        return await self.list_all(limit=limit, offset=offset)
 
     # === Conversion methods ===
 

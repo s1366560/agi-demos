@@ -29,5 +29,16 @@ class ProjectRepository(ABC):
         """List all public projects"""
 
     @abstractmethod
+    async def list_active_projects(self, limit: int = 1000, offset: int = 0) -> list[Project]:
+        """List all active (non-deleted) projects across all tenants.
+
+        Used by background sweeps (e.g. ``ReflectionRunner``) that need to
+        iterate every project regardless of tenant or visibility. Ordered by
+        ``created_at`` ascending for stable iteration. Soft-delete is not
+        modeled today, so this returns every row in ``projects`` — callers
+        should still respect tenant boundaries inside the iteration.
+        """
+
+    @abstractmethod
     async def delete(self, project_id: str) -> bool:
         """Delete a project. Returns True if deleted, False if not found."""

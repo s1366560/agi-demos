@@ -4,6 +4,7 @@ The DIContainer delegates to domain-specific sub-containers while preserving
 the exact same public interface for all callers.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -177,6 +178,8 @@ from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repo
 )
 from src.infrastructure.agent.context.window_manager import ContextWindowManager
 
+logger = logging.getLogger(__name__)
+
 
 class DIContainer:
     """Dependency Injection Container using composition with sub-containers.
@@ -344,22 +347,26 @@ class DIContainer:
 
     # === Reflection (friction → playbook loop) ===
 
-    async def reflection_service(self, project_id: str) -> Any:
-        """Build a per-project ``ReflectionService``.
+    async def reflection_service(self, project_id: str, *, session: AsyncSession) -> Any:
+        """Build a per-project ``ReflectionService`` bound to a SQL session.
 
-        Uses Redis-backed friction ledger when a redis client is available;
-        falls back to a process-singleton in-memory ledger otherwise. The
-        playbook repository is currently in-memory (singleton across all
-        projects) until ``SqlPlaybookRepository`` ships.
+        - Friction ledger: Redis-backed when a redis client is available,
+          process-singleton in-memory ledger otherwise (local dev / tests).
+        - Playbook repository: ``SqlPlaybookRepository(session)`` \u2014 the
+          caller owns the session lifecycle and must commit after invoking
+          ``reflect_window``.
+        - Reflector: LLM-backed via ``AIServiceFactory``.
         """
         from src.application.services.reflection_factory import (
             build_litellm_reflector,
             build_reflection_service,
             default_in_memory_ledger,
-            default_in_memory_playbooks,
         )
         from src.infrastructure.adapters.secondary.cache.redis_friction_ledger import (
             RedisFrictionLedger,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository import (
+            SqlPlaybookRepository,
         )
 
         del project_id  # ledger is keyed per project at append/query time
@@ -377,15 +384,17 @@ class DIContainer:
 
         return build_reflection_service(
             ledger=ledger,
-            playbooks=default_in_memory_playbooks(),
+            playbooks=SqlPlaybookRepository(session),
             reflector=reflector,
         )
 
     def reflection_runner(self) -> Any:
-        """Singleton ``ReflectionRunner`` driven by all-projects sweep.
+        """Singleton ``ReflectionRunner`` driven by an all-tenants sweep.
 
-        Lifecycle is owned by the caller (FastAPI lifespan). Construction is
-        cheap; ``start()`` must be invoked once the event loop is up.
+        Opens a fresh DB session per project iteration so SQL-backed playbook
+        writes commit cleanly between projects. Lifecycle is owned by the
+        caller (FastAPI lifespan); ``start()`` must be invoked once the
+        event loop is running.
         """
         existing = getattr(self, "_reflection_runner", None)
         if existing is not None:
@@ -403,14 +412,35 @@ class DIContainer:
 
             async with session_factory() as session:
                 repo = SqlProjectRepository(session)
-                # No "list all" method on the port; fall back to public projects
-                # which is the safest superset for periodic sweeps. Operators
-                # can swap this for a tenant-scoped iteration later.
-                projects = await repo.find_public_projects(limit=500)
+                projects = await repo.list_active_projects(limit=1000)
                 return [p.id for p in projects]
 
         async def _service_for(project_id: str) -> Any:
-            return await self.reflection_service(project_id)
+            """Per-project session-scoped ``ReflectionService`` adapter.
+
+            Returns an object whose ``reflect_window`` opens its own DB
+            session, builds the SQL-backed service, runs reflection, then
+            commits. Mirrors the contract ``ReflectionRunner`` expects.
+            """
+            session_factory = self._session_factory
+            if session_factory is None:
+                logger.warning(
+                    "ReflectionRunner: no session_factory; skipping project %s",
+                    project_id,
+                )
+                return None
+
+            container_self = self
+
+            class _SessionScopedReflection:
+                async def reflect_window(self, pid: str) -> list[Any]:
+                    async with session_factory() as session:
+                        service = await container_self.reflection_service(pid, session=session)
+                        verdicts = await service.reflect_window(pid)
+                        await session.commit()
+                        return verdicts
+
+            return _SessionScopedReflection()
 
         runner = ReflectionRunner(
             project_ids_provider=_all_active_project_ids,
@@ -726,9 +756,7 @@ class DIContainer:
         except Exception:
             import logging
 
-            logging.getLogger(__name__).exception(
-                "Failed to initialize skill evolution plugin"
-            )
+            logging.getLogger(__name__).exception("Failed to initialize skill evolution plugin")
             return None
 
     def workspace_manager(self) -> Any:

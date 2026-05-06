@@ -3336,13 +3336,9 @@ class WorkspacePipelineContractModel(Base):
     )
     provider: Mapped[str] = mapped_column(String(40), nullable=False, default="sandbox_native")
     code_root: Mapped[str | None] = mapped_column(String, nullable=True)
-    commands_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
+    commands_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     env_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    trigger_policy_json: Mapped[dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict
-    )
+    trigger_policy_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=600)
     auto_deploy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     preview_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -3559,4 +3555,43 @@ class DecisionLogModel(Base):
         ),
         Index("ix_decision_logs_agent", "agent_id"),
         Index("ix_decision_logs_tool", "tool_name"),
+    )
+
+
+class Playbook(Base):
+    """Persistent reflection-distilled playbook.
+
+    Stores the output of ``ReflectionService.reflect_window`` so playbooks
+    survive process restarts and can be queried across replicas. The
+    ``trigger`` and ``steps`` columns hold structured records (not regexes
+    or executable code) so semantic matching stays delegated to agents \u2014
+    the Agent-First rule.
+    """
+
+    __tablename__ = "playbooks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="draft", server_default="draft"
+    )
+    trigger: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    hit_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_playbooks_project_status", "project_id", "status"),
+        Index("ix_playbooks_project_created", "project_id", "created_at"),
     )
