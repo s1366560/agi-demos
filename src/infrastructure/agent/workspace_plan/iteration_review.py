@@ -7,6 +7,14 @@ import logging
 from typing import Any
 
 from src.domain.llm_providers.llm_types import LLMClient
+from src.domain.model.review.finding_filter import filter_findings
+from src.domain.model.review.review_finding import (
+    FindingVerdict,
+    RawReviewFinding,
+    ReviewFindingContext,
+    ReviewSeverity,
+    ValidatedReviewFinding,
+)
 from src.domain.ports.services.iteration_review_port import (
     IterationNextTask,
     IterationReviewContext,
@@ -17,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 _VALID_VERDICTS = {"complete_goal", "continue_next_iteration", "needs_human_review"}
 _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
+_VALID_SEVERITIES = {s.value for s in ReviewSeverity}
 _MIN_REVIEW_CONFIDENCE = 0.6
+_MAX_FINDINGS = 12
 
 
 class LLMIterationReviewProvider:
@@ -63,7 +73,7 @@ class LLMIterationReviewProvider:
                 logger.warning("workspace iteration review failed: %s", exc)
                 return _needs_human_review(f"iteration review failed: {exc}")
 
-        parsed = _parse_review_response(response, max_next_tasks=context.max_next_tasks)
+        parsed = _parse_review_response(response, context=context)
         if parsed.summary != "iteration review did not return structured arguments":
             return parsed
 
@@ -88,7 +98,7 @@ class LLMIterationReviewProvider:
 
         repaired = _parse_review_response(
             repaired_response,
-            max_next_tasks=context.max_next_tasks,
+            context=context,
         )
         if repaired.summary == "iteration review did not return structured arguments":
             return parsed
@@ -288,6 +298,45 @@ def _review_tool_schema(max_next_tasks: int) -> dict[str, Any]:
                             "required": ["id", "description"],
                         },
                     },
+                    "findings": {
+                        "type": "array",
+                        "description": (
+                            "Optional structured per-file review findings. A "
+                            "deterministic guardrail will drop test-file noise, "
+                            "lint-covered, framework-handled, and speculative "
+                            "items, so emit them rather than self-censoring."
+                        ),
+                        "maxItems": _MAX_FINDINGS,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file": {"type": "string"},
+                                "line": {"type": "integer", "minimum": 0},
+                                "category": {"type": "string"},
+                                "severity": {
+                                    "type": "string",
+                                    "enum": sorted(_VALID_SEVERITIES),
+                                },
+                                "raw_confidence": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 100,
+                                },
+                                "description": {"type": "string"},
+                                "suggestion": {"type": "string"},
+                                "concrete_evidence": {"type": "boolean"},
+                            },
+                            "required": [
+                                "file",
+                                "line",
+                                "category",
+                                "severity",
+                                "raw_confidence",
+                                "description",
+                                "suggestion",
+                            ],
+                        },
+                    },
                 },
                 "required": ["verdict", "confidence", "summary"],
             },
@@ -296,7 +345,7 @@ def _review_tool_schema(max_next_tasks: int) -> dict[str, Any]:
 
 
 def _parse_review_response(
-    response: dict[str, Any], *, max_next_tasks: int
+    response: dict[str, Any], *, context: IterationReviewContext
 ) -> IterationReviewVerdict:
     args = _response_arguments(response)
     if args is None:
@@ -311,9 +360,22 @@ def _parse_review_response(
     if confidence < _MIN_REVIEW_CONFIDENCE:
         return _needs_human_review(summary or "iteration review confidence was too low")
 
-    tasks = _parse_next_tasks(args.get("next_tasks"), max_next_tasks=max_next_tasks)
+    tasks = _parse_next_tasks(args.get("next_tasks"), max_next_tasks=context.max_next_tasks)
     if verdict == "continue_next_iteration" and not tasks:
         return _needs_human_review("iteration review requested continuation without next tasks")
+
+    raw_findings = _parse_raw_findings(args.get("findings"), limit=_MAX_FINDINGS)
+    kept_findings, rejected_count = _gate_findings(
+        raw_findings,
+        linter_covered_categories=context.linter_covered_categories,
+    )
+    if raw_findings:
+        logger.info(
+            "iteration review findings: raw=%d kept=%d rejected=%d",
+            len(raw_findings),
+            len(kept_findings),
+            rejected_count,
+        )
 
     return IterationReviewVerdict(
         verdict=verdict,  # type: ignore[arg-type]
@@ -322,7 +384,66 @@ def _parse_review_response(
         next_sprint_goal=str(args.get("next_sprint_goal") or "").strip(),
         feedback_items=_string_tuple(args.get("feedback_items"), limit=8),
         next_tasks=tasks,
+        findings=kept_findings,
+        rejected_finding_count=rejected_count,
     )
+
+
+def _parse_raw_findings(value: object, *, limit: int) -> tuple[RawReviewFinding, ...]:
+    if not isinstance(value, list):
+        return ()
+    findings: list[RawReviewFinding] = []
+    for item in value[:limit]:
+        if not isinstance(item, dict):
+            continue
+        severity_raw = str(item.get("severity") or "").strip().upper()
+        if severity_raw not in _VALID_SEVERITIES:
+            logger.debug("iteration review skipped finding with bad severity: %r", severity_raw)
+            continue
+        file_path = str(item.get("file") or "").strip()
+        category = str(item.get("category") or "").strip()
+        description = str(item.get("description") or "").strip()
+        suggestion = str(item.get("suggestion") or "").strip()
+        if not file_path or not category or not description:
+            logger.debug("iteration review skipped finding with missing required fields")
+            continue
+        try:
+            line = int(item.get("line") or 0)
+        except (TypeError, ValueError):
+            logger.debug("iteration review skipped finding with non-integer line")
+            continue
+        try:
+            raw_confidence = int(item.get("raw_confidence") or 0)
+        except (TypeError, ValueError):
+            logger.debug("iteration review skipped finding with non-integer raw_confidence")
+            continue
+        findings.append(
+            RawReviewFinding(
+                file=file_path,
+                line=max(0, line),
+                category=category,
+                severity=ReviewSeverity(severity_raw),
+                raw_confidence=max(0, min(raw_confidence, 100)),
+                description=description,
+                suggestion=suggestion,
+                concrete_evidence=bool(item.get("concrete_evidence")),
+            )
+        )
+    return tuple(findings)
+
+
+def _gate_findings(
+    raw: tuple[RawReviewFinding, ...],
+    *,
+    linter_covered_categories: tuple[str, ...],
+) -> tuple[tuple[ValidatedReviewFinding, ...], int]:
+    if not raw:
+        return ((), 0)
+    review_context = ReviewFindingContext(linter_covered_categories=linter_covered_categories)
+    validated = filter_findings(list(raw), review_context)
+    kept = tuple(v for v in validated if v.verdict is FindingVerdict.KEEP)
+    rejected = len(validated) - len(kept)
+    return (kept, rejected)
 
 
 def _response_arguments(response: dict[str, Any]) -> dict[str, Any] | None:  # noqa: PLR0911

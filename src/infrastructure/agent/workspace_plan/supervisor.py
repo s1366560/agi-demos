@@ -596,6 +596,8 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "loop_status": "completed",
                     "last_review_summary": verdict.summary,
                     "last_review_confidence": verdict.confidence,
+                    "last_review_findings": _iteration_review_findings_payload(verdict),
+                    "last_review_rejected_finding_count": verdict.rejected_finding_count,
                     "stop_reason": "",
                     "completed_iterations": _append_int(
                         loop_metadata.get("completed_iterations"),
@@ -636,6 +638,8 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "loop_status": "suspended",
                     "last_review_summary": verdict.summary,
                     "last_review_confidence": verdict.confidence,
+                    "last_review_findings": _iteration_review_findings_payload(verdict),
+                    "last_review_rejected_finding_count": verdict.rejected_finding_count,
                     "stop_reason": reason,
                     "feedback_items": list(verdict.feedback_items),
                     "reviewed_iterations": _append_int(
@@ -976,7 +980,30 @@ def _iteration_review_payload(
             }
             for task in verdict.next_tasks
         ],
+        "findings": _iteration_review_findings_payload(verdict),
+        "rejected_finding_count": verdict.rejected_finding_count,
     }
+
+
+def _iteration_review_findings_payload(
+    verdict: IterationReviewVerdict,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "file": finding.file,
+            "line": finding.line,
+            "category": finding.category,
+            "severity": finding.severity.value,
+            "raw_confidence": finding.raw_confidence,
+            "validated_confidence": finding.validated_confidence,
+            "description": finding.description,
+            "suggestion": finding.suggestion,
+            "concrete_evidence": finding.concrete_evidence,
+            "verdict": finding.verdict.value,
+            "reasoning": finding.reasoning,
+        }
+        for finding in verdict.findings
+    ]
 
 
 def _append_next_iteration(
@@ -1047,6 +1074,8 @@ def _append_next_iteration(
             "loop_status": "active",
             "last_review_summary": verdict.summary,
             "last_review_confidence": verdict.confidence,
+            "last_review_findings": _iteration_review_findings_payload(verdict),
+            "last_review_rejected_finding_count": verdict.rejected_finding_count,
             "current_sprint_goal": verdict.next_sprint_goal,
             "next_sprint_goal": verdict.next_sprint_goal,
             "stop_reason": "",

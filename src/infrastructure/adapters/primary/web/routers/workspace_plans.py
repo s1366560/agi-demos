@@ -236,6 +236,20 @@ class WorkspacePlanIterationHistoryResponse(BaseModel):
     created_at: str = ""
 
 
+class WorkspacePlanReviewFindingResponse(BaseModel):
+    file: str
+    line: int
+    category: str
+    severity: str
+    raw_confidence: int
+    validated_confidence: int
+    description: str
+    suggestion: str = ""
+    concrete_evidence: bool = False
+    verdict: str
+    reasoning: str = ""
+
+
 class WorkspacePlanIterationSummaryResponse(BaseModel):
     current_iteration: int = 1
     loop_label: str = "Scrum feedback loop"
@@ -256,6 +270,8 @@ class WorkspacePlanIterationSummaryResponse(BaseModel):
     feedback_items: list[str] = Field(default_factory=list)
     history: list[WorkspacePlanIterationHistoryResponse] = Field(default_factory=list)
     actions: dict[str, WorkspacePlanActionCapabilityResponse] = Field(default_factory=dict)
+    findings: list[WorkspacePlanReviewFindingResponse] = Field(default_factory=list)
+    rejected_finding_count: int = 0
 
 
 class WorkspacePipelineStageRunResponse(BaseModel):
@@ -1339,6 +1355,10 @@ def _to_iteration_summary(
         ),
         history=_iteration_history(loop, event_items),
         actions=_iteration_actions(plan, loop_status),
+        findings=_iteration_review_findings(loop),
+        rejected_finding_count=_metadata_int(
+            loop.get("last_review_rejected_finding_count"), fallback=0
+        ),
     )
 
 
@@ -1457,6 +1477,37 @@ def _history_response_from_payload(
         next_sprint_goal=_metadata_string(payload.get("next_sprint_goal")),
         created_at=_metadata_string(payload.get("created_at")),
     )
+
+
+def _iteration_review_findings(
+    loop: dict[str, Any],
+) -> list[WorkspacePlanReviewFindingResponse]:
+    raw = loop.get("last_review_findings")
+    if not isinstance(raw, list):
+        return []
+    findings: list[WorkspacePlanReviewFindingResponse] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            findings.append(
+                WorkspacePlanReviewFindingResponse(
+                    file=str(item.get("file") or ""),
+                    line=int(item.get("line") or 0),
+                    category=str(item.get("category") or ""),
+                    severity=str(item.get("severity") or ""),
+                    raw_confidence=int(item.get("raw_confidence") or 0),
+                    validated_confidence=int(item.get("validated_confidence") or 0),
+                    description=str(item.get("description") or ""),
+                    suggestion=str(item.get("suggestion") or ""),
+                    concrete_evidence=bool(item.get("concrete_evidence")),
+                    verdict=str(item.get("verdict") or ""),
+                    reasoning=str(item.get("reasoning") or ""),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return findings
 
 
 def _iteration_actions(

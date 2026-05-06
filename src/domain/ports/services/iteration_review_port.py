@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from src.domain.model.review.review_finding import ValidatedReviewFinding
+
 IterationReviewDecision = Literal[
     "complete_goal",
     "continue_next_iteration",
@@ -35,6 +37,8 @@ class IterationReviewVerdict:
     next_sprint_goal: str = ""
     feedback_items: tuple[str, ...] = field(default_factory=tuple)
     next_tasks: tuple[IterationNextTask, ...] = field(default_factory=tuple)
+    findings: tuple[ValidatedReviewFinding, ...] = field(default_factory=tuple)
+    rejected_finding_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,7 @@ class IterationReviewContext:
     deliverables: tuple[str, ...] = field(default_factory=tuple)
     feedback_items: tuple[str, ...] = field(default_factory=tuple)
     max_next_tasks: int = 6
+    linter_covered_categories: tuple[str, ...] = field(default_factory=tuple)
 
 
 class IterationReviewPort(Protocol):
