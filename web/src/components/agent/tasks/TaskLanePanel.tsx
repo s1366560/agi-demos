@@ -11,6 +11,12 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Ban, CheckCircle2, ChevronDown, ChevronRight, Circle, Loader2, XCircle } from 'lucide-react';
 
+import {
+  DEFAULT_LANE_CONTRACT,
+  formatArtifactLabel,
+  type ArtifactType,
+} from '@/utils/artifactGate';
+
 import type { AgentTask, TaskStatus } from '@/types/agent';
 
 interface TaskLanePanelProps {
@@ -77,6 +83,30 @@ const PRIORITY_DOT: Record<string, string> = {
   medium: 'bg-amber-400',
   low: 'bg-slate-300 dark:bg-slate-600',
 };
+
+/**
+ * Lane → required-evidence mapping. Distilled from routa's lane contracts:
+ * a task moving *out of* a lane must carry the evidence the next lane expects.
+ *
+ * The mapping bridges status-based lanes (the LaneKey enum below) to the
+ * canonical column ids in `DEFAULT_LANE_CONTRACT` so we can reuse a single
+ * source of truth for "what does this lane owe downstream".
+ */
+const LANE_TO_CONTRACT_COLUMN: Record<'in_progress' | 'pending' | 'completed' | 'failed', string> = {
+  pending: 'todo',
+  in_progress: 'dev',
+  completed: 'done',
+  failed: 'dev',
+};
+
+function getLaneContractEvidence(laneKey: 'in_progress' | 'pending' | 'completed' | 'failed'): ArtifactType[] {
+  const columnId = LANE_TO_CONTRACT_COLUMN[laneKey];
+  const sorted = [...DEFAULT_LANE_CONTRACT.columns].sort((a, b) => a.position - b.position);
+  const idx = sorted.findIndex((c) => c.id === columnId);
+  if (idx < 0 || idx + 1 >= sorted.length) return [];
+  const next = sorted[idx + 1];
+  return next?.requiredArtifacts ?? [];
+}
 
 const COLLAPSE_STORAGE_PREFIX = 'memstack:taskLanes:collapsed:';
 
@@ -242,17 +272,40 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                 </span>
               </button>
               {!isCollapsed ? (
-                lane.tasks.length === 0 ? (
-                  <p className="px-3 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
-                    Empty.
-                  </p>
-                ) : (
-                  <ul className="space-y-1.5 p-2 pt-0">
-                    {lane.tasks.map((task) => (
-                      <LaneTaskRow key={task.id} task={task} />
-                    ))}
-                  </ul>
-                )
+                <>
+                  {(() => {
+                    const evidence = getLaneContractEvidence(lane.key);
+                    if (evidence.length === 0 || lane.tasks.length === 0) return null;
+                    return (
+                      <div
+                        className="flex flex-wrap items-center gap-1 px-3 pb-1.5 text-[10px] text-slate-500 dark:text-slate-400"
+                        data-testid="lane-contract-hint"
+                      >
+                        <span className="uppercase tracking-[0.1em]">advances with</span>
+                        {evidence.map((kind) => (
+                          <span
+                            key={kind}
+                            className="inline-flex items-center rounded border border-slate-200 bg-white px-1.5 py-0.5 font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            title={`Next lane requires: ${formatArtifactLabel(kind)}`}
+                          >
+                            {formatArtifactLabel(kind)}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {lane.tasks.length === 0 ? (
+                    <p className="px-3 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
+                      Empty.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5 p-2 pt-0">
+                      {lane.tasks.map((task) => (
+                        <LaneTaskRow key={task.id} task={task} />
+                      ))}
+                    </ul>
+                  )}
+                </>
               ) : null}
             </section>
           );

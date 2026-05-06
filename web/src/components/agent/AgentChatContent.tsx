@@ -73,6 +73,8 @@ import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
+import { AgentProgressBar } from './AgentProgressBar';
+import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 
 import type {
   AgentTask,
@@ -668,6 +670,25 @@ ${content}`;
               <GripHorizontal size={12} />
             </div>
           </div>
+          {(() => {
+            const progress = deriveTaskProgress(tasks, isStreaming);
+            if (!progress.hasTasks) return null;
+            return (
+              <div
+                className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 px-4 py-2"
+                data-testid="agent-task-progress-strip"
+              >
+                <AgentProgressBar
+                  current={progress.current}
+                  total={progress.total}
+                  status={progress.status}
+                  label={progress.label}
+                  compact
+                  animate={progress.status === 'step_executing'}
+                />
+              </div>
+            );
+          })()}
           <InputBar
             ref={inputBarRef}
             onSend={(...args) => {
