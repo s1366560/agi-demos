@@ -13,6 +13,7 @@ import type {
   WorkspacePlanActionResult,
   WorkspacePlanSnapshot,
   WorkspaceTask,
+  WorkspaceTaskExperienceSummary,
   WorkspaceUpdateRequest,
 } from '@/types/workspace';
 
@@ -403,6 +404,18 @@ export const workspaceTaskService = {
       },
     });
     return response.json() as Promise<WorkspaceTask[]>;
+  },
+
+  getExperience: async (
+    workspaceId: string,
+    taskId: string
+  ): Promise<WorkspaceTaskExperienceSummary> => {
+    const response = await apiFetch.get(`${taskBase(workspaceId)}/${taskId}/experience`, {
+      retry: {
+        maxRetries: 1,
+      },
+    });
+    return response.json() as Promise<WorkspaceTaskExperienceSummary>;
   },
 
   create: async (

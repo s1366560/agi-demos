@@ -199,6 +199,48 @@ export interface WorkspaceTask {
   updated_at?: string | undefined;
 }
 
+export interface WorkspaceTaskTransitionGate {
+  target_status: WorkspaceTaskStatus;
+  would_block: boolean;
+  severity: 'ready' | 'warning' | string;
+  missing: string[];
+  reasons: string[];
+}
+
+export interface WorkspaceTaskExperienceSummary {
+  task_id: string;
+  workspace_id: string;
+  readiness: {
+    goal_contract?: Record<string, unknown> | undefined;
+    missing_evidence?: string[] | undefined;
+    blocked_requirements?: string[] | undefined;
+    transition_gates?:
+      | Partial<Record<'done' | 'blocked', WorkspaceTaskTransitionGate>>
+      | Record<string, WorkspaceTaskTransitionGate>
+      | undefined;
+  };
+  execution: Record<string, unknown>;
+  evidence: {
+    evidence_refs?: string[] | undefined;
+    artifacts?: string[] | undefined;
+    verification_summaries?: string[] | undefined;
+    goal_evidence_grade?: string | null | undefined;
+    worker_report?: Record<string, unknown> | undefined;
+  };
+  diagnostics: Record<string, unknown> & {
+    blocker_reason?: string | null | undefined;
+    pending_leader_adjudication?: boolean | undefined;
+    missing_conversation?: boolean | undefined;
+    durable_plan_verdict?: string | null | undefined;
+    last_attempt_status?: string | null | undefined;
+    transition_gates?:
+      | Partial<Record<'done' | 'blocked', WorkspaceTaskTransitionGate>>
+      | Record<string, WorkspaceTaskTransitionGate>
+      | undefined;
+  };
+  activity: Array<Record<string, unknown>>;
+}
+
 export type WorkspacePlanStatus = 'draft' | 'active' | 'suspended' | 'completed' | 'abandoned';
 export type WorkspacePlanNodeKind = 'goal' | 'milestone' | 'task' | 'verify';
 export type WorkspacePlanTaskIntent = 'todo' | 'in_progress' | 'blocked' | 'done';

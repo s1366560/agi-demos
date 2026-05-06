@@ -285,6 +285,8 @@ class TestFormatWorkspaceContext:
         assert 'workspace_agent_binding_id="binding-1"' in result
         assert 'last_attempt_id="attempt-1"' in result
         assert 'last_attempt_status="awaiting_leader_adjudication"' in result
+        assert 'missing_evidence="leader_adjudication"' in result
+        assert 'verification_summaries="worker_report:completed"' in result
 
 
 @pytest.mark.unit
@@ -354,6 +356,10 @@ class TestBuildWorkspaceContext:
                 "src.infrastructure.agent.workspace.workspace_context_builder.SqlWorkspaceTaskRepository"
             ) as mock_task_repo_cls,
             patch(
+                "src.infrastructure.agent.workspace.workspace_context_builder."
+                "SqlWorkspaceTaskSessionAttemptRepository"
+            ) as mock_attempt_repo_cls,
+            patch(
                 "src.infrastructure.agent.workspace.workspace_context_builder.SqlCyberObjectiveRepository"
             ) as mock_objective_repo_cls,
         ):
@@ -363,6 +369,9 @@ class TestBuildWorkspaceContext:
             mock_msg_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=messages)
             mock_bb_repo_cls.return_value.list_posts_by_workspace = AsyncMock(return_value=posts)
             mock_task_repo_cls.return_value.find_by_workspace = AsyncMock(return_value=tasks)
+            mock_attempt_repo_cls.return_value.find_by_workspace_task_id = AsyncMock(
+                return_value=[]
+            )
             mock_objective_repo_cls.return_value.find_by_workspace = AsyncMock(
                 return_value=objectives
             )

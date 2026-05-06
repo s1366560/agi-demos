@@ -26,6 +26,76 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 _GOAL_ROOT_ROLE = "goal_root"
 
 
+def evaluate_workspace_task_transition_gates(
+    task: WorkspaceTask,
+) -> dict[str, dict[str, object]]:
+    """Return advisory transition gates without enforcing them."""
+
+    metadata = dict(getattr(task, "metadata", {}) or {})
+    evidence_refs = _string_list(metadata.get("evidence_refs"))
+    artifacts = _string_list(metadata.get("last_worker_report_artifacts"))
+    worker_checks = _string_list(metadata.get("last_worker_report_verifications"))
+    execution_checks = _string_list(metadata.get("execution_verifications"))
+    goal_evidence = metadata.get("goal_evidence")
+    goal_evidence_grade = (
+        goal_evidence.get("verification_grade")
+        if isinstance(goal_evidence, dict)
+        and isinstance(goal_evidence.get("verification_grade"), str)
+        else None
+    )
+
+    done_missing: list[str] = []
+    done_reasons: list[str] = []
+    if not any([evidence_refs, artifacts, worker_checks, execution_checks, goal_evidence_grade]):
+        done_missing.append("evidence")
+        done_reasons.append(
+            "Completion should include verifiable evidence tied to the workspace goal."
+        )
+    if metadata.get("pending_leader_adjudication") is True:
+        done_missing.append("leader_adjudication")
+        done_reasons.append("Pending leader adjudication should resolve before marking done.")
+
+    blocked_missing: list[str] = []
+    blocked_reasons: list[str] = []
+    if not (task.blocker_reason or "").strip():
+        blocked_missing.append("blocker_reason")
+        blocked_reasons.append("Blocked is reserved for explicit human-intervention reasons.")
+
+    return {
+        "done": _transition_gate(
+            target=WorkspaceTaskStatus.DONE,
+            missing=done_missing,
+            reasons=done_reasons,
+        ),
+        "blocked": _transition_gate(
+            target=WorkspaceTaskStatus.BLOCKED,
+            missing=blocked_missing,
+            reasons=blocked_reasons,
+        ),
+    }
+
+
+def _transition_gate(
+    *,
+    target: WorkspaceTaskStatus,
+    missing: list[str],
+    reasons: list[str],
+) -> dict[str, object]:
+    return {
+        "target_status": target.value,
+        "would_block": bool(missing),
+        "severity": "warning" if missing else "ready",
+        "missing": missing,
+        "reasons": reasons,
+    }
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
 class WorkspaceTaskCommandService:
     """Runs workspace task mutations and queues canonical events for post-commit publish."""
 
@@ -115,6 +185,12 @@ class WorkspaceTaskCommandService:
         if metadata.get(TASK_ROLE) != _GOAL_ROOT_ROLE:
             return
         self._pending_autonomy_ticks.append((task.workspace_id, actor_user_id))
+
+    @staticmethod
+    def evaluate_transition_gates(task: WorkspaceTask) -> dict[str, dict[str, object]]:
+        """Return advisory gate state for UX and prompt context surfaces."""
+
+        return evaluate_workspace_task_transition_gates(task)
 
     async def create_task(  # noqa: PLR0913
         self,

@@ -1,41 +1,41 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input, Select, Switch, Tooltip } from 'antd';
-import { AlertCircle, Ban, CheckCircle, ListTodo, PlayCircle, Plus } from 'lucide-react';
+import {
+  AlertCircle,
+  Ban,
+  CheckCircle,
+  ListTodo,
+  PanelRightOpen,
+  PlayCircle,
+  Plus,
+} from 'lucide-react';
 
 import { useWorkspaceAgents, useWorkspaceTasks } from '@/stores/workspace';
 
 import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 
-import {
-  formatTaskProjectionLabel,
-  getPendingLeaderAdjudicationSummary,
-} from '@/utils/workspaceTaskProjection';
+import { getPendingLeaderAdjudicationSummary } from '@/utils/workspaceTaskProjection';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
+import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
+import {
+  formatMetadataLabel,
+  getRootGoalDisplayState,
+  getTaskObservabilityState,
+} from '@/components/workspace/taskBoardSignals';
 
-import type { WorkspaceTask, WorkspaceTaskPriority, WorkspaceTaskStatus } from '@/types/workspace';
+import type {
+  WorkspaceTask,
+  WorkspaceTaskExperienceSummary,
+  WorkspaceTaskPriority,
+  WorkspaceTaskStatus,
+} from '@/types/workspace';
 
 interface TaskBoardProps {
   workspaceId: string;
-}
-
-interface RootGoalDisplayState {
-  isRootGoal: boolean;
-  goalHealth: string;
-  remediationStatus: string;
-  verificationGrade: string;
-}
-
-interface TaskObservabilityState {
-  codeRoot: string;
-  agentsDigest: string;
-  loadedAgentsCount: number;
-  launchState: string;
-  durableVerdict: string;
-  missingConversation: boolean;
 }
 
 const PRIORITY_TONES: Record<string, string> = {
@@ -140,68 +140,6 @@ const COLUMN_CONFIG: {
   },
 ];
 
-function getRootGoalDisplayState(
-  metadata: Record<string, unknown> | undefined
-): RootGoalDisplayState {
-  const safeMetadata = metadata ?? {};
-  const taskRole = typeof safeMetadata.task_role === 'string' ? safeMetadata.task_role : '';
-  const goalEvidence =
-    safeMetadata.goal_evidence && typeof safeMetadata.goal_evidence === 'object'
-      ? (safeMetadata.goal_evidence as Record<string, unknown>)
-      : null;
-
-  return {
-    isRootGoal: taskRole === 'goal_root',
-    goalHealth: typeof safeMetadata.goal_health === 'string' ? safeMetadata.goal_health : '',
-    remediationStatus:
-      typeof safeMetadata.remediation_status === 'string' ? safeMetadata.remediation_status : '',
-    verificationGrade:
-      goalEvidence && typeof goalEvidence.verification_grade === 'string'
-        ? goalEvidence.verification_grade
-        : '',
-  };
-}
-
-function formatMetadataLabel(value: string): string {
-  return formatTaskProjectionLabel(value);
-}
-
-function getTaskObservabilityState(task: WorkspaceTask): TaskObservabilityState {
-  const metadata = Object(task.metadata) as Record<string, unknown>;
-  const codeContext =
-    metadata.code_context && typeof metadata.code_context === 'object'
-      ? (metadata.code_context as Record<string, unknown>)
-      : null;
-  const loadedAgentsFiles = Array.isArray(codeContext?.loaded_agents_files)
-    ? codeContext.loaded_agents_files.filter((item): item is string => typeof item === 'string')
-    : [];
-  const currentAttemptId =
-    typeof metadata.current_attempt_id === 'string'
-      ? metadata.current_attempt_id
-      : task.current_attempt_id;
-  const attemptConversationId =
-    typeof metadata.current_attempt_conversation_id === 'string'
-      ? metadata.current_attempt_conversation_id
-      : task.current_attempt_conversation_id;
-
-  return {
-    codeRoot:
-      typeof codeContext?.sandbox_code_root === 'string'
-        ? codeContext.sandbox_code_root
-        : typeof metadata.sandbox_code_root === 'string'
-          ? metadata.sandbox_code_root
-          : '',
-    agentsDigest: typeof codeContext?.agents_digest === 'string' ? codeContext.agents_digest : '',
-    loadedAgentsCount: loadedAgentsFiles.length,
-    launchState: typeof metadata.launch_state === 'string' ? metadata.launch_state : '',
-    durableVerdict:
-      typeof metadata.durable_plan_verdict === 'string' ? metadata.durable_plan_verdict : '',
-    missingConversation: Boolean(
-      task.status === 'in_progress' && currentAttemptId && !attemptConversationId
-    ),
-  };
-}
-
 export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
   const { t } = useTranslation();
   const message = useLazyMessage();
@@ -215,6 +153,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
   const [effort, setEffort] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutonomyTicking, setIsAutonomyTicking] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedExperience, setSelectedExperience] =
+    useState<WorkspaceTaskExperienceSummary | null>(null);
+  const [isExperienceLoading, setIsExperienceLoading] = useState(false);
+  const [experienceError, setExperienceError] = useState<string | null>(null);
 
   const workspaceTasks = useMemo(() => {
     return tasks
@@ -245,6 +188,52 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
 
     return grouped;
   }, [workspaceTasks]);
+
+  const selectedTask = useMemo(
+    () => workspaceTasks.find((task) => task.id === selectedTaskId) ?? null,
+    [selectedTaskId, workspaceTasks]
+  );
+
+  useEffect(() => {
+    if (!selectedTaskId || selectedTask) {
+      return;
+    }
+    setSelectedTaskId(null);
+    setSelectedExperience(null);
+  }, [selectedTask, selectedTaskId]);
+
+  useEffect(() => {
+    if (!selectedTaskId || !selectedTask) {
+      return;
+    }
+    let cancelled = false;
+    setIsExperienceLoading(true);
+    setExperienceError(null);
+
+    workspaceTaskService
+      .getExperience(workspaceId, selectedTaskId)
+      .then((summary) => {
+        if (!cancelled) {
+          setSelectedExperience(summary);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExperienceError(
+            t('workspaceDetail.taskExperience.loadFailed', 'Task experience could not be loaded.')
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsExperienceLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTask, selectedTaskId, t, workspaceId]);
 
   const handleAddTask = async () => {
     const trimmedTitle = title.trim();
@@ -456,267 +445,317 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {COLUMN_CONFIG.map((col) => {
-          const colTasks = columns[col.status];
-          return (
-            <div
-              key={col.status}
-              className="flex min-h-[200px] flex-col rounded-xl border border-border-light bg-surface-muted/60 dark:border-border-dark dark:bg-surface-dark-alt/60"
-            >
-              <div className="flex items-center gap-2 border-b border-border-light px-3 py-2.5 dark:border-border-dark">
-                {col.icon}
-                <span className="text-xs font-semibold text-text-primary dark:text-text-inverse">
-                  {t(col.labelKey, col.fallback)}
-                </span>
-                <span className="ml-auto text-xs tabular-nums text-text-muted dark:text-text-muted">
-                  ({colTasks.length})
-                </span>
-              </div>
+      <div
+        className={`grid gap-3 ${
+          selectedTask ? 'xl:grid-cols-[minmax(0,1fr)_420px]' : 'xl:grid-cols-[minmax(0,1fr)]'
+        }`}
+      >
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {COLUMN_CONFIG.map((col) => {
+            const colTasks = columns[col.status];
+            return (
+              <div
+                key={col.status}
+                className="flex min-h-[200px] flex-col rounded-xl border border-border-light bg-surface-muted/60 dark:border-border-dark dark:bg-surface-dark-alt/60"
+              >
+                <div className="flex items-center gap-2 border-b border-border-light px-3 py-2.5 dark:border-border-dark">
+                  {col.icon}
+                  <span className="text-xs font-semibold text-text-primary dark:text-text-inverse">
+                    {t(col.labelKey, col.fallback)}
+                  </span>
+                  <span className="ml-auto text-xs tabular-nums text-text-muted dark:text-text-muted">
+                    ({colTasks.length})
+                  </span>
+                </div>
 
-              <div className="flex-1 space-y-2 overflow-y-auto p-2">
-                {colTasks.length === 0 ? (
-                  <div className="flex h-full min-h-[80px] items-center justify-center">
-                    <span className="text-xs text-text-muted/60 dark:text-text-muted/40">--</span>
-                  </div>
-                ) : (
-                  colTasks.map((task) => {
-                    const isDone = task.status === 'done';
-                    const isBlocked = task.status === 'blocked';
-                    const { isRootGoal, goalHealth, remediationStatus, verificationGrade } =
-                      getRootGoalDisplayState(task.metadata as Record<string, unknown> | undefined);
-                    const {
-                      pending,
-                      reportTypeLabel,
-                      reportSummary,
-                      reportArtifacts,
-                      reportVerifications,
-                      workerLabel,
-                      attemptNumber,
-                    } = getPendingLeaderAdjudicationSummary(task, agents);
-                    const priorityTone =
-                      PRIORITY_TONES[task.priority || ''] ??
-                      'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary';
-                    const observability = getTaskObservabilityState(task);
+                <div className="flex-1 space-y-2 overflow-y-auto p-2">
+                  {colTasks.length === 0 ? (
+                    <div className="flex h-full min-h-[80px] items-center justify-center">
+                      <span className="text-xs text-text-muted/60 dark:text-text-muted/40">--</span>
+                    </div>
+                  ) : (
+                    colTasks.map((task) => {
+                      const isDone = task.status === 'done';
+                      const isBlocked = task.status === 'blocked';
+                      const { isRootGoal, goalHealth, remediationStatus, verificationGrade } =
+                        getRootGoalDisplayState(
+                          task.metadata as Record<string, unknown> | undefined
+                        );
+                      const {
+                        pending,
+                        reportTypeLabel,
+                        reportSummary,
+                        reportArtifacts,
+                        reportVerifications,
+                        workerLabel,
+                        attemptNumber,
+                      } = getPendingLeaderAdjudicationSummary(task, agents);
+                      const priorityTone =
+                        PRIORITY_TONES[task.priority || ''] ??
+                        'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary';
+                      const observability = getTaskObservabilityState(task);
 
-                    return (
-                      <article
-                        key={task.id}
-                        id={`workspace-task-${task.id}`}
-                        data-task-id={task.id}
-                        className={`rounded-lg border border-border-light bg-surface-light p-2.5 shadow-sm transition hover:border-border-separator dark:border-border-dark dark:bg-surface-dark ${
-                          isDone ? 'opacity-60' : ''
-                        } scroll-mt-24`}
-                      >
-                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                          {task.priority && (
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${priorityTone}`}
-                            >
-                              {task.priority}
-                            </span>
-                          )}
-                          {task.estimated_effort && (
-                            <span className="rounded-full border border-border-light bg-surface-muted px-2 py-0.5 text-[10px] font-medium text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-secondary">
-                              {task.estimated_effort}
-                            </span>
-                          )}
-                          {isRootGoal && (
-                            <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
-                              Root goal
-                            </span>
-                          )}
-                          {isRootGoal && goalHealth && (
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                                GOAL_HEALTH_TONES[goalHealth] ??
-                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                      return (
+                        <article
+                          key={task.id}
+                          id={`workspace-task-${task.id}`}
+                          data-task-id={task.id}
+                          className={`rounded-lg border border-border-light bg-surface-light p-2.5 shadow-sm transition hover:border-border-separator dark:border-border-dark dark:bg-surface-dark ${
+                            isDone ? 'opacity-60' : ''
+                          } ${
+                            selectedTaskId === task.id
+                              ? 'ring-1 ring-border-separator dark:ring-border-light'
+                              : ''
+                          } scroll-mt-24`}
+                        >
+                          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                            {task.priority && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${priorityTone}`}
+                              >
+                                {task.priority}
+                              </span>
+                            )}
+                            {task.estimated_effort && (
+                              <span className="rounded-full border border-border-light bg-surface-muted px-2 py-0.5 text-[10px] font-medium text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-secondary">
+                                {task.estimated_effort}
+                              </span>
+                            )}
+                            {isRootGoal && (
+                              <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+                                Root goal
+                              </span>
+                            )}
+                            {isRootGoal && goalHealth && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                  GOAL_HEALTH_TONES[goalHealth] ??
+                                  'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                                }`}
+                              >
+                                {goalHealth.replace('_', ' ')}
+                              </span>
+                            )}
+                            {isRootGoal && verificationGrade && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                  VERIFICATION_GRADE_TONES[verificationGrade] ??
+                                  'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                                }`}
+                              >
+                                Evidence {verificationGrade}
+                              </span>
+                            )}
+                            {pending && (
+                              <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+                                Pending adjudication
+                              </span>
+                            )}
+                            {observability.launchState && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                  OBSERVABILITY_TONES[observability.launchState] ??
+                                  'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                                }`}
+                              >
+                                {formatMetadataLabel(observability.launchState)}
+                              </span>
+                            )}
+                            {observability.durableVerdict && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                  OBSERVABILITY_TONES[observability.durableVerdict] ??
+                                  'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
+                                }`}
+                              >
+                                Durable {formatMetadataLabel(observability.durableVerdict)}
+                              </span>
+                            )}
+                            {observability.missingConversation && (
+                              <Tooltip
+                                title={t(
+                                  'workspaceDetail.taskBoard.missingAttemptConversation',
+                                  'Attempt is running but the worker conversation has not been bound yet.'
+                                )}
+                              >
+                                <span className="rounded-full border border-warning-border bg-warning-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+                                  No conversation
+                                </span>
+                              </Tooltip>
+                            )}
+                            {isBlocked && (
+                              <Tooltip
+                                title={
+                                  task.blocker_reason ||
+                                  t('workspaceDetail.taskBoard.taskIsBlocked', 'Task is blocked')
+                                }
+                              >
+                                <span className="inline-flex items-center gap-0.5 rounded-full border border-error-border bg-error-bg px-1.5 py-0.5 text-[10px] font-medium text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark">
+                                  <AlertCircle size={10} />
+                                </span>
+                              </Tooltip>
+                            )}
+                          </div>
+
+                          <div className="flex items-start gap-1.5">
+                            <h4
+                              className={`min-w-0 flex-1 break-words text-xs font-semibold leading-snug text-text-primary dark:text-text-inverse ${
+                                isDone ? 'line-through decoration-border-separator' : ''
                               }`}
                             >
-                              {goalHealth.replace('_', ' ')}
-                            </span>
-                          )}
-                          {isRootGoal && verificationGrade && (
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                                VERIFICATION_GRADE_TONES[verificationGrade] ??
-                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
-                              }`}
-                            >
-                              Evidence {verificationGrade}
-                            </span>
-                          )}
-                          {pending && (
-                            <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
-                              Pending adjudication
-                            </span>
-                          )}
-                          {observability.launchState && (
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                                OBSERVABILITY_TONES[observability.launchState] ??
-                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
-                              }`}
-                            >
-                              {formatMetadataLabel(observability.launchState)}
-                            </span>
-                          )}
-                          {observability.durableVerdict && (
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                                OBSERVABILITY_TONES[observability.durableVerdict] ??
-                                'border-border-light bg-surface-light text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-secondary'
-                              }`}
-                            >
-                              Durable {formatMetadataLabel(observability.durableVerdict)}
-                            </span>
-                          )}
-                          {observability.missingConversation && (
+                              {task.title}
+                            </h4>
                             <Tooltip
                               title={t(
-                                'workspaceDetail.taskBoard.missingAttemptConversation',
-                                'Attempt is running but the worker conversation has not been bound yet.'
+                                'workspaceDetail.taskBoard.openDetails',
+                                'Open task details'
                               )}
                             >
-                              <span className="rounded-full border border-warning-border bg-warning-bg px-2 py-0.5 text-[10px] font-semibold uppercase text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
-                                No conversation
-                              </span>
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<PanelRightOpen size={13} />}
+                                aria-label={t(
+                                  'workspaceDetail.taskBoard.openDetails',
+                                  'Open task details'
+                                )}
+                                className="h-6 w-6 shrink-0 text-text-muted hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse"
+                                onClick={() => {
+                                  setSelectedTaskId(task.id);
+                                }}
+                              />
                             </Tooltip>
-                          )}
-                          {isBlocked && (
-                            <Tooltip
-                              title={
-                                task.blocker_reason ||
-                                t('workspaceDetail.taskBoard.taskIsBlocked', 'Task is blocked')
-                              }
-                            >
-                              <span className="inline-flex items-center gap-0.5 rounded-full border border-error-border bg-error-bg px-1.5 py-0.5 text-[10px] font-medium text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark">
-                                <AlertCircle size={10} />
-                              </span>
-                            </Tooltip>
-                          )}
-                        </div>
-
-                        <h4
-                          className={`text-xs font-semibold leading-snug text-text-primary dark:text-text-inverse ${
-                            isDone ? 'line-through decoration-border-separator' : ''
-                          }`}
-                        >
-                          {task.title}
-                        </h4>
-
-                        {task.description && (
-                          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
-                            {task.description}
-                          </p>
-                        )}
-
-                        {isBlocked && task.blocker_reason && (
-                          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-status-text-error dark:text-status-text-error-dark">
-                            {task.blocker_reason}
-                          </p>
-                        )}
-
-                        {isRootGoal && remediationStatus && (
-                          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
-                            {formatMetadataLabel(remediationStatus)}
-                          </p>
-                        )}
-
-                        {(observability.codeRoot || observability.agentsDigest) && (
-                          <div className="mt-2 space-y-1 rounded-md border border-border-light bg-surface-muted/70 px-2 py-2 text-[11px] leading-4 text-text-secondary dark:border-border-dark dark:bg-background-dark/45 dark:text-text-muted">
-                            {observability.codeRoot && (
-                              <p className="break-all">
-                                {t('workspaceDetail.taskBoard.codeRoot', 'Code root')}:{' '}
-                                <span className="font-mono">{observability.codeRoot}</span>
-                              </p>
-                            )}
-                            {observability.agentsDigest && (
-                              <p className="break-all">
-                                AGENTS {observability.agentsDigest.slice(0, 12)}
-                                {observability.loadedAgentsCount > 0
-                                  ? ` · ${String(observability.loadedAgentsCount)} file(s)`
-                                  : ''}
-                              </p>
-                            )}
                           </div>
-                        )}
 
-                        {pending && (
-                          <div className="mt-2 rounded-md border border-info-border/60 bg-info-bg/70 px-2 py-2 text-[11px] leading-4 text-status-text-info dark:border-info-border-dark/60 dark:bg-info-bg-dark/40 dark:text-status-text-info-dark">
-                            <p className="font-medium">
-                              {t(
-                                'workspaceDetail.taskBoard.pendingLeaderAdjudication',
-                                'Waiting for Sisyphus to review the worker result.'
-                              )}
+                          {task.description && (
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
+                              {task.description}
                             </p>
-                            {reportTypeLabel && (
-                              <p className="mt-1">
-                                {t('workspaceDetail.taskBoard.workerReportType', 'Worker report')}:{' '}
-                                {reportTypeLabel}
-                              </p>
-                            )}
-                            {reportSummary && <p className="mt-1 line-clamp-3">{reportSummary}</p>}
-                            {reportArtifacts.length > 0 && (
-                              <p className="mt-1 line-clamp-2">
-                                {t('workspaceDetail.taskBoard.reportArtifacts', 'Artifacts')}:{' '}
-                                {reportArtifacts.join(', ')}
-                              </p>
-                            )}
-                            {reportVerifications.length > 0 && (
-                              <p className="mt-1 line-clamp-2">
-                                {t('workspaceDetail.taskBoard.reportVerifications', 'Checks')}:{' '}
-                                {reportVerifications.join(', ')}
-                              </p>
-                            )}
-                            {workerLabel && (
-                              <p className="mt-1 line-clamp-2">
-                                {t('workspaceDetail.taskBoard.workerLabel', 'Worker')}:{' '}
-                                {workerLabel}
-                              </p>
-                            )}
-                            {attemptNumber && (
-                              <p className="mt-1 line-clamp-2">
-                                {t('workspaceDetail.taskBoard.attemptNumber', 'Attempt')} #
-                                {String(attemptNumber)}
-                              </p>
-                            )}
-                          </div>
-                        )}
+                          )}
 
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <Select
-                            aria-label={t('workspaceDetail.taskBoard.assignee', 'Assignee')}
-                            size="small"
-                            value={resolveAssignedAgentValue(task)}
-                            options={agentOptions}
-                            onChange={(value) => {
-                              void handleAgentAssign(task.id, value);
-                            }}
-                            className="min-w-0 flex-1"
-                            variant="borderless"
-                          />
-                          <Select
-                            aria-label={t('workspaceDetail.taskBoard.status', 'Status')}
-                            size="small"
-                            value={task.status}
-                            options={statusOptions}
-                            onChange={(value) => {
-                              void handleStatusChange(task.id, value as WorkspaceTaskStatus);
-                            }}
-                            className="min-w-0 flex-1"
-                            variant="borderless"
-                            {...(isBlocked ? { status: 'error' } : {})}
-                          />
-                        </div>
-                      </article>
-                    );
-                  })
-                )}
+                          {isBlocked && task.blocker_reason && (
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-status-text-error dark:text-status-text-error-dark">
+                              {task.blocker_reason}
+                            </p>
+                          )}
+
+                          {isRootGoal && remediationStatus && (
+                            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary dark:text-text-muted">
+                              {formatMetadataLabel(remediationStatus)}
+                            </p>
+                          )}
+
+                          {(observability.codeRoot || observability.agentsDigest) && (
+                            <div className="mt-2 space-y-1 rounded-md border border-border-light bg-surface-muted/70 px-2 py-2 text-[11px] leading-4 text-text-secondary dark:border-border-dark dark:bg-background-dark/45 dark:text-text-muted">
+                              {observability.codeRoot && (
+                                <p className="break-all">
+                                  {t('workspaceDetail.taskBoard.codeRoot', 'Code root')}:{' '}
+                                  <span className="font-mono">{observability.codeRoot}</span>
+                                </p>
+                              )}
+                              {observability.agentsDigest && (
+                                <p className="break-all">
+                                  AGENTS {observability.agentsDigest.slice(0, 12)}
+                                  {observability.loadedAgentsCount > 0
+                                    ? ` · ${String(observability.loadedAgentsCount)} file(s)`
+                                    : ''}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {pending && (
+                            <div className="mt-2 rounded-md border border-info-border/60 bg-info-bg/70 px-2 py-2 text-[11px] leading-4 text-status-text-info dark:border-info-border-dark/60 dark:bg-info-bg-dark/40 dark:text-status-text-info-dark">
+                              <p className="font-medium">
+                                {t(
+                                  'workspaceDetail.taskBoard.pendingLeaderAdjudication',
+                                  'Waiting for Sisyphus to review the worker result.'
+                                )}
+                              </p>
+                              {reportTypeLabel && (
+                                <p className="mt-1">
+                                  {t('workspaceDetail.taskBoard.workerReportType', 'Worker report')}
+                                  : {reportTypeLabel}
+                                </p>
+                              )}
+                              {reportSummary && (
+                                <p className="mt-1 line-clamp-3">{reportSummary}</p>
+                              )}
+                              {reportArtifacts.length > 0 && (
+                                <p className="mt-1 line-clamp-2">
+                                  {t('workspaceDetail.taskBoard.reportArtifacts', 'Artifacts')}:{' '}
+                                  {reportArtifacts.join(', ')}
+                                </p>
+                              )}
+                              {reportVerifications.length > 0 && (
+                                <p className="mt-1 line-clamp-2">
+                                  {t('workspaceDetail.taskBoard.reportVerifications', 'Checks')}:{' '}
+                                  {reportVerifications.join(', ')}
+                                </p>
+                              )}
+                              {workerLabel && (
+                                <p className="mt-1 line-clamp-2">
+                                  {t('workspaceDetail.taskBoard.workerLabel', 'Worker')}:{' '}
+                                  {workerLabel}
+                                </p>
+                              )}
+                              {attemptNumber && (
+                                <p className="mt-1 line-clamp-2">
+                                  {t('workspaceDetail.taskBoard.attemptNumber', 'Attempt')} #
+                                  {String(attemptNumber)}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-2 flex items-center gap-1.5">
+                            <Select
+                              aria-label={t('workspaceDetail.taskBoard.assignee', 'Assignee')}
+                              size="small"
+                              value={resolveAssignedAgentValue(task)}
+                              options={agentOptions}
+                              onChange={(value) => {
+                                void handleAgentAssign(task.id, value);
+                              }}
+                              className="min-w-0 flex-1"
+                              variant="borderless"
+                            />
+                            <Select
+                              aria-label={t('workspaceDetail.taskBoard.status', 'Status')}
+                              size="small"
+                              value={task.status}
+                              options={statusOptions}
+                              onChange={(value) => {
+                                void handleStatusChange(task.id, value as WorkspaceTaskStatus);
+                              }}
+                              className="min-w-0 flex-1"
+                              variant="borderless"
+                              {...(isBlocked ? { status: 'error' } : {})}
+                            />
+                          </div>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        {selectedTask && (
+          <TaskExperiencePanel
+            task={selectedTask}
+            agents={agents}
+            experience={selectedExperience}
+            loading={isExperienceLoading}
+            error={experienceError}
+            onClose={() => {
+              setSelectedTaskId(null);
+              setSelectedExperience(null);
+              setExperienceError(null);
+            }}
+          />
+        )}
       </div>
     </section>
   );

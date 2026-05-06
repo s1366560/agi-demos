@@ -14,11 +14,16 @@ Usage in ReActAgent._build_system_prompt:
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
 from src.application.services.workspace_goal_sensing_service import (
     WorkspaceGoalSensingService,
+)
+from src.application.services.workspace_task_experience_service import (
+    build_workspace_task_experience_summary,
 )
 from src.domain.model.workspace.blackboard_post import BlackboardPost
 from src.domain.model.workspace.cyber_objective import CyberObjective
@@ -48,6 +53,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository 
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
+    SqlWorkspaceTaskSessionAttemptRepository,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
@@ -106,6 +114,7 @@ async def build_workspace_context(
             message_repo = SqlWorkspaceMessageRepository(db)
             blackboard_repo = SqlBlackboardRepository(db)
             task_repo = SqlWorkspaceTaskRepository(db)
+            attempt_repo = SqlWorkspaceTaskSessionAttemptRepository(db)
             objective_repo = SqlCyberObjectiveRepository(db)
 
             members = await member_repo.find_by_workspace(
@@ -129,6 +138,13 @@ async def build_workspace_context(
                 workspace.id,
                 limit=_MAX_TASKS,
             )
+            task_experience_summaries: dict[str, dict[str, Any]] = {}
+            for task in tasks:
+                attempts = await attempt_repo.find_by_workspace_task_id(task.id, limit=3)
+                task_experience_summaries[task.id] = build_workspace_task_experience_summary(
+                    task,
+                    attempts=attempts,
+                )
             objectives = await objective_repo.find_by_workspace(
                 workspace.id,
                 limit=_MAX_OBJECTIVES,
@@ -149,6 +165,7 @@ async def build_workspace_context(
             tasks,
             objectives,
             goal_candidates,
+            task_experience_summaries,
         )
     except Exception:
         logger.warning(
@@ -166,6 +183,7 @@ def format_workspace_context(
     tasks: list[WorkspaceTask] | None = None,
     objectives: list[CyberObjective] | None = None,
     goal_candidates: list[GoalCandidateRecordModel] | None = None,
+    task_experience_summaries: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> str:
     """Format workspace data into an XML text block for prompt injection."""
     sections: list[str] = []
@@ -176,7 +194,7 @@ def format_workspace_context(
     _extend_section(sections, _format_messages(messages))
     _extend_section(sections, _format_posts(posts))
     _extend_section(sections, _format_objectives(objectives or []))
-    _extend_section(sections, _format_tasks(tasks or []))
+    _extend_section(sections, _format_tasks(tasks or [], task_experience_summaries or {}))
     _extend_section(sections, _format_goal_candidates(goal_candidates or []))
 
     sections.append("</cyber-workspace>")
@@ -262,132 +280,146 @@ def _format_objectives(objectives: list[CyberObjective]) -> str | None:
     return "\n".join(lines)
 
 
-def _format_tasks(tasks: list[WorkspaceTask]) -> str | None:
+def _format_tasks(
+    tasks: list[WorkspaceTask],
+    task_experience_summaries: Mapping[str, Mapping[str, Any]] | None = None,
+) -> str | None:
     if not tasks:
         return None
     lines = ["  <tasks>"]
     for task in tasks:
-        metadata = task.metadata
-        role = str(metadata.get(TASK_ROLE, "task"))
-        goal_health = metadata.get("goal_health")
-        remediation_status = metadata.get(REMEDIATION_STATUS)
-        goal_progress_summary = metadata.get("goal_progress_summary")
-        last_worker_report_type = metadata.get("last_worker_report_type")
-        last_worker_report_summary = metadata.get(LAST_WORKER_REPORT_SUMMARY)
-        last_worker_report_artifacts = metadata.get("last_worker_report_artifacts")
-        last_worker_report_verifications = metadata.get("last_worker_report_verifications")
-        last_worker_report_id = metadata.get("last_worker_report_id")
-        last_worker_report_fingerprint = metadata.get("last_worker_report_fingerprint")
-        current_attempt_id = metadata.get(CURRENT_ATTEMPT_ID)
-        current_attempt_number = metadata.get("current_attempt_number")
-        current_attempt_worker_agent_id = metadata.get("current_attempt_worker_agent_id")
-        current_attempt_worker_binding_id = metadata.get("current_attempt_worker_binding_id")
-        last_attempt_id = metadata.get("last_attempt_id")
-        last_attempt_status = metadata.get("last_attempt_status")
-        workspace_agent_binding_id = task.get_workspace_agent_binding_id()
-        goal_evidence = metadata.get("goal_evidence")
-        description_attr = (
-            f' description="{truncate(task.description, 160)}"' if task.description else ""
-        )
-        goal_health_attr = f' goal_health="{goal_health}"' if isinstance(goal_health, str) else ""
-        remediation_attr = (
-            f' remediation_status="{remediation_status}"'
-            if isinstance(remediation_status, str)
-            else ""
-        )
-        progress_summary_attr = (
-            f' progress_summary="{truncate(str(goal_progress_summary), 160)}"'
-            if isinstance(goal_progress_summary, str)
-            else ""
-        )
-        pending_adjudication_attr = (
-            ' pending_leader_adjudication="true"'
-            if metadata.get(PENDING_LEADER_ADJUDICATION) is True
-            else ""
-        )
-        worker_report_attr = (
-            f' last_worker_report_type="{last_worker_report_type}"'
-            if isinstance(last_worker_report_type, str)
-            else ""
-        )
-        worker_summary_attr = (
-            f' last_worker_report_summary="{truncate(str(last_worker_report_summary), 120)}"'
-            if isinstance(last_worker_report_summary, str)
-            else ""
-        )
-        worker_artifacts_attr = (
-            f' last_worker_report_artifacts="{truncate(",".join(last_worker_report_artifacts), 120)}"'
-            if isinstance(last_worker_report_artifacts, list)
-            else ""
-        )
-        worker_verifications_attr = (
-            f' last_worker_report_verifications="{truncate(",".join(last_worker_report_verifications), 120)}"'
-            if isinstance(last_worker_report_verifications, list)
-            else ""
-        )
-        worker_report_id_attr = (
-            f' last_worker_report_id="{last_worker_report_id}"'
-            if isinstance(last_worker_report_id, str)
-            else ""
-        )
-        worker_report_fingerprint_attr = (
-            f' last_worker_report_fingerprint="{truncate(str(last_worker_report_fingerprint), 24)}"'
-            if isinstance(last_worker_report_fingerprint, str)
-            else ""
-        )
-        current_attempt_id_attr = (
-            f' current_attempt_id="{current_attempt_id}"'
-            if isinstance(current_attempt_id, str)
-            else ""
-        )
-        current_attempt_number_attr = (
-            f' current_attempt_number="{current_attempt_number}"'
-            if isinstance(current_attempt_number, int)
-            else ""
-        )
-        current_attempt_worker_binding_attr = (
-            f' current_attempt_worker_binding_id="{current_attempt_worker_binding_id}"'
-            if isinstance(current_attempt_worker_binding_id, str)
-            else ""
-        )
-        current_attempt_worker_agent_attr = (
-            f' current_attempt_worker_agent_id="{current_attempt_worker_agent_id}"'
-            if isinstance(current_attempt_worker_agent_id, str)
-            else ""
-        )
-        workspace_agent_binding_attr = (
-            f' workspace_agent_binding_id="{workspace_agent_binding_id}"'
-            if isinstance(workspace_agent_binding_id, str)
-            else ""
-        )
-        last_attempt_id_attr = (
-            f' last_attempt_id="{last_attempt_id}"' if isinstance(last_attempt_id, str) else ""
-        )
-        last_attempt_status_attr = (
-            f' last_attempt_status="{last_attempt_status}"'
-            if isinstance(last_attempt_status, str)
-            else ""
-        )
-        evidence_grade_attr = (
-            f' evidence_grade="{goal_evidence.get("verification_grade")}"'
-            if isinstance(goal_evidence, dict)
-            and isinstance(goal_evidence.get("verification_grade"), str)
-            else ""
-        )
-        lines.append(
-            f'    <task id="{task.id}" status="{task.status.value}" role="{role}" '
-            + f'priority="{task.priority.value}"{description_attr}{goal_health_attr}'
-            + f"{workspace_agent_binding_attr}"
-            + f"{remediation_attr}{progress_summary_attr}{pending_adjudication_attr}"
-            + f"{worker_report_attr}{worker_summary_attr}{worker_artifacts_attr}"
-            + f"{worker_verifications_attr}{worker_report_id_attr}{worker_report_fingerprint_attr}"
-            + f"{current_attempt_id_attr}{current_attempt_number_attr}{last_attempt_id_attr}"
-            + f"{current_attempt_worker_agent_attr}{current_attempt_worker_binding_attr}{last_attempt_status_attr}"
-            + f"{evidence_grade_attr}>"
-            + f"{truncate(task.title, 120)}</task>"
-        )
+        lines.append(_format_task(task, task_experience_summaries or {}))
     lines.append("  </tasks>")
     return "\n".join(lines)
+
+
+def _format_task(
+    task: WorkspaceTask,
+    task_experience_summaries: Mapping[str, Mapping[str, Any]],
+) -> str:
+    metadata = task.metadata
+    role = str(metadata.get(TASK_ROLE, "task"))
+    attrs = "".join(
+        [
+            _task_goal_attrs(task, metadata),
+            _task_worker_attrs(metadata),
+            _task_attempt_attrs(metadata),
+            _task_experience_attrs(task, task_experience_summaries),
+        ]
+    )
+    return (
+        f'    <task id="{task.id}" status="{task.status.value}" role="{role}" '
+        + f'priority="{task.priority.value}"{attrs}>{truncate(task.title, 120)}</task>'
+    )
+
+
+def _task_goal_attrs(task: WorkspaceTask, metadata: Mapping[str, Any]) -> str:
+    goal_evidence = metadata.get("goal_evidence")
+    evidence_grade = (
+        goal_evidence.get("verification_grade")
+        if isinstance(goal_evidence, dict)
+        and isinstance(goal_evidence.get("verification_grade"), str)
+        else None
+    )
+    return "".join(
+        [
+            _xml_attr("description", task.description, max_len=160),
+            _xml_attr("goal_health", metadata.get("goal_health")),
+            _xml_attr("workspace_agent_binding_id", task.get_workspace_agent_binding_id()),
+            _xml_attr("remediation_status", metadata.get(REMEDIATION_STATUS)),
+            _xml_attr("progress_summary", metadata.get("goal_progress_summary"), max_len=160),
+            _xml_bool_attr(
+                "pending_leader_adjudication",
+                metadata.get(PENDING_LEADER_ADJUDICATION) is True,
+            ),
+            _xml_attr("evidence_grade", evidence_grade),
+        ]
+    )
+
+
+def _task_worker_attrs(metadata: Mapping[str, Any]) -> str:
+    return "".join(
+        [
+            _xml_attr("last_worker_report_type", metadata.get("last_worker_report_type")),
+            _xml_attr(
+                "last_worker_report_summary",
+                metadata.get(LAST_WORKER_REPORT_SUMMARY),
+                max_len=120,
+            ),
+            _xml_list_attr(
+                "last_worker_report_artifacts",
+                metadata.get("last_worker_report_artifacts"),
+                max_len=120,
+            ),
+            _xml_list_attr(
+                "last_worker_report_verifications",
+                metadata.get("last_worker_report_verifications"),
+                max_len=120,
+            ),
+            _xml_attr("last_worker_report_id", metadata.get("last_worker_report_id")),
+            _xml_attr(
+                "last_worker_report_fingerprint",
+                metadata.get("last_worker_report_fingerprint"),
+                max_len=24,
+            ),
+        ]
+    )
+
+
+def _task_attempt_attrs(metadata: Mapping[str, Any]) -> str:
+    return "".join(
+        [
+            _xml_attr("current_attempt_id", metadata.get(CURRENT_ATTEMPT_ID)),
+            _xml_attr("current_attempt_number", metadata.get("current_attempt_number")),
+            _xml_attr(
+                "current_attempt_worker_agent_id",
+                metadata.get("current_attempt_worker_agent_id"),
+            ),
+            _xml_attr(
+                "current_attempt_worker_binding_id",
+                metadata.get("current_attempt_worker_binding_id"),
+            ),
+            _xml_attr("last_attempt_id", metadata.get("last_attempt_id")),
+            _xml_attr("last_attempt_status", metadata.get("last_attempt_status")),
+        ]
+    )
+
+
+def _task_experience_attrs(
+    task: WorkspaceTask,
+    task_experience_summaries: Mapping[str, Mapping[str, Any]],
+) -> str:
+    experience = task_experience_summaries.get(task.id)
+    if not isinstance(experience, Mapping):
+        experience = build_workspace_task_experience_summary(task)
+    readiness = _mapping_from_mapping(experience, "readiness")
+    execution = _mapping_from_mapping(experience, "execution")
+    evidence = _mapping_from_mapping(experience, "evidence")
+    diagnostics = _mapping_from_mapping(experience, "diagnostics")
+    active_attempt = _mapping_from_mapping(execution, "active_attempt")
+    return "".join(
+        [
+            _xml_list_attr("missing_evidence", readiness.get("missing_evidence"), max_len=120),
+            _xml_list_attr(
+                "blocked_requirements",
+                readiness.get("blocked_requirements"),
+                max_len=160,
+            ),
+            _xml_list_attr("evidence_refs", evidence.get("evidence_refs"), max_len=120),
+            _xml_list_attr(
+                "verification_summaries",
+                evidence.get("verification_summaries"),
+                max_len=120,
+            ),
+            _xml_attr("active_attempt_status", active_attempt.get("status")),
+            _xml_bool_attr("missing_conversation", diagnostics.get("missing_conversation") is True),
+        ]
+    )
+
+
+def _mapping_from_mapping(source: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    value = source.get(key)
+    return value if isinstance(value, Mapping) else {}
 
 
 def _format_goal_candidates(candidates: list[GoalCandidateRecordModel]) -> str | None:
@@ -405,6 +437,30 @@ def _format_goal_candidates(candidates: list[GoalCandidateRecordModel]) -> str |
         )
     lines.append("  </goal-candidates>")
     return "\n".join(lines)
+
+
+def _xml_attr(name: str, value: object, *, max_len: int | None = None) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str | int):
+        return ""
+    text = str(value)
+    if not text:
+        return ""
+    if max_len is not None:
+        text = truncate(text, max_len)
+    return f' {name}="{text}"'
+
+
+def _xml_bool_attr(name: str, value: bool) -> str:
+    return f' {name}="true"' if value else ""
+
+
+def _xml_list_attr(name: str, value: object, *, max_len: int) -> str:
+    if not isinstance(value, list):
+        return ""
+    text = ",".join(item for item in value if isinstance(item, str) and item)
+    return _xml_attr(name, text, max_len=max_len)
 
 
 def format_timestamp(dt: datetime) -> str:

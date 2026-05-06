@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
 from src.application.services.workspace_task_event_publisher import WorkspaceTaskEventPublisher
+from src.application.services.workspace_task_experience_service import (
+    WorkspaceTaskExperienceService,
+)
 from src.application.services.workspace_task_service import WorkspaceTaskService
 from src.configuration.di_container import DIContainer
 from src.domain.model.workspace.workspace_task import (
@@ -46,6 +49,17 @@ def _get_workspace_task_command_service(
     request: Request, db: AsyncSession
 ) -> WorkspaceTaskCommandService:
     return WorkspaceTaskCommandService(_get_workspace_task_service(request, db))
+
+
+def _get_workspace_task_experience_service(
+    request: Request,
+    db: AsyncSession,
+) -> WorkspaceTaskExperienceService:
+    container = get_container_with_db(request, db)
+    return WorkspaceTaskExperienceService(
+        task_service=_get_workspace_task_service(request, db),
+        attempt_repo=container.workspace_task_session_attempt_repository(),
+    )
 
 
 def _get_workspace_task_event_publisher(request: Request) -> WorkspaceTaskEventPublisher:
@@ -116,6 +130,16 @@ class WorkspaceTaskResponse(BaseModel):
     blocker_reason: str | None = None
     completed_at: datetime | None = None
     archived_at: datetime | None = None
+
+
+class WorkspaceTaskExperienceResponse(BaseModel):
+    task_id: str
+    workspace_id: str
+    readiness: dict[str, Any]
+    execution: dict[str, Any]
+    evidence: dict[str, Any]
+    diagnostics: dict[str, Any]
+    activity: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
@@ -311,6 +335,26 @@ async def get_workspace_task(
     except Exception as exc:
         raise _to_http_error(exc) from exc
     return _to_response(task)
+
+
+@router.get("/{task_id}/experience", response_model=WorkspaceTaskExperienceResponse)
+async def get_workspace_task_experience(
+    workspace_id: str,
+    task_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceTaskExperienceResponse:
+    service = _get_workspace_task_experience_service(request, db)
+    try:
+        summary = await service.get_summary(
+            workspace_id=workspace_id,
+            task_id=task_id,
+            actor_user_id=current_user.id,
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+    return WorkspaceTaskExperienceResponse.model_validate(summary)
 
 
 @router.patch("/{task_id}", response_model=WorkspaceTaskResponse)

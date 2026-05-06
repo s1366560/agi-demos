@@ -199,6 +199,30 @@ class TestWorkspaceTaskCommandService:
 
         assert command_service.consume_pending_autonomy_ticks() == []
 
+    def test_transition_gates_warn_when_done_lacks_evidence(self) -> None:
+        task = _make_task(status=WorkspaceTaskStatus.IN_PROGRESS)
+
+        gates = WorkspaceTaskCommandService.evaluate_transition_gates(task)
+
+        assert gates["done"]["would_block"] is True
+        assert gates["done"]["missing"] == ["evidence"]
+        assert gates["blocked"]["would_block"] is True
+        assert gates["blocked"]["missing"] == ["blocker_reason"]
+
+    def test_transition_gates_accept_done_with_worker_evidence(self) -> None:
+        task = _make_task(status=WorkspaceTaskStatus.IN_PROGRESS)
+        task.metadata = {
+            "last_worker_report_artifacts": ["artifact:diff"],
+            "last_worker_report_verifications": ["pytest passed"],
+        }
+        task.blocker_reason = "Needs deployment approval"
+
+        gates = WorkspaceTaskCommandService.evaluate_transition_gates(task)
+
+        assert gates["done"]["would_block"] is False
+        assert gates["done"]["missing"] == []
+        assert gates["blocked"]["would_block"] is False
+
 
 @pytest.mark.unit
 class TestWorkerLaunchQueue:
