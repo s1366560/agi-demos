@@ -14,6 +14,13 @@ deterministic; any judgement about whether content "is good enough" must be
 delegated to an agent tool-call.
 """
 
+from src.domain.model.lane_contract.artifact_gate import (
+    ArtifactGapReport,
+    LaneArtifactRequirement,
+    RequiredArtifactKind,
+    default_lane_artifact_requirements,
+    evaluate_artifact_gap,
+)
 from src.domain.model.lane_contract.contract import (
     GateCheck,
     GateEvaluation,
@@ -25,11 +32,16 @@ from src.domain.model.lane_contract.contract import (
 )
 
 __all__ = [
+    "ArtifactGapReport",
     "GateCheck",
     "GateEvaluation",
     "GateResult",
+    "LaneArtifactRequirement",
     "LaneContract",
     "LaneContractRegistry",
+    "RequiredArtifactKind",
     "default_kanban_contracts",
+    "default_lane_artifact_requirements",
+    "evaluate_artifact_gap",
     "evaluate_gate",
 ]
