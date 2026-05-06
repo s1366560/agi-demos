@@ -38,6 +38,9 @@ import { useMentionDetection } from './hooks/useMentionDetection';
 import { useSlashCommand } from './hooks/useSlashCommand';
 import { InputToolbar } from './InputToolbar';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
+import { QueuedPromptStrip } from './QueuedPromptStrip';
+
+import { usePendingPromptStore, usePendingPrompts } from '@/stores/pendingPromptStore';
 
 interface InputBarProps {
   onSend: (
@@ -183,6 +186,15 @@ export const InputBar = memo<InputBarProps>(
       (content.trim().length > 0 || uploadedAttachments.length > 0) &&
       pendingCount === 0;
 
+    // Pending-prompt queue: while streaming, Enter queues the message instead
+    // of sending. The head of the queue auto-dispatches once streaming ends.
+    const queueConvId = activeConversationId ?? conversationId ?? null;
+    const queue = usePendingPrompts(queueConvId ?? undefined);
+    const enqueuePrompt = usePendingPromptStore((s) => s.enqueue);
+    const shiftPrompt = usePendingPromptStore((s) => s.shift);
+    const canQueue =
+      isStreaming && !disabled && content.trim().length > 0 && Boolean(queueConvId);
+
     // --- Extracted hooks ---
     const {
       slashDropdownVisible,
@@ -241,6 +253,29 @@ export const InputBar = memo<InputBarProps>(
 
     // --- Send ---
     const handleSend = useCallback(() => {
+      // Streaming + text in the box → queue instead of sending. File
+      // attachments are not supported in the queue (v1); they stay in the
+      // composer until the next manual send.
+      if (
+        isStreaming &&
+        !disabled &&
+        queueConvId &&
+        content.trim().length > 0 &&
+        uploadedAttachments.length === 0
+      ) {
+        enqueuePrompt(queueConvId, {
+          text: content.trim(),
+          skillName: selectedSkill?.name,
+          subAgentName: selectedSubAgent || undefined,
+        });
+        setContent('');
+        resetSlash();
+        resetMention();
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        return;
+      }
       if (
         (!content.trim() && uploadedAttachments.length === 0) ||
         isStreaming ||
@@ -288,7 +323,17 @@ export const InputBar = memo<InputBarProps>(
       captureFrame,
       resetSlash,
       resetMention,
+      queueConvId,
+      enqueuePrompt,
     ]);
+
+    // Auto-dispatch the head of the queue when streaming ends.
+    useEffect(() => {
+      if (isStreaming || disabled || !queueConvId || queue.length === 0) return;
+      const head = shiftPrompt(queueConvId);
+      if (!head) return;
+      onSend(head.text, undefined, head.skillName, head.subAgentName, undefined);
+    }, [isStreaming, disabled, queueConvId, queue.length, shiftPrompt, onSend]);
 
     // --- Template select ---
     const handleTemplateSelect = useCallback((prompt: string) => {
@@ -308,13 +353,13 @@ export const InputBar = memo<InputBarProps>(
           !e.shiftKey &&
           !e.nativeEvent.isComposing &&
           !disabled &&
-          !isStreaming
+          (!isStreaming || canQueue)
         ) {
           e.preventDefault();
           handleSend();
         }
       },
-      [handleMentionKeyDown, handleSlashKeyDown, handleSend, disabled, isStreaming]
+      [handleMentionKeyDown, handleSlashKeyDown, handleSend, disabled, isStreaming, canQueue]
     );
 
     // --- Input ---
@@ -472,6 +517,14 @@ export const InputBar = memo<InputBarProps>(
               </div>
             </div>
           )}
+
+          {/* Queued prompts (compose-ahead while streaming) */}
+          <div className="flex-shrink-0">
+            <QueuedPromptStrip
+              conversationId={queueConvId ?? undefined}
+              isStreaming={isStreaming}
+            />
+          </div>
 
           {/* Selected Skill Badge */}
           {selectedSkill && (
