@@ -258,6 +258,25 @@ class DIContainer:
             _infra=self._infra,
         )
 
+    def _require_db(self, provider_name: str) -> AsyncSession:
+        """Return ``self._db`` or raise a clear error.
+
+        The global ``app.state.container`` is constructed without a session
+        (it carries singletons only). Callers that need DB-backed services
+        must obtain a request-scoped clone via ``container.with_db(db)``.
+
+        This helper turns a downstream
+        ``AttributeError: 'NoneType' has no attribute 'execute'`` into a
+        descriptive ``RuntimeError`` at the call site.
+        """
+        if self._db is None:
+            raise RuntimeError(
+                f"DIContainer.{provider_name}() requires a db session. "
+                "Use container.with_db(db) (or get_container_with_db("
+                "request, db)) before resolving this service."
+            )
+        return self._db
+
     def ai_service_factory(self) -> Any:
         """Get the AIServiceFactory singleton."""
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
@@ -941,8 +960,7 @@ class DIContainer:
             SqlEventLogRepository,
         )
 
-        assert self._db is not None, "DB session required for event_log_repository"
-        return SqlEventLogRepository(self._db)
+        return SqlEventLogRepository(self._require_db("event_log_repository"))
 
     def event_log_service(self) -> Any:
         from src.application.services.event_log_service import EventLogService
@@ -954,8 +972,7 @@ class DIContainer:
             SqlWebhookRepository,
         )
 
-        assert self._db is not None, "DB session required for webhook_repository"
-        return SqlWebhookRepository(self._db)
+        return SqlWebhookRepository(self._require_db("webhook_repository"))
 
     def webhook_service(self) -> Any:
         from src.application.services.webhook_service import WebhookService
