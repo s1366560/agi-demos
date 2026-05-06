@@ -21,7 +21,6 @@ Reference: OpenCode SessionProcessor architecture
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -55,9 +54,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_LEADER,
     WORKSPACE_SESSION_ROLE_KEY,
     WORKSPACE_TOOL_MODE_KEY,
-    WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
     WORKSPACE_TURN_TYPE_KEY,
-    WORKSPACE_TURN_TYPE_LEADER_REPLAN,
 )
 
 from ..commands.builtins import register_builtin_commands
@@ -122,6 +119,14 @@ from .react_agent_profile import (  # noqa: E402  (re-export for back-compat)
     _infer_provider_from_model_name,
     _normalize_model_provider,
     _register_selected_agent_session,
+)
+from .react_agent_workspace_context import (  # noqa: E402
+    has_workspace_runtime_context,
+    is_workspace_leader_replan_context,
+    normalize_workspace_binding,
+    workspace_binding_from_context,
+    workspace_binding_from_text,
+    workspace_runtime_context,
 )
 
 
@@ -2075,92 +2080,35 @@ class ReActAgent:
         conversation_context: Sequence[Mapping[str, Any]],
     ) -> Mapping[str, Any] | None:
         """Return hidden workspace worker app context injected as system metadata."""
-        for message in conversation_context:
-            if message.get("role") != "system":
-                continue
-            content = message.get("content")
-            if not isinstance(content, str) or "workspace_worker_runtime" not in content:
-                continue
-            json_start = content.find("{")
-            if json_start < 0:
-                continue
-            try:
-                payload = json.loads(content[json_start:])
-            except json.JSONDecodeError:
-                logger.warning(
-                    "[ReActAgent] Failed to parse workspace runtime app context",
-                    exc_info=True,
-                )
-                continue
-            if (
-                isinstance(payload, Mapping)
-                and payload.get("context_type") == "workspace_worker_runtime"
-            ):
-                return payload
-        return None
+        return workspace_runtime_context(conversation_context)
 
     @staticmethod
     def _is_workspace_leader_replan_context(payload: Mapping[str, Any] | None) -> bool:
         """Detect task-ledger-only leader remediation turns from structured app context."""
-
-        if not isinstance(payload, Mapping):
-            return False
-        return (
-            payload.get(WORKSPACE_TURN_TYPE_KEY) == WORKSPACE_TURN_TYPE_LEADER_REPLAN
-            or payload.get(WORKSPACE_TOOL_MODE_KEY) == WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
-        )
+        return is_workspace_leader_replan_context(payload)
 
     @classmethod
     def _has_workspace_runtime_context(
         cls, conversation_context: Sequence[Mapping[str, Any]]
     ) -> bool:
         """Detect hidden workspace worker app context injected as system metadata."""
-        return cls._workspace_runtime_context(conversation_context) is not None
+        return has_workspace_runtime_context(conversation_context)
 
     @staticmethod
     def _normalize_workspace_binding(raw: Mapping[str, Any] | None) -> dict[str, str] | None:
-        if not isinstance(raw, Mapping):
-            return None
-        binding = {
-            str(key): str(value).strip()
-            for key, value in raw.items()
-            if isinstance(key, str) and value is not None and str(value).strip()
-        }
-        if not binding.get("workspace_id"):
-            return None
-        return binding
+        return normalize_workspace_binding(raw)
 
     @classmethod
     def _workspace_binding_from_context(
         cls,
         conversation_context: Sequence[Mapping[str, Any]],
     ) -> dict[str, str] | None:
-        payload = cls._workspace_runtime_context(conversation_context)
-        raw_binding = payload.get("workspace_binding") if isinstance(payload, Mapping) else None
-        return cls._normalize_workspace_binding(raw_binding)
+        return workspace_binding_from_context(conversation_context)
 
     @classmethod
     def _workspace_binding_from_text(cls, text: str | None) -> dict[str, str] | None:
         """Parse the structural workspace binding block from worker task briefs."""
-        if not isinstance(text, str) or "[workspace-task-binding]" not in text:
-            return None
-        in_block = False
-        raw: dict[str, str] = {}
-        for line in text.splitlines():
-            stripped = line.strip()
-            if stripped == "[workspace-task-binding]":
-                in_block = True
-                continue
-            if stripped == "[/workspace-task-binding]":
-                break
-            if not in_block or "=" not in stripped:
-                continue
-            key, _, value = stripped.partition("=")
-            key = key.strip()
-            value = value.strip()
-            if key and value:
-                raw[key] = value
-        return cls._normalize_workspace_binding(raw)
+        return workspace_binding_from_text(text)
 
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self,
