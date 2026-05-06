@@ -128,11 +128,13 @@ def get_message_router() -> MessageRouter:
             StopSessionHandler,
             SubscribeHandler,
             SubscribeLifecycleStateHandler,
+            SubscribeProjectEventsHandler,
             SubscribeSandboxHandler,
             SubscribeStatusHandler,
             SubscribeWorkspaceHandler,
             UnsubscribeHandler,
             UnsubscribeLifecycleStateHandler,
+            UnsubscribeProjectEventsHandler,
             UnsubscribeSandboxHandler,
             UnsubscribeStatusHandler,
             UnsubscribeWorkspaceHandler,
@@ -150,6 +152,8 @@ def get_message_router() -> MessageRouter:
                 # Subscription
                 SubscribeHandler(),
                 UnsubscribeHandler(),
+                SubscribeProjectEventsHandler(),
+                UnsubscribeProjectEventsHandler(),
                 # Status
                 SubscribeStatusHandler(),
                 UnsubscribeStatusHandler(),

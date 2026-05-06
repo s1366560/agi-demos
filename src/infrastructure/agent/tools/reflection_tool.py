@@ -16,7 +16,9 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from src.application.services.reflection_events import ReflectionCompleteStatus
 from src.application.services.reflection_service import ReflectionService
+from src.domain.model.flow.reflection_verdict import ReflectionVerdict
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -25,9 +27,14 @@ logger = logging.getLogger(__name__)
 
 
 ReflectionServiceProvider = Callable[[str], Awaitable[ReflectionService | None]]
+ReflectionCompleteEmitter = Callable[
+    [str, list[ReflectionVerdict], ReflectionCompleteStatus, str | None, str | None],
+    Awaitable[None],
+]
 
 
 _provider: ReflectionServiceProvider | None = None
+_completion_emitter: ReflectionCompleteEmitter | None = None
 
 
 def configure_reflection_tool(provider: ReflectionServiceProvider) -> None:
@@ -39,6 +46,14 @@ def configure_reflection_tool(provider: ReflectionServiceProvider) -> None:
     """
     global _provider
     _provider = provider
+
+
+def configure_reflection_complete_emitter(
+    emitter: ReflectionCompleteEmitter | None,
+) -> None:
+    """Inject optional realtime emitter for project-scoped completion events."""
+    global _completion_emitter
+    _completion_emitter = emitter
 
 
 def _json(data: Any) -> str:
@@ -81,12 +96,20 @@ async def reflect_friction_tool(ctx: ToolContext) -> ToolResult:
         service = await _provider(project_id)
     except Exception as exc:
         logger.exception("reflect_friction: provider failed for %s", project_id)
+        await _emit_completion(
+            project_id,
+            [],
+            "failed",
+            f"provider_failed:{exc}",
+            ctx.call_id,
+        )
         return ToolResult(
             output=_json({"error": f"Failed to build reflection service: {exc}"}),
             is_error=True,
         )
 
     if service is None:
+        await _emit_completion(project_id, [], "unavailable", None, ctx.call_id)
         return ToolResult(
             output=_json({"status": "unavailable", "verdicts": []}),
         )
@@ -95,10 +118,19 @@ async def reflect_friction_tool(ctx: ToolContext) -> ToolResult:
         verdicts = await service.reflect_window(project_id)
     except Exception as exc:
         logger.exception("reflect_friction: reflect_window failed for %s", project_id)
+        await _emit_completion(
+            project_id,
+            [],
+            "failed",
+            f"reflection_failed:{exc}",
+            ctx.call_id,
+        )
         return ToolResult(
             output=_json({"error": f"Reflection failed: {exc}"}),
             is_error=True,
         )
+
+    await _emit_completion(project_id, verdicts, "success", None, ctx.call_id)
 
     return ToolResult(
         output=_json(
@@ -121,4 +153,26 @@ async def reflect_friction_tool(ctx: ToolContext) -> ToolResult:
     )
 
 
-__all__ = ["configure_reflection_tool", "reflect_friction_tool"]
+async def _emit_completion(
+    project_id: str,
+    verdicts: list[ReflectionVerdict],
+    status: ReflectionCompleteStatus,
+    error: str | None,
+    run_id: str | None,
+) -> None:
+    if _completion_emitter is None:
+        return
+    try:
+        await _completion_emitter(project_id, verdicts, status, error, run_id)
+    except Exception:
+        logger.exception(
+            "reflect_friction: completion emitter failed",
+            extra={"project_id": project_id, "status": status},
+        )
+
+
+__all__ = [
+    "configure_reflection_complete_emitter",
+    "configure_reflection_tool",
+    "reflect_friction_tool",
+]

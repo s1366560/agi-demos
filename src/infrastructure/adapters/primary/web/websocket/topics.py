@@ -5,6 +5,7 @@ Manages topic subscriptions for unified WebSocket event delivery.
 Supports multiple topic types:
 - agent:{conversation_id} - Agent conversation events
 - sandbox:{project_id} - Sandbox lifecycle events
+- project:{project_id} - Project-scoped domain events
 - system:{event_type} - System-wide events
 - lifecycle:{tenant_id}:{project_id} - Agent lifecycle state
 """
@@ -23,6 +24,7 @@ class TopicType(str, Enum):
 
     AGENT = "agent"
     SANDBOX = "sandbox"
+    PROJECT = "project"
     WORKSPACE = "workspace"
     SYSTEM = "system"
     LIFECYCLE = "lifecycle"

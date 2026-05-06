@@ -5,7 +5,7 @@ import { unifiedEventService } from '@/services/unifiedEventService';
 describe('unifiedEventService workspace routing', () => {
   it('subscribeWorkspace delegates to workspace topic subscription', () => {
     const subscribeSpy = vi.spyOn(
-      unifiedEventService as unknown as { subscribe: Function },
+      unifiedEventService as unknown as { subscribe: (topic: string, handler: () => void) => () => void },
       'subscribe'
     );
 
@@ -34,6 +34,41 @@ describe('unifiedEventService workspace routing', () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect((handler.mock.calls[0] as [Record<string, unknown>])[0].routing_key).toBe(
       'workspace:ws-123:topology_updated'
+    );
+
+    internal.subscriptions.clear();
+  });
+
+  it('subscribeProject registers a project topic handler', () => {
+    const noop = () => {};
+    const unsubscribe = unifiedEventService.subscribeProject('proj-123', noop);
+    const internal = unifiedEventService as unknown as {
+      subscriptions: Map<string, Set<(event: unknown) => void>>;
+    };
+
+    expect(typeof unsubscribe).toBe('function');
+    expect(internal.subscriptions.has('project:proj-123')).toBe(true);
+    unsubscribe();
+  });
+
+  it('dispatches project routing_key events to project topic handlers', () => {
+    const handler = vi.fn();
+    const internal = unifiedEventService as unknown as {
+      subscriptions: Map<string, Set<(event: unknown) => void>>;
+      handleMessage: (message: unknown) => void;
+    };
+    internal.subscriptions.set('project:proj-123', new Set([handler]));
+
+    internal.handleMessage({
+      type: 'reflection_complete',
+      routing_key: 'project:proj-123:reflection_complete',
+      data: { applied_verdict_count: 1 },
+      sequence_id: '1-0',
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect((handler.mock.calls[0] as [Record<string, unknown>])[0].routing_key).toBe(
+      'project:proj-123:reflection_complete'
     );
 
     internal.subscriptions.clear();

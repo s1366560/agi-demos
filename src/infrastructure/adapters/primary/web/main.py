@@ -265,6 +265,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         from src.application.services.friction_runtime import (
             configure_friction_ingest,
         )
+        from src.application.services.reflection_events import (
+            ReflectionCompleteStatus,
+            publish_reflection_complete,
+        )
         from src.application.services.reflection_factory import (
             default_in_memory_ledger,
         )
@@ -277,6 +281,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             RedisFrictionLedger,
         )
         from src.infrastructure.agent.tools.reflection_tool import (
+            configure_reflection_complete_emitter,
             configure_reflection_tool,
         )
 
@@ -326,6 +331,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
         configure_reflection_tool(_reflection_provider)
 
+        async def _emit_completion(
+            project_id: str,
+            verdicts: list[ReflectionVerdict],
+            status: ReflectionCompleteStatus,
+            error: str | None,
+            run_id: str | None,
+        ) -> None:
+            if redis_client is None:
+                return
+            await publish_reflection_complete(
+                redis_client=cast("Redis", redis_client),
+                project_id=project_id,
+                verdicts=verdicts,
+                status=status,
+                source="tool",
+                run_id=run_id,
+                error=error,
+            )
+
+        configure_reflection_complete_emitter(_emit_completion)
+
         runner = container.reflection_runner()
         runner.start()
         app.state.reflection_runner = runner
@@ -365,10 +391,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             reset_friction_ingest,
         )
         from src.infrastructure.agent.tools.reflection_tool import (
+            configure_reflection_complete_emitter,
             configure_reflection_tool,
         )
 
         reset_friction_ingest()
+        configure_reflection_complete_emitter(None)
         configure_reflection_tool(None)  # type: ignore[arg-type]
     except Exception:
         logger.exception("Error tearing down friction/reflection wiring")

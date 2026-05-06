@@ -404,6 +404,10 @@ class DIContainer:
         if existing is not None:
             return existing
 
+        from src.application.services.reflection_events import (
+            ReflectionCompleteStatus,
+            publish_reflection_complete,
+        )
         from src.application.services.reflection_runner import ReflectionRunner
 
         async def _all_active_project_ids() -> list[str]:
@@ -446,9 +450,28 @@ class DIContainer:
 
             return _SessionScopedReflection()
 
+        async def _emit_completion(
+            project_id: str,
+            verdicts: list[Any],
+            status: ReflectionCompleteStatus,
+            error: str | None,
+        ) -> None:
+            redis_client = self.redis()
+            if redis_client is None:
+                return
+            await publish_reflection_complete(
+                redis_client=redis_client,
+                project_id=project_id,
+                verdicts=verdicts,
+                status=status,
+                source="runner",
+                error=error,
+            )
+
         runner = ReflectionRunner(
             project_ids_provider=_all_active_project_ids,
             service_factory=_service_for,
+            completion_emitter=_emit_completion,
         )
         self._reflection_runner = runner  # type: ignore[attr-defined]
         return runner

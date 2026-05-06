@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from src.application.services.reflection_service import ReflectionService
 from src.domain.model.flow.reflection_verdict import ReflectionVerdict
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 ProjectIdsProvider = Callable[[], Awaitable[list[str]]]
 ReflectionServiceFactory = Callable[[str], Awaitable[ReflectionService | None]]
+ReflectionCompleteEmitter = Callable[
+    [str, list[ReflectionVerdict], Literal["success", "failed", "timeout", "unavailable"], str | None],
+    Awaitable[None],
+]
 
 
 class ReflectionRunner:
@@ -39,6 +44,7 @@ class ReflectionRunner:
         service_factory: ReflectionServiceFactory,
         interval_seconds: float = 600.0,
         per_project_timeout_seconds: float = 60.0,
+        completion_emitter: ReflectionCompleteEmitter | None = None,
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
@@ -48,8 +54,15 @@ class ReflectionRunner:
         self._service_factory = service_factory
         self._interval = interval_seconds
         self._timeout = per_project_timeout_seconds
+        self._completion_emitter = completion_emitter
         self._task: asyncio.Task[None] | None = None
         self._running = False
+
+    def configure_completion_emitter(
+        self, emitter: ReflectionCompleteEmitter | None
+    ) -> None:
+        """Update the optional ``reflection_complete`` emitter at runtime."""
+        self._completion_emitter = emitter
 
     def start(self) -> None:
         """Start the background loop. Idempotent."""
@@ -116,11 +129,14 @@ class ReflectionRunner:
                     project_id,
                     self._timeout,
                 )
+                await self._emit_completion(project_id, [], "timeout", None)
             except Exception:
                 logger.exception(
                     "ReflectionRunner: project %s failed", project_id
                 )
+                await self._emit_completion(project_id, [], "failed", "reflection_run_failed")
             else:
+                await self._emit_completion(project_id, verdicts, "success", None)
                 if verdicts:
                     logger.info(
                         "ReflectionRunner: project %s produced %d verdict(s)",
@@ -128,5 +144,27 @@ class ReflectionRunner:
                         len(verdicts),
                     )
 
+    async def _emit_completion(
+        self,
+        project_id: str,
+        verdicts: list[ReflectionVerdict],
+        status: Literal["success", "failed", "timeout", "unavailable"],
+        error: str | None,
+    ) -> None:
+        if self._completion_emitter is None:
+            return
+        try:
+            await self._completion_emitter(project_id, verdicts, status, error)
+        except Exception:
+            logger.exception(
+                "ReflectionRunner completion emitter failed",
+                extra={"project_id": project_id, "status": status},
+            )
 
-__all__ = ["ProjectIdsProvider", "ReflectionRunner", "ReflectionServiceFactory"]
+
+__all__ = [
+    "ProjectIdsProvider",
+    "ReflectionCompleteEmitter",
+    "ReflectionRunner",
+    "ReflectionServiceFactory",
+]

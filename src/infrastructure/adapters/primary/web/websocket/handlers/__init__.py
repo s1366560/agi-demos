@@ -31,6 +31,10 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.lifecycle_handle
     SubscribeLifecycleStateHandler,
     UnsubscribeLifecycleStateHandler,
 )
+from src.infrastructure.adapters.primary.web.websocket.handlers.project_events_handler import (
+    SubscribeProjectEventsHandler,
+    UnsubscribeProjectEventsHandler,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.sandbox_handler import (
     SubscribeSandboxHandler,
     UnsubscribeSandboxHandler,
@@ -68,6 +72,7 @@ __all__ = [
     "SubscribeHandler",
     # Lifecycle
     "SubscribeLifecycleStateHandler",
+    "SubscribeProjectEventsHandler",
     # Sandbox
     "SubscribeSandboxHandler",
     # Status
@@ -75,6 +80,7 @@ __all__ = [
     "SubscribeWorkspaceHandler",
     "UnsubscribeHandler",
     "UnsubscribeLifecycleStateHandler",
+    "UnsubscribeProjectEventsHandler",
     "UnsubscribeSandboxHandler",
     "UnsubscribeStatusHandler",
     "UnsubscribeWorkspaceHandler",

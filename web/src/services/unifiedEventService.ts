@@ -29,7 +29,7 @@ import { createWebSocketUrl } from './client/urlUtils';
 /**
  * Topic types supported by the unified event service
  */
-export type TopicType = 'agent' | 'sandbox' | 'workspace' | 'system' | 'lifecycle';
+export type TopicType = 'agent' | 'sandbox' | 'workspace' | 'project' | 'system' | 'lifecycle';
 
 /**
  * WebSocket connection status
@@ -44,6 +44,7 @@ export interface UnifiedEvent<T = unknown> {
   routing_key?: string | undefined;
   conversation_id?: string | undefined;
   project_id?: string | undefined;
+  sequence_id?: string | undefined;
   data?: T | undefined;
   event_id?: string | undefined;
   event_time_us?: number | undefined;
@@ -64,6 +65,7 @@ interface ServerMessage {
   routing_key?: string | undefined;
   conversation_id?: string | undefined;
   project_id?: string | undefined;
+  sequence_id?: string | undefined;
   data?: unknown | undefined;
   event_id?: string | undefined;
   event_time_us?: number | undefined;
@@ -279,7 +281,10 @@ class UnifiedEventServiceImpl {
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, new Set());
     }
-    this.subscriptions.get(topic)!.add(handler);
+    const topicHandlers = this.subscriptions.get(topic);
+    if (topicHandlers) {
+      topicHandlers.add(handler);
+    }
 
     this.ensureConnected();
 
@@ -353,7 +358,10 @@ class UnifiedEventServiceImpl {
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, new Set());
     }
-    this.subscriptions.get(topic)!.add(handler);
+    const topicHandlers = this.subscriptions.get(topic);
+    if (topicHandlers) {
+      topicHandlers.add(handler);
+    }
 
     logger.debug(`[UnifiedWS] Subscribed to sandbox:${projectId}`);
 
@@ -380,6 +388,47 @@ class UnifiedEventServiceImpl {
   }
 
   /**
+   * Subscribe to project-scoped domain events.
+   */
+  subscribeProject(
+    projectId: string,
+    handler: EventHandler,
+    fromSequence?: string
+  ): () => void {
+    const topic = `project:${projectId}`;
+
+    this.ensureConnected();
+
+    this.sendOrQueue({
+      type: 'subscribe_project_events',
+      project_id: projectId,
+      ...(fromSequence ? { from_sequence: fromSequence } : {}),
+    });
+
+    if (!this.subscriptions.has(topic)) {
+      this.subscriptions.set(topic, new Set());
+    }
+    const topicHandlers = this.subscriptions.get(topic);
+    if (topicHandlers) {
+      topicHandlers.add(handler);
+    }
+
+    return () => {
+      const handlers = this.subscriptions.get(topic);
+      if (handlers) {
+        handlers.delete(handler);
+        if (handlers.size === 0) {
+          this.subscriptions.delete(topic);
+          this.sendOrQueue({
+            type: 'unsubscribe_project_events',
+            project_id: projectId,
+          });
+        }
+      }
+    };
+  }
+
+  /**
    * Subscribe to lifecycle state events for a project
    */
   subscribeLifecycle(projectId: string, handler: EventHandler): () => void {
@@ -395,7 +444,10 @@ class UnifiedEventServiceImpl {
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, new Set());
     }
-    this.subscriptions.get(topic)!.add(handler);
+    const topicHandlers = this.subscriptions.get(topic);
+    if (topicHandlers) {
+      topicHandlers.add(handler);
+    }
 
     return () => {
       const handlers = this.subscriptions.get(topic);
@@ -462,6 +514,8 @@ class UnifiedEventServiceImpl {
       topic = `lifecycle:${project_id}`;
     } else if (type === 'sandbox_state_change' && project_id) {
       topic = `sandbox:${project_id}`;
+    } else if (type === 'reflection_complete' && project_id) {
+      topic = `project:${project_id}`;
     }
 
     if (topic) {
@@ -470,6 +524,7 @@ class UnifiedEventServiceImpl {
         routing_key,
         conversation_id,
         project_id,
+        sequence_id: message.sequence_id,
         data,
         event_id: message.event_id,
         event_time_us: message.event_time_us,
@@ -481,6 +536,10 @@ class UnifiedEventServiceImpl {
       if (routing_key?.startsWith('workspace:')) {
         const workspaceTopic = routing_key.split(':').slice(0, 2).join(':');
         this.dispatchToTopic(workspaceTopic, event);
+      }
+      if (routing_key?.startsWith('project:')) {
+        const projectTopic = routing_key.split(':').slice(0, 2).join(':');
+        this.dispatchToTopic(projectTopic, event);
       }
     }
 
@@ -533,6 +592,12 @@ class UnifiedEventServiceImpl {
           workspace_id: parts[1],
         });
         break;
+      case 'project':
+        this.sendOrQueue({
+          type: 'subscribe_project_events',
+          project_id: parts[1],
+        });
+        break;
       case 'lifecycle':
         this.sendOrQueue({
           type: 'subscribe_lifecycle_state',
@@ -561,6 +626,12 @@ class UnifiedEventServiceImpl {
         this.sendOrQueue({
           type: 'unsubscribe_workspace',
           workspace_id: parts[1],
+        });
+        break;
+      case 'project':
+        this.sendOrQueue({
+          type: 'unsubscribe_project_events',
+          project_id: parts[1],
         });
         break;
       case 'lifecycle':
@@ -656,6 +727,7 @@ class UnifiedEventServiceImpl {
       agent: 0,
       sandbox: 0,
       workspace: 0,
+      project: 0,
       lifecycle: 0,
       system: 0,
     };

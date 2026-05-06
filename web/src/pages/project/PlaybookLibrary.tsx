@@ -12,11 +12,13 @@
  */
 
 import { AlertCircle, BookOpen, Loader2, RefreshCw, Sparkles } from 'lucide-react';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FC, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { formatDateOnly } from '@/utils/date';
+import { unifiedEventService } from '@/services/unifiedEventService';
 
 import {
   type Playbook,
@@ -26,6 +28,7 @@ import {
 
 const LIMIT = 200;
 const POLL_INTERVAL_MS = 30_000;
+const EVENT_REFRESH_DEBOUNCE_MS = 1200;
 
 const VERDICT_LABELS: Record<ReflectionVerdict['action'], string> = {
   create: 'Created',
@@ -43,12 +46,12 @@ const VERDICT_BADGE_CLASS: Record<ReflectionVerdict['action'], string> = {
 
 interface SectionProps {
   title: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   count: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-const Section: React.FC<SectionProps> = ({ title, icon, count, children }) => (
+const Section: FC<SectionProps> = ({ title, icon, count, children }) => (
   <section className="rounded-md border border-zinc-200 bg-white">
     <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
       <div className="flex items-center gap-2 text-sm font-medium text-zinc-900">
@@ -63,7 +66,7 @@ const Section: React.FC<SectionProps> = ({ title, icon, count, children }) => (
   </section>
 );
 
-const PlaybookCard: React.FC<{ playbook: Playbook }> = ({ playbook }) => (
+const PlaybookCard: FC<{ playbook: Playbook }> = ({ playbook }) => (
   <article className="rounded-md border border-zinc-200 p-4 hover:border-zinc-300">
     <header className="flex items-start justify-between gap-4">
       <div>
@@ -104,7 +107,7 @@ const PlaybookCard: React.FC<{ playbook: Playbook }> = ({ playbook }) => (
   </article>
 );
 
-const VerdictRow: React.FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => (
+const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => (
   <li className="flex gap-3 py-3 first:pt-0 last:pb-0">
     <div className="shrink-0">
       <span
@@ -128,13 +131,15 @@ const VerdictRow: React.FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => (
   </li>
 );
 
-export const PlaybookLibrary: React.FC = () => {
+export const PlaybookLibrary: FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
   const [playbooks, setPlaybooks] = useState<Playbook[]>([]);
   const [verdicts, setVerdicts] = useState<ReflectionVerdict[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastSequenceRef = useRef<string | undefined>(undefined);
+  const refreshTimerRef = useRef<number | undefined>(undefined);
 
   const load = useCallback(
     async (silent: boolean = false) => {
@@ -173,6 +178,38 @@ export const PlaybookLibrary: React.FC = () => {
     }, POLL_INTERVAL_MS);
     return () => {
       window.clearInterval(handle);
+    };
+  }, [projectId, load]);
+
+  useEffect(() => {
+    if (projectId === undefined) return;
+
+    const unsubscribe = unifiedEventService.subscribeProject(
+      projectId,
+      (event) => {
+        if (event.type !== 'reflection_complete') {
+          return;
+        }
+        if (event.sequence_id) {
+          lastSequenceRef.current = event.sequence_id;
+        }
+        if (refreshTimerRef.current) {
+          window.clearTimeout(refreshTimerRef.current);
+        }
+        refreshTimerRef.current = window.setTimeout(() => {
+          void load(true);
+          refreshTimerRef.current = undefined;
+        }, EVENT_REFRESH_DEBOUNCE_MS);
+      },
+      lastSequenceRef.current,
+    );
+
+    return () => {
+      unsubscribe();
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = undefined;
+      }
     };
   }, [projectId, load]);
 
