@@ -368,6 +368,9 @@ class DIContainer:
         from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository import (
             SqlPlaybookRepository,
         )
+        from src.infrastructure.adapters.secondary.persistence.sql_reflection_verdict_repository import (
+            SqlReflectionVerdictRepository,
+        )
 
         del project_id  # ledger is keyed per project at append/query time
 
@@ -386,6 +389,7 @@ class DIContainer:
             ledger=ledger,
             playbooks=SqlPlaybookRepository(session),
             reflector=reflector,
+            verdict_log=SqlReflectionVerdictRepository(session),
         )
 
     def reflection_runner(self) -> Any:

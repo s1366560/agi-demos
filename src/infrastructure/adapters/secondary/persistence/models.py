@@ -3595,3 +3595,43 @@ class Playbook(Base):
         Index("ix_playbooks_project_status", "project_id", "status"),
         Index("ix_playbooks_project_created", "project_id", "created_at"),
     )
+
+
+class ReflectionVerdictRecord(Base):
+    """Audit log of reflector verdicts.
+
+    Each row captures one ReflectionVerdict produced by a reflect_window
+    sweep. The table is append-only; UI surfaces use it to render the
+    "lessons learned" timeline. ``playbook_id`` is nullable because
+    CREATE verdicts persist a new playbook in the same transaction but
+    DEPRECATE/REINFORCE refer to existing playbooks (set NULL on cascade
+    delete so verdicts survive playbook removal).
+    """
+
+    __tablename__ = "reflection_verdicts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    playbook_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("playbooks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    proposed_payload: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_reflection_verdicts_project_created",
+            "project_id",
+            "created_at",
+        ),
+    )

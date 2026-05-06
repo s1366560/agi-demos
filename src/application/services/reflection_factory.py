@@ -13,6 +13,9 @@ from typing import Any
 from src.application.services.reflection_service import ReflectionService
 from src.domain.ports.repositories.friction_ledger import FrictionLedger
 from src.domain.ports.repositories.playbook_repository import PlaybookRepository
+from src.domain.ports.repositories.reflection_verdict_repository import (
+    ReflectionVerdictRepository,
+)
 from src.domain.ports.services.reflector_port import ReflectorPort
 from src.infrastructure.adapters.secondary.in_memory.friction_loop import (
     InMemoryFrictionLedger,
@@ -28,6 +31,7 @@ def build_reflection_service(
     ledger: FrictionLedger,
     playbooks: PlaybookRepository,
     reflector: ReflectorPort,
+    verdict_log: ReflectionVerdictRepository | None = None,
     window_minutes: int = 60 * 24,
 ) -> ReflectionService:
     """Assemble a ``ReflectionService`` from already-built ports."""
@@ -35,6 +39,7 @@ def build_reflection_service(
         ledger=ledger,
         playbooks=playbooks,
         reflector=reflector,
+        verdict_log=verdict_log,
         window_minutes=window_minutes,
     )
 

@@ -27,6 +27,9 @@ from src.domain.model.flow.playbook import (
 from src.domain.model.flow.reflection_verdict import ReflectionAction, ReflectionVerdict
 from src.domain.ports.repositories.friction_ledger import FrictionLedger
 from src.domain.ports.repositories.playbook_repository import PlaybookRepository
+from src.domain.ports.repositories.reflection_verdict_repository import (
+    ReflectionVerdictRepository,
+)
 from src.domain.ports.services.reflector_port import ReflectorPort
 
 logger = logging.getLogger(__name__)
@@ -41,11 +44,13 @@ class ReflectionService:
         ledger: FrictionLedger,
         playbooks: PlaybookRepository,
         reflector: ReflectorPort,
+        verdict_log: ReflectionVerdictRepository | None = None,
         window_minutes: int = 60 * 24,
     ) -> None:
         self._ledger = ledger
         self._playbooks = playbooks
         self._reflector = reflector
+        self._verdict_log = verdict_log
         self._window = timedelta(minutes=window_minutes)
 
     async def ingest_friction(self, signal: FrictionSignal) -> None:
@@ -113,6 +118,7 @@ class ReflectionService:
             try:
                 if await self._apply_verdict(project_id, verdict):
                     applied.append(verdict)
+                    await self._record_verdict(project_id, verdict)
             except Exception:
                 logger.exception(
                     "Failed to apply reflection verdict",
@@ -141,6 +147,25 @@ class ReflectionService:
 
     async def _noop(self) -> bool:
         return False
+
+    async def _record_verdict(
+        self, project_id: str, verdict: ReflectionVerdict
+    ) -> None:
+        """Persist an applied verdict to the audit log if a writer is wired.
+
+        Failures are logged but never re-raised — the verdict has already
+        been applied to the playbook repo and an audit-log outage MUST NOT
+        force a rollback of the reflection loop.
+        """
+        if self._verdict_log is None:
+            return
+        try:
+            await self._verdict_log.record(project_id=project_id, verdict=verdict)
+        except Exception:
+            logger.exception(
+                "ReflectionVerdictRepository.record failed",
+                extra={"project_id": project_id, "action": verdict.action.value},
+            )
 
     async def _apply_create(
         self, project_id: str, verdict: ReflectionVerdict

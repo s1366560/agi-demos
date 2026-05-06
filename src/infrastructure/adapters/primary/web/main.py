@@ -64,6 +64,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     project_sandbox,
     projects,
     recall,
+    reflection,
     sandbox,
     schema,
     security_ws,
@@ -567,6 +568,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # New routers - feature parity with server/
     app.include_router(episodes.router)
     app.include_router(recall.router)
+    app.include_router(reflection.router)
     app.include_router(enhanced_search.router)
     app.include_router(enhanced_search.memory_router)
     app.include_router(data_export.router)
