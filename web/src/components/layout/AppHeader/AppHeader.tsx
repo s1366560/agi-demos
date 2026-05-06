@@ -32,6 +32,7 @@ import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { MobileMenu } from './MobileMenu';
 import { Notifications } from './Notifications';
+import { NotificationDropdown } from './NotificationDropdown';
 import { PrimaryAction } from './PrimaryAction';
 import { Search } from './Search';
 import { SidebarToggle } from './SidebarToggle';
@@ -298,7 +299,7 @@ function HeaderContent({
                 </div>
 
                 {/* Notifications */}
-                <Notifications />
+                <NotificationDropdown />
 
                 {/* Divider - hidden on small screens */}
                 <div className="hidden sm:block h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1 flex-shrink-0" />

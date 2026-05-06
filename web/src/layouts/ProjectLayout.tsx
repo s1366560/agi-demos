@@ -22,6 +22,7 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { NotificationDropdown } from '@/components/layout/AppHeader/NotificationDropdown';
 import { ProjectSidebar } from '@/components/layout/AppSidebar';
 
 /**
@@ -92,7 +93,7 @@ export const ProjectLayout: React.FC = memo(() => {
             <AppHeader.ThemeToggle />
             <AppHeader.LanguageSwitcher />
           </AppHeader.Tools>
-          <AppHeader.Notifications />
+          <NotificationDropdown />
           <AppHeader.WorkspaceSwitcher mode="project" />
           <AppHeader.PrimaryAction
             label="nav.newMemory"
