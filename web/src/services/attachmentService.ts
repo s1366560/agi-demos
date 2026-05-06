@@ -2,11 +2,24 @@
  * Attachment Service - Handles file uploads for agent chat
  *
  * Supports both simple upload (≤10MB) and multipart upload (>10MB)
+ *
+ * Transport split (per audit D7):
+ * - JSON control-plane (initiate/complete/abort/list/get/delete) goes
+ *   through ``httpClient`` (axios) so it shares auth-token injection,
+ *   401 handling, and the structured ``ApiError`` pipeline used by the
+ *   rest of the frontend.
+ * - The byte-plane (uploadSimple, uploadPart) keeps ``XMLHttpRequest`` /
+ *   ``fetch`` because httpClient does not surface upload progress events
+ *   and would buffer multipart bodies in memory at 200MB.
  */
 
 import { getAuthToken } from '@/utils/tokenResolver';
 
+import { httpClient } from './client/httpClient';
+
 const API_BASE = '/api/v1/attachments';
+// httpClient already prepends ``/api/v1`` via its baseURL.
+const HTTP_PATH = '/attachments';
 
 /**
  * Get authorization headers with bearer token
@@ -249,28 +262,17 @@ class AttachmentServiceClass {
    * Initiate multipart upload
    */
   async initiateUpload(request: InitiateUploadRequest): Promise<InitiateUploadResponse> {
-    const response = await fetch(`${API_BASE}/upload/initiate`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const data = await httpClient.post<InitiateUploadApiResponse>(
+      `${HTTP_PATH}/upload/initiate`,
+      {
         conversation_id: request.conversationId,
         project_id: request.projectId,
         filename: request.filename,
         mime_type: request.mimeType,
         size_bytes: request.sizeBytes,
         purpose: request.purpose,
-      }),
-    });
-
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Failed to initiate upload');
-    }
-
-    const data = (await response.json()) as InitiateUploadApiResponse;
+      }
+    );
     return {
       attachmentId: data.attachment_id,
       uploadId: data.upload_id,
@@ -313,24 +315,10 @@ class AttachmentServiceClass {
     attachmentId: string,
     parts: UploadPartResponse[]
   ): Promise<AttachmentResponse> {
-    const response = await fetch(`${API_BASE}/upload/complete`, {
-      method: 'POST',
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        attachment_id: attachmentId,
-        parts: parts,
-      }),
+    return httpClient.post<AttachmentResponse>(`${HTTP_PATH}/upload/complete`, {
+      attachment_id: attachmentId,
+      parts: parts,
     });
-
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Failed to complete upload');
-    }
-
-    return response.json() as Promise<AttachmentResponse>;
   }
 
   /**
@@ -339,38 +327,20 @@ class AttachmentServiceClass {
   async abortUpload(attachmentId: string): Promise<void> {
     const formData = new FormData();
     formData.append('attachment_id', attachmentId);
-
-    const response = await fetch(`${API_BASE}/upload/abort`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Failed to abort upload');
-    }
+    await httpClient.post(`${HTTP_PATH}/upload/abort`, formData);
   }
 
   /**
    * List attachments for a conversation
    */
   async list(conversationId: string, status?: AttachmentStatus): Promise<AttachmentResponse[]> {
-    const params = new URLSearchParams({ conversation_id: conversationId });
+    const params: Record<string, string> = { conversation_id: conversationId };
     if (status) {
-      params.append('status', status);
+      params.status = status;
     }
-
-    const response = await fetch(`${API_BASE}?${params}`, {
-      headers: getAuthHeaders(),
+    const data = await httpClient.get<ListAttachmentsApiResponse>(HTTP_PATH, {
+      params,
     });
-
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Failed to list attachments');
-    }
-
-    const data = (await response.json()) as ListAttachmentsApiResponse;
     return data.attachments;
   }
 
@@ -378,16 +348,7 @@ class AttachmentServiceClass {
    * Get attachment by ID
    */
   async get(attachmentId: string): Promise<AttachmentResponse> {
-    const response = await fetch(`${API_BASE}/${attachmentId}`, {
-      headers: getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Attachment not found');
-    }
-
-    return response.json() as Promise<AttachmentResponse>;
+    return httpClient.get<AttachmentResponse>(`${HTTP_PATH}/${attachmentId}`);
   }
 
   /**
@@ -401,15 +362,7 @@ class AttachmentServiceClass {
    * Delete attachment
    */
   async delete(attachmentId: string): Promise<void> {
-    const response = await fetch(`${API_BASE}/${attachmentId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-
-    if (!response.ok) {
-      const detail = await getErrorDetail(response);
-      throw new Error(detail || 'Failed to delete attachment');
-    }
+    await httpClient.delete(`${HTTP_PATH}/${attachmentId}`);
   }
 
   /**
