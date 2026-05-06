@@ -23,6 +23,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 
+from src.domain.model.review.review_finding import (
+    FindingVerdict,
+    RawReviewFinding,
+    ReviewFindingContext,
+    ReviewSeverity,
+    ValidatedReviewFinding,
+)
+
 
 class ReviewVerdict(str, Enum):
     APPROVED = "APPROVED"
@@ -107,8 +115,13 @@ __all__ = [
     "CriterionEvaluation",
     "CriterionStatus",
     "EntrixVerdict",
+    "FindingVerdict",
     "GateDecision",
     "HardGateResult",
     "HarnessSignal",
+    "RawReviewFinding",
+    "ReviewFindingContext",
+    "ReviewSeverity",
     "ReviewVerdict",
+    "ValidatedReviewFinding",
 ]

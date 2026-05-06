@@ -16,6 +16,9 @@ import {
 
 import { formatTaskProjectionLabel } from '@/utils/workspaceTaskProjection';
 
+import { CanonicalStoryCard } from '@/components/agent/canonicalStory/CanonicalStoryCard';
+import { parseCanonicalStory } from '@/components/agent/canonicalStory/canonicalStory';
+
 import type {
   WorkspaceAgent,
   WorkspaceTask,
@@ -100,11 +103,22 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
           <h3 className="mt-2 break-words text-sm font-semibold leading-5 text-text-primary dark:text-text-inverse">
             {task.title}
           </h3>
-          {task.description && (
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary dark:text-text-muted">
-              {task.description}
-            </p>
-          )}
+          {task.description &&
+            (() => {
+              const parsed = parseCanonicalStory(task.description);
+              if (parsed.story) {
+                return (
+                  <div className="mt-2">
+                    <CanonicalStoryCard result={parsed} defaultOpen />
+                  </div>
+                );
+              }
+              return (
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary dark:text-text-muted">
+                  {task.description}
+                </p>
+              );
+            })()}
         </div>
         <Button
           type="text"
