@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -43,6 +44,8 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     ROOT_GOAL_TASK_ID,
     WORKSPACE_AGENT_BINDING_ID,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -280,11 +283,35 @@ class WorkspaceTaskService:
                 target=status,
                 authority=authority_ctx,
             )
+            previous_status = task.status
             self._apply_transition(task, status)
             if status is not WorkspaceTaskStatus.BLOCKED:
                 task.blocker_reason = None
             saved = await self._workspace_task_repo.save(task)
             await self._reconcile_root_goal_if_needed(saved)
+            # Fire-and-forget friction ingestion. No-op unless
+            # ``configure_friction_ingest`` has been called at startup.
+            try:
+                from src.application.services.friction_runtime import (
+                    record_lane_change,
+                )
+
+                await record_lane_change(
+                    project_id=workspace.project_id,
+                    task_id=saved.id,
+                    from_lane=previous_status.value,
+                    to_lane=status.value,
+                    metadata={
+                        "workspace_id": workspace.id,
+                        "actor_type": actor_type,
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "record_lane_change failed for task=%s ws=%s",
+                    saved.id,
+                    workspace.id,
+                )
             return saved
 
         task.updated_at = datetime.now(UTC)
