@@ -25,7 +25,6 @@ import logging
 import re
 import time
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping, Sequence
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -112,13 +111,17 @@ _react_bg_tasks: set[asyncio.Task[Any]] = set()
 # Re-exported from ``react_agent_profile`` for backward compatibility.
 # Anything new should import directly from ``react_agent_profile``.
 from .react_agent_profile import (  # noqa: E402  (re-export for back-compat)
-    _WORKSPACE_LEADER_REPLAN_TOOL_NAMES,
-    _WORKSPACE_WORKER_CODE_TOOL_NAMES,
-    _WORKSPACE_WORKER_REPORT_TOOL_NAMES,
     AgentRuntimeProfile,
     _infer_provider_from_model_name,
     _normalize_model_provider,
     _register_selected_agent_session,
+)
+from .react_agent_tool_policy import (  # noqa: E402
+    WORKSPACE_ROOT_TOOL_BYPASS_NAMES,
+    filter_tools_by_name_policy,
+    filter_workspace_root_tools,
+    with_workspace_leader_replan_tool_allowlist,
+    with_workspace_worker_tool_allowlist,
 )
 from .react_agent_workspace_context import (  # noqa: E402
     has_workspace_runtime_context,
@@ -131,16 +134,8 @@ from .react_agent_workspace_context import (  # noqa: E402
 
 
 class ReActAgent:
-    _WORKSPACE_ROOT_TOOL_BYPASS_NAMES: ClassVar[frozenset[str]] = frozenset(
-        {
-            "agent_spawn",
-            "agent_send",
-            "agent_sessions",
-            "agent_history",
-            "agent_stop",
-            "workspace_chat_send",
-        }
-    )
+    _WORKSPACE_ROOT_TOOL_BYPASS_NAMES: ClassVar[frozenset[str]] = WORKSPACE_ROOT_TOOL_BYPASS_NAMES
+
     """
     Self-developed ReAct Agent implementation.
 
@@ -1552,32 +1547,14 @@ class ReActAgent:
         runtime_profile: AgentRuntimeProfile,
     ) -> AgentRuntimeProfile:
         """Ensure workspace workers can inspect/edit/report despite persona allowlists."""
-
-        if not runtime_profile.allow_tools or "*" in runtime_profile.allow_tools:
-            return runtime_profile
-        required_tools = list(_WORKSPACE_WORKER_REPORT_TOOL_NAMES)
-        if not runtime_profile.tenant_agent_config.enabled_tools:
-            required_tools.extend(_WORKSPACE_WORKER_CODE_TOOL_NAMES)
-        expanded = sorted(
-            {
-                *canonical_tool_policy_names(runtime_profile.allow_tools),
-                *required_tools,
-            }
-        )
-        return replace(runtime_profile, allow_tools=expanded)
+        return with_workspace_worker_tool_allowlist(runtime_profile)
 
     @staticmethod
     def _with_workspace_leader_replan_tool_allowlist(
         runtime_profile: AgentRuntimeProfile,
     ) -> AgentRuntimeProfile:
         """Restrict leader remediation turns to task-ledger inspection and updates."""
-
-        allowed = set(_WORKSPACE_LEADER_REPLAN_TOOL_NAMES)
-        return replace(
-            runtime_profile,
-            allow_tools=sorted(allowed),
-            deny_tools=sorted(set(runtime_profile.deny_tools) - allowed),
-        )
+        return with_workspace_leader_replan_tool_allowlist(runtime_profile)
 
     def _resolve_effective_model(
         self,
@@ -2049,11 +2026,7 @@ class ReActAgent:
         tools_to_use: list[ToolDefinition],
         workspace_root_task: Any | None,
     ) -> list[ToolDefinition]:
-        if workspace_root_task is None:
-            return tools_to_use
-        return [
-            tool for tool in tools_to_use if tool.name not in cls._WORKSPACE_ROOT_TOOL_BYPASS_NAMES
-        ]
+        return filter_workspace_root_tools(tools_to_use, workspace_root_task)
 
     @staticmethod
     def _filter_tools_by_name_policy(
@@ -2063,17 +2036,11 @@ class ReActAgent:
         deny_tools: Sequence[str] | None,
     ) -> list[ToolDefinition]:
         """Apply final hard allow/deny filtering to the executable tool list."""
-        known_tool_names = [tool.name for tool in tools_to_use]
-        raw_allow: set[str] = set(canonical_tool_policy_names(allow_tools, known_tool_names))
-        allow: set[str] = set() if "*" in raw_allow else raw_allow
-        deny: set[str] = set(canonical_tool_policy_names(deny_tools, known_tool_names))
-        if not allow and not deny:
-            return tools_to_use
-        return [
-            tool
-            for tool in tools_to_use
-            if (not allow or tool.name in allow) and tool.name not in deny
-        ]
+        return filter_tools_by_name_policy(
+            tools_to_use,
+            allow_tools=allow_tools,
+            deny_tools=deny_tools,
+        )
 
     @staticmethod
     def _workspace_runtime_context(
