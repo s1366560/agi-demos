@@ -7,14 +7,17 @@
  * - Draggable resize support
  */
 
-import { useCallback, memo, useState } from 'react';
+import { useCallback, memo } from 'react';
 
 import { Filter, ListTodo, Route, X } from 'lucide-react';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
 
+import { useUrlState } from '../../hooks/useUrlState';
+
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { ResizeHandle } from './RightPanelComponents';
+import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { TaskList } from './TaskList';
 
 import type {
@@ -249,9 +252,13 @@ export const RightPanel = memo<RightPanelProps>(
       (executionNarrative && executionNarrative.length > 0)
     );
     const hasAgents = Boolean(agentNodes && agentNodes.size > 0);
-    const [preferredTab, setPreferredTab] = useState<PanelTab>(
-      hasInsights && tasks.length === 0 ? 'insights' : 'tasks'
-    );
+    const initialTab: PanelTab = hasInsights && tasks.length === 0 ? 'insights' : 'tasks';
+    const [preferredTab, setPreferredTab] = useUrlState<PanelTab>('panel', initialTab, {
+      allowed: ['tasks', 'insights', 'agents'],
+    });
+    const [taskView, setTaskView] = useUrlState<'flat' | 'lanes'>('tasks', 'flat', {
+      allowed: ['flat', 'lanes'],
+    });
     const activeTab: PanelTab =
       preferredTab === 'insights' && !hasInsights
         ? 'tasks'
@@ -313,6 +320,19 @@ export const RightPanel = memo<RightPanelProps>(
                 >
                   Tasks
                 </button>
+                {activeTab === 'tasks' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskView(taskView === 'lanes' ? 'flat' : 'lanes');
+                    }}
+                    title={taskView === 'lanes' ? 'Switch to list view' : 'Switch to lane view'}
+                    className="ml-1 px-2 py-1 text-xs rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                    data-testid="task-view-toggle"
+                  >
+                    {taskView === 'lanes' ? 'List' : 'Lanes'}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => hasInsights && setPreferredTab('insights')}
@@ -370,7 +390,11 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              <TaskList tasks={tasks} />
+              {taskView === 'lanes' ? (
+                <TaskLanePanel tasks={tasks} />
+              ) : (
+                <TaskList tasks={tasks} />
+              )}
             </div>
           )}
         </div>

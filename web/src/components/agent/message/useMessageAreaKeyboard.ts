@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { message } from 'antd';
 
 import type { GroupedItem } from './groupTimelineEvents';
+import type { DisplayItem } from './turnFolding';
 
 export interface UseMessageAreaKeyboardParams {
   containerRef: React.RefObject<HTMLDivElement | null>;
-  groupedItems: GroupedItem[];
+  groupedItems: Array<GroupedItem | DisplayItem>;
 }
 
 export interface UseMessageAreaKeyboardReturn {
@@ -71,7 +72,7 @@ export function useMessageAreaKeyboard(
       // c to copy focused message content
       if (e.key === 'c' && focusedMsgRef.current >= 0) {
         const item = groupedItems[focusedMsgRef.current];
-        if (item?.kind === 'event') {
+        if (item && item.kind === 'event') {
           const ev = item.event;
           if (ev.type === 'user_message' || ev.type === 'assistant_message') {
             navigator.clipboard.writeText(ev.content).catch(() => {

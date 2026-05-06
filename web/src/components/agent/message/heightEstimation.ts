@@ -4,11 +4,15 @@
  */
 
 import type { GroupedItem } from './groupTimelineEvents';
+import type { DisplayItem } from './turnFolding';
 
 /**
  * Estimate item height for the virtualizer based on item type.
  */
-export function estimateGroupedItemHeight(item: GroupedItem): number {
+export function estimateGroupedItemHeight(item: GroupedItem | DisplayItem): number {
+  if (item.kind === 'turn-placeholder') {
+    return 36;
+  }
   if (item.kind === 'timeline') {
     return 80 + item.steps.length * 52;
   }

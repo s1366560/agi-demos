@@ -23,14 +23,53 @@
  * <MarkdownContent content="**Result:** Done" className="text-xs" />
  */
 
-import { memo, useMemo, lazy, Suspense } from 'react';
+import { isValidElement, memo, useMemo, lazy, Suspense } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 
+import { CanonicalStoryCard } from '../canonicalStory/CanonicalStoryCard';
+import {
+  looksLikeCanonicalStory,
+  parseCanonicalStory,
+} from '../canonicalStory/canonicalStory';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
+
+/**
+ * Inspect the `<code>` child react-markdown places inside `<pre>` and, when
+ * its language is `yaml` (or `canonical-story`) and the content looks like a
+ * canonical story document, return its raw text. Otherwise return null so the
+ * normal CodeBlock path handles syntax highlighting.
+ */
+function extractCanonicalStoryYaml(children: ReactNode): string | null {
+  let codeEl: ReactElement<{ className?: string; children?: ReactNode }> | null = null;
+  if (isValidElement(children)) {
+    codeEl = children as ReactElement<{ className?: string; children?: ReactNode }>;
+  } else if (Array.isArray(children)) {
+    const found = children.find((c) => isValidElement(c));
+    if (found) codeEl = found as ReactElement<{ className?: string; children?: ReactNode }>;
+  }
+  if (!codeEl) return null;
+  const className = codeEl.props.className ?? '';
+  if (!/language-(yaml|canonical-story)/.test(className)) return null;
+  const text = collectText(codeEl.props.children);
+  if (!text || !looksLikeCanonicalStory(text)) return null;
+  return text;
+}
+
+function collectText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(collectText).join('');
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode };
+    return collectText(props.children);
+  }
+  return '';
+}
 
 export interface MarkdownContentProps {
   /** Markdown content to render */
@@ -95,16 +134,28 @@ export const MarkdownContent = memo<MarkdownContentProps>(
 
     // Stable components reference
     const components: Components = useMemo(() => {
-      if (!codeActions) return safeMarkdownComponents as Components;
-
-      return {
+      const baseStoryAware: Components = {
         ...safeMarkdownComponents,
-        pre: ({ children }) => (
-          <CodeBlockWithSuspense codeActions={codeActions} loadingFallback={loadingFallback}>
-            {children}
-          </CodeBlockWithSuspense>
-        ),
+        pre: ({ children }) => {
+          const yamlText = extractCanonicalStoryYaml(children);
+          if (yamlText !== null) {
+            return (
+              <div className="my-2">
+                <CanonicalStoryCard result={parseCanonicalStory(yamlText)} />
+              </div>
+            );
+          }
+          if (codeActions) {
+            return (
+              <CodeBlockWithSuspense codeActions={codeActions} loadingFallback={loadingFallback}>
+                {children}
+              </CodeBlockWithSuspense>
+            );
+          }
+          return <pre>{children}</pre>;
+        },
       };
+      return baseStoryAware;
     }, [codeActions, loadingFallback]);
 
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);

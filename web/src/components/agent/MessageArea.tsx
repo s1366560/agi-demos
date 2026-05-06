@@ -76,6 +76,9 @@ import {
   StreamingContentMarker,
 } from './message/markers';
 import { StreamingToolPreparation } from './message/StreamingToolPreparation';
+import { TurnPlaceholderRow } from './message/TurnPlaceholderRow';
+import { applyTurnCollapse, computeTurns, isTurnPlaceholder } from './message/turnFolding';
+import { useTurnCollapse } from './message/useTurnCollapse';
 import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
 import { useMessageAreaScroll } from './message/useMessageAreaScroll';
 import { MessageBubble } from './MessageBubble';
@@ -87,7 +90,8 @@ import {
   WIDE_MESSAGE_MAX_WIDTH_CLASSES,
 } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
-import { MemoryRecalledStep, MemoryCapturedStep } from './timeline/MemoryRecalledStep';
+import { JitContextCard } from './timeline/JitContextCard';
+import { MemoryCapturedStep } from './timeline/MemoryRecalledStep';
 import { SubAgentCostSummary } from './timeline/SubAgentCostSummary';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
@@ -273,6 +277,28 @@ const storeStreamingContent = useStreamingAssistantContent();
     // Memoize grouped timeline items to avoid re-grouping on every render
     const groupedItems = useMemo(() => groupTimelineEvents(timeline), [timeline]);
 
+    // Per-conversation collapsed turns (persisted in localStorage)
+    const turnCollapse = useTurnCollapse(conversationId);
+    const turns = useMemo(() => computeTurns(groupedItems), [groupedItems]);
+    const displayItems = useMemo(
+      () => applyTurnCollapse(groupedItems, turnCollapse.collapsed),
+      [groupedItems, turnCollapse.collapsed]
+    );
+
+    // Map each grouped item index to the turn that owns it. Used to wire the
+    // "collapse turn" button on user-message bubbles.
+    const turnByUserMessageId = useMemo(() => {
+      const map = new Map<string, (typeof turns)[number]>();
+      for (const turn of turns) {
+        if (turn.userIndex === -1) continue;
+        const userItem = groupedItems[turn.userIndex];
+        if (userItem && userItem.kind === 'event' && userItem.event.id) {
+          map.set(userItem.event.id, turn);
+        }
+      }
+      return map;
+    }, [turns, groupedItems]);
+
     const subagentGroups = useMemo(
       () =>
         groupedItems
@@ -285,11 +311,11 @@ const storeStreamingContent = useStreamingAssistantContent();
     );
 
     const lastTimelineGroupIndex = useMemo(() => {
-      for (let i = groupedItems.length - 1; i >= 0; i--) {
-        if (groupedItems[i]?.kind === 'timeline') return i;
+      for (let i = displayItems.length - 1; i >= 0; i--) {
+        if (displayItems[i]?.kind === 'timeline') return i;
       }
       return -1;
-    }, [groupedItems]);
+    }, [displayItems]);
 
     const pinnedEventIds = usePinnedEventIds();
     const togglePinEvent = useAgentHITLStore((s) => s.togglePinEvent);
@@ -435,14 +461,14 @@ const storeStreamingContent = useStreamingAssistantContent();
     // Virtualizer setup
     const estimateSize = useCallback(
       (index: number) => {
-        const item = groupedItems[index];
+        const item = displayItems[index];
         return item ? estimateGroupedItemHeight(item) : 80;
       },
-      [groupedItems]
+      [displayItems]
     );
 
     const virtualizer = useVirtualizer({
-      count: groupedItems.length,
+      count: displayItems.length,
       getScrollElement: () => containerRef.current,
       estimateSize,
       overscan: 15,
@@ -472,8 +498,8 @@ const storeStreamingContent = useStreamingAssistantContent();
       // second frame scrolls after layout has settled.
       const rafId = requestAnimationFrame(() => {
         const rafId2 = requestAnimationFrame(() => {
-          if (groupedItems.length > 0) {
-            virtualizer.scrollToIndex(groupedItems.length - 1, { align: 'end' });
+          if (displayItems.length > 0) {
+            virtualizer.scrollToIndex(displayItems.length - 1, { align: 'end' });
             isInitialLoadRef.current = false;
             hasScrolledInitiallyRef.current = true;
             prevTimelineLengthRef.current = timeline.length;
@@ -495,12 +521,12 @@ const storeStreamingContent = useStreamingAssistantContent();
         cancelAnimationFrame(rafId);
         if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current);
       };
-    }, [conversationId, virtualizer, groupedItems.length, timeline.length]);
+    }, [conversationId, virtualizer, displayItems.length, timeline.length]);
 
     // Keyboard navigation (extracted to useMessageAreaKeyboard)
     const { focusedMsgIndex } = useMessageAreaKeyboard({
       containerRef,
-      groupedItems,
+      groupedItems: displayItems,
     });
 
     return (
@@ -628,8 +654,31 @@ const storeStreamingContent = useStreamingAssistantContent();
                 }}
               >
                 {virtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = groupedItems[virtualRow.index];
+                  const item = displayItems[virtualRow.index];
                   if (!item) return null;
+                  if (isTurnPlaceholder(item)) {
+                    return (
+                      <div
+                        key={`turn-placeholder-${item.turnId}`}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${String(virtualRow.start)}px)`,
+                        }}
+                      >
+                        <TurnPlaceholderRow
+                          hiddenCount={item.hiddenCount}
+                          onExpand={() => {
+                            turnCollapse.toggle(item.turnId);
+                          }}
+                        />
+                      </div>
+                    );
+                  }
                   if (item.kind === 'timeline') {
                     return (
                       <div
@@ -714,7 +763,7 @@ const storeStreamingContent = useStreamingAssistantContent();
                           <div className="w-8 shrink-0" />
                           <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
                             {event.type === 'memory_recalled' ? (
-                              <MemoryRecalledStep event={event} />
+                              <JitContextCard event={event} conversationId={conversationId} />
                             ) : (
                               <MemoryCapturedStep event={event} />
                             )}
@@ -725,6 +774,12 @@ const storeStreamingContent = useStreamingAssistantContent();
                   }
 
                   const isFocused = focusedMsgIndex === virtualRow.index;
+                  const isUserMessage = event.type === 'user_message';
+                  const turn =
+                    isUserMessage && event.id ? turnByUserMessageId.get(event.id) : undefined;
+                  const turnIdForItem = turn?.turnId;
+                  const canFoldThisTurn = !!turn && turn.agentIndices.length > 0;
+                  const isTurnFolded = !!turnIdForItem && turnCollapse.isCollapsed(turnIdForItem);
                   return (
                     <div
                       key={event.id || `event-${String(index)}`}
@@ -745,7 +800,7 @@ const storeStreamingContent = useStreamingAssistantContent();
                           : ''
                       }
                     >
-                      <div className="pb-1">
+                      <div className="pb-1 group/turn relative">
                         <MessageBubble
                           event={event}
                           isStreaming={isStreaming && index === lastEventIndex}
@@ -759,6 +814,25 @@ const storeStreamingContent = useStreamingAssistantContent();
                               : undefined
                           }
                         />
+                        {isUserMessage && canFoldThisTurn && turnIdForItem ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              turnCollapse.toggle(turnIdForItem);
+                            }}
+                            className={`absolute -bottom-1 right-2 inline-flex items-center gap-1 rounded-md border border-slate-200/70 bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 backdrop-blur transition-opacity hover:text-slate-800 dark:border-slate-700/60 dark:bg-slate-800/70 dark:text-slate-400 dark:hover:text-slate-100 ${
+                              isTurnFolded
+                                ? 'opacity-100'
+                                : 'opacity-0 group-hover/turn:opacity-100 focus:opacity-100'
+                            }`}
+                            aria-label={isTurnFolded ? 'Expand turn' : 'Collapse turn'}
+                            data-testid="turn-fold-toggle"
+                          >
+                            {isTurnFolded
+                              ? `Expand (${String(turn.agentIndices.length)})`
+                              : 'Collapse'}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );
