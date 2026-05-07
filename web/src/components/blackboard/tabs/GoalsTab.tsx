@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import { App, Button } from 'antd';
@@ -19,7 +21,6 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-
 
 import { workspaceAutonomyService } from '@/services/workspaceService';
 
@@ -105,7 +106,8 @@ interface ChildTaskLogCardProps {
 
 function resolveAssigneeLabel(
   task: Pick<WorkspaceTask, 'workspace_agent_id' | 'assignee_agent_id' | 'assignee_user_id'>,
-  agents: WorkspaceAgent[]
+  agents: WorkspaceAgent[],
+  unassignedLabel: string
 ): string {
   const bindingId = task.workspace_agent_id;
   if (bindingId) {
@@ -124,20 +126,21 @@ function resolveAssigneeLabel(
     return assignedAgentId;
   }
 
-  return task.assignee_user_id ?? '未分配';
+  return task.assignee_user_id ?? unassignedLabel;
 }
 
 function getObjectiveExecutionFeedback(
   objective: CyberObjective,
-  tasks: WorkspaceTask[]
+  tasks: WorkspaceTask[],
+  t: TFunction
 ): ObjectiveExecutionFeedback {
   const rootTask = tasks.find((task) => task.metadata.objective_id === objective.id) ?? null;
   const rootStatus = rootTask?.status ?? 'missing';
   const childTasks = rootTask
     ? tasks.filter((task) => task.metadata.root_goal_task_id === rootTask.id)
     : [];
-  const assignedCount = childTasks.filter(
-    (task) => Boolean(task.assignee_agent_id || task.assignee_user_id)
+  const assignedCount = childTasks.filter((task) =>
+    Boolean(task.assignee_agent_id || task.assignee_user_id)
   ).length;
   const inProgressCount = childTasks.filter((task) => task.status === 'in_progress').length;
   const doneCount = childTasks.filter((task) => task.status === 'done').length;
@@ -155,8 +158,11 @@ function getObjectiveExecutionFeedback(
       inProgressCount: 0,
       doneCount: 0,
       blockedCount: 0,
-      stageLabel: '等待 root task',
-      helperText: '目标已创建，正在触发 Sisyphus 接管并投影为 root task。',
+      stageLabel: t('blackboard.executionFeedback.stage.waitingRoot', 'Waiting for root task'),
+      helperText: t(
+        'blackboard.executionFeedback.helper.waitingRoot',
+        'The objective is created. Sisyphus is being triggered to project it as a root task.'
+      ),
       accentClassName:
         'border-primary/30 bg-primary/5 text-primary dark:border-primary-300/30 dark:bg-primary-300/10 dark:text-primary-100',
       pulse: true,
@@ -175,9 +181,17 @@ function getObjectiveExecutionFeedback(
       inProgressCount: 0,
       doneCount: 0,
       blockedCount: 0,
-      stageLabel: rootStatus === 'in_progress' ? '已生成 root task，等待拆解' : '已生成 root task',
-      helperText:
-        '现在应该进入任务拆解阶段；一旦 child task 创建出来，这里会实时显示分配和执行进度。',
+      stageLabel:
+        rootStatus === 'in_progress'
+          ? t(
+              'blackboard.executionFeedback.stage.rootReadyWaitingChildren',
+              'Root task created, waiting for decomposition'
+            )
+          : t('blackboard.executionFeedback.stage.rootReady', 'Root task created'),
+      helperText: t(
+        'blackboard.executionFeedback.helper.rootReady',
+        'The next step is task decomposition. Child task assignment and execution progress will appear here live.'
+      ),
       accentClassName:
         'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark',
       pulse: rootStatus !== 'done',
@@ -196,8 +210,12 @@ function getObjectiveExecutionFeedback(
       inProgressCount,
       doneCount,
       blockedCount,
-      stageLabel: '执行受阻',
-      helperText: `${String(blockedCount)} 个 child task 已阻塞，请查看任务板中的 blocker 与 leader 汇总状态。`,
+      stageLabel: t('blackboard.executionFeedback.stage.blocked', 'Execution blocked'),
+      helperText: t(
+        'blackboard.executionFeedback.helper.blocked',
+        '{{count}} child task(s) are blocked. Review blockers and the leader summary in the task board.',
+        { count: blockedCount }
+      ),
       accentClassName:
         'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
       pulse: false,
@@ -216,8 +234,12 @@ function getObjectiveExecutionFeedback(
       inProgressCount,
       doneCount,
       blockedCount,
-      stageLabel: '执行中',
-      helperText: `${String(inProgressCount)} 个 child task 正在执行，${String(doneCount)}/${String(childTasks.length)} 已完成。`,
+      stageLabel: t('blackboard.executionFeedback.stage.running', 'Running'),
+      helperText: t(
+        'blackboard.executionFeedback.helper.running',
+        '{{running}} child task(s) are running. {{done}}/{{total}} are done.',
+        { running: inProgressCount, done: doneCount, total: childTasks.length }
+      ),
       accentClassName:
         'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
       pulse: true,
@@ -236,8 +258,11 @@ function getObjectiveExecutionFeedback(
       inProgressCount,
       doneCount,
       blockedCount,
-      stageLabel: '子任务已完成',
-      helperText: '等待 root task 汇总、验收并推进最终状态。',
+      stageLabel: t('blackboard.executionFeedback.stage.childrenDone', 'Child tasks complete'),
+      helperText: t(
+        'blackboard.executionFeedback.helper.childrenDone',
+        'Waiting for the root task to summarize, verify, and advance the final state.'
+      ),
       accentClassName:
         'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
       pulse: false,
@@ -255,11 +280,25 @@ function getObjectiveExecutionFeedback(
     inProgressCount,
     doneCount,
     blockedCount,
-    stageLabel: assignedCount > 0 ? '已拆解并分配' : '已拆解，等待分配',
+    stageLabel:
+      assignedCount > 0
+        ? t('blackboard.executionFeedback.stage.assigned', 'Decomposed and assigned')
+        : t(
+            'blackboard.executionFeedback.stage.waitingAssignment',
+            'Decomposed, waiting assignment'
+          ),
     helperText:
       assignedCount > 0
-        ? `${String(assignedCount)}/${String(childTasks.length)} 个 child task 已分配，等待 worker 开工。`
-        : `已生成 ${String(childTasks.length)} 个 child task，等待 leader 完成任务分配。`,
+        ? t(
+            'blackboard.executionFeedback.helper.assigned',
+            '{{assigned}}/{{total}} child task(s) are assigned and waiting for worker execution.',
+            { assigned: assignedCount, total: childTasks.length }
+          )
+        : t(
+            'blackboard.executionFeedback.helper.waitingAssignment',
+            '{{total}} child task(s) have been created and are waiting for leader assignment.',
+            { total: childTasks.length }
+          ),
     accentClassName:
       'border-caution-border bg-caution-bg text-status-text-caution dark:border-caution-border-dark dark:bg-caution-bg-dark dark:text-status-text-caution-dark',
     pulse: false,
@@ -267,63 +306,113 @@ function getObjectiveExecutionFeedback(
 }
 
 function buildExecutionTimeline(
-  item: ObjectiveExecutionFeedback
+  item: ObjectiveExecutionFeedback,
+  t: TFunction
 ): FeedbackTimelineStep[] {
   const rootReady = item.rootTask !== null;
   const childReady = item.childCount > 0;
   const assignmentReady = item.assignedCount > 0;
   const executionActive = item.inProgressCount > 0 || item.doneCount > 0 || item.blockedCount > 0;
-  const completed = item.childCount > 0 && item.doneCount === item.childCount && item.blockedCount === 0;
+  const completed =
+    item.childCount > 0 && item.doneCount === item.childCount && item.blockedCount === 0;
 
   return [
     {
       id: 'objective',
-      label: '目标已创建',
-      helper: '用户已在中央黑板提交目标。',
+      label: t('blackboard.executionFeedback.timeline.objective', 'Objective created'),
+      helper: t(
+        'blackboard.executionFeedback.timeline.objectiveHelper',
+        'The user submitted the objective on the central blackboard.'
+      ),
       state: 'complete',
     },
     {
       id: 'root',
-      label: '生成 root task',
-      helper: rootReady ? 'Sisyphus 已获得可接管的 root。' : '等待 root task 投影完成。',
+      label: t('blackboard.executionFeedback.timeline.root', 'Create root task'),
+      helper: rootReady
+        ? t(
+            'blackboard.executionFeedback.timeline.rootReady',
+            'Sisyphus has an actionable root task.'
+          )
+        : t(
+            'blackboard.executionFeedback.timeline.rootWaiting',
+            'Waiting for the root task projection.'
+          ),
       state: rootReady ? 'complete' : 'current',
     },
     {
       id: 'children',
-      label: '拆解 child tasks',
-      helper: childReady ? `已拆解 ${String(item.childCount)} 个 child task。` : '等待 leader 进行任务拆解。',
+      label: t('blackboard.executionFeedback.timeline.children', 'Decompose child tasks'),
+      helper: childReady
+        ? t(
+            'blackboard.executionFeedback.timeline.childrenReady',
+            '{{count}} child task(s) have been decomposed.',
+            { count: item.childCount }
+          )
+        : t(
+            'blackboard.executionFeedback.timeline.childrenWaiting',
+            'Waiting for the leader to decompose tasks.'
+          ),
       state: childReady ? 'complete' : rootReady ? 'current' : 'upcoming',
     },
     {
       id: 'assignment',
-      label: '分配给 agents',
+      label: t('blackboard.executionFeedback.timeline.assignment', 'Assign to agents'),
       helper: assignmentReady
-        ? `已分配 ${String(item.assignedCount)} 个 child task。`
+        ? t(
+            'blackboard.executionFeedback.timeline.assignmentReady',
+            '{{count}} child task(s) have been assigned.',
+            { count: item.assignedCount }
+          )
         : childReady
-          ? '等待 leader 完成分配。'
-          : '拆解完成后进入分配阶段。',
+          ? t(
+              'blackboard.executionFeedback.timeline.assignmentWaiting',
+              'Waiting for the leader to finish assignment.'
+            )
+          : t(
+              'blackboard.executionFeedback.timeline.assignmentUpcoming',
+              'Assignment starts after decomposition.'
+            ),
       state: assignmentReady ? 'complete' : childReady ? 'current' : 'upcoming',
     },
     {
       id: 'execution',
-      label: completed ? '执行完成' : '执行推进',
+      label: completed
+        ? t('blackboard.executionFeedback.timeline.executionComplete', 'Execution complete')
+        : t('blackboard.executionFeedback.timeline.executionProgress', 'Execution progress'),
       helper: completed
-        ? '所有 child task 已完成，等待 root 汇总收口。'
+        ? t(
+            'blackboard.executionFeedback.timeline.executionCompleteHelper',
+            'All child tasks are done. Waiting for the root task to summarize.'
+          )
         : executionActive
-          ? `运行中 ${String(item.inProgressCount)}，完成 ${String(item.doneCount)}。`
-          : '分配完成后会实时显示执行进度。',
-      state: completed ? 'complete' : executionActive ? 'current' : assignmentReady ? 'current' : 'upcoming',
+          ? t(
+              'blackboard.executionFeedback.timeline.executionActive',
+              '{{running}} running, {{done}} done.',
+              { running: item.inProgressCount, done: item.doneCount }
+            )
+          : t(
+              'blackboard.executionFeedback.timeline.executionUpcoming',
+              'Live execution progress appears after assignment.'
+            ),
+      state: completed
+        ? 'complete'
+        : executionActive
+          ? 'current'
+          : assignmentReady
+            ? 'current'
+            : 'upcoming',
     },
   ];
 }
 
-function formatEventTimestamp(value: string): string {
+function formatEventTimestamp(value: string, locale: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale === 'zh-CN' ? 'zh-CN' : 'en-US', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -332,20 +421,25 @@ function formatEventTimestamp(value: string): string {
   }).format(date);
 }
 
-function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: WorkspaceTask[]): FeedbackLogEntry[] {
+function buildExecutionEventLog(
+  item: ObjectiveExecutionFeedback,
+  tasks: WorkspaceTask[],
+  t: TFunction,
+  locale: string
+): FeedbackLogEntry[] {
   const entries: FeedbackLogEntry[] = [
     {
       id: `objective-${item.objectiveId}`,
-      label: '目标已创建',
-      timestamp: formatEventTimestamp(item.objectiveCreatedAt),
+      label: t('blackboard.executionFeedback.events.objectiveCreated', 'Objective created'),
+      timestamp: formatEventTimestamp(item.objectiveCreatedAt, locale),
     },
   ];
 
   if (item.rootTask) {
     entries.push({
       id: `root-${item.rootTask.id}`,
-      label: 'root task 已生成',
-      timestamp: formatEventTimestamp(item.rootTask.created_at),
+      label: t('blackboard.executionFeedback.events.rootCreated', 'Root task created'),
+      timestamp: formatEventTimestamp(item.rootTask.created_at, locale),
     });
   }
 
@@ -353,20 +447,25 @@ function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: Workspa
     ? tasks.filter((task) => task.metadata.root_goal_task_id === item.rootTask?.id)
     : [];
   if (childTasks.length > 0) {
-    const firstChildCreatedAt = [...childTasks]
-      .sort((left, right) => left.created_at.localeCompare(right.created_at))[0]?.created_at;
+    const firstChildCreatedAt = [...childTasks].sort((left, right) =>
+      left.created_at.localeCompare(right.created_at)
+    )[0]?.created_at;
     if (firstChildCreatedAt) {
       entries.push({
         id: `children-${item.objectiveId}`,
-        label: `已拆解 ${String(childTasks.length)} 个 child task`,
-        timestamp: formatEventTimestamp(firstChildCreatedAt),
+        label: t(
+          'blackboard.executionFeedback.events.childrenCreated',
+          '{{count}} child task(s) created',
+          { count: childTasks.length }
+        ),
+        timestamp: formatEventTimestamp(firstChildCreatedAt, locale),
       });
     }
   }
 
   if (item.assignedCount > 0) {
-    const assignedTasks = childTasks.filter(
-      (task) => Boolean(task.assignee_agent_id || task.assignee_user_id)
+    const assignedTasks = childTasks.filter((task) =>
+      Boolean(task.assignee_agent_id || task.assignee_user_id)
     );
     const assignmentTimestamp = [...assignedTasks]
       .map((task) => task.updated_at ?? task.created_at)
@@ -374,8 +473,12 @@ function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: Workspa
     if (assignmentTimestamp) {
       entries.push({
         id: `assigned-${item.objectiveId}`,
-        label: `已分配 ${String(item.assignedCount)} 个 child task`,
-        timestamp: formatEventTimestamp(assignmentTimestamp),
+        label: t(
+          'blackboard.executionFeedback.events.assigned',
+          '{{count}} child task(s) assigned',
+          { count: item.assignedCount }
+        ),
+        timestamp: formatEventTimestamp(assignmentTimestamp, locale),
       });
     }
   }
@@ -388,8 +491,10 @@ function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: Workspa
     if (executionTimestamp) {
       entries.push({
         id: `running-${item.objectiveId}`,
-        label: `${String(item.inProgressCount)} 个 child task 进入执行中`,
-        timestamp: formatEventTimestamp(executionTimestamp),
+        label: t('blackboard.executionFeedback.events.running', '{{count}} child task(s) running', {
+          count: item.inProgressCount,
+        }),
+        timestamp: formatEventTimestamp(executionTimestamp, locale),
         emphasis: true,
       });
     }
@@ -401,8 +506,8 @@ function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: Workspa
     if (completionTimestamp) {
       entries.push({
         id: `done-${item.objectiveId}`,
-        label: '所有 child task 已完成',
-        timestamp: formatEventTimestamp(completionTimestamp),
+        label: t('blackboard.executionFeedback.events.allDone', 'All child tasks complete'),
+        timestamp: formatEventTimestamp(completionTimestamp, locale),
         emphasis: true,
       });
     }
@@ -417,8 +522,10 @@ function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: Workspa
     if (blockedTimestamp) {
       entries.push({
         id: `blocked-${item.objectiveId}`,
-        label: `${String(item.blockedCount)} 个 child task 进入阻塞`,
-        timestamp: formatEventTimestamp(blockedTimestamp),
+        label: t('blackboard.executionFeedback.events.blocked', '{{count}} child task(s) blocked', {
+          count: item.blockedCount,
+        }),
+        timestamp: formatEventTimestamp(blockedTimestamp, locale),
         emphasis: true,
       });
     }
@@ -430,7 +537,9 @@ function buildExecutionEventLog(item: ObjectiveExecutionFeedback, tasks: Workspa
 function buildChildTaskLogs(
   item: ObjectiveExecutionFeedback,
   tasks: WorkspaceTask[],
-  agents: WorkspaceAgent[]
+  agents: WorkspaceAgent[],
+  t: TFunction,
+  locale: string
 ): ChildTaskLogEntry[] {
   if (!item.rootTask) {
     return [];
@@ -444,25 +553,32 @@ function buildChildTaskLogs(
       const events: FeedbackLogEntry[] = [
         {
           id: `${task.id}-created`,
-          label: 'child task 已创建',
-          timestamp: formatEventTimestamp(task.created_at),
+          label: t('blackboard.executionFeedback.child.created', 'Child task created'),
+          timestamp: formatEventTimestamp(task.created_at, locale),
         },
       ];
 
       const assignmentTimestamp = task.updated_at ?? task.created_at;
       if (task.assignee_agent_id || task.assignee_user_id) {
+        const assigneeLabel = resolveAssigneeLabel(
+          task,
+          agents,
+          t('workspaceDetail.taskBoard.unassigned', 'Unassigned')
+        );
         events.push({
           id: `${task.id}-assigned`,
-          label: `已分配给 ${resolveAssigneeLabel(task, agents)}`,
-          timestamp: formatEventTimestamp(assignmentTimestamp),
+          label: t('blackboard.executionFeedback.child.assignedTo', 'Assigned to {{name}}', {
+            name: assigneeLabel,
+          }),
+          timestamp: formatEventTimestamp(assignmentTimestamp, locale),
         });
       }
 
       if (task.status === 'in_progress') {
         events.push({
           id: `${task.id}-running`,
-          label: '进入执行中',
-          timestamp: formatEventTimestamp(task.updated_at ?? task.created_at),
+          label: t('blackboard.executionFeedback.child.running', 'Started running'),
+          timestamp: formatEventTimestamp(task.updated_at ?? task.created_at, locale),
           emphasis: true,
         });
       }
@@ -470,8 +586,11 @@ function buildChildTaskLogs(
       if (task.status === 'done') {
         events.push({
           id: `${task.id}-done`,
-          label: '执行完成',
-          timestamp: formatEventTimestamp(task.completed_at ?? task.updated_at ?? task.created_at),
+          label: t('blackboard.executionFeedback.child.done', 'Execution complete'),
+          timestamp: formatEventTimestamp(
+            task.completed_at ?? task.updated_at ?? task.created_at,
+            locale
+          ),
           emphasis: true,
         });
       }
@@ -479,8 +598,12 @@ function buildChildTaskLogs(
       if (task.status === 'blocked') {
         events.push({
           id: `${task.id}-blocked`,
-          label: `进入阻塞${task.blocker_reason ? `：${task.blocker_reason}` : ''}`,
-          timestamp: formatEventTimestamp(task.updated_at ?? task.created_at),
+          label: task.blocker_reason
+            ? t('blackboard.executionFeedback.child.blockedWithReason', 'Blocked: {{reason}}', {
+                reason: task.blocker_reason,
+              })
+            : t('blackboard.executionFeedback.child.blocked', 'Blocked'),
+          timestamp: formatEventTimestamp(task.updated_at ?? task.created_at, locale),
           emphasis: true,
         });
       }
@@ -491,7 +614,11 @@ function buildChildTaskLogs(
       return {
         childTaskId: task.id,
         title: task.title,
-        assigneeLabel: resolveAssigneeLabel(task, agents),
+        assigneeLabel: resolveAssigneeLabel(
+          task,
+          agents,
+          t('workspaceDetail.taskBoard.unassigned', 'Unassigned')
+        ),
         workerLabel: adjudication.workerLabel,
         status: task.status,
         pendingAdjudication: adjudication.pending,
@@ -511,6 +638,7 @@ function ChildTaskLogCard({
   onJump,
   conversationHref,
 }: ChildTaskLogCardProps) {
+  const { t } = useTranslation();
   const [copiedEventId, setCopiedEventId] = useState<string | null>(null);
   const latestEventRef = useRef<HTMLDivElement | null>(null);
   const visibleEvents = filterMode === 'all' ? child.events : child.events.slice(0, 1);
@@ -556,14 +684,24 @@ function ChildTaskLogCard({
           : 'border-caution-border/60 bg-caution-bg text-status-text-caution dark:border-caution-border-dark/60 dark:bg-caution-bg-dark dark:text-status-text-caution-dark';
 
   return (
-    <div className="rounded-xl border border-current/10 bg-white/40 p-3 dark:bg-black/10">
+    <div className="rounded-lg border border-current/10 bg-white/40 p-3 dark:bg-black/10">
       <div className="flex items-start justify-between gap-3">
-        <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-          {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {expanded ? (
+            <ChevronUp size={14} aria-hidden="true" />
+          ) : (
+            <ChevronDown size={14} aria-hidden="true" />
+          )}
           <div className="min-w-0">
             <div className="truncate text-xs font-semibold">{child.title}</div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusTone}`}>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusTone}`}
+              >
                 {child.status}
               </span>
               <span className="rounded-full border border-current/15 px-2 py-0.5 text-[10px] opacity-80">
@@ -571,12 +709,15 @@ function ChildTaskLogCard({
               </span>
               {child.workerLabel && child.workerLabel !== child.assigneeLabel && (
                 <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary dark:border-primary-300/20 dark:bg-primary-300/10 dark:text-primary-100">
-                  Worker {child.workerLabel}
+                  {t('blackboard.executionFeedback.child.worker', 'Worker')} {child.workerLabel}
                 </span>
               )}
               {child.pendingAdjudication && (
                 <span className="rounded-full border border-info-border bg-info-bg px-2 py-0.5 text-[10px] font-medium text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
-                  Pending adjudication
+                  {t(
+                    'blackboard.executionFeedback.child.pendingAdjudication',
+                    'Pending adjudication'
+                  )}
                   {child.reportTypeLabel ? ` · ${child.reportTypeLabel}` : ''}
                 </span>
               )}
@@ -589,7 +730,7 @@ function ChildTaskLogCard({
             onClick={onJump}
             className="rounded-md border border-current/15 px-2 py-1 text-[10px] font-medium opacity-80 transition hover:bg-white/40 dark:hover:bg-black/10"
           >
-            跳转到任务板
+            {t('blackboard.executionFeedback.controls.jumpToTaskBoard', 'Jump to task board')}
           </button>
           {conversationHref && (child.status === 'in_progress' || child.status === 'done') && (
             <Link
@@ -597,7 +738,10 @@ function ChildTaskLogCard({
               className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary transition hover:bg-primary/20 dark:border-primary-300/40 dark:bg-primary-300/10 dark:text-primary-100 dark:hover:bg-primary-300/20"
               title={child.attemptNumber ? `Attempt #${String(child.attemptNumber)}` : undefined}
             >
-              跳转到会话
+              {t(
+                'blackboard.executionFeedback.controls.jumpToConversation',
+                'Jump to conversation'
+              )}
               {child.attemptNumber ? ` #${String(child.attemptNumber)}` : ''}
             </Link>
           )}
@@ -609,7 +753,7 @@ function ChildTaskLogCard({
             <div
               key={entry.id}
               ref={index === 0 ? latestEventRef : null}
-              className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-[11px] ${
+              className={`flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-[11px] ${
                 index === 0
                   ? 'border border-primary/20 bg-primary/10 dark:border-primary-300/20 dark:bg-primary-300/10'
                   : entry.emphasis
@@ -617,7 +761,13 @@ function ChildTaskLogCard({
                     : 'bg-transparent'
               }`}
             >
-              <span className="truncate">{index === 0 ? `最新：${entry.label}` : entry.label}</span>
+              <span className="truncate">
+                {index === 0
+                  ? t('blackboard.executionFeedback.events.latest', 'Latest: {{label}}', {
+                      label: entry.label,
+                    })
+                  : entry.label}
+              </span>
               <div className="flex items-center gap-2">
                 <span className="shrink-0 font-medium opacity-70">{entry.timestamp}</span>
                 <button
@@ -629,11 +779,13 @@ function ChildTaskLogCard({
                 >
                   {copiedEventId === entry.id ? (
                     <>
-                      <Check size={12} aria-hidden="true" /> 已复制
+                      <Check size={12} aria-hidden="true" />{' '}
+                      {t('blackboard.executionFeedback.controls.copied', 'Copied')}
                     </>
                   ) : (
                     <>
-                      <Copy size={12} aria-hidden="true" /> 复制快照
+                      <Copy size={12} aria-hidden="true" />{' '}
+                      {t('blackboard.executionFeedback.controls.copySnapshot', 'Copy snapshot')}
                     </>
                   )}
                 </button>
@@ -654,7 +806,7 @@ function getTimelineIcon(step: FeedbackTimelineStep): React.ReactNode {
     if (step.id === 'execution') {
       return <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" />;
     }
-    return <Orbit size={16} className="motion-safe:animate-pulse" aria-hidden="true" />;
+    return <Orbit size={16} aria-hidden="true" />;
   }
   switch (step.id) {
     case 'root':
@@ -690,41 +842,66 @@ export function GoalsTab({
   onCreateObjective,
 }: GoalsTabProps) {
   const { message } = App.useApp();
+  const { t, i18n } = useTranslation();
   const [expandedObjectiveIds, setExpandedObjectiveIds] = useState<Record<string, boolean>>({});
   const [expandedChildTaskIds, setExpandedChildTaskIds] = useState<Record<string, boolean>>({});
   const [eventFilterByObjectiveId, setEventFilterByObjectiveId] = useState<
     Record<string, 'latest' | 'all'>
   >({});
   const [autonomyTicking, setAutonomyTicking] = useState(false);
+  const locale = i18n.resolvedLanguage || i18n.language || 'en-US';
 
   const handleRunAutonomy = async (force: boolean) => {
     setAutonomyTicking(true);
     try {
       const result = await workspaceAutonomyService.tick(workspaceId, { force });
       if (result.triggered) {
-        message.success('已触发自治：Leader 将推进下一步');
+        message.success(
+          t(
+            'blackboard.autonomy.success',
+            'Autonomy triggered. The leader will advance the next step.'
+          )
+        );
       } else if (result.reason === 'cooling_down') {
-        message.info('冷却中（60s 内已触发过）。按住 Shift 再点可强制触发。');
+        message.info(
+          t(
+            'blackboard.autonomy.coolingDown',
+            'Cooling down. Hold Shift and click again to force a tick.'
+          )
+        );
       } else if (result.reason === 'no_open_root') {
-        message.info('当前工作区没有进行中的 goal，无需触发。');
+        message.info(
+          t('blackboard.autonomy.noOpenRoot', 'This workspace has no open goal to progress.')
+        );
       } else if (result.reason === 'no_root_needs_progress') {
-        message.info('所有 goal 都处于稳定状态，暂无需推进。');
+        message.info(t('blackboard.autonomy.stable', 'All goals are stable right now.'));
       } else {
-        message.warning(`未触发：${result.reason || 'unknown'}`);
+        message.warning(
+          t('blackboard.autonomy.noop', 'Autonomy was not triggered: {{reason}}', {
+            reason: result.reason || 'unknown',
+          })
+        );
       }
     } catch (err) {
       const description = err instanceof Error ? err.message : String(err);
-      message.error(`启动自治失败：${description}`);
+      message.error(
+        t('blackboard.autonomy.failed', 'Failed to start autonomy: {{description}}', {
+          description,
+        })
+      );
     } finally {
       setAutonomyTicking(false);
     }
   };
   const executionFeedback = objectives
-    .map((objective) => getObjectiveExecutionFeedback(objective, tasks))
+    .map((objective) => getObjectiveExecutionFeedback(objective, tasks, t))
     .sort((left, right) => {
       const leftRootTime = left.rootTask?.created_at ?? '';
       const rightRootTime = right.rootTask?.created_at ?? '';
-      return rightRootTime.localeCompare(leftRootTime) || right.objectiveTitle.localeCompare(left.objectiveTitle);
+      return (
+        rightRootTime.localeCompare(leftRootTime) ||
+        right.objectiveTitle.localeCompare(left.objectiveTitle)
+      );
     });
 
   const toggleDetailedLog = (objectiveId: string) => {
@@ -750,7 +927,13 @@ export function GoalsTab({
       return;
     }
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    element.classList.add('ring-2', 'ring-primary', 'bg-primary/10', 'transition-all', 'duration-300');
+    element.classList.add(
+      'ring-2',
+      'ring-primary',
+      'bg-primary/10',
+      'transition-all',
+      'duration-300'
+    );
     window.setTimeout(() => {
       element.classList.remove(
         'ring-2',
@@ -772,13 +955,16 @@ export function GoalsTab({
         onCreate={onCreateObjective}
       />
 
-      <section className="flex items-center justify-between gap-3 rounded-xl border border-border-light bg-surface-light px-4 py-3 dark:border-border-dark dark:bg-surface-dark">
+      <section className="flex items-center justify-between gap-3 rounded-lg border border-border-light bg-surface-light px-4 py-3 dark:border-border-dark dark:bg-surface-dark">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
-            自主推进
+            {t('blackboard.autonomy.title', 'Autonomy')}
           </h3>
           <p className="mt-0.5 text-[11px] text-text-secondary dark:text-text-muted">
-            触发 Leader 检查工作区状态并推进下一步（Shift+Click 绕过冷却）。
+            {t(
+              'blackboard.autonomy.description',
+              'Ask the leader to inspect workspace state and advance the next step. Shift-click bypasses cooldown.'
+            )}
           </p>
         </div>
         <Button
@@ -791,16 +977,16 @@ export function GoalsTab({
             void handleRunAutonomy(force);
           }}
         >
-          Run Autonomy
+          {t('blackboard.autonomy.run', 'Run autonomy')}
         </Button>
       </section>
 
       {executionFeedback.length > 0 && (
-        <section className="space-y-3 rounded-xl border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
+        <section className="space-y-3 rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-primary dark:text-primary-200" />
             <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
-              自动编排反馈
+              {t('blackboard.executionFeedback.title', 'Orchestration feedback')}
             </h3>
           </div>
           <HostedProjectionBadge
@@ -811,7 +997,7 @@ export function GoalsTab({
             {executionFeedback.map((item) => (
               <article
                 key={item.objectiveId}
-                className={`rounded-xl border px-4 py-3 transition-all duration-300 ${item.accentClassName} ${item.pulse ? 'motion-safe:shadow-[0_0_0_1px_rgba(99,102,241,0.12),0_12px_32px_-20px_rgba(99,102,241,0.5)]' : ''}`}
+                className={`rounded-lg border px-4 py-3 transition-colors duration-200 ${item.accentClassName} ${item.pulse ? 'shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_32px_-24px_rgba(99,102,241,0.45)]' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -829,11 +1015,7 @@ export function GoalsTab({
                         aria-label="orchestration-waiting"
                       />
                     ) : item.inProgressCount > 0 ? (
-                      <PlayCircle
-                        size={16}
-                        className={item.pulse ? 'animate-pulse' : undefined}
-                        aria-label="orchestration-running"
-                      />
+                      <PlayCircle size={16} aria-label="orchestration-running" />
                     ) : item.doneCount > 0 && item.doneCount === item.childCount ? (
                       <CheckCircle2 size={16} aria-label="orchestration-complete" />
                     ) : (
@@ -862,7 +1044,7 @@ export function GoalsTab({
                 </div>
 
                 <div className="mt-4 grid gap-2">
-                  {buildExecutionTimeline(item).map((step, index, steps) => (
+                  {buildExecutionTimeline(item, t).map((step, index, steps) => (
                     <div key={step.id} className="flex items-start gap-3">
                       <div className="flex flex-col items-center">
                         <div
@@ -888,10 +1070,10 @@ export function GoalsTab({
                   ))}
                 </div>
 
-                <div className="mt-4 rounded-xl border border-current/10 bg-white/30 p-3 dark:bg-black/10">
+                <div className="mt-4 rounded-lg border border-current/10 bg-white/30 p-3 dark:bg-black/10">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-[11px] font-semibold uppercase tracking-wide opacity-75">
-                      事件流日志
+                      {t('blackboard.executionFeedback.eventLogTitle', 'Event stream log')}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="inline-flex rounded-md border border-current/15 p-0.5 text-[10px] font-medium opacity-80">
@@ -909,7 +1091,7 @@ export function GoalsTab({
                               : ''
                           }`}
                         >
-                          只看最新事件
+                          {t('blackboard.executionFeedback.controls.latestOnly', 'Latest')}
                         </button>
                         <button
                           type="button"
@@ -925,7 +1107,7 @@ export function GoalsTab({
                               : ''
                           }`}
                         >
-                          查看全部事件
+                          {t('blackboard.executionFeedback.controls.viewAll', 'All events')}
                         </button>
                       </div>
                       <button
@@ -937,24 +1119,24 @@ export function GoalsTab({
                       >
                         {expandedObjectiveIds[item.objectiveId] ? (
                           <>
-                            收起详细日志 <ChevronUp size={14} />
+                            {t('blackboard.executionFeedback.controls.collapseLog', 'Collapse log')}{' '}
+                            <ChevronUp size={14} />
                           </>
                         ) : (
                           <>
-                            展开详细日志 <ChevronDown size={14} />
+                            {t('blackboard.executionFeedback.controls.expandLog', 'Expand log')}{' '}
+                            <ChevronDown size={14} />
                           </>
                         )}
                       </button>
                     </div>
                   </div>
                   <div className="mt-3 space-y-2">
-                    {buildExecutionEventLog(item, tasks).map((entry) => (
+                    {buildExecutionEventLog(item, tasks, t, locale).map((entry) => (
                       <div
                         key={entry.id}
-                        className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-[11px] transition-all duration-300 ${
-                          entry.emphasis
-                            ? 'bg-white/60 dark:bg-black/15 motion-safe:animate-pulse'
-                            : 'bg-transparent'
+                        className={`flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-[11px] transition-colors duration-200 ${
+                          entry.emphasis ? 'bg-white/60 dark:bg-black/15' : 'bg-transparent'
                         }`}
                       >
                         <span className="truncate">{entry.label}</span>
@@ -965,12 +1147,15 @@ export function GoalsTab({
 
                   {expandedObjectiveIds[item.objectiveId] && (
                     <div className="mt-4 space-y-3 border-t border-current/10 pt-4">
-                      {buildChildTaskLogs(item, tasks, agents).length === 0 ? (
+                      {buildChildTaskLogs(item, tasks, agents, t, locale).length === 0 ? (
                         <div className="rounded-lg bg-white/40 px-3 py-2 text-[11px] opacity-80 dark:bg-black/10">
-                          还没有 child task 详细事件。
+                          {t(
+                            'blackboard.executionFeedback.emptyChildEvents',
+                            'No child task detail events yet.'
+                          )}
                         </div>
                       ) : (
-                        buildChildTaskLogs(item, tasks, agents).map((child) => {
+                        buildChildTaskLogs(item, tasks, agents, t, locale).map((child) => {
                           const conversationHref =
                             child.conversationId && tenantId
                               ? buildAgentWorkspacePath({
@@ -1003,17 +1188,17 @@ export function GoalsTab({
 
                 {item.rootTask &&
                   typeof item.rootTask.metadata.goal_progress_summary === 'string' && (
-                  <div className="mt-3 rounded-lg border border-current/10 bg-white/40 px-3 py-2 text-[11px] opacity-90 dark:bg-black/10">
-                    {item.rootTask.metadata.goal_progress_summary}
-                  </div>
-                )}
+                    <div className="mt-3 rounded-lg border border-current/10 bg-white/40 px-3 py-2 text-[11px] opacity-90 dark:bg-black/10">
+                      {item.rootTask.metadata.goal_progress_summary}
+                    </div>
+                  )}
               </article>
             ))}
           </div>
         </section>
       )}
 
-      <TaskBoard workspaceId={workspaceId} />
+      <TaskBoard workspaceId={workspaceId} showAutonomyAction={false} />
     </div>
   );
 }

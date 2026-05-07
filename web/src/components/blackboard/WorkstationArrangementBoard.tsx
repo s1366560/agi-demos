@@ -1,16 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
-} from 'react';
+import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  RotateCcw,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
 import { useWorkspaceActions } from '@/stores/workspace';
 
@@ -38,8 +31,12 @@ import { useArrangementKeyboard } from './useArrangementKeyboard';
 
 import type { TopologyNode, WorkspaceAgent } from '@/types/workspace';
 
-import type { MoveMode, SelectionState, ViewMode, WorkstationArrangementBoardProps } from './arrangementUtils';
-
+import type {
+  MoveMode,
+  SelectionState,
+  ViewMode,
+  WorkstationArrangementBoardProps,
+} from './arrangementUtils';
 
 const HexCanvas3D = lazy(() =>
   import('@/components/workspace/hex3d/HexCanvas3D').then((module) => ({
@@ -109,9 +106,13 @@ export function WorkstationArrangementBoard({
   }, [placedNodes]);
 
   const selectedAgent =
-    selection?.kind === 'agent' ? agents.find((agent) => agent.id === selection.agentId) ?? null : null;
+    selection?.kind === 'agent'
+      ? (agents.find((agent) => agent.id === selection.agentId) ?? null)
+      : null;
   const selectedNode =
-    selection?.kind === 'node' ? nodes.find((node) => node.id === selection.nodeId) ?? null : null;
+    selection?.kind === 'node'
+      ? (nodes.find((node) => node.id === selection.nodeId) ?? null)
+      : null;
 
   const selectedHex = useMemo(() => {
     if (!selection) {
@@ -120,10 +121,20 @@ export function WorkstationArrangementBoard({
     if (selection.kind === 'empty' || selection.kind === 'blackboard') {
       return { q: selection.q, r: selection.r };
     }
-    if (selection.kind === 'agent' && selectedAgent && hasHex(selectedAgent.hex_q) && hasHex(selectedAgent.hex_r)) {
+    if (
+      selection.kind === 'agent' &&
+      selectedAgent &&
+      hasHex(selectedAgent.hex_q) &&
+      hasHex(selectedAgent.hex_r)
+    ) {
       return { q: selectedAgent.hex_q, r: selectedAgent.hex_r };
     }
-    if (selection.kind === 'node' && selectedNode && hasHex(selectedNode.hex_q) && hasHex(selectedNode.hex_r)) {
+    if (
+      selection.kind === 'node' &&
+      selectedNode &&
+      hasHex(selectedNode.hex_q) &&
+      hasHex(selectedNode.hex_r)
+    ) {
       return { q: selectedNode.hex_q, r: selectedNode.hex_r };
     }
     return null;
@@ -273,14 +284,17 @@ export function WorkstationArrangementBoard({
     setZoom((current) => Math.max(0.55, Math.min(2.2, current + delta)));
   }, []);
 
-  const handlePointerDown = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
-    if (event.target instanceof Element && event.target.closest('[data-hex-cell="true"]')) {
-      return;
-    }
-    boardContainerRef.current?.focus();
-    setPanning(true);
-    setPanAnchor({ x: event.clientX - pan.x, y: event.clientY - pan.y });
-  }, [pan.x, pan.y]);
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<SVGSVGElement>) => {
+      if (event.target instanceof Element && event.target.closest('[data-hex-cell="true"]')) {
+        return;
+      }
+      boardContainerRef.current?.focus();
+      setPanning(true);
+      setPanAnchor({ x: event.clientX - pan.x, y: event.clientY - pan.y });
+    },
+    [pan.x, pan.y]
+  );
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -294,9 +308,15 @@ export function WorkstationArrangementBoard({
 
   const svgTransform = useMemo(
     () =>
-      ['translate(', pan.x.toString(), ', ', pan.y.toString(), ') scale(', zoom.toString(), ')'].join(
-        ''
-      ),
+      [
+        'translate(',
+        pan.x.toString(),
+        ', ',
+        pan.y.toString(),
+        ') scale(',
+        zoom.toString(),
+        ')',
+      ].join(''),
     [pan.x, pan.y, zoom]
   );
 
@@ -343,7 +363,7 @@ export function WorkstationArrangementBoard({
   }, [agentByCoord, keyboardCursor.q, keyboardCursor.r, nodeByCoord, t]);
 
   return (
-    <section className="flex flex-col h-full rounded-2xl border border-border-light bg-surface-light p-4 shadow-lg transition-colors duration-200 dark:border-border-dark dark:bg-surface-dark sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+    <section className="flex h-full flex-col rounded-lg border border-border-light bg-surface-light p-4 shadow-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark sm:p-5">
       <HostedProjectionBadge
         labelKey="blackboard.arrangementSurfaceHint"
         fallbackLabel="workspace arrangement projection"
@@ -366,18 +386,22 @@ export function WorkstationArrangementBoard({
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-text-secondary dark:text-text-muted">
-            {t('blackboard.arrangement.inlineStats', '{{agents}} Agents · {{seats}} Human · {{corridors}} Corridors · {{done}}/{{total}} Tasks', {
-              agents: agents.length,
-              seats: summary.humanSeats,
-              corridors: summary.corridors,
-              done: summary.completedTasks,
-              total: tasks.length,
-            })}
+            {t(
+              'blackboard.arrangement.inlineStats',
+              '{{agents}} Agents · {{seats}} Human · {{corridors}} Corridors · {{done}}/{{total}} Tasks',
+              {
+                agents: agents.length,
+                seats: summary.humanSeats,
+                corridors: summary.corridors,
+                done: summary.completedTasks,
+                total: tasks.length,
+              }
+            )}
           </span>
-          
+
           <span className="h-4 w-px bg-border-light dark:bg-border-dark" />
 
-          <div className="inline-flex rounded-2xl border border-border-light bg-surface-muted p-1 dark:border-border-dark dark:bg-surface-dark-alt">
+          <div className="inline-flex rounded-lg border border-border-light bg-surface-muted p-1 dark:border-border-dark dark:bg-surface-dark-alt">
             {(['2d', '3d'] as const).map((mode) => (
               <button
                 key={mode}
@@ -405,7 +429,7 @@ export function WorkstationArrangementBoard({
                 setZoom((current) => Math.max(0.55, current - 0.15));
               }}
               disabled={viewMode !== '2d'}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-light bg-surface-muted text-text-secondary transition motion-reduce:transition-none hover:bg-surface-light active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-border-light bg-surface-muted text-text-secondary transition-colors duration-150 hover:bg-surface-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
             >
               <ZoomOut className="h-3.5 w-3.5" />
             </button>
@@ -416,7 +440,7 @@ export function WorkstationArrangementBoard({
                 setZoom((current) => Math.min(2.2, current + 0.15));
               }}
               disabled={viewMode !== '2d'}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-light bg-surface-muted text-text-secondary transition motion-reduce:transition-none hover:bg-surface-light active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-border-light bg-surface-muted text-text-secondary transition-colors duration-150 hover:bg-surface-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
             >
               <ZoomIn className="h-3.5 w-3.5" />
             </button>
@@ -424,7 +448,7 @@ export function WorkstationArrangementBoard({
             <button
               type="button"
               onClick={resetView}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-light bg-surface-muted text-text-secondary transition motion-reduce:transition-none hover:bg-surface-light active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-border-light bg-surface-muted text-text-secondary transition-colors duration-150 hover:bg-surface-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
               title={t('blackboard.arrangement.resetView', 'Reset view')}
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -458,27 +482,30 @@ export function WorkstationArrangementBoard({
               </div>
             )}
             <div id={gridHelpId} className="sr-only">
-                {isKeyboardGridActive
-                  ? t(
-                      'blackboard.arrangement.keyboardHint',
-                      'Use arrow keys to move keyboard focus across the grid, Enter to inspect a hex, Shift and arrow keys to pan, and the action shortcuts only while this grid is focused.'
-                    )
-                  : t(
-                      'blackboard.arrangement.threeDKeyboardHint',
-                      'Three-dimensional view is preview only. Use pointer controls here, or switch back to 2D to move across hexes and edit placements with the keyboard.'
-                    )}
+              {isKeyboardGridActive
+                ? t(
+                    'blackboard.arrangement.keyboardHint',
+                    'Use arrow keys to move keyboard focus across the grid, Enter to inspect a hex, Shift and arrow keys to pan, and the action shortcuts only while this grid is focused.'
+                  )
+                : t(
+                    'blackboard.arrangement.threeDKeyboardHint',
+                    'Three-dimensional view is preview only. Use pointer controls here, or switch back to 2D to move across hexes and edit placements with the keyboard.'
+                  )}
+            </div>
+            {isKeyboardGridActive && (
+              <div id={gridStatusId} aria-live="polite" className="sr-only">
+                {keyboardCursorSummary}
               </div>
-              {isKeyboardGridActive && (
-                <div id={gridStatusId} aria-live="polite" className="sr-only">
-                  {keyboardCursorSummary}
-                </div>
-              )}
+            )}
             {viewMode === '2d' ? (
               <div
                 ref={boardContainerRef}
                 tabIndex={0}
                 role="group"
-                aria-label={t('blackboard.arrangement.ariaLabel', 'Interactive workstation arrangement grid')}
+                aria-label={t(
+                  'blackboard.arrangement.ariaLabel',
+                  'Interactive workstation arrangement grid'
+                )}
                 aria-roledescription={t('blackboard.arrangement.roleDescription', 'hex grid')}
                 aria-describedby={`${gridHelpId} ${gridStatusId}`}
                 onFocus={() => {
@@ -513,7 +540,13 @@ export function WorkstationArrangementBoard({
                       <stop offset="100%" stopColor="rgba(30, 63, 174, 0)" />
                     </radialGradient>
                   </defs>
-                  <rect x={-760} y={-560} width={1520} height={1120} fill="url(#blackboard-grid-glow)" />
+                  <rect
+                    x={-760}
+                    y={-560}
+                    width={1520}
+                    height={1120}
+                    fill="url(#blackboard-grid-glow)"
+                  />
                   <g transform={svgTransform}>
                     <ArrangementHexGrid
                       gridCells={gridCells}
@@ -535,7 +568,10 @@ export function WorkstationArrangementBoard({
               <div
                 tabIndex={-1}
                 role="group"
-                aria-label={t('blackboard.arrangement.threeDAriaLabel', 'Three-dimensional workstation arrangement')}
+                aria-label={t(
+                  'blackboard.arrangement.threeDAriaLabel',
+                  'Three-dimensional workstation arrangement'
+                )}
                 aria-describedby={gridHelpId}
                 className="h-full w-full rounded-[inherit]"
               >
@@ -561,7 +597,7 @@ export function WorkstationArrangementBoard({
             )}
 
             {selection == null && (
-              <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-2xl border border-border-light/80 bg-surface-light/95 px-4 py-3 text-sm text-text-secondary shadow-md dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary">
+              <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-lg border border-border-light/80 bg-surface-light/95 px-4 py-3 text-sm text-text-secondary shadow-md dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary">
                 {t(
                   'blackboard.arrangement.emptySelectionHint',
                   'Start by selecting an empty hex, an AI employee, or the center board.'

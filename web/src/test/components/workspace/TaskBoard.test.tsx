@@ -18,6 +18,7 @@ vi.mock('@/services/workspaceService', () => ({
   workspaceTaskService: {
     create: vi.fn(),
     getExperience: vi.fn(),
+    getExecutionSession: vi.fn(),
     update: vi.fn(),
     assignToAgent: vi.fn(),
     unassignAgent: vi.fn(),
@@ -233,6 +234,7 @@ describe('TaskBoard', () => {
       },
       activity: [{ type: 'attempt', summary: 'Attempt completed', at: '2026-04-30T00:00:00Z' }],
     } as any);
+    vi.mocked(workspaceTaskService.getExecutionSession).mockResolvedValue(null as any);
 
     render(<TaskBoard workspaceId="ws-1" />);
 
@@ -293,5 +295,18 @@ describe('TaskBoard', () => {
     });
 
     expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });
+  });
+
+  it('can hide the forced autonomy action when embedded in goals', async () => {
+    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+
+    vi.mocked(useWorkspaceTasks).mockReturnValue([] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+
+    render(<TaskBoard workspaceId="ws-1" showAutonomyAction={false} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' })
+    ).not.toBeInTheDocument();
   });
 });

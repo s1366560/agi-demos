@@ -239,6 +239,7 @@ class AgentService(AgentServicePort):
         project_id: str,
         user_id: str,
         tenant_id: str,
+        preferred_language: str | None = None,
         attachment_ids: list[str] | None = None,
         file_metadata: list[dict[str, Any]] | None = None,
         forced_skill_name: str | None = None,
@@ -376,6 +377,7 @@ class AgentService(AgentServicePort):
                 app_model_context=app_model_context,
                 image_attachments=image_attachments,
                 agent_id=agent_id,
+                preferred_language=preferred_language,
             )
             logger.info(
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
@@ -413,6 +415,7 @@ class AgentService(AgentServicePort):
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
         model_override: str | None = None,
+        preferred_language: str | None = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -429,6 +432,7 @@ class AgentService(AgentServicePort):
             image_attachments=image_attachments,
             agent_id=agent_id,
             model_override=model_override,
+            preferred_language=preferred_language,
         )
 
     async def _get_stream_events(
@@ -855,9 +859,9 @@ class AgentService(AgentServicePort):
             return AgentService._sanitize_persisted_text(value)
         if isinstance(value, Mapping):
             return {
-                AgentService._sanitize_persisted_text(str(key)): AgentService._sanitize_persisted_value(
-                    item
-                )
+                AgentService._sanitize_persisted_text(
+                    str(key)
+                ): AgentService._sanitize_persisted_value(item)
                 for key, item in value.items()
             }
         if isinstance(value, list | tuple):

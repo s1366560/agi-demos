@@ -4,7 +4,7 @@ All request/response models for the Agent API endpoints.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -141,6 +141,7 @@ class ChatRequest(BaseModel):
 
     conversation_id: str
     message: str
+    preferred_language: Literal["en-US", "zh-CN"] | None = None
     reply_to_id: str | None = None
     app_model_context: dict[str, Any] | None = Field(
         None,

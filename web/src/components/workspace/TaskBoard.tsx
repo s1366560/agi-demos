@@ -38,6 +38,7 @@ import type {
 
 interface TaskBoardProps {
   workspaceId: string;
+  showAutonomyAction?: boolean;
 }
 
 const PRIORITY_TONES: Record<string, string> = {
@@ -142,7 +143,7 @@ const COLUMN_CONFIG: {
   },
 ];
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId, showAutonomyAction = true }) => {
   const { t } = useTranslation();
   const message = useLazyMessage();
   const tasks = useWorkspaceTasks();
@@ -351,34 +352,38 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
         message?.success(
           t(
             'workspaceDetail.taskBoard.forceAutonomySuccess',
-            '已强制触发自治推进，Leader 将继续调度任务。'
+            'Autonomy was forced. The leader will continue scheduling tasks.'
           )
         );
       } else if (result.reason === 'no_open_root') {
         message?.info(
           t(
             'workspaceDetail.taskBoard.forceAutonomyNoRoot',
-            '当前工作区没有进行中的 goal，无需触发。'
+            'This workspace has no open goal to progress.'
           )
         );
       } else if (result.reason === 'no_root_needs_progress') {
         message?.info(
           t(
             'workspaceDetail.taskBoard.forceAutonomyStable',
-            '所有 goal 都处于稳定状态，暂无需推进。'
+            'All goals are stable. No autonomy tick is needed.'
           )
         );
       } else {
         message?.warning(
           t(
             'workspaceDetail.taskBoard.forceAutonomyNoop',
-            `未触发自治推进：${result.reason || 'unknown'}`
+            'Autonomy was not triggered: {{reason}}',
+            { reason: result.reason || 'unknown' }
           )
         );
       }
     } catch {
       message?.error(
-        t('workspaceDetail.taskBoard.forceAutonomyFailed', '触发自治推进失败，请稍后重试。')
+        t(
+          'workspaceDetail.taskBoard.forceAutonomyFailed',
+          'Failed to trigger autonomy. Try again later.'
+        )
       );
     } finally {
       setIsAutonomyTicking(false);
@@ -406,16 +411,18 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
           {t('workspaceDetail.taskBoard.title')}
         </h3>
         <div className="flex items-center gap-3">
-          <Button
-            size="small"
-            type="primary"
-            loading={isAutonomyTicking}
-            onClick={() => {
-              void handleForceAutonomyTick();
-            }}
-          >
-            {t('workspaceDetail.taskBoard.forceAutonomy', '强制推进自治')}
-          </Button>
+          {showAutonomyAction && (
+            <Button
+              size="small"
+              type="primary"
+              loading={isAutonomyTicking}
+              onClick={() => {
+                void handleForceAutonomyTick();
+              }}
+            >
+              {t('workspaceDetail.taskBoard.forceAutonomy', 'Force autonomy')}
+            </Button>
+          )}
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary dark:text-text-muted">
             {t('workspaceDetail.taskBoard.showArchived', 'Show archived')}
             <Switch size="small" checked={showArchived} onChange={setShowArchived} />
@@ -435,7 +442,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
       </div>
 
       {showAddForm && (
-        <div className="mb-4 flex items-end gap-2 rounded-xl border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark sm:flex-row sm:items-end">
           <Input
             aria-label={t('workspaceDetail.taskBoard.taskTitle', 'Task title')}
             placeholder={t('workspaceDetail.taskBoard.taskTitlePlaceholder')}
@@ -488,13 +495,13 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
           selectedTask ? 'xl:grid-cols-[minmax(0,1fr)_420px]' : 'xl:grid-cols-[minmax(0,1fr)]'
         }`}
       >
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
           {COLUMN_CONFIG.map((col) => {
             const colTasks = columns[col.status];
             return (
               <div
                 key={col.status}
-                className="flex min-h-[200px] flex-col rounded-xl border border-border-light bg-surface-muted/60 dark:border-border-dark dark:bg-surface-dark-alt/60"
+                className="flex min-h-[200px] flex-col rounded-lg border border-border-light bg-surface-muted/60 dark:border-border-dark dark:bg-surface-dark-alt/60"
               >
                 <div className="flex items-center gap-2 border-b border-border-light px-3 py-2.5 dark:border-border-dark">
                   {col.icon}

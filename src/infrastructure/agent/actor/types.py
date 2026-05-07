@@ -52,6 +52,8 @@ class ProjectChatRequest:
     tenant_agent_config: dict[str, Any] | None = None
     # Multi-agent: parent conversation_id for child-to-parent announce
     parent_session_id: str | None = None
+    # User-selected UI language for this turn.
+    preferred_language: str | None = None
 
 
 @dataclass(frozen=True)

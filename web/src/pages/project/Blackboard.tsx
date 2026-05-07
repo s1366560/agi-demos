@@ -218,7 +218,7 @@ export function Blackboard() {
   if (workspacesError) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-background-light p-4 dark:bg-background-dark sm:p-6">
-        <div className="rounded-2xl border border-error/25 bg-error/10 p-6 text-sm leading-7 text-status-text-error dark:text-status-text-error-dark">
+        <div className="rounded-lg border border-error/25 bg-error/10 p-6 text-sm leading-7 text-status-text-error dark:text-status-text-error-dark">
           <div className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('common.error', 'Error')}
           </div>
@@ -233,7 +233,7 @@ export function Blackboard() {
   if (workspaces.length === 0) {
     return (
       <div className="flex h-full min-h-0 flex-col justify-center bg-background-light p-4 dark:bg-background-dark sm:p-6">
-        <div className="rounded-2xl border border-dashed border-border-separator bg-surface-light p-8 text-center dark:border-border-dark dark:bg-surface-dark-alt">
+        <div className="rounded-lg border border-dashed border-border-separator bg-surface-light p-8 text-center dark:border-border-dark dark:bg-surface-dark-alt">
           <div className="text-xl font-semibold text-text-primary dark:text-text-inverse">
             {t('blackboard.noWorkspaces', 'No workspaces found')}
           </div>
@@ -260,8 +260,8 @@ export function Blackboard() {
       fallbackLabel={t('blackboard.errorBoundary.title', 'Something went wrong')}
       retryLabel={t('blackboard.errorBoundary.retry', 'Try again')}
     >
-      <div className="flex h-full min-h-0 flex-col gap-4 bg-background-light p-4 dark:bg-background-dark sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
+      <div className="flex h-full min-h-0 flex-col gap-4 bg-background-light p-3 dark:bg-background-dark sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-semibold text-text-primary dark:text-text-inverse sm:text-xl">
               {t('blackboard.title', 'Blackboard')}
@@ -283,21 +283,21 @@ export function Blackboard() {
                 </span>
               </div>
             )}
-            <div className="mt-1 text-xs text-text-muted dark:text-text-muted">
-              {t(
-                'blackboard.shellHint',
-                'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
-              )}
-            </div>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted dark:text-text-muted">
               <SensingSurfaceBadge
                 labelKey="blackboard.shellSensingHint"
                 fallbackLabel="workspace shell sync"
               />
+              <span className="min-w-0">
+                {t(
+                  'blackboard.shellHint',
+                  'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
+                )}
+              </span>
             </div>
           </div>
 
-          <div className="flex w-full items-center sm:w-auto sm:min-w-[260px]">
+          <div className="flex w-full items-center sm:w-auto sm:min-w-[240px]">
             <label htmlFor="workspace-select" className="sr-only">
               {t('blackboard.workspaceLabel', 'Workspace')}
             </label>
@@ -307,7 +307,7 @@ export function Blackboard() {
               onChange={(event) => {
                 setSelectedWorkspaceId(event.target.value || null);
               }}
-              className="min-h-11 w-full rounded-md border border-border-light bg-surface-light px-4 text-sm normal-case tracking-normal text-text-primary transition focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
+              className="min-h-10 w-full rounded-md border border-border-light bg-surface-light px-3 text-sm normal-case tracking-normal text-text-primary transition-colors duration-150 focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
             >
               {workspaces.map((workspace) => (
                 <option
@@ -325,12 +325,12 @@ export function Blackboard() {
             {selectedWorkspaceId ? (
               <Link
                 to={agentWorkspacePath}
-                className="inline-flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-md border border-border-light bg-surface-light px-5 text-sm font-medium text-text-primary transition motion-reduce:transition-none hover:border-primary/30 hover:bg-primary/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse sm:flex-none"
+                className="inline-flex min-h-10 flex-1 items-center justify-center whitespace-nowrap rounded-md border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse sm:flex-none"
               >
                 {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
               </Link>
             ) : (
-              <span className="inline-flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-md border border-border-light px-5 text-sm font-medium text-text-muted dark:border-border-dark dark:text-text-muted sm:flex-none">
+              <span className="inline-flex min-h-10 flex-1 items-center justify-center whitespace-nowrap rounded-md border border-border-light px-4 text-sm font-medium text-text-muted dark:border-border-dark dark:text-text-muted sm:flex-none">
                 {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
               </span>
             )}
@@ -340,7 +340,7 @@ export function Blackboard() {
         {error && (
           <div
             role="alert"
-            className="flex flex-col gap-3 rounded-2xl border border-error/25 bg-error/10 px-4 py-3 text-sm text-status-text-error dark:text-status-text-error-dark sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-3 rounded-lg border border-error/25 bg-error/10 px-4 py-3 text-sm text-status-text-error dark:text-status-text-error-dark sm:flex-row sm:items-center sm:justify-between"
           >
             <span className="break-words">{error}</span>
             <button
@@ -349,7 +349,7 @@ export function Blackboard() {
                 void handleRetrySurface();
               }}
               disabled={surfaceLoading || !selectedWorkspaceId}
-              className="min-h-10 rounded-md border border-error/25 bg-surface-light px-4 text-sm font-medium text-status-text-error transition motion-reduce:transition-none hover:bg-error/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5 dark:text-status-text-error-dark"
+              className="min-h-10 rounded-md border border-error/25 bg-surface-light px-4 text-sm font-medium text-status-text-error transition-colors duration-150 hover:bg-error/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/5 dark:text-status-text-error-dark"
             >
               {surfaceLoading ? t('common.loading', 'Loading…') : t('common.retry', 'Retry')}
             </button>

@@ -201,6 +201,8 @@ export interface ChatRequest {
   conversation_id: string;
   message: string;
   project_id?: string | undefined;
+  /** UI language selected by the user for this turn */
+  preferred_language?: 'en-US' | 'zh-CN' | undefined;
   /** File metadata for files uploaded to sandbox */
   file_metadata?:
     | Array<{

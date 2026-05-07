@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input, Popconfirm } from 'antd';
+import { Pin } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
 
@@ -10,7 +11,6 @@ import { EmptyState } from '../EmptyState';
 import { OwnedSurfaceBadge } from '../OwnedSurfaceBadge';
 
 import type { BlackboardPost, BlackboardReply } from '@/types/workspace';
-
 
 const { TextArea } = Input;
 
@@ -106,7 +106,7 @@ function ThreadListView({
         <button
           type="button"
           onClick={onToggleCompose}
-          className="rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         >
           {showCompose
             ? t('common.cancel', 'Cancel')
@@ -148,7 +148,7 @@ function ThreadListView({
                   void handleCreatePost();
                 }}
                 disabled={creatingPost || !postTitle.trim() || !postContent.trim()}
-                className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {creatingPost
                   ? t('common.loading', 'Loading\u2026')
@@ -160,7 +160,7 @@ function ThreadListView({
       )}
 
       {/* BBS table header */}
-      <div className="grid grid-cols-[1fr_80px_160px] items-center border-b border-border-light bg-surface-muted/60 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-text-muted dark:border-border-dark dark:bg-surface-dark-alt/60 dark:text-text-muted">
+      <div className="hidden grid-cols-[1fr_80px_160px] items-center border-b border-border-light bg-surface-muted/60 px-4 py-2 text-[11px] font-medium uppercase tracking-wider text-text-muted dark:border-border-dark dark:bg-surface-dark-alt/60 dark:text-text-muted md:grid">
         <span>{t('blackboard.postTitle', 'Title')}</span>
         <span className="text-center">{t('blackboard.replies', 'Replies')}</span>
         <span className="text-right">{t('blackboard.date', 'Date')}</span>
@@ -171,13 +171,12 @@ function ThreadListView({
         <ThreadRow
           key={post.id}
           post={post}
-          replyCount={
-            loadedReplyPostIds[post.id] ? (repliesByPostId[post.id] ?? []).length : null
-          }
+          replyCount={loadedReplyPostIds[post.id] ? (repliesByPostId[post.id] ?? []).length : null}
           pinned
           onClick={() => {
             onSelectPost(post.id);
           }}
+          t={t}
         />
       ))}
 
@@ -186,13 +185,12 @@ function ThreadListView({
         <ThreadRow
           key={post.id}
           post={post}
-          replyCount={
-            loadedReplyPostIds[post.id] ? (repliesByPostId[post.id] ?? []).length : null
-          }
+          replyCount={loadedReplyPostIds[post.id] ? (repliesByPostId[post.id] ?? []).length : null}
           pinned={false}
           onClick={() => {
             onSelectPost(post.id);
           }}
+          t={t}
         />
       ))}
 
@@ -210,23 +208,23 @@ function ThreadRow({
   replyCount,
   pinned,
   onClick,
+  t,
 }: {
   post: BlackboardPost;
   replyCount: number | null;
   pinned: boolean;
   onClick: () => void;
+  t: (key: string, fallback: string) => string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group grid w-full grid-cols-[1fr_80px_160px] items-center border-b border-border-light/60 px-4 py-3 text-left transition-colors motion-reduce:transition-none hover:bg-surface-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset dark:border-border-dark/60 dark:hover:bg-surface-dark-alt/40"
+      className="group grid w-full gap-2 border-b border-border-light/60 px-4 py-3 text-left transition-colors duration-150 hover:bg-surface-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset dark:border-border-dark/60 dark:hover:bg-surface-dark-alt/40 md:grid-cols-[1fr_80px_160px] md:items-center"
     >
-      <div className="min-w-0 pr-3">
+      <div className="min-w-0 md:pr-3">
         <div className="flex items-center gap-2">
-          {pinned && (
-            <span className="shrink-0 text-[10px] text-primary">&#x1F4CC;</span>
-          )}
+          {pinned && <Pin size={12} className="shrink-0 text-primary" aria-hidden="true" />}
           <span className="truncate text-sm font-medium text-text-primary group-hover:text-primary dark:text-text-inverse dark:group-hover:text-primary-200">
             {post.title}
           </span>
@@ -235,12 +233,13 @@ function ThreadRow({
           {getAuthorTag(post.author_id)}
         </span>
       </div>
-      <span className="text-center text-xs tabular-nums text-text-muted dark:text-text-muted">
-        {replyCount !== null ? String(replyCount) : '-'}
-      </span>
-      <span className="text-right text-xs tabular-nums text-text-muted dark:text-text-muted">
-        {formatDateTime(post.created_at)}
-      </span>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted dark:text-text-muted md:contents">
+        <span className="tabular-nums md:text-center">
+          <span className="md:hidden">{t('blackboard.replies', 'Replies')}: </span>
+          {replyCount !== null ? String(replyCount) : '-'}
+        </span>
+        <span className="tabular-nums md:text-right">{formatDateTime(post.created_at)}</span>
+      </div>
     </button>
   );
 }
@@ -405,10 +404,7 @@ function ThreadDetailView({
                   #{String(index + 1)}
                 </span>
                 <span className="text-xs font-medium text-text-primary dark:text-text-inverse">
-                  {getAuthorDisplay(
-                    reply.author_id,
-                    t('blackboard.unknownAuthor', 'Unknown')
-                  )}
+                  {getAuthorDisplay(reply.author_id, t('blackboard.unknownAuthor', 'Unknown'))}
                 </span>
               </div>
               <div className="flex items-center gap-3">
@@ -468,11 +464,9 @@ function ThreadDetailView({
                 void handleCreateReply();
               }}
               disabled={replying || !replyDraft.trim()}
-              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {replying
-                ? t('common.loading', 'Loading\u2026')
-                : t('blackboard.sendReply', 'Reply')}
+              {replying ? t('common.loading', 'Loading\u2026') : t('blackboard.sendReply', 'Reply')}
             </button>
           </div>
         </div>
@@ -515,9 +509,7 @@ export function DiscussionTab({
 
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
   const selectedReplies = selectedPost ? (repliesByPostId[selectedPost.id] ?? []) : [];
-  const selectedRepliesLoaded = selectedPost
-    ? loadedReplyPostIds[selectedPost.id] === true
-    : false;
+  const selectedRepliesLoaded = selectedPost ? loadedReplyPostIds[selectedPost.id] === true : false;
 
   const handleSelectPost = (id: string) => {
     setSelectedPostId(id);

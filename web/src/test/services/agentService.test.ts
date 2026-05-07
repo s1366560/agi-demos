@@ -211,4 +211,34 @@ describe('agentService - WebSocket Token Handling', () => {
       agentService.disconnect();
     });
   });
+
+  describe('chat()', () => {
+    it('should include preferred_language in send_message payload', async () => {
+      const isConnectedSpy = vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+      const sendSpy = vi.spyOn(agentService as any, 'send').mockReturnValue(true);
+
+      try {
+        await agentService.chat(
+          {
+            conversation_id: 'conv-1',
+            message: '你好',
+            project_id: 'proj-1',
+            preferred_language: 'zh-CN',
+          },
+          {}
+        );
+
+        expect(sendSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'send_message',
+            conversation_id: 'conv-1',
+            preferred_language: 'zh-CN',
+          })
+        );
+      } finally {
+        sendSpy.mockRestore();
+        isConnectedSpy.mockRestore();
+      }
+    });
+  });
 });

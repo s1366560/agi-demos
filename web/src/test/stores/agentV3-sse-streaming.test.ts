@@ -53,9 +53,7 @@ vi.mock('../../services/agentService', () => ({
         last_sequence: 0,
       })
     ),
-    listConversations: vi.fn(() =>
-      Promise.resolve({ items: [], has_more: false, total: 0 })
-    ),
+    listConversations: vi.fn(() => Promise.resolve({ items: [], has_more: false, total: 0 })),
   },
 }));
 
@@ -123,6 +121,11 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       await act(async () => {
         await result.current.sendMessage('Hello', 'proj-123');
       });
+
+      expect(agentService.chat).toHaveBeenCalledWith(
+        expect.objectContaining({ preferred_language: 'en-US' }),
+        expect.any(Object)
+      );
 
       // Verify timeline has user message (read from bridged sub-store)
       const timeline = getTimeline();

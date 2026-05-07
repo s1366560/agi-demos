@@ -7,6 +7,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 
+import i18n from '../../i18n/config';
 import { agentService } from '../../services/agentService';
 import {
   type ConversationState,
@@ -37,6 +38,11 @@ import type { AdditionalAgentHandlers, AgentV3State } from './types';
 import type { AgentStreamHandler, Message, UserMessageEvent } from '../../types/agent';
 import type { StoreApi } from 'zustand';
 
+function getPreferredLanguage(): 'en-US' | 'zh-CN' {
+  const language = i18n.resolvedLanguage || i18n.language;
+  return language === 'zh-CN' || language === 'zh' ? 'zh-CN' : 'en-US';
+}
+
 export interface MessageSendActionDeps {
   get: () => {
     activeConversationId: string | null;
@@ -56,7 +62,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
     sendMessage: async (
       content: string,
       projectId: string,
-      additionalHandlers?: AdditionalAgentHandlers,
+      additionalHandlers?: AdditionalAgentHandlers
     ): Promise<string | null> => {
       const { activeConversationId, getStreamingConversationCount } = get();
       const messages = useTimelineStore.getState().agentMessages;
@@ -79,10 +85,9 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
 
       if (!conversationId) {
         try {
-          const newConv = await useConversationsStore.getState().createConversation(
-            projectId,
-            content.slice(0, 30) + '...'
-          );
+          const newConv = await useConversationsStore
+            .getState()
+            .createConversation(projectId, content.slice(0, 30) + '...');
           conversationId = newConv.id;
           isNewConversation = true;
           resetCanvasForConversationScope();
@@ -211,6 +216,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
               conversation_id: conversationId,
               message: content,
               project_id: projectId,
+              preferred_language: getPreferredLanguage(),
               file_metadata: additionalHandlers?.fileMetadata,
               forced_skill_name: additionalHandlers?.forcedSkillName,
               app_model_context: appCtx ?? undefined,
@@ -241,6 +247,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
             conversation_id: conversationId,
             message: content,
             project_id: projectId,
+            preferred_language: getPreferredLanguage(),
             file_metadata: additionalHandlers?.fileMetadata,
             forced_skill_name: additionalHandlers?.forcedSkillName,
             app_model_context: appCtx2 ?? undefined,

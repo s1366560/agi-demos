@@ -36,6 +36,7 @@ class SendMessageHandler(WebSocketMessageHandler):
         conversation_id = message.get("conversation_id")
         user_message = message.get("message")
         project_id = message.get("project_id")
+        preferred_language = message.get("preferred_language")
         attachment_ids = message.get("attachment_ids")
         file_metadata = message.get("file_metadata")
         forced_skill_name = message.get("forced_skill_name")
@@ -53,6 +54,8 @@ class SendMessageHandler(WebSocketMessageHandler):
         assert isinstance(conversation_id, str)
         assert isinstance(user_message, str)
         assert isinstance(project_id, str)
+        if preferred_language not in {"en-US", "zh-CN"}:
+            preferred_language = None
 
         try:
             container = context.get_scoped_container()
@@ -130,6 +133,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     conversation_id=conversation_id,
                     user_message=user_message,
                     project_id=project_id,
+                    preferred_language=preferred_language,
                     attachment_ids=attachment_ids,
                     file_metadata=file_metadata,
                     forced_skill_name=forced_skill_name,
@@ -260,6 +264,7 @@ async def stream_agent_to_websocket(
     conversation_id: str,
     user_message: str,
     project_id: str,
+    preferred_language: str | None = None,
     attachment_ids: list[str] | None = None,
     file_metadata: list[dict[str, Any]] | None = None,
     forced_skill_name: str | None = None,
@@ -283,6 +288,7 @@ async def stream_agent_to_websocket(
             project_id=project_id,
             user_id=context.user_id,
             tenant_id=context.tenant_id,
+            preferred_language=preferred_language,
             attachment_ids=attachment_ids,
             file_metadata=file_metadata,
             forced_skill_name=forced_skill_name,

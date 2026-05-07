@@ -27,6 +27,7 @@ class AgentServicePort(ABC):
         project_id: str,
         user_id: str,
         tenant_id: str,
+        preferred_language: str | None = None,
         attachment_ids: list[str] | None = None,
         file_metadata: list[dict[str, Any]] | None = None,
         forced_skill_name: str | None = None,

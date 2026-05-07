@@ -161,7 +161,7 @@ async def test_start_chat_actor_local_mode_uses_local_only(
             new_callable=AsyncMock,
             return_value=tenant_agent_config,
         ),
-        patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock),
+        patch.object(bootstrapper, "_run_chat_local", new_callable=AsyncMock) as local_run_mock,
         patch("asyncio.create_task", side_effect=_capture_task) as create_task_mock,
     ):
         actor_id = await bootstrapper.start_chat_actor(
@@ -169,10 +169,12 @@ async def test_start_chat_actor_local_mode_uses_local_only(
             message_id="msg-1",
             user_message="hello",
             conversation_context=[],
+            preferred_language="zh-CN",
         )
 
     assert actor_id == "agent:tenant-1:proj-1:default"
     register_local_mock.assert_awaited_once_with("tenant-1", "proj-1")
+    assert local_run_mock.call_args.args[1].preferred_language == "zh-CN"
     create_task_mock.assert_called_once()
     assert len(created_tasks) == 1
 

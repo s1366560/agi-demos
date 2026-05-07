@@ -103,8 +103,8 @@ export function StatusTab({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-border-light bg-surface-muted px-4 py-4 dark:border-border-dark dark:bg-background-dark/35">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <section className="rounded-lg border border-border-light bg-surface-muted px-4 py-4 dark:border-border-dark dark:bg-background-dark/35">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.statusOverviewTitle', 'Status and presence')}
@@ -158,7 +158,7 @@ export function StatusTab({
         refreshToken={planRefreshToken}
       />
 
-      <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+      <section className="rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
@@ -210,19 +210,13 @@ export function StatusTab({
             />
             <DiagnosticsList
               title={t('blackboard.executionDiagnosticsEvidenceGaps', 'Evidence gaps')}
-              emptyLabel={t(
-                'blackboard.executionDiagnosticsNoEvidenceGaps',
-                'No evidence gaps'
-              )}
+              emptyLabel={t('blackboard.executionDiagnosticsNoEvidenceGaps', 'No evidence gaps')}
               rows={diagnosticsSignals.evidenceGaps}
               kind="evidence"
             />
             <DiagnosticsList
               title={t('blackboard.executionDiagnosticsToolFailures', 'Tool failures')}
-              emptyLabel={t(
-                'blackboard.executionDiagnosticsNoToolFailures',
-                'No tool failures'
-              )}
+              emptyLabel={t('blackboard.executionDiagnosticsNoToolFailures', 'No tool failures')}
               rows={diagnosticsSignals.toolFailures}
               kind="tool"
             />
@@ -230,7 +224,7 @@ export function StatusTab({
         )}
       </section>
 
-      <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+      <section className="rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
@@ -341,7 +335,7 @@ export function StatusTab({
 
       <PresenceBar workspaceId={workspaceId} />
 
-      <section className="rounded-xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+      <section className="rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark-alt">
         <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
           {t('blackboard.agentStatusTitle', 'Agent status')}
         </h3>
@@ -414,9 +408,7 @@ function DiagnosticsList({
   return (
     <div className="rounded-lg border border-border-light bg-surface-muted p-3 dark:border-border-dark dark:bg-background-dark/35">
       <div className="flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
-          {title}
-        </h4>
+        <h4 className="text-sm font-semibold text-text-primary dark:text-text-inverse">{title}</h4>
         <span className="rounded-full border border-border-light bg-surface-light px-2 py-0.5 text-[10px] font-semibold text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
           {String(rows.length)}
         </span>

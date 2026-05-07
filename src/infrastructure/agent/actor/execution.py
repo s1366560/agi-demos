@@ -542,6 +542,32 @@ def _inject_app_model_context(
     return [context_msg, *conversation_context]
 
 
+def _inject_preferred_language_context(
+    conversation_context: list[dict[str, Any]],
+    preferred_language: str | None,
+) -> list[dict[str, Any]]:
+    if preferred_language == "zh-CN":
+        content = (
+            "[Response Language]\n"
+            "The user's selected UI language for this turn is Simplified Chinese (zh-CN). "
+            "Write assistant prose in Simplified Chinese unless the user explicitly asks "
+            "for another language. Do not translate quoted user content, code, logs, "
+            "file paths, task titles, artifact names, or persisted workspace data."
+        )
+    elif preferred_language == "en-US":
+        content = (
+            "[Response Language]\n"
+            "The user's selected UI language for this turn is English (en-US). "
+            "Write assistant prose in English unless the user explicitly asks for another "
+            "language. Do not translate quoted user content, code, logs, file paths, "
+            "task titles, artifact names, or persisted workspace data."
+        )
+    else:
+        return conversation_context
+
+    return [{"role": "system", "content": content}, *conversation_context]
+
+
 async def _load_persisted_agent_config(conversation_id: str) -> dict[str, Any] | None:
     """Load persisted agent_config from the conversation record.
 
@@ -597,8 +623,9 @@ async def execute_project_chat(
             conversation_id=request.conversation_id,
             user_message=request.user_message,
             user_id=request.user_id,
-            conversation_context=_inject_app_model_context(
-                request.conversation_context, request.app_model_context
+            conversation_context=_inject_preferred_language_context(
+                _inject_app_model_context(request.conversation_context, request.app_model_context),
+                request.preferred_language,
             ),
             tenant_id=agent.config.tenant_id,
             message_id=request.message_id,
@@ -1237,9 +1264,7 @@ async def _publish_error_event(
 
     try:
         redis_client = await _get_redis_client()
-        await redis_client.xadd(
-            stream_key, {"data": json.dumps(error_event)}, maxlen=1000
-        )
+        await redis_client.xadd(stream_key, {"data": json.dumps(error_event)}, maxlen=1000)
     except Exception as e:
         logger.error(
             f"[ActorExecution] Failed to publish error event to Redis: {e}",
