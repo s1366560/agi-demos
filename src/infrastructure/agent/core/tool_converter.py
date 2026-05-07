@@ -8,6 +8,7 @@ Supports both legacy class-based tools (AgentToolBase subclasses) and new
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any, cast
 
@@ -63,19 +64,27 @@ def _resolve_execute_method(
 
     Returns:
         Tuple of (bound method, is_async) or None if no method found.
+
+    Async detection uses :func:`inspect.iscoroutinefunction` so a sync
+    ``execute`` that happens to live on a class with that name does not get
+    awaited (and a true async ``__call__`` is correctly awaited).
     """
-    method_candidates: list[tuple[str, bool]] = [
-        ("execute", True),  # may be sync or async; caller checks
-        ("ainvoke", True),
-        ("_arun", True),
-        ("_run", False),
-        ("run", False),
-        ("__call__", True),  # Support plugin tools that only implement __call__
+    method_candidates: list[str] = [
+        "execute",
+        "ainvoke",
+        "_arun",
+        "_run",
+        "run",
+        "__call__",
     ]
-    for attr, is_async in method_candidates:
+    for attr in method_candidates:
         method = getattr(tool_instance, attr, None)
-        if method is not None:
-            return method, is_async
+        if method is None:
+            continue
+        is_async = inspect.iscoroutinefunction(method) or inspect.iscoroutinefunction(
+            getattr(method, "__func__", method)
+        )
+        return method, is_async
     return None
 
 
@@ -91,11 +100,14 @@ def _make_execute_wrapper(tool_instance: Any, tool_name: str) -> Any:
                 raise ValueError(f"Tool {tool_name} has no execute method")
             method, is_async = resolved
             if is_async:
-                result = method(**kwargs)
-                if hasattr(result, "__await__"):
-                    return await result
-                return result
-            return method(**kwargs)
+                # Method is a coroutine function -> always returns awaitable.
+                return await method(**kwargs)
+            result = method(**kwargs)
+            # Defensive: a sync-typed callable may still return an awaitable
+            # at runtime (e.g. duck-typed wrappers); await it if so.
+            if inspect.isawaitable(result):
+                return await result
+            return result
         except Exception:
             # Do NOT leak the raw exception text to the LLM: it can
             # contain stack traces, file paths, secrets pulled from env
@@ -209,7 +221,6 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
                 _tool_instance=tool,
             )
         )
-
 
     # Lazy import to avoid basedpyright resolution timing issues
     from src.infrastructure.agent.prompts import tool_summaries as _ts

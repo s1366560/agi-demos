@@ -60,12 +60,16 @@ class DefaultMessageRouter:
         return None
 
     async def register_binding(self, binding: MessageBinding) -> None:
-        self._bindings[binding.id] = binding
+        # Persist first so a save failure does NOT leave a binding dangling
+        # in the in-memory cache that no other process can see.
         await self._binding_repo.save(binding)
+        self._bindings[binding.id] = binding
 
     async def remove_binding(self, binding_id: str) -> None:
-        self._bindings.pop(binding_id, None)
+        # Symmetric: remove from cache only after the persistent delete
+        # succeeds, so a failed delete does not lose the in-memory binding.
         await self._binding_repo.delete(binding_id)
+        self._bindings.pop(binding_id, None)
 
     @staticmethod
     def _matches_scope(binding: MessageBinding, context: RoutingContext) -> bool:

@@ -26,6 +26,12 @@ from src.infrastructure.agent.routing.execution_router import (
 
 logger = logging.getLogger(__name__)
 
+# Hard cap on classified message length. Beyond this we truncate before
+# evaluating any keyword/regex match: this bounds worst-case match time
+# in the face of pathological user input combined with a custom pattern
+# that has catastrophic backtracking properties.
+_MAX_CLASSIFY_LEN = 4096
+
 
 @dataclass(frozen=True)
 class IntentPattern:
@@ -88,6 +94,8 @@ class IntentGate:
             return None
 
         normalized = message.strip().lower()
+        if len(normalized) > _MAX_CLASSIFY_LEN:
+            normalized = normalized[:_MAX_CLASSIFY_LEN]
         best_match: IntentPattern | None = None
         best_score: float = 0.0
 
@@ -124,9 +132,19 @@ class IntentGate:
     ) -> float:
         """Score how well a message matches a pattern."""
         keyword_match = any(kw in normalized_message for kw in pattern.keywords)
-        regex_match = (
-            pattern.regex is not None and pattern.regex.search(normalized_message) is not None
-        )
+        regex_match = False
+        if pattern.regex is not None:
+            try:
+                regex_match = pattern.regex.search(normalized_message) is not None
+            except re.error:
+                # Pattern is registered as a compiled re.Pattern, but defensive
+                # coding: a custom subclass could still raise here. Treat as
+                # no-match rather than letting one bad pattern poison routing.
+                logger.warning(
+                    "[IntentGate] regex evaluation failed for pattern %s",
+                    pattern.name,
+                )
+                regex_match = False
 
         if keyword_match or regex_match:
             return pattern.confidence

@@ -27,7 +27,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, cast
 
 from src.domain.events.agent_events import (
     AgentActDeltaEvent,
@@ -203,6 +203,46 @@ class ProcessorConfig:
     control_channel: ControlChannelPort | None = None
     # Multi-agent: run identifier for this SubAgent execution (used as control channel key)
     run_id: str | None = None
+
+    # Hard ceilings — defensive bounds against misconfiguration / a malicious
+    # agent definition setting absurd values that would let a single ReAct
+    # session monopolize a worker indefinitely.
+    HARD_MAX_STEPS: ClassVar[int] = 1000
+    HARD_MAX_COST_PER_REQUEST: ClassVar[float] = 1000.0  # USD
+
+    def __post_init__(self) -> None:
+        """Validate runtime bounds on numeric limits.
+
+        Per the audit (P1-12): unbounded ``max_steps`` or ``max_cost_per_request``
+        let a misbehaving / hijacked agent loop forever or spend without bound.
+        ``0`` is treated as a sentinel for "use platform default" rather than
+        "unlimited"; negative values are always invalid.
+        """
+        if self.max_steps <= 0 or self.max_steps > self.HARD_MAX_STEPS:
+            raise ValueError(
+                f"ProcessorConfig.max_steps must be in [1, {self.HARD_MAX_STEPS}], "
+                f"got {self.max_steps}"
+            )
+        if self.max_tool_calls_per_step <= 0 or self.max_tool_calls_per_step > 100:
+            raise ValueError(
+                "ProcessorConfig.max_tool_calls_per_step must be in [1, 100], "
+                f"got {self.max_tool_calls_per_step}"
+            )
+        if self.max_cost_per_request < 0:
+            raise ValueError(
+                f"ProcessorConfig.max_cost_per_request must be >= 0, "
+                f"got {self.max_cost_per_request}"
+            )
+        if self.max_cost_per_request > self.HARD_MAX_COST_PER_REQUEST:
+            raise ValueError(
+                "ProcessorConfig.max_cost_per_request exceeds hard ceiling "
+                f"{self.HARD_MAX_COST_PER_REQUEST}, got {self.max_cost_per_request}"
+            )
+        if self.max_cost_per_session < 0:
+            raise ValueError(
+                f"ProcessorConfig.max_cost_per_session must be >= 0, "
+                f"got {self.max_cost_per_session}"
+            )
 
 
 @dataclass
@@ -679,9 +719,7 @@ class SessionProcessor:
         ):
             yield evt
 
-        todos, action = self._build_workspace_replan_recovery_todowrite_args(
-            self._last_output_str
-        )
+        todos, action = self._build_workspace_replan_recovery_todowrite_args(self._last_output_str)
         async for evt in self._execute_synthetic_tool_call(
             session_id=session_id,
             tool_name="todowrite",
@@ -1595,8 +1633,7 @@ class SessionProcessor:
         if result == ProcessorResult.COMPLETE:
             replan_dispatched = (
                 self._is_workspace_task_ledger_only_turn()
-                and self._pending_completion_status
-                == "goal_achieved:workspace_replan_dispatched"
+                and self._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
             )
             if (
                 self._saw_task_events

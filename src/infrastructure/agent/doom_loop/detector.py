@@ -88,22 +88,31 @@ class DoomLoopDetector:
 
         # Error-pattern tracking
         self._error_threshold = error_threshold if error_threshold is not None else threshold * 2
-        self._consecutive_errors: list[ToolErrorRecord] = []
+        # Bound error history so a long run cannot leak unbounded memory.
+        # We keep at least 2x the threshold so ``should_intervene_on_errors``
+        # still has the data it needs to make a verdict.
+        self._error_history_max = max(self._error_threshold * 2, window_size)
+        self._consecutive_errors: deque[ToolErrorRecord] = deque(maxlen=self._error_history_max)
 
     def _hash_input(self, input: Any) -> str:
         """
         Compute a hash of the tool input for comparison.
 
+        The hash is type-tagged so that ``"42"`` (string) and ``42`` (int) do
+        not collapse to the same key; otherwise a tool that emits varied
+        input types could falsely trip the doom-loop detector.
+
         Args:
             input: The tool input (dict, list, or primitive)
 
         Returns:
-            JSON string hash of the input
+            Stable string hash of the input
         """
         try:
-            return json.dumps(input, sort_keys=True, default=str)
+            payload = json.dumps(input, sort_keys=True, default=str)
         except (TypeError, ValueError):
-            return str(input)
+            payload = str(input)
+        return f"{type(input).__name__}::{payload}"
 
     def record(self, tool: str, input: Any) -> None:
         """
@@ -140,7 +149,7 @@ class DoomLoopDetector:
 
     def reset_errors(self) -> None:
         """Reset the consecutive error counter (call after a successful tool execution)."""
-        self._consecutive_errors = []
+        self._consecutive_errors.clear()
 
     @property
     def consecutive_error_count(self) -> int:
@@ -183,7 +192,7 @@ class DoomLoopDetector:
 
     def get_recent_errors(self, n: int = 5) -> list[ToolErrorRecord]:
         """Return the most recent error records."""
-        return self._consecutive_errors[-n:]
+        return list(self._consecutive_errors)[-n:]
 
     def get_recent_calls(self, n: int = 5) -> list[ToolCallRecord]:
         """
@@ -200,7 +209,7 @@ class DoomLoopDetector:
     def clear(self) -> None:
         """Clear all recorded tool calls and errors."""
         self.window.clear()
-        self._consecutive_errors = []
+        self._consecutive_errors.clear()
 
     def reset_for_new_conversation(self) -> None:
         """Reset detector for a new conversation."""

@@ -129,14 +129,29 @@ class BindingRouter:
 
         Returns:
             AgentRouteResult with resolved agent and route result.
+
+        Raises:
+            ValueError: When ``message.tenant_id`` is missing/empty. Routing
+                without a tenant scope is an invariant violation: a binding
+                lookup with empty tenant would silently match cross-tenant
+                rows in some repositories.
         """
+        tenant_id = (message.tenant_id or "").strip()
+        if not tenant_id:
+            raise ValueError(
+                "BindingRouter.route requires a non-empty tenant_id on the "
+                "ChannelMessage; refusing to perform a cross-tenant lookup."
+            )
+
+        metadata = message.metadata or {}
+
         # Resolve agent via bindings
         agent = await self.resolve_agent(
-            tenant_id=message.tenant_id or "",
+            tenant_id=tenant_id,
             channel_type=message.channel_type,
             channel_id=message.channel_id,
             account_id=message.sender_id,
-            peer_id=message.metadata.get("peer_id"),
+            peer_id=metadata.get("peer_id"),
         )
 
         # Resolve conversation via existing ChannelRouter
