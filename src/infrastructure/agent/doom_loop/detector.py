@@ -8,6 +8,7 @@ failures) even when tool names or arguments vary between calls.
 """
 
 import json
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -94,6 +95,15 @@ class DoomLoopDetector:
         self._error_history_max = max(self._error_threshold * 2, window_size)
         self._consecutive_errors: deque[ToolErrorRecord] = deque(maxlen=self._error_history_max)
 
+        # Defensive concurrency guard. In normal operation a single
+        # SessionProcessor owns its detector and drives it from one
+        # asyncio task, so contention is non-existent. The lock costs
+        # nothing in that case but prevents corruption if a future
+        # caller fans tool execution out across threads (e.g. an
+        # offloaded sync executor) and lets recorders be safely called
+        # from inside ``loop.run_in_executor`` without surprises.
+        self._lock = threading.Lock()
+
     def _hash_input(self, input: Any) -> str:
         """
         Compute a hash of the tool input for comparison.
@@ -122,14 +132,14 @@ class DoomLoopDetector:
             tool: Name of the tool called
             input: Input arguments passed to the tool
         """
-        self.window.append(
-            ToolCallRecord(
-                tool=tool,
-                input=input,
-                input_hash=self._hash_input(input),
-                timestamp=time.time(),
-            )
+        record = ToolCallRecord(
+            tool=tool,
+            input=input,
+            input_hash=self._hash_input(input),
+            timestamp=time.time(),
         )
+        with self._lock:
+            self.window.append(record)
 
     def record_error(self, tool: str, error: str) -> None:
         """
@@ -143,18 +153,20 @@ class DoomLoopDetector:
             tool: Name of the tool that errored
             error: Error message
         """
-        self._consecutive_errors.append(
-            ToolErrorRecord(tool=tool, error=error, timestamp=time.time())
-        )
+        record = ToolErrorRecord(tool=tool, error=error, timestamp=time.time())
+        with self._lock:
+            self._consecutive_errors.append(record)
 
     def reset_errors(self) -> None:
         """Reset the consecutive error counter (call after a successful tool execution)."""
-        self._consecutive_errors.clear()
+        with self._lock:
+            self._consecutive_errors.clear()
 
     @property
     def consecutive_error_count(self) -> int:
         """Return the current number of consecutive tool errors."""
-        return len(self._consecutive_errors)
+        with self._lock:
+            return len(self._consecutive_errors)
 
     def should_intervene(self, tool: str, input: Any) -> bool:
         """
@@ -170,11 +182,11 @@ class DoomLoopDetector:
         Returns:
             True if intervention is needed, False otherwise
         """
-        if len(self.window) < self.threshold:
-            return False
-
         input_hash = self._hash_input(input)
-        recent = list(self.window)[-self.threshold :]
+        with self._lock:
+            if len(self.window) < self.threshold:
+                return False
+            recent = list(self.window)[-self.threshold :]
 
         return all(record.tool == tool and record.input_hash == input_hash for record in recent)
 
@@ -188,11 +200,13 @@ class DoomLoopDetector:
         Returns:
             True if error-based intervention is needed, False otherwise.
         """
-        return len(self._consecutive_errors) >= self._error_threshold
+        with self._lock:
+            return len(self._consecutive_errors) >= self._error_threshold
 
     def get_recent_errors(self, n: int = 5) -> list[ToolErrorRecord]:
         """Return the most recent error records."""
-        return list(self._consecutive_errors)[-n:]
+        with self._lock:
+            return list(self._consecutive_errors)[-n:]
 
     def get_recent_calls(self, n: int = 5) -> list[ToolCallRecord]:
         """
@@ -204,12 +218,14 @@ class DoomLoopDetector:
         Returns:
             List of recent ToolCallRecord objects
         """
-        return list(self.window)[-n:]
+        with self._lock:
+            return list(self.window)[-n:]
 
     def clear(self) -> None:
         """Clear all recorded tool calls and errors."""
-        self.window.clear()
-        self._consecutive_errors.clear()
+        with self._lock:
+            self.window.clear()
+            self._consecutive_errors.clear()
 
     def reset_for_new_conversation(self) -> None:
         """Reset detector for a new conversation."""
