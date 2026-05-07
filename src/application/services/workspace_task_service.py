@@ -687,8 +687,7 @@ class WorkspaceTaskService:
 
                 increment_counter(
                     "friction_ingest_failed_total",
-                    "Number of failed friction ledger writes from "
-                    "workspace lane transitions.",
+                    "Number of failed friction ledger writes from workspace lane transitions.",
                     attributes={"from_lane": from_lane, "to_lane": to_lane},
                 )
             except Exception:
@@ -727,8 +726,7 @@ class WorkspaceTaskService:
             return
         if authority.role == "leader":
             if status in {WorkspaceTaskStatus.DONE, WorkspaceTaskStatus.BLOCKED}:
-                current_attempt_id = task.metadata.get(CURRENT_ATTEMPT_ID)
-                if not isinstance(current_attempt_id, str) or not current_attempt_id:
+                if not _has_current_attempt_for_finalization(task, metadata):
                     raise PermissionError(
                         "Leader must adjudicate a concrete execution attempt before finalizing an execution task"
                     )
@@ -783,8 +781,7 @@ class WorkspaceTaskService:
             await self._ensure_root_not_todo_for_child_start(workspace_id=workspace_id, task=task)
         if authority.role == "leader":
             if target in {WorkspaceTaskStatus.DONE, WorkspaceTaskStatus.BLOCKED}:
-                current_attempt_id = task.metadata.get(CURRENT_ATTEMPT_ID)
-                if not isinstance(current_attempt_id, str) or not current_attempt_id:
+                if not _has_current_attempt_for_finalization(task, None):
                     raise PermissionError(
                         "Leader must adjudicate a concrete execution attempt before finalizing an execution task"
                     )
@@ -859,3 +856,14 @@ class WorkspaceTaskService:
             allowed = ", ".join(repr(value) for value in cls._PUBLIC_PRIORITY_TO_INTERNAL)
             raise ValueError(f"Unsupported priority {priority!r}. Expected one of: {allowed}")
         return cls._PUBLIC_PRIORITY_TO_INTERNAL[normalized]
+
+
+def _has_current_attempt_for_finalization(
+    task: WorkspaceTask,
+    metadata_patch: Mapping[str, object] | None,
+) -> bool:
+    if metadata_patch is not None and CURRENT_ATTEMPT_ID in metadata_patch:
+        current_attempt_id = metadata_patch.get(CURRENT_ATTEMPT_ID)
+    else:
+        current_attempt_id = task.metadata.get(CURRENT_ATTEMPT_ID)
+    return isinstance(current_attempt_id, str) and bool(current_attempt_id.strip())

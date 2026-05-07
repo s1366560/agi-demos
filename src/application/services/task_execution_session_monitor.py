@@ -748,7 +748,7 @@ def _metadata_patch(
         "conversation_id": before.conversation_id,
         "incident_types": [incident.type for incident in before.incidents],
     }
-    return {
+    patch: dict[str, object] = {
         "task_execution_session_health": before.health,
         "task_execution_session_status": before.session_status,
         "task_execution_session_last_error": before.last_error,
@@ -757,6 +757,9 @@ def _metadata_patch(
         .replace("+00:00", "Z"),
         "execution_recovery_actions": [entry, *ledger][:_MAX_RECOVERY_LEDGER_ITEMS],
     }
+    if before.attempt_id:
+        patch[CURRENT_ATTEMPT_ID] = before.attempt_id
+    return patch
 
 
 def _recovery_ledger(metadata: Mapping[str, Any]) -> list[dict[str, Any]]:

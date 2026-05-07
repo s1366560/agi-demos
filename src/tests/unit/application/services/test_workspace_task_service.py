@@ -651,3 +651,44 @@ class TestWorkspaceTaskService:
         )
 
         assert updated.status == WorkspaceTaskStatus.DONE
+
+    @pytest.mark.asyncio
+    async def test_leader_can_block_child_with_attempt_in_same_metadata_patch(
+        self,
+        workspace_task_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_task_repo: MagicMock,
+    ) -> None:
+        from src.application.services.workspace_task_service import WorkspaceTaskAuthorityContext
+
+        root_task = _make_root_task(status=WorkspaceTaskStatus.IN_PROGRESS)
+        child_task = _make_execution_task(status=WorkspaceTaskStatus.IN_PROGRESS)
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "member-1", WorkspaceRole.EDITOR
+        )
+        mock_task_repo.find_by_id.side_effect = lambda task_id: {
+            "child-1": child_task,
+            "root-1": root_task,
+        }.get(task_id)
+        mock_task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child_task])
+        mock_task_repo.save.side_effect = lambda task: task
+
+        updated = await workspace_task_service.update_task(
+            workspace_id="ws-1",
+            task_id="child-1",
+            actor_user_id="member-1",
+            status=WorkspaceTaskStatus.BLOCKED,
+            blocker_reason="Recovery budget exhausted",
+            metadata={
+                "current_attempt_id": "attempt-1",
+                "task_execution_session_health": "degraded",
+                "task_execution_session_status": "requires_human",
+            },
+            authority=WorkspaceTaskAuthorityContext.leader("leader-agent"),
+        )
+
+        assert updated.status == WorkspaceTaskStatus.BLOCKED
+        assert updated.metadata["current_attempt_id"] == "attempt-1"
+        assert updated.metadata["task_execution_session_status"] == "requires_human"

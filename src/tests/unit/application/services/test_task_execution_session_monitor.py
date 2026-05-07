@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.task_execution_session_monitor import TaskExecutionSessionMonitor
+from src.application.services.task_execution_session_monitor import (
+    TaskExecutionIncident,
+    TaskExecutionSessionMonitor,
+    TaskExecutionSessionState,
+)
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
@@ -153,3 +157,61 @@ class TestTaskExecutionSessionMonitor:
             actor_user_id=test_user.id,
         )
         attempt_repo.find_by_workspace_task_id.assert_awaited_once_with(task.id, limit=5)
+
+    async def test_mark_human_blocked_patches_current_attempt_id_for_task_guard(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        task = _task()
+        task.metadata.pop("current_attempt_id")
+        before = TaskExecutionSessionState(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            task_status="in_progress",
+            health="degraded",
+            session_status="initialization_failed",
+            conversation_id="conv-session-monitor-1",
+            attempt_id="attempt-session-monitor-1",
+            attempt_status="running",
+            execution_status=None,
+            last_event_at=_NOW,
+            last_assistant_event_at=None,
+            last_error="Agent initialization failed",
+            has_user_input=True,
+            has_assistant_output=False,
+            incidents=(
+                TaskExecutionIncident(
+                    type="agent_initialization_failed",
+                    severity="error",
+                    summary="Agent initialization failed.",
+                    opened_at=_NOW,
+                ),
+            ),
+            recommended_recovery_action="mark_human_blocked",
+            available_interventions=("mark_human_blocked",),
+        )
+        task_service = AsyncMock()
+        task_service.get_task.return_value = task
+        command_service = AsyncMock()
+        attempt_repo = AsyncMock()
+        attempt_repo.find_by_id.return_value = _attempt()
+        service = TaskExecutionSessionMonitor(
+            db=db_session,
+            task_service=task_service,
+            command_service=command_service,
+            attempt_repo=attempt_repo,
+        )
+        service.get_state = AsyncMock(side_effect=[before, before])  # type: ignore[method-assign]
+
+        result = await service.apply_recovery_action(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            actor_user_id="user-session-monitor-1",
+            action="mark_human_blocked",
+            reason="recovery budget exhausted",
+        )
+
+        assert result.status == "completed"
+        metadata = command_service.update_task.await_args.kwargs["metadata"]
+        assert metadata["current_attempt_id"] == "attempt-session-monitor-1"
+        assert metadata["task_execution_session_status"] == "initialization_failed"
