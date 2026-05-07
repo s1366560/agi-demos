@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import uuid
 from typing import Any, cast
 
 from src.infrastructure.agent.tools.define import ToolInfo
@@ -95,6 +96,10 @@ def _make_execute_wrapper(tool_instance: Any, tool_name: str) -> Any:
 
     async def execute_wrapper(**kwargs: Any) -> Any:
         """Wrapper to execute tool."""
+        # The legacy non-pipeline path has no ToolContext, but observability
+        # still requires a stable per-invocation correlator. Synthesize one
+        # so error logs are never anonymous.
+        call_id = uuid.uuid4().hex
         try:
             if resolved is None:
                 raise ValueError(f"Tool {tool_name} has no execute method")
@@ -115,7 +120,7 @@ def _make_execute_wrapper(tool_instance: Any, tool_name: str) -> Any:
             # server, return a structured, safe error to the model.
             logger.exception(
                 "[tool_converter] tool execution failed",
-                extra={"tool": tool_name},
+                extra={"tool_name": tool_name, "call_id": call_id},
             )
             return {
                 "error": "tool_execution_failed",
@@ -143,10 +148,14 @@ def _make_toolinfo_execute_wrapper(tool_info: ToolInfo) -> Any:
 
         from src.infrastructure.agent.tools.context import ToolContext
 
+        # Synthesize a non-empty call_id so error correlation is never lost
+        # on the legacy (pipeline-less) path. The real pipeline path passes
+        # its own ToolContext via _ToolAdapter and never reaches this stub.
+        call_id = uuid.uuid4().hex
         ctx = ToolContext(
             session_id="",
             message_id="",
-            call_id="",
+            call_id=call_id,
             agent_name="",
             conversation_id="",
             abort_signal=asyncio.Event(),
@@ -156,7 +165,7 @@ def _make_toolinfo_execute_wrapper(tool_info: ToolInfo) -> Any:
         except Exception:
             logger.exception(
                 "[tool_converter] ToolInfo execution failed",
-                extra={"tool": tool_info.name},
+                extra={"tool_name": tool_info.name, "call_id": call_id},
             )
             return {
                 "error": "tool_execution_failed",
