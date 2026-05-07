@@ -259,7 +259,7 @@ class RayHITLHandler:
         return allowed_values
 
     @classmethod
-    def _matches_request_semantics(
+    def _matches_request_semantics(  # noqa: PLR0912
         cls,
         request: HITLRequest,
         response_data: dict[str, Any],
@@ -328,14 +328,17 @@ class RayHITLHandler:
                 and bool(source_component_id.strip())
                 and isinstance(action_context, dict)
             )
-            if basic_shape_is_valid and request.a2ui_data.allowed_actions:
+            if not basic_shape_is_valid:
+                is_valid = False
+            else:
+                # Strict allowed_actions enforcement: an empty allow-list means
+                # the surface published no actionable affordances and MUST NOT
+                # accept any client-supplied action (P1-16).
                 allowed_pairs = {
                     (entry.get("source_component_id", ""), entry.get("action_name", ""))
                     for entry in request.a2ui_data.allowed_actions
                 }
                 is_valid = (source_component_id, action_name) in allowed_pairs
-            else:
-                is_valid = basic_shape_is_valid
         else:
             is_valid = True
         return is_valid
