@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+# Transitional alias table for UI/Claude-style tool names referenced in policy
+# YAML and tenant agent definitions (e.g. ``Read``, ``WebSearch``). Runtime
+# alias resolution for live tool calls now lives on ``ToolDefinition.aliases``
+# (P2-19); this table is retained for one deprecation cycle so existing
+# allow/deny declarations keep working and will be removed once policy data is
+# migrated to the canonical names.
 _TOOL_NAME_ALIASES: dict[str, str] = {
     "bash": "bash",
     "edit": "edit",

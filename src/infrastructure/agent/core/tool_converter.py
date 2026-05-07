@@ -202,6 +202,7 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
                     parameters=tool.parameters,
                     execute=_make_toolinfo_execute_wrapper(tool),
                     permission=tool.permission,
+                    aliases=tool.aliases,
                     _tool_instance=tool,  # ToolInfo stored for pipeline detection
                 )
             )
@@ -211,6 +212,8 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
         if not _is_tool_visible_to_model(tool):
             continue
 
+        legacy_aliases_raw = getattr(tool, "aliases", ())
+        legacy_aliases: tuple[str, ...] = tuple(legacy_aliases_raw) if legacy_aliases_raw else ()
         definitions.append(
             ToolDefinition(
                 name=name,
@@ -218,6 +221,7 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
                 parameters=_get_tool_parameters(tool),
                 execute=_make_execute_wrapper(tool, name),
                 permission=getattr(tool, "permission", None),
+                aliases=legacy_aliases,
                 _tool_instance=tool,
             )
         )

@@ -78,6 +78,7 @@ class ToolInfo:
     tags: frozenset[str] = field(default_factory=lambda: frozenset[str]())
     execution_context: ExecutionContext | None = None
     dependencies: RuntimeDependencies | None = None
+    aliases: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +105,7 @@ def pop_registered_tool(name: str) -> ToolInfo:
     """
     return _TOOL_REGISTRY.pop(name)
 
+
 # ---------------------------------------------------------------------------
 # @tool_define decorator
 # ---------------------------------------------------------------------------
@@ -120,6 +122,7 @@ def tool_define(
     tags: frozenset[str] | None = None,
     execution_context: ExecutionContext | None = None,
     dependencies: RuntimeDependencies | None = None,
+    aliases: tuple[str, ...] = (),
 ) -> Callable[[Callable[..., Awaitable[Any]]], ToolInfo]:
     """Decorator factory that converts an async function into a :class:`ToolInfo`.
 
@@ -158,6 +161,7 @@ def tool_define(
             tags=tags if tags is not None else frozenset(),
             execution_context=execution_context,
             dependencies=dependencies,
+            aliases=aliases,
         )
         # Attach metadata to the original function for introspection.
         fn._tool_info = info  # type: ignore[attr-defined]

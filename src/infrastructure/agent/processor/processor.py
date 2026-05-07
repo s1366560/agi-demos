@@ -95,15 +95,6 @@ from .run_context import RunContext
 
 logger = logging.getLogger(__name__)
 
-_TOOL_NAME_ALIASES: dict[str, str] = {
-    "memorysearch": "memory_search",
-    "entitylookup": "entity_lookup",
-    "graphquery": "graph_query",
-    "memorycreate": "memory_create",
-    "memoryget": "memory_get",
-    "episoderetrieval": "episode_retrieval",
-}
-
 
 async def _iter_events(
     events: list["ProcessorEvent"],
@@ -254,6 +245,7 @@ class ToolDefinition:
     parameters: dict[str, Any]
     execute: Callable[..., Any]  # Async callable
     permission: str | None = None  # Permission required
+    aliases: tuple[str, ...] = ()  # Alternate names accepted by canonicalization
     _tool_instance: Any = field(default=None, repr=False)  # Original tool object
 
     def to_openai_format(self) -> dict[str, Any]:
@@ -2381,22 +2373,32 @@ class SessionProcessor:
     # ── _execute_tool helper methods ──────────────────────────────────
 
     def _canonicalize_tool_name(self, tool_name: str) -> str:
-        """Resolve common aliases/casing variants to a registered tool name."""
+        """Resolve common aliases/casing variants to a registered tool name.
+
+        Single-pass traversal of the tool registry consulting:
+          1. exact match
+          2. casefold match against name
+          3. casefold match against any declared alias (ToolDefinition.aliases)
+          4. compact (alphanumeric-only) match against name or aliases
+          5. CamelCase / kebab / space normalization to snake_case fallback
+        """
         if not tool_name:
             return tool_name
 
         if tool_name in self.tools:
             return tool_name
 
-        lowered = tool_name.lower()
-        for known in self.tools:
-            if known.lower() == lowered:
-                return known
+        folded = tool_name.casefold()
+        compact = re.sub(r"[^a-z0-9]", "", folded)
 
-        compact = re.sub(r"[^a-z0-9]", "", lowered)
-        alias = _TOOL_NAME_ALIASES.get(compact)
-        if alias and alias in self.tools:
-            return alias
+        for tool_def in self.tools.values():
+            candidates: tuple[str, ...] = (tool_def.name, *tool_def.aliases)
+            for candidate in candidates:
+                cand_folded = candidate.casefold()
+                if cand_folded == folded:
+                    return tool_def.name
+                if re.sub(r"[^a-z0-9]", "", cand_folded) == compact:
+                    return tool_def.name
 
         snake = re.sub(r"(?<!^)(?=[A-Z])", "_", tool_name)
         snake = snake.replace("-", "_").replace(" ", "_").lower()

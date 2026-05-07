@@ -26,8 +26,6 @@ from src.infrastructure.agent.tools.result import ToolResult
 logger = logging.getLogger(__name__)
 
 
-
-
 async def _execute_memory_get(
     session_factory: Callable[..., Any],
     project_id: str,
@@ -187,6 +185,7 @@ async def _search_graph_for_tool(
     },
     permission=None,
     category="memory",
+    aliases=("memorysearch",),
 )
 async def memory_search_tool(
     ctx: ToolContext,
@@ -292,6 +291,7 @@ def configure_memory_get(
     },
     permission=None,
     category="memory",
+    aliases=("memoryget",),
 )
 async def memory_get_tool(
     ctx: ToolContext,
@@ -313,9 +313,7 @@ async def memory_get_tool(
         )
 
     try:
-        data = await _execute_memory_get(
-            _memget_session_factory, _memget_project_id, source_id
-        )
+        data = await _execute_memory_get(_memget_session_factory, _memget_project_id, source_id)
         is_err = "error" in data
         return ToolResult(
             output=json.dumps(data, ensure_ascii=False, default=str),
@@ -340,6 +338,7 @@ _memcreate_project_id: str = ""
 _memcreate_tenant_id: str = ""
 _memcreate_user_id: str = ""
 
+
 def configure_memory_create(
     session_factory: Callable[..., Any],
     graph_service: Any,
@@ -361,8 +360,6 @@ def configure_memory_create(
     _memcreate_project_id = project_id
     _memcreate_tenant_id = tenant_id
     _memcreate_user_id = user_id
-
-
 
 
 async def _execute_memory_create(
@@ -493,6 +490,7 @@ async def _execute_memory_create(
     },
     permission=None,
     category="memory",
+    aliases=("memorycreate",),
 )
 async def memory_create_tool(
     ctx: ToolContext,
@@ -595,9 +593,7 @@ async def _execute_memory_update(
                     memory_id=memory.id,
                     content=memory.content,
                     project_id=memory.project_id,
-                    category=normalize_memory_chunk_category(
-                        memory.metadata.get("category")
-                    ),
+                    category=normalize_memory_chunk_category(memory.metadata.get("category")),
                     metadata={
                         "title": memory.title,
                         "tags": memory.tags,
