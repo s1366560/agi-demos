@@ -9,6 +9,8 @@ from deep inside SQLAlchemy when callers forgot ``container.with_db()``.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from src.configuration.di_container import DIContainer
@@ -42,3 +44,13 @@ class TestRequireDbGuard:
         msg = str(exc_info.value)
         assert "my_provider" in msg
         assert "with_db" in msg
+
+    def test_skill_evolution_plugin_without_db_skips_without_error(self, caplog) -> None:
+        container = DIContainer(db=None, session_factory=object())  # type: ignore[arg-type]
+
+        with caplog.at_level(logging.INFO, logger="src.configuration.di_container"):
+            plugin = container.skill_evolution_plugin()
+
+        assert plugin is None
+        assert "DB-scoped container is required" in caplog.text
+        assert not [record for record in caplog.records if record.levelno >= logging.ERROR]

@@ -156,6 +156,39 @@ def test_execution_task_metadata_accepts_delegation_binding_fields() -> None:
 
 
 @pytest.mark.unit
+def test_execution_task_metadata_accepts_execution_session_recovery_ledger() -> None:
+    metadata = validate_autonomy_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "task_execution_session_health": "degraded",
+            "task_execution_session_status": "initialization_failed",
+            "task_execution_session_last_error": "Agent initialization failed",
+            "task_execution_session_last_checked_at": "2026-05-07T09:21:55Z",
+            "execution_recovery_actions": [
+                {
+                    "action": "new_attempt",
+                    "status": "queued",
+                    "reason": "startup recovery",
+                    "at": "2026-05-07T09:21:55Z",
+                    "attempt_id": "attempt-1",
+                    "conversation_id": "conv-1",
+                    "incident_types": ["agent_initialization_failed"],
+                }
+            ],
+        }
+    )
+
+    assert metadata["task_execution_session_health"] == "degraded"
+    assert metadata["execution_recovery_actions"][0]["action"] == "new_attempt"
+    assert metadata["execution_recovery_actions"][0]["incident_types"] == [
+        "agent_initialization_failed"
+    ]
+
+
+@pytest.mark.unit
 def test_root_metadata_accepts_workspace_type_and_profile_override() -> None:
     metadata = validate_autonomy_metadata(
         {

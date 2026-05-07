@@ -9,20 +9,28 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
-from src.infrastructure.agent.actor.execution import execute_project_chat
-from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
-from src.infrastructure.agent.core.project_react_agent import (
-    ProjectAgentConfig,
-    ProjectReActAgent,
-)
+if TYPE_CHECKING:
+    from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
+    from src.infrastructure.agent.core.project_react_agent import (
+        ProjectAgentConfig,
+        ProjectReActAgent,
+    )
+
+# Detached local workspace workers are long-lived subprocesses. Avoid retaining
+# idle DB connections in every worker process.
+_ = os.environ.setdefault("MEMSTACK_POSTGRES_POOL_MODE", "null")
 
 logger = logging.getLogger(__name__)
 
 
 async def _run(request_file: Path) -> int:
+    from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+    from src.infrastructure.agent.actor.execution import execute_project_chat
+    from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
+    from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+
     payload = _load_payload(request_file)
     config = ProjectAgentActorConfig(**payload["config"])
     request = ProjectChatRequest(**payload["request"])
@@ -80,6 +88,8 @@ def _load_payload(request_file: Path) -> dict[str, Any]:
 
 
 def _agent_config_from_actor_config(config: ProjectAgentActorConfig) -> ProjectAgentConfig:
+    from src.infrastructure.agent.core.project_react_agent import ProjectAgentConfig
+
     return ProjectAgentConfig(
         tenant_id=config.tenant_id,
         project_id=config.project_id,

@@ -1,15 +1,37 @@
 import logging
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+_NULL_POOL_MODES = frozenset({"null", "none", "disabled"})
+
+
+def _postgres_engine_kwargs() -> dict[str, Any]:
+    pool_mode = os.getenv("MEMSTACK_POSTGRES_POOL_MODE", "").strip().lower()
+    common: dict[str, Any] = {
+        "echo": settings.log_level.upper() == "DEBUG",
+        "pool_recycle": settings.postgres_pool_recycle,
+        "pool_pre_ping": settings.postgres_pool_pre_ping,
+    }
+    if pool_mode in _NULL_POOL_MODES:
+        logger.info("Postgres NullPool enabled for this process")
+        return {**common, "poolclass": NullPool}
+    return {
+        **common,
+        "pool_size": settings.postgres_pool_size,
+        "max_overflow": settings.postgres_max_overflow,
+    }
+
 
 # Configure connection pool for high concurrency (1000+ users)
 # pool_size: Number of connections to maintain
@@ -18,11 +40,7 @@ settings = get_settings()
 # pool_pre_ping: Test connections before using them (detects stale connections)
 engine = create_async_engine(
     settings.postgres_url,
-    echo=settings.log_level.upper() == "DEBUG",
-    pool_size=settings.postgres_pool_size,
-    max_overflow=settings.postgres_max_overflow,
-    pool_recycle=settings.postgres_pool_recycle,
-    pool_pre_ping=settings.postgres_pool_pre_ping,
+    **_postgres_engine_kwargs(),
 )
 
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -40,11 +58,7 @@ if settings.postgres_read_replica_host:
     )
     read_engine = create_async_engine(
         read_url,
-        echo=settings.log_level.upper() == "DEBUG",
-        pool_size=settings.postgres_pool_size,
-        max_overflow=settings.postgres_max_overflow,
-        pool_recycle=settings.postgres_pool_recycle,
-        pool_pre_ping=settings.postgres_pool_pre_ping,
+        **_postgres_engine_kwargs(),
     )
     read_session_factory = async_sessionmaker(
         read_engine, expire_on_commit=False, class_=AsyncSession

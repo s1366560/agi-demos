@@ -231,6 +231,16 @@ class WorkspaceProgressEventModel(ContractModel):
     created_at: str
 
 
+class ExecutionRecoveryActionModel(ContractModel):
+    action: str
+    status: str
+    reason: str | None = None
+    at: str
+    attempt_id: str | None = None
+    conversation_id: str | None = None
+    incident_types: list[str] = Field(default_factory=list)
+
+
 class ExecutionStateModel(ContractModel):
     phase: ExecutionPhase
     last_agent_reason: str
@@ -318,6 +328,11 @@ class ExecutionTaskMetadataModel(ContractModel):
     durable_plan_verdict: str | None = None
     durable_plan_verification_summary: str | None = None
     durable_plan_verified_at: str | None = None
+    task_execution_session_health: str | None = None
+    task_execution_session_status: str | None = None
+    task_execution_session_last_error: str | None = None
+    task_execution_session_last_checked_at: str | None = None
+    execution_recovery_actions: list[ExecutionRecoveryActionModel] = Field(default_factory=list)
     progress_events: list[WorkspaceProgressEventModel] = Field(default_factory=list)
     next_session_briefing: str | None = None
     last_leader_adjudication_status: str | None = None

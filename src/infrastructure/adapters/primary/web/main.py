@@ -104,6 +104,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_llm_providers,
     initialize_redis_client,
     initialize_sandbox_idle_reaper,
+    initialize_task_execution_session_recovery,
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
@@ -113,6 +114,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
+    shutdown_task_execution_session_recovery,
     shutdown_telemetry_services,
     shutdown_workspace_plan_outbox_worker,
     sync_health_checker_providers,
@@ -238,6 +240,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Start Workspace Plan V2 durable outbox worker
     await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
+
+    # Start task/conversation execution-session recovery after the outbox worker
+    # is available to drain any queued retry launches from the startup sweep.
+    await initialize_task_execution_session_recovery(
+        container=container,
+        redis_client=cast(Redis | None, redis_client),
+    )
 
     # Initialize Channel Connection Manager for IM integrations
     channel_manager = await initialize_channel_manager()
@@ -404,6 +413,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Stop workspace autonomy idle waker
     await shutdown_autonomy_idle_waker()
+
+    # Stop task execution session recovery service
+    await shutdown_task_execution_session_recovery()
 
     # Stop Workspace Plan V2 durable outbox worker
     await shutdown_workspace_plan_outbox_worker()

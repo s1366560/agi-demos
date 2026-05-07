@@ -414,6 +414,8 @@ class AgentRuntimeBootstrapper:
             )
             request_path = self._write_local_subprocess_request(config, request)
             try:
+                env = os.environ.copy()
+                _ = env.setdefault("MEMSTACK_POSTGRES_POOL_MODE", "null")
                 process = await asyncio.create_subprocess_exec(
                     sys.executable,
                     "-m",
@@ -422,7 +424,7 @@ class AgentRuntimeBootstrapper:
                     cwd=str(Path.cwd()),
                     stdout=DEVNULL,
                     stderr=None,
-                    env=os.environ.copy(),
+                    env=env,
                     start_new_session=True,
                 )
             except Exception:
@@ -457,13 +459,9 @@ class AgentRuntimeBootstrapper:
         config: ProjectAgentActorConfig,
         request: ProjectChatRequest,
     ) -> Path:
-        request_dir = Path(
-            os.getenv(_LOCAL_SUBPROCESS_REQUEST_DIR, "/tmp/memstack-agent-requests")
-        )
+        request_dir = Path(os.getenv(_LOCAL_SUBPROCESS_REQUEST_DIR, "/tmp/memstack-agent-requests"))
         request_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        file_name = _safe_request_file_name(
-            f"{request.conversation_id}-{request.message_id}.json"
-        )
+        file_name = _safe_request_file_name(f"{request.conversation_id}-{request.message_id}.json")
         request_path = request_dir / file_name
         payload = {
             "config": asdict(config),

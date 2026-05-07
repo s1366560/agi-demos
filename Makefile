@@ -329,6 +329,9 @@ dev-stop: ## Stop all background services
 	done
 	@# Fallback: kill remaining processes by pattern (scoped to current project)
 	@pkill -9 -f "uvicorn src.infrastructure" 2>/dev/null || true
+	@pkill -TERM -f "src.infrastructure.agent.actor.local_chat_worker" 2>/dev/null || true
+	@sleep 1
+	@pkill -9 -f "src.infrastructure.agent.actor.local_chat_worker" 2>/dev/null || true
 	@# Note: vite is already covered by port 3000 above, avoid killing other projects
 	@echo " All services stopped"
 

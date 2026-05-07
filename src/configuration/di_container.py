@@ -806,6 +806,9 @@ class DIContainer:
         """
         if self._session_factory is None:
             return None
+        if self._db is None:
+            logger.info("Skill evolution plugin not initialized: DB-scoped container is required")
+            return None
 
         from src.application.services.llm_provider_manager import (
             get_llm_provider_manager,
@@ -835,9 +838,7 @@ class DIContainer:
                 session_factory=self._session_factory,
             )
         except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception("Failed to initialize skill evolution plugin")
+            logger.exception("Failed to initialize skill evolution plugin")
             return None
 
     def workspace_manager(self) -> Any:

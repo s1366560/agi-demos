@@ -280,6 +280,7 @@ async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_p
 
     subprocess_mock.assert_awaited_once()
     assert subprocess_mock.await_args.kwargs["start_new_session"] is True
+    assert subprocess_mock.await_args.kwargs["env"]["MEMSTACK_POSTGRES_POOL_MODE"] == "null"
     assert created_tasks
     assert AgentRuntimeBootstrapper._local_subprocesses["conv-1"] is process
 
