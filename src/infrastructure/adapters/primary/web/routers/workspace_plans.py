@@ -14,8 +14,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_service import WorkspaceService
+from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
+from src.application.services.workspace_task_event_publisher import WorkspaceTaskEventPublisher
+from src.application.services.workspace_task_service import (
+    WorkspaceTaskAuthorityContext,
+    WorkspaceTaskService,
+)
 from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
+from src.domain.model.workspace.workspace_role import WorkspaceRole
+from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 from src.domain.model.workspace_plan import Plan, PlanNode, PlanNodeId, PlanStatus, Progress
 from src.domain.model.workspace_plan.plan_node import TaskExecution, TaskIntent
 from src.domain.model.workspace_plan.state_machine import transition_execution, transition_intent
@@ -443,6 +451,7 @@ class WorkspacePlanSnapshotResponse(BaseModel):
 
 class WorkspacePlanActionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class WorkspacePlanPipelineRunRequest(WorkspacePlanActionRequest):
@@ -471,6 +480,27 @@ def _get_workspace_service(request: Request, db: AsyncSession) -> WorkspaceServi
     )
 
 
+def _get_workspace_task_service(request: Request, db: AsyncSession) -> WorkspaceTaskService:
+    container = _get_container_with_db(request, db)
+    return WorkspaceTaskService(
+        workspace_repo=container.workspace_repository(),
+        workspace_member_repo=container.workspace_member_repository(),
+        workspace_agent_repo=container.workspace_agent_repository(),
+        workspace_task_repo=container.workspace_task_repository(),
+    )
+
+
+def _get_workspace_task_command_service(
+    request: Request,
+    db: AsyncSession,
+) -> WorkspaceTaskCommandService:
+    return WorkspaceTaskCommandService(_get_workspace_task_service(request, db))
+
+
+def _get_workspace_task_event_publisher(request: Request) -> WorkspaceTaskEventPublisher:
+    return WorkspaceTaskEventPublisher(request.app.state.container.redis())
+
+
 async def _ensure_workspace_access(
     *,
     workspace_id: str,
@@ -482,6 +512,22 @@ async def _ensure_workspace_access(
     _ = await workspace_service.get_workspace(
         workspace_id=workspace_id,
         actor_user_id=current_user.id,
+    )
+
+
+async def _ensure_workspace_editor_access(
+    *,
+    workspace_id: str,
+    request: Request,
+    db: AsyncSession,
+    current_user: User,
+) -> None:
+    workspace_service = _get_workspace_service(request, db)
+    _ = await workspace_service._require_minimum_role(
+        workspace_id=workspace_id,
+        user_id=current_user.id,
+        minimum=WorkspaceRole.EDITOR,
+        error_message="Only workspace owners and editors can accept a plan node after review",
     )
 
 
@@ -504,6 +550,9 @@ def _node_actions(node: PlanNode) -> dict[str, WorkspacePlanActionCapabilityResp
     executable = node.kind.value in {"task", "verify"}
     done = node.intent is TaskIntent.DONE
     blocked = node.intent is TaskIntent.BLOCKED
+    reviewable = blocked or (
+        executable and not done and node.metadata.get("last_verification_passed") is False
+    )
     has_attempt = bool(node.current_attempt_id or node.workspace_task_id)
     return {
         "open_attempt": _action(
@@ -525,6 +574,16 @@ def _node_actions(node: PlanNode) -> dict[str, WorkspacePlanActionCapabilityResp
             enabled=blocked,
             label="Reopen blocked node",
             reason=None if blocked else "Only blocked nodes can be reopened.",
+        ),
+        "accept_with_human_review": _action(
+            enabled=reviewable,
+            label="Accept after review",
+            reason=(
+                None
+                if reviewable
+                else "Only blocked or verification-rework nodes can be accepted after review."
+            ),
+            requires_confirmation=True,
         ),
     }
 
@@ -721,14 +780,19 @@ def _node_gate_status_response(
     )
     evidence_refs = evidence_bundle.evidence_refs[:8]
     if node.intent is TaskIntent.BLOCKED:
+        human_required = _node_human_intervention_required(metadata)
         return WorkspacePlanGateStatusResponse(
             status="blocked",
             summary=_first_metadata_string(metadata, "blocker_reason", "last_error")
             or node.progress.note
-            or "Human intervention is required before this node can advance.",
+            or (
+                "Human intervention is required before this node can advance."
+                if human_required
+                else "Verification needs recovery or rework before this node can advance."
+            ),
             missing=missing,
             evidence_refs=evidence_refs,
-            routing="needs_human_review",
+            routing="needs_human_review" if human_required else "recover",
         )
     if node.intent is TaskIntent.DONE:
         status = "missing" if missing else "passed"
@@ -875,6 +939,17 @@ def _node_blocker_analysis_response(
     gate_status: WorkspacePlanGateStatusResponse,
 ) -> WorkspacePlanBlockerAnalysisResponse | None:
     if node.intent is TaskIntent.BLOCKED:
+        if not _node_human_intervention_required(metadata):
+            return WorkspacePlanBlockerAnalysisResponse(
+                blocker_type="recovery",
+                root_cause=gate_status.summary or node.progress.note,
+                resolution=(
+                    _metadata_string(metadata.get("last_verification_judge_required_next_action"))
+                    or "Route through recovery, rework, or operator review; this is not human-only."
+                ),
+                routing_decision=gate_status.routing or "recover",
+                human_intervention_required=False,
+            )
         return WorkspacePlanBlockerAnalysisResponse(
             blocker_type="human_required",
             root_cause=gate_status.summary or node.progress.note,
@@ -892,6 +967,13 @@ def _node_blocker_analysis_response(
             human_intervention_required=False,
         )
     return None
+
+
+def _node_human_intervention_required(metadata: Mapping[str, Any]) -> bool:
+    return (
+        _metadata_string(metadata.get("last_verification_judge_verdict"))
+        == "blocked_human_required"
+    )
 
 
 def _fill_pipeline_status_from_evidence(metadata: dict[str, Any]) -> None:
@@ -1988,6 +2070,26 @@ def _load_plan_node(plan: Plan, node_id: str) -> PlanNode:
     return node
 
 
+_OPERATOR_CLEARED_RETRY_KEYS = frozenset(
+    {
+        "retry_count",
+        "retry_last_reason",
+        "retry_not_before",
+        "terminal_attempt_retry_count",
+        "terminal_attempt_retry_reason",
+        "terminal_attempt_reconciled_at",
+        "terminal_attempt_status",
+    }
+)
+
+
+def _operator_cleared_retry_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    cleaned = dict(metadata or {})
+    for key in _OPERATOR_CLEARED_RETRY_KEYS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
 def _reset_node_for_operator(
     *,
     node: PlanNode,
@@ -2005,6 +2107,13 @@ def _reset_node_for_operator(
 
     current_time = datetime.now(UTC)
     action_label = "reopened" if action == "operator_node_reopened" else "sent back for replan"
+    metadata = _operator_cleared_retry_metadata(node.metadata)
+    metadata["operator_action"] = {
+        "action": action,
+        "actor_id": actor_id,
+        "reason": reason,
+        "created_at": current_time.isoformat(),
+    }
     return replace(
         node,
         intent=target_intent,
@@ -2016,16 +2125,65 @@ def _reset_node_for_operator(
         ),
         assignee_agent_id=None,
         current_attempt_id=None,
-        metadata={
-            **dict(node.metadata or {}),
-            "operator_action": {
-                "action": action,
-                "actor_id": actor_id,
-                "reason": reason,
-                "created_at": current_time.isoformat(),
-            },
-        },
+        metadata=metadata,
         completed_at=None,
+        updated_at=current_time,
+    )
+
+
+def _accept_node_for_operator_review(
+    *,
+    node: PlanNode,
+    actor_id: str,
+    reason: str | None,
+    evidence_refs: list[str],
+) -> PlanNode:
+    if node.intent is TaskIntent.DONE:
+        raise ValueError("done nodes are already accepted")
+    reviewable = (
+        node.intent is TaskIntent.BLOCKED or node.metadata.get("last_verification_passed") is False
+    )
+    if not reviewable:
+        raise ValueError("only blocked or verification-rework nodes can be accepted after review")
+    current_time = datetime.now(UTC)
+    metadata = _operator_cleared_retry_metadata(node.metadata)
+    previous_verification_refs = metadata.get("verification_evidence_refs")
+    merged_evidence_refs: list[str] = []
+    if isinstance(previous_verification_refs, list):
+        merged_evidence_refs.extend(str(item) for item in previous_verification_refs if item)
+    merged_evidence_refs.extend(str(item) for item in evidence_refs if item)
+    review_record = {
+        "action": "accept_with_human_review",
+        "actor_id": actor_id,
+        "reason": reason,
+        "evidence_refs": list(dict.fromkeys(merged_evidence_refs)),
+        "created_at": current_time.isoformat(),
+    }
+    metadata.update(
+        {
+            "operator_action": review_record,
+            "human_review_acceptance": review_record,
+            "last_verification_summary": reason or "Accepted after human review.",
+            "last_verification_passed": True,
+            "last_verification_hard_fail": False,
+            "last_verification_judge_verdict": "accepted",
+            "last_verification_judge_rationale": reason or "Accepted after human review.",
+            "verification_evidence_refs": list(dict.fromkeys(merged_evidence_refs)),
+        }
+    )
+    return replace(
+        node,
+        intent=TaskIntent.DONE,
+        execution=TaskExecution.IDLE,
+        progress=Progress(
+            percent=100,
+            confidence=max(node.progress.confidence, 0.75),
+            note="Accepted after human review.",
+        ),
+        assignee_agent_id=None,
+        current_attempt_id=None,
+        metadata=metadata,
+        completed_at=current_time,
         updated_at=current_time,
     )
 
@@ -3255,6 +3413,98 @@ async def reopen_blocked_workspace_plan_node(
         )
     except Exception as exc:
         raise _map_error(exc) from exc
+
+
+@router.post("/nodes/{node_id}/accept-review", response_model=WorkspacePlanActionResultResponse)
+async def accept_review_workspace_plan_node(
+    workspace_id: str,
+    node_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Accept a blocked/rework plan node after explicit operator review."""
+    task_command_service = _get_workspace_task_command_service(request, db)
+    task_event_publisher = _get_workspace_task_event_publisher(request)
+    try:
+        await _ensure_workspace_editor_access(
+            workspace_id=workspace_id,
+            request=request,
+            db=db,
+            current_user=current_user,
+        )
+        plan = await _load_plan_for_workspace(db, workspace_id)
+        node = _load_plan_node(plan, node_id)
+        reason = body.reason or "Accepted after operator review."
+        evidence_refs = [ref.strip() for ref in body.evidence_refs if ref.strip()]
+        updated = _accept_node_for_operator_review(
+            node=node,
+            actor_id=current_user.id,
+            reason=reason,
+            evidence_refs=evidence_refs,
+        )
+        plan.replace_node(updated)
+        await SqlPlanRepository(db).save(plan)
+        if node.workspace_task_id:
+            task_metadata: dict[str, object] = {
+                "durable_plan_verdict": "accepted",
+                "durable_plan_verification_summary": reason,
+                "last_worker_report_type": "completed",
+                "last_worker_report_summary": reason,
+                "human_review_acceptance": updated.metadata["human_review_acceptance"],
+                "pending_leader_adjudication": False,
+            }
+            if updated.metadata.get("verification_evidence_refs"):
+                task_metadata["evidence_refs"] = updated.metadata["verification_evidence_refs"]
+            await task_command_service.update_task(
+                workspace_id=workspace_id,
+                task_id=node.workspace_task_id,
+                actor_user_id=current_user.id,
+                status=WorkspaceTaskStatus.DONE,
+                metadata=task_metadata,
+                actor_type="human",
+                reason="workspace_plan.accept_with_human_review",
+                authority=WorkspaceTaskAuthorityContext(),
+            )
+        _ = await SqlWorkspacePlanEventRepository(db).append(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            node_id=node_id,
+            attempt_id=node.current_attempt_id,
+            event_type="operator_review_accepted",
+            source="operator",
+            actor_id=current_user.id,
+            payload={"reason": reason, "evidence_refs": evidence_refs},
+        )
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise _map_error(exc) from exc
+
+    try:
+        await task_event_publisher.publish_pending_events(
+            task_command_service.consume_pending_events()
+        )
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace task events for plan accept-review",
+            extra={"workspace_id": workspace_id, "node_id": node_id},
+        )
+    await _publish_plan_updated_event(
+        request=request,
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+        action="accept_with_human_review",
+        node_id=node_id,
+        reason=body.reason,
+    )
+    return WorkspacePlanActionResultResponse(
+        ok=True,
+        message="Plan node accepted after human review.",
+        plan_id=plan.id,
+        node_id=node_id,
+    )
 
 
 __all__ = [

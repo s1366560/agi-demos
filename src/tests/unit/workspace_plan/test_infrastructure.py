@@ -34,6 +34,11 @@ from src.domain.ports.services.iteration_review_port import (
 )
 from src.domain.ports.services.task_allocator_port import WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationJudgeRequest,
+    WorkspaceVerificationJudgeResult,
+    WorkspaceVerificationJudgeVerdict,
+)
 from src.infrastructure.agent.workspace_plan import factory as workspace_plan_factory
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
@@ -88,6 +93,19 @@ class _FakeDecomposer:
         from types import SimpleNamespace
 
         return SimpleNamespace(subtasks=list(self.result))
+
+
+class _RecordingVerificationJudge:
+    def __init__(self, result: WorkspaceVerificationJudgeResult) -> None:
+        self.result = result
+        self.requests: list[WorkspaceVerificationJudgeRequest] = []
+
+    async def judge(
+        self,
+        request: WorkspaceVerificationJudgeRequest,
+    ) -> WorkspaceVerificationJudgeResult:
+        self.requests.append(request)
+        return self.result
 
 
 @dataclass
@@ -1006,6 +1024,179 @@ class TestVerifier:
 
         assert rep.passed
         assert any(result.message == "clean worktree after commit" for result in rep.results)
+
+    @pytest.mark.parametrize(
+        "stdout",
+        ["", "(no output)", "Tool executed successfully (no output)"],
+    )
+    async def test_verifier_treats_no_output_sentinels_as_clean_worktree(
+        self,
+        stdout: str,
+    ) -> None:
+        class SentinelSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                assert command == "git -C /workspace/my-evo status --short"
+                return {"exit_code": 0, "stdout": stdout, "stderr": ""}
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "write_set": ["src/app.py"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="75b81824-f3a1-40c4-b719-1a79740c748d",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:78dacf1", "git_diff_summary:3 files changed"],
+            },
+            sandbox=SentinelSandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(result.message == "clean worktree after commit" for result in rep.results)
+
+    async def test_verification_judge_receives_bounded_node_attempt_and_guard_context(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="worker evidence satisfies the node",
+                confidence=0.82,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Implement API slice",
+            description="Wire the endpoint and tests.",
+            metadata={
+                "write_set": ["src/api.py"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={"pattern": r"\S", "source": "stdout"},
+                    required=True,
+                    description="worker report is present",
+                ),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="completed API implementation",
+            artifacts={
+                "last_worker_report_type": "completed",
+                "last_worker_report_summary": "implemented API and tests",
+                "candidate_artifacts": ["commit_ref:abc123"],
+                "candidate_verifications": ["test_run:uv run pytest src/tests/unit/api.py"],
+                "evidence_refs": ["commit_ref:abc123"],
+            },
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert len(judge.requests) == 1
+        request = judge.requests[0]
+        assert request.node_title == "Implement API slice"
+        assert request.node_description == "Wire the endpoint and tests."
+        assert request.attempt_id == "attempt-1"
+        assert "implemented API and tests" in request.worker_summary
+        assert "commit_ref:abc123" in request.candidate_artifacts
+        assert "test_run:uv run pytest src/tests/unit/api.py" in request.candidate_verifications
+        assert request.sandbox_code_root == "/workspace/my-evo"
+        assert request.latest_verification_results
+
+    async def test_verification_judge_cannot_accept_without_required_worker_report(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="looks acceptable",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={
+                        "pattern": r"\S",
+                        "source": "stdout",
+                        "requires_terminal_worker_report": True,
+                    },
+                    required=True,
+                ),
+            )
+        )
+
+        rep = await verifier.verify(VerificationContext(workspace_id="ws", node=node))
+
+        assert not rep.passed
+        assert not rep.hard_fail
+        assert "terminal_worker_report_completed" in rep.summary()
+
+    @pytest.mark.parametrize(
+        ("verdict", "passed", "hard_fail", "retryable"),
+        [
+            (WorkspaceVerificationJudgeVerdict.ACCEPTED, True, False, False),
+            (WorkspaceVerificationJudgeVerdict.NEEDS_REWORK, False, False, False),
+            (WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED, False, True, False),
+            (WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE, False, False, True),
+        ],
+    )
+    async def test_verification_judge_verdict_controls_report_mapping(
+        self,
+        verdict: WorkspaceVerificationJudgeVerdict,
+        passed: bool,
+        hard_fail: bool,
+        retryable: bool,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=verdict,
+                rationale=f"{verdict.value} rationale",
+                failed_criteria=("criterion-a",) if not passed else (),
+                required_next_action="next action",
+                confidence=0.95,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node()
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={"last_worker_report_type": "completed"},
+            )
+        )
+
+        assert rep.passed is passed
+        assert rep.hard_fail is hard_fail
+        assert (
+            any(
+                result.criterion.spec.get("name") == "retryable_infrastructure_failure"
+                for result in rep.results
+            )
+            is retryable
+        )
 
     async def test_verifier_uses_artifact_code_context_for_clean_worktree(self) -> None:
         commands: list[str] = []
@@ -2832,6 +3023,8 @@ def _ctx() -> Any:
 
 def _leaf_node(
     *,
+    title: str = "x",
+    description: str = "",
     criteria: tuple[AcceptanceCriterion, ...] = (),
     metadata: dict[str, Any] | None = None,
     feature_checkpoint: FeatureCheckpoint | None = None,
@@ -2841,7 +3034,8 @@ def _leaf_node(
         plan_id="p",
         parent_id=PlanNodeId("goal"),
         kind=PlanNodeKind.TASK,
-        title="x",
+        title=title,
+        description=description,
         acceptance_criteria=criteria,
         feature_checkpoint=feature_checkpoint,
         metadata=metadata or {},

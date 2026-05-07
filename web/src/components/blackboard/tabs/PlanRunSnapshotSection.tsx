@@ -925,6 +925,7 @@ export function PlanRunSnapshotSection({
   const openAttemptAction = selectedNode?.actions?.open_attempt;
   const requestReplanAction = selectedNode?.actions?.request_replan;
   const reopenBlockedAction = selectedNode?.actions?.reopen_blocked;
+  const acceptAfterReviewAction = selectedNode?.actions?.accept_with_human_review;
   const canOpenAttempt =
     Boolean(attemptHref) && (!openAttemptAction || actionEnabled(openAttemptAction));
   const showOpenAttemptAction = Boolean(openAttemptAction || attemptHref);
@@ -936,6 +937,9 @@ export function PlanRunSnapshotSection({
     : undefined;
   const reopenBlockedDisabledReason = !actionEnabled(reopenBlockedAction)
     ? actionDisabledReason(reopenBlockedAction, 'This node cannot be reopened.')
+    : undefined;
+  const acceptAfterReviewDisabledReason = !actionEnabled(acceptAfterReviewAction)
+    ? actionDisabledReason(acceptAfterReviewAction, 'This node cannot be accepted after review.')
     : undefined;
   const selectedGate = selectedNode ? nodeGateStatus(selectedNode) : null;
   const selectedEvidence = selectedNode ? nodeEvidenceBundle(selectedNode) : null;
@@ -1006,13 +1010,18 @@ export function PlanRunSnapshotSection({
     try {
       const reason = reasonOrFallback(operatorReason, DEFAULT_NODE_ACTION_REASON);
       const result =
-        actionId === 'reopen_blocked'
-          ? await workspacePlanService.reopenBlockedNode(workspaceId, selectedNode.id, {
+        actionId === 'accept_with_human_review'
+          ? await workspacePlanService.acceptNodeAfterReview(workspaceId, selectedNode.id, {
               reason,
+              evidenceRefs: selectedEvidence?.evidence_refs ?? [],
             })
-          : await workspacePlanService.requestNodeReplan(workspaceId, selectedNode.id, {
-              reason,
-            });
+          : actionId === 'reopen_blocked'
+            ? await workspacePlanService.reopenBlockedNode(workspaceId, selectedNode.id, {
+                reason,
+              })
+            : await workspacePlanService.requestNodeReplan(workspaceId, selectedNode.id, {
+                reason,
+              });
       setActionMessage(result.message);
       await loadSnapshot({ silent: true });
     } catch (err) {
@@ -1548,6 +1557,21 @@ export function PlanRunSnapshotSection({
                           t('blackboard.planRunRequestReplan', 'Request replan')
                         )}
                       </button>
+                      {actionEnabled(acceptAfterReviewAction) && (
+                        <button
+                          type="button"
+                          onClick={() => void runNodeAction('accept_with_human_review')}
+                          disabled={isActionPending}
+                          title={acceptAfterReviewDisabledReason}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
+                        >
+                          <ShieldCheck className="h-4 w-4" aria-hidden />
+                          {actionLabel(
+                            acceptAfterReviewAction,
+                            t('blackboard.planRunAcceptAfterReview', 'Accept after review')
+                          )}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => void runNodeAction('reopen_blocked')}

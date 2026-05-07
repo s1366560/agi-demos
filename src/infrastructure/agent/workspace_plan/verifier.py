@@ -1,4 +1,4 @@
-"""M5 — :class:`VerifierPort` with deterministic runners.
+"""M5 — :class:`VerifierPort` with deterministic runners plus Agent-First judgment.
 
 Runners available out of the box:
 
@@ -7,9 +7,8 @@ Runners available out of the box:
 * :class:`RegexCriterionRunner`      — regex against artifact/stdout
 * :class:`SchemaCriterionRunner`     — JSON Schema validation
 
-``CriterionKind.LLM_JUDGE`` and ``CUSTOM`` are intentionally stubbed to
-"inconclusive" so M5 can ship without LLM dependency; a dedicated runner
-will be added in M5.5.
+Deterministic runners collect evidence. When a verification judge is wired, the
+final semantic verdict is delegated to that structured Agent-First boundary.
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ import os
 import re
 import shlex
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any, Protocol
 
 from src.domain.model.workspace_plan import (
@@ -35,10 +35,21 @@ from src.domain.ports.services.verifier_port import (
     VerificationContext,
     VerifierPort,
 )
+from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationJudgePort,
+    WorkspaceVerificationJudgeRequest,
+    WorkspaceVerificationJudgeResult,
+    WorkspaceVerificationJudgeVerdict,
+)
 
 logger = logging.getLogger(__name__)
 
 _CHANGE_EVIDENCE_PHASES = {"implement", "test", "deploy"}
+_NO_OUTPUT_SENTINELS = {
+    "(no output)",
+    "tool executed successfully (no output)",
+    "tool executed successfully. (no output)",
+}
 
 _TRANSIENT_INFRA_FAILURE_MARKERS = (
     "Executor shutdown has been called",
@@ -107,7 +118,7 @@ class CmdCriterionRunner(CriterionRunner):
                 message=f"sandbox error: {exc}",
             )
         exit_code = int(result.get("exit_code", 1))
-        stdout = str(result.get("stdout", ""))
+        stdout = _normalize_sandbox_no_output_text(str(result.get("stdout", "")))
         stderr = str(result.get("stderr", ""))
         passed = exit_code <= max_exit
         return CriterionResult(
@@ -542,6 +553,7 @@ class AcceptanceCriterionVerifier(VerifierPort):
     def __init__(
         self,
         runners: dict[CriterionKind, CriterionRunner] | None = None,
+        verification_judge: WorkspaceVerificationJudgePort | None = None,
     ) -> None:
         self._runners: dict[CriterionKind, CriterionRunner] = runners or {
             CriterionKind.CMD: CmdCriterionRunner(),
@@ -555,6 +567,7 @@ class AcceptanceCriterionVerifier(VerifierPort):
             CriterionKind.PREVIEW_E2E: PreviewE2ECriterionRunner(),
         }
         self._fallback = _InconclusiveRunner()
+        self._verification_judge = verification_judge
 
     def register(self, kind: CriterionKind, runner: CriterionRunner) -> None:
         self._runners[kind] = runner
@@ -597,11 +610,286 @@ class AcceptanceCriterionVerifier(VerifierPort):
                     message=f"runner error: {exc}",
                 )
             results.append(res)
+        if self._verification_judge is not None:
+            results = await _apply_verification_judge(
+                self._verification_judge,
+                ctx=ctx,
+                results=results,
+            )
         return VerificationReport(
             node_id=ctx.node.id,
             attempt_id=ctx.attempt_id,
             results=tuple(results),
         )
+
+
+async def _apply_verification_judge(
+    judge: WorkspaceVerificationJudgePort,
+    *,
+    ctx: VerificationContext,
+    results: list[CriterionResult],
+) -> list[CriterionResult]:
+    request = _build_judge_request(ctx, results)
+    try:
+        judge_result = await judge.judge(request)
+    except Exception as exc:
+        logger.warning("workspace verification judge failed: %s", exc)
+        judge_result = WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale=f"workspace verification judge failed: {exc}",
+            failed_criteria=("workspace_verification_judge",),
+            required_next_action="retry verification judge",
+            confidence=0.5,
+        )
+    judge_result = _coerce_judge_result_for_required_context(ctx, judge_result)
+    return [
+        *_normalize_results_for_judge(results, judge_result),
+        _judge_criterion_result(judge_result),
+    ]
+
+
+def _build_judge_request(
+    ctx: VerificationContext,
+    results: list[CriterionResult],
+) -> WorkspaceVerificationJudgeRequest:
+    result_payloads = tuple(_criterion_result_payload(result) for result in results)
+    failed_messages = tuple(
+        result.message
+        for result in results
+        if result.criterion.required and not result.passed and result.message
+    )[:12]
+    return WorkspaceVerificationJudgeRequest(
+        workspace_id=ctx.workspace_id,
+        node_id=ctx.node.id,
+        attempt_id=ctx.attempt_id,
+        node_title=ctx.node.title,
+        node_description=ctx.node.description,
+        acceptance_criteria=tuple(
+            {
+                "kind": criterion.kind.value,
+                "spec": _bounded_jsonish(criterion.spec),
+                "required": criterion.required,
+                "description": criterion.description,
+            }
+            for criterion in ctx.node.acceptance_criteria
+        ),
+        worker_summary=_bounded_text(
+            _artifact_text(ctx, "last_worker_report_summary") or ctx.stdout,
+            limit=1600,
+        ),
+        candidate_artifacts=tuple(
+            _bounded_text(value, limit=600)
+            for value in sorted(
+                _artifact_text_values(
+                    ctx,
+                    "candidate_artifacts",
+                    "last_worker_report_artifacts",
+                )
+            )[:20]
+        ),
+        candidate_verifications=tuple(
+            _bounded_text(value, limit=600)
+            for value in sorted(
+                _artifact_text_values(
+                    ctx,
+                    "candidate_verifications",
+                    "last_worker_report_verifications",
+                    "execution_verifications",
+                )
+            )[:24]
+        ),
+        task_evidence_refs=tuple(
+            _bounded_text(value, limit=600)
+            for value in sorted(
+                _artifact_text_values(
+                    ctx,
+                    "evidence_refs",
+                    "pipeline_evidence_refs",
+                    "verification_evidence_refs",
+                )
+            )[:24]
+        ),
+        latest_verification_results=result_payloads,
+        guard_failures=failed_messages,
+        sandbox_code_root=_sandbox_code_root(ctx),
+        worktree_path=_clean_worktree_git_root(ctx),
+        recent_git_status=_recent_git_status_from_results(results),
+        task_metadata=_metadata_summary(ctx),
+    )
+
+
+def _criterion_result_payload(result: CriterionResult) -> dict[str, Any]:
+    return {
+        "kind": result.criterion.kind.value,
+        "name": result.criterion.spec.get("name"),
+        "required": result.criterion.required,
+        "passed": result.passed,
+        "confidence": result.confidence,
+        "message": _bounded_text(result.message, limit=500),
+        "description": _bounded_text(result.criterion.description, limit=500),
+        "evidence": [
+            {
+                "kind": evidence.kind,
+                "ref": _bounded_text(evidence.ref, limit=500),
+                "note": _bounded_text(evidence.note, limit=300),
+            }
+            for evidence in result.evidence[:6]
+        ],
+    }
+
+
+def _metadata_summary(ctx: VerificationContext) -> dict[str, Any]:
+    allowed_keys = (
+        "code_context",
+        "current_attempt_conversation_id",
+        "evidence_refs",
+        "execution_verifications",
+        "feature_id",
+        "git_diff_summary",
+        "last_attempt_status",
+        "last_worker_report_artifacts",
+        "last_worker_report_summary",
+        "last_worker_report_type",
+        "last_worker_report_verifications",
+        "pipeline_evidence_refs",
+        "pipeline_status",
+        "preflight_checks",
+        "preview_url",
+        "verification_commands",
+        "write_set",
+    )
+    return {
+        key: _bounded_jsonish(value)
+        for key in allowed_keys
+        for value in [ctx.node.metadata.get(key, ctx.artifacts.get(key))]
+        if value not in (None, "", [], {})
+    }
+
+
+def _bounded_jsonish(value: object, *, limit: int = 1600) -> object:
+    if isinstance(value, str):
+        return _bounded_text(value, limit=limit)
+    if isinstance(value, int | float | bool) or value is None:
+        return value
+    if isinstance(value, list | tuple | set):
+        return [_bounded_jsonish(item, limit=400) for item in list(value)[:24]]
+    if isinstance(value, Mapping):
+        return {
+            str(key): _bounded_jsonish(item, limit=400) for key, item in list(value.items())[:24]
+        }
+    return _bounded_text(str(value), limit=limit)
+
+
+def _bounded_text(value: str, *, limit: int) -> str:
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 15].rstrip() + " ...[truncated]"
+
+
+def _recent_git_status_from_results(results: list[CriterionResult]) -> str:
+    for result in results:
+        if result.criterion.spec.get("name") != "clean_worktree_after_commit":
+            continue
+        for evidence in result.evidence:
+            if evidence.kind == "git_status":
+                return _bounded_text(evidence.ref, limit=1200)
+        if result.passed:
+            return ""
+        return _bounded_text(result.message, limit=1200)
+    return ""
+
+
+def _coerce_judge_result_for_required_context(
+    ctx: VerificationContext,
+    result: WorkspaceVerificationJudgeResult,
+) -> WorkspaceVerificationJudgeResult:
+    if (
+        result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED
+        and _requires_terminal_worker_report(ctx)
+        and _artifact_text(ctx, "last_worker_report_type") != "completed"
+    ):
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Completed worker report is required before this node can be accepted. "
+                f"Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=("terminal_worker_report_completed", *result.failed_criteria),
+            required_next_action="collect a completed worker report and rerun verification",
+            confidence=max(result.confidence, 0.7),
+        )
+    return result
+
+
+def _normalize_results_for_judge(
+    results: list[CriterionResult],
+    judge_result: WorkspaceVerificationJudgeResult,
+) -> list[CriterionResult]:
+    normalized: list[CriterionResult] = []
+    for result in results:
+        if result.passed or not result.criterion.required:
+            normalized.append(result)
+            continue
+        if judge_result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED:
+            normalized.append(
+                replace(
+                    result,
+                    criterion=replace(result.criterion, required=False),
+                    message=f"advisory evidence before judge acceptance: {result.message}",
+                )
+            )
+            continue
+        if judge_result.verdict is not WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED:
+            normalized.append(replace(result, confidence=min(result.confidence, 0.7)))
+            continue
+        normalized.append(result)
+    return normalized
+
+
+def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> CriterionResult:
+    verdict = result.verdict
+    criterion_name = (
+        "retryable_infrastructure_failure"
+        if verdict is WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE
+        else "workspace_verification_judge"
+    )
+    confidence = result.confidence
+    if verdict is WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED:
+        confidence = max(confidence, 0.9)
+    elif verdict in {
+        WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+        WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+    }:
+        confidence = min(confidence, 0.7)
+    message_parts = [f"judge verdict={verdict.value}", result.rationale]
+    if result.required_next_action:
+        message_parts.append(f"next_action={result.required_next_action}")
+    if result.failed_criteria:
+        message_parts.append("failed=" + ", ".join(result.failed_criteria[:8]))
+    return CriterionResult(
+        criterion=AcceptanceCriterion(
+            kind=CriterionKind.CUSTOM,
+            spec={
+                "name": criterion_name,
+                "judge_verdict": verdict.value,
+                "failed_criteria": list(result.failed_criteria),
+                "required_next_action": result.required_next_action,
+            },
+            required=True,
+            description="Agent-First workspace verification judge verdict",
+        ),
+        passed=verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED,
+        confidence=confidence,
+        message="; ".join(part for part in message_parts if part),
+        evidence=(
+            EvidenceRef(
+                kind="verification_judge",
+                ref=verdict.value,
+                note=_bounded_text(result.rationale, limit=300),
+            ),
+        ),
+    )
 
 
 def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult | None:  # noqa: PLR0911
@@ -822,7 +1110,7 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
         )
 
     exit_code = int(result.get("exit_code", 1))
-    stdout = str(result.get("stdout", "")).strip()
+    stdout = _normalize_sandbox_no_output_text(str(result.get("stdout", "")))
     stderr = str(result.get("stderr", "")).strip()
     if exit_code != 0:
         return CriterionResult(
@@ -993,6 +1281,11 @@ def _text_values(raw: object) -> set[str]:
     if isinstance(raw, dict):
         return {str(item) for item in raw.values() if item}
     return set()
+
+
+def _normalize_sandbox_no_output_text(value: str) -> str:
+    text = value.strip()
+    return "" if text.casefold() in _NO_OUTPUT_SENTINELS else text
 
 
 def _first_prefixed(values: set[str], prefix: str) -> str | None:

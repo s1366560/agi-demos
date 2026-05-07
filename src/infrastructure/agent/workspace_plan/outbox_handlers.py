@@ -56,6 +56,9 @@ from src.domain.ports.services.task_allocator_port import (
     WorkspaceAgent as AllocatorAgent,
 )
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationJudgePort,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceModel,
     WorkspacePlanOutboxModel,
@@ -126,6 +129,10 @@ from src.infrastructure.agent.workspace_plan.system_actor import (
     WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
     persisted_attempt_leader_agent_id,
 )
+from src.infrastructure.agent.workspace_plan.verification_judge import (
+    LLMWorkspaceVerificationJudge,
+    UnavailableWorkspaceVerificationJudge,
+)
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -154,6 +161,13 @@ _TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
         "rejected",
         "blocked",
         "cancelled",
+    }
+)
+_NO_OUTPUT_SENTINELS = frozenset(
+    {
+        "(no output)",
+        "tool executed successfully (no output)",
+        "tool executed successfully. (no output)",
     }
 )
 
@@ -287,6 +301,11 @@ def make_supervisor_tick_handler(
                 workspace_id=workspace_id,
                 root_task_id=_payload_string(payload, "root_task_id"),
             ),
+            verification_judge=await _make_sql_verification_judge(
+                session=session,
+                workspace_id=workspace_id,
+                root_task_id=_payload_string(payload, "root_task_id"),
+            ),
         )
         report = await orchestrator.tick_once(workspace_id)
         if report.errors:
@@ -332,6 +351,42 @@ async def _make_sql_iteration_reviewer(
             extra={"workspace_id": workspace_id},
         )
         return UnavailableIterationReviewProvider("iteration review agent is unavailable")
+
+
+async def _make_sql_verification_judge(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    root_task_id: str | None,
+) -> WorkspaceVerificationJudgePort | None:
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    if workspace is None:
+        return None
+    root_metadata: Mapping[str, Any] | None = None
+    if root_task_id:
+        root_task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
+        if root_task is not None and root_task.workspace_id == workspace_id:
+            root_metadata = root_task.metadata
+    if resolve_workspace_type(root_metadata, workspace.metadata) != "software_development":
+        return None
+    try:
+        from src.domain.llm_providers.models import OperationType
+        from src.infrastructure.llm.provider_factory import AIServiceFactory
+
+        factory = AIServiceFactory()
+        provider = await factory.resolve_provider(
+            workspace.tenant_id,
+            operation_type=OperationType.LLM,
+        )
+        llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
+        return LLMWorkspaceVerificationJudge(llm_client)
+    except Exception:
+        logger.warning(
+            "workspace_plan.verification_judge_unavailable",
+            exc_info=True,
+            extra={"workspace_id": workspace_id},
+        )
+        return UnavailableWorkspaceVerificationJudge("workspace verification judge is unavailable")
 
 
 def _software_iteration_task_budget() -> int:
@@ -2669,7 +2724,7 @@ class _WorkspaceSandboxCommandRunner:
             },
             timeout=float(timeout) + 5.0,
         )
-        text = _tool_result_text(raw)
+        text = _normalize_sandbox_no_output_text(_tool_result_text(raw))
         is_error = bool(raw.get("is_error") or raw.get("isError"))
         return {
             "exit_code": 1 if is_error else 0,
@@ -2936,6 +2991,11 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_hard_fail",
         "last_verification_attempt_id",
         "last_verification_ran_at",
+        "last_verification_judge_confidence",
+        "last_verification_judge_failed_criteria",
+        "last_verification_judge_rationale",
+        "last_verification_judge_required_next_action",
+        "last_verification_judge_verdict",
         "verification_evidence_refs",
         "verified_commit_ref",
         "verified_git_diff_summary",
@@ -2983,6 +3043,11 @@ def _tool_result_text(raw: Mapping[str, Any]) -> str:
     if isinstance(text, str):
         return text
     return ""
+
+
+def _normalize_sandbox_no_output_text(value: str) -> str:
+    text = value.strip()
+    return "" if text.casefold() in _NO_OUTPUT_SENTINELS else text
 
 
 def _node_worker_brief(node: PlanNode) -> str:

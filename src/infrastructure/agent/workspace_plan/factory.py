@@ -22,6 +22,9 @@ from src.domain.model.workspace_plan import PlanNode
 from src.domain.ports.services.iteration_review_port import IterationReviewPort
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationJudgePort,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
@@ -147,15 +150,13 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
                     "workspace_id": workspace_id,
                     "plan_id": node.plan_id,
                     "node_id": node.id,
-                    "attempt_id": _payload_string(payload, "attempt_id")
-                    or node.current_attempt_id,
+                    "attempt_id": _payload_string(payload, "attempt_id") or node.current_attempt_id,
                     "reason": payload.get("reason") or "pipeline_gate_required",
                 },
                 metadata={
                     "source_event_type": event_type,
                     "node_id": node.id,
-                    "attempt_id": _payload_string(payload, "attempt_id")
-                    or node.current_attempt_id,
+                    "attempt_id": _payload_string(payload, "attempt_id") or node.current_attempt_id,
                 },
             )
         if event_type == "dispatch_deferred_concurrency_limit":
@@ -473,6 +474,7 @@ def build_default_orchestrator(
     config: OrchestratorConfig | None = None,
     decomposer: TaskDecomposerProtocol | None = None,
     iteration_reviewer: IterationReviewPort | None = None,
+    verification_judge: WorkspaceVerificationJudgePort | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a default, side-effect-free :class:`WorkspaceOrchestrator`.
 
@@ -484,7 +486,7 @@ def build_default_orchestrator(
     plan_repo = InMemoryPlanRepository()
     planner = LLMGoalPlanner(decomposer=decomposer)
     allocator = CapabilityAllocator()
-    verifier = AcceptanceCriterionVerifier()
+    verifier = AcceptanceCriterionVerifier(verification_judge=verification_judge)
     projector = ProgressProjector()
     blackboard = InMemoryBlackboard()
     supervisor = WorkspaceSupervisor(
@@ -523,6 +525,7 @@ def build_sql_orchestrator(
     progress_sink: ProgressSink | None = None,
     event_sink: PlanEventSink | None = None,
     iteration_reviewer: IterationReviewPort | None = None,
+    verification_judge: WorkspaceVerificationJudgePort | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a SQL-backed Workspace V2 orchestrator.
 
@@ -535,7 +538,7 @@ def build_sql_orchestrator(
     plan_repo = SqlPlanRepository(db)
     planner = LLMGoalPlanner(decomposer=decomposer)
     allocator = CapabilityAllocator()
-    verifier = AcceptanceCriterionVerifier()
+    verifier = AcceptanceCriterionVerifier(verification_judge=verification_judge)
     projector = ProgressProjector()
     blackboard = SqlWorkspacePlanBlackboard(db)
     supervisor = WorkspaceSupervisor(

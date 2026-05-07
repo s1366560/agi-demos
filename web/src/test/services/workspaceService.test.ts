@@ -244,6 +244,36 @@ describe('workspaceService', () => {
     expect(result.node_id).toBe('node-1');
   });
 
+  it('accepts a durable workspace plan node after operator review', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({
+        ok: true,
+        message: 'Plan node accepted after human review.',
+        plan_id: 'plan-1',
+        node_id: 'node-1',
+      }),
+    } as Response);
+
+    const result = await workspacePlanService.acceptNodeAfterReview('ws-1', 'node-1', {
+      reason: 'reviewed evidence',
+      evidenceRefs: ['manual_review:ticket-1'],
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith(
+      '/workspaces/ws-1/plan/nodes/node-1/accept-review',
+      {
+        reason: 'reviewed evidence',
+        evidence_refs: ['manual_review:ticket-1'],
+      }
+    );
+    expect(result.node_id).toBe('node-1');
+  });
+
   it('pauses, resumes, and triggers durable workspace plan iteration loop', async () => {
     const { apiFetch } = await import('@/services/client/urlUtils');
     vi.mocked(apiFetch.post)

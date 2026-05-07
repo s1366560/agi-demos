@@ -17,6 +17,7 @@ vi.mock('@/services/workspaceService', () => ({
   },
   workspacePlanService: {
     getSnapshot: vi.fn(),
+    acceptNodeAfterReview: vi.fn(),
     pauseAutoLoop: vi.fn(),
     regenerateDeliveryContract: vi.fn(),
     reopenBlockedNode: vi.fn(),

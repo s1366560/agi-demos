@@ -292,6 +292,75 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert task_node.feature_checkpoint["feature_id"] == "feature-api"
     assert task_node.actions["request_replan"].enabled is True
     assert task_node.actions["reopen_blocked"].enabled is False
+    assert task_node.actions["accept_with_human_review"].enabled is False
+
+
+def test_reopen_blocked_clears_terminal_retry_debt() -> None:
+    plan = _make_plan("workspace-plan-api")
+    node = plan.nodes[PlanNodeId("task-api")]
+    blocked = replace(
+        node,
+        intent=TaskIntent.BLOCKED,
+        execution=TaskExecution.IDLE,
+        current_attempt_id=None,
+        metadata={
+            **node.metadata,
+            "terminal_attempt_retry_count": 11,
+            "terminal_attempt_retry_reason": "terminal_attempt_blocked",
+            "terminal_attempt_reconciled_at": "2026-05-07T00:00:00Z",
+            "retry_count": 3,
+            "retry_not_before": "2026-05-07T00:05:00Z",
+        },
+    )
+
+    reopened = workspace_plans._reset_node_for_operator(
+        node=blocked,
+        actor_id="plan-api-user",
+        action="operator_node_reopened",
+        reason="operator wants another attempt",
+    )
+
+    assert reopened.intent is TaskIntent.TODO
+    assert reopened.execution is TaskExecution.IDLE
+    assert reopened.current_attempt_id is None
+    assert "terminal_attempt_retry_count" not in reopened.metadata
+    assert "terminal_attempt_retry_reason" not in reopened.metadata
+    assert "terminal_attempt_reconciled_at" not in reopened.metadata
+    assert "retry_count" not in reopened.metadata
+    assert reopened.metadata["operator_action"]["reason"] == "operator wants another attempt"
+
+
+def test_accept_after_review_marks_node_done_and_records_evidence() -> None:
+    plan = _make_plan("workspace-plan-api")
+    node = replace(
+        plan.nodes[PlanNodeId("task-api")],
+        intent=TaskIntent.BLOCKED,
+        execution=TaskExecution.IDLE,
+        metadata={
+            "last_verification_passed": False,
+            "verification_evidence_refs": ["commit_ref:abc123"],
+            "terminal_attempt_retry_count": 11,
+        },
+    )
+
+    accepted = workspace_plans._accept_node_for_operator_review(
+        node=node,
+        actor_id="plan-api-user",
+        reason="reviewed evidence manually",
+        evidence_refs=["manual_review:ticket-1"],
+    )
+
+    assert accepted.intent is TaskIntent.DONE
+    assert accepted.execution is TaskExecution.IDLE
+    assert accepted.completed_at is not None
+    assert accepted.metadata["last_verification_passed"] is True
+    assert accepted.metadata["last_verification_hard_fail"] is False
+    assert accepted.metadata["last_verification_judge_verdict"] == "accepted"
+    assert accepted.metadata["verification_evidence_refs"] == [
+        "commit_ref:abc123",
+        "manual_review:ticket-1",
+    ]
+    assert "terminal_attempt_retry_count" not in accepted.metadata
 
 
 @pytest.mark.asyncio

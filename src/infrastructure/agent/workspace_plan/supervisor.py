@@ -295,9 +295,14 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         },
                     )
                 elif report.hard_fail:
+                    failed_node = _node_with_verification_evidence(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
                     plan.replace_node(
                         _force_intent(
-                            _force_execution(node, TaskExecution.IDLE),
+                            _force_execution(failed_node, TaskExecution.IDLE),
                             TaskIntent.BLOCKED,
                             summary=report.summary(),
                         )
@@ -1289,6 +1294,11 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_hard_fail",
         "last_verification_attempt_id",
         "last_verification_ran_at",
+        "last_verification_judge_confidence",
+        "last_verification_judge_failed_criteria",
+        "last_verification_judge_rationale",
+        "last_verification_judge_required_next_action",
+        "last_verification_judge_verdict",
         "verification_evidence_refs",
         "verified_commit_ref",
         "verified_git_diff_summary",
@@ -1478,6 +1488,9 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
         "results": [
             {
                 "kind": result.criterion.kind.value,
+                "name": result.criterion.spec.get("name"),
+                "judge_verdict": result.criterion.spec.get("judge_verdict"),
+                "required_next_action": result.criterion.spec.get("required_next_action"),
                 "required": result.criterion.required,
                 "passed": result.passed,
                 "confidence": result.confidence,
@@ -1509,6 +1522,7 @@ def _node_with_verification_evidence(
     metadata["last_verification_passed"] = report.passed
     metadata["last_verification_hard_fail"] = report.hard_fail
     metadata["last_verification_ran_at"] = report.ran_at.isoformat().replace("+00:00", "Z")
+    metadata.update(_judge_result_metadata(report))
     if report.attempt_id:
         metadata["last_verification_attempt_id"] = report.attempt_id
     metadata["verification_evidence_refs"] = refs
@@ -1557,6 +1571,28 @@ def _report_evidence_refs(report: VerificationReport) -> list[str]:
     for result in report.results:
         refs.extend(evidence.ref for evidence in result.evidence if evidence.ref)
     return list(dict.fromkeys(refs))
+
+
+def _judge_result_metadata(report: VerificationReport) -> dict[str, Any]:
+    for result in report.results:
+        verdict = result.criterion.spec.get("judge_verdict")
+        if not isinstance(verdict, str) or not verdict:
+            continue
+        metadata: dict[str, Any] = {
+            "last_verification_judge_verdict": verdict,
+            "last_verification_judge_rationale": result.message,
+            "last_verification_judge_confidence": result.confidence,
+        }
+        failed_criteria = result.criterion.spec.get("failed_criteria")
+        if isinstance(failed_criteria, list):
+            metadata["last_verification_judge_failed_criteria"] = [
+                str(item) for item in failed_criteria if item
+            ]
+        required_next_action = result.criterion.spec.get("required_next_action")
+        if isinstance(required_next_action, str) and required_next_action.strip():
+            metadata["last_verification_judge_required_next_action"] = required_next_action
+        return metadata
+    return {}
 
 
 def _pipeline_refs_for_verification(

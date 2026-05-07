@@ -539,6 +539,21 @@ export const workspacePlanService = {
     return response.json() as Promise<WorkspacePlanActionResult>;
   },
 
+  acceptNodeAfterReview: async (
+    workspaceId: string,
+    nodeId: string,
+    options: { reason?: string; evidenceRefs?: string[] } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(
+      `${planBase(workspaceId)}/nodes/${nodeId}/accept-review`,
+      {
+        reason: options.reason ?? null,
+        evidence_refs: options.evidenceRefs ?? [],
+      }
+    );
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
+
   pauseAutoLoop: async (
     workspaceId: string,
     options: { reason?: string } = {}

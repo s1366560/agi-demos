@@ -7,7 +7,7 @@ import type {
 } from '@/types/workspace';
 
 export type NodeFilter = 'all' | 'running' | 'blocked' | 'verifying' | 'done' | 'recovery';
-export type NodeActionId = 'request_replan' | 'reopen_blocked';
+export type NodeActionId = 'request_replan' | 'reopen_blocked' | 'accept_with_human_review';
 
 export const FILTERS: Array<{ id: NodeFilter; label: string }> = [
   { id: 'all', label: 'All' },
