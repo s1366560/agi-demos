@@ -80,8 +80,11 @@ class ConversationAwareRouter:
         roster = set(conversation.participant_agents or [])
 
         # 1. Explicit mention wins when it names a current participant.
-        mentions = getattr(message, "mentions", None) or []
-        for mentioned in mentions:
+        # ``Message.mentions`` is a typed ``list[str]`` populated by the
+        # frontend mention-picker; per Agent First we never parse the body
+        # text. Use the field directly rather than ``getattr`` — the schema
+        # is the contract.
+        for mentioned in message.mentions:
             if mentioned and mentioned in roster:
                 logger.debug(
                     "ConversationAwareRouter: explicit mention -> %s (conv=%s)",
