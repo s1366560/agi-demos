@@ -11,14 +11,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_from_header_or_query,
+    get_db,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 
-from .utils import get_event_publisher
+from .utils import assert_caller_owns_project, get_event_publisher
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +104,9 @@ async def sse_generator(
 async def subscribe_sandbox_events(
     project_id: str,
     last_id: str = Query("0", description="Last event ID for resuming stream"),
-    _current_user: User = Depends(get_current_user_from_header_or_query),
+    current_user: User = Depends(get_current_user_from_header_or_query),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """
     SSE endpoint for sandbox events.
@@ -138,6 +141,9 @@ async def subscribe_sandbox_events(
     - Save the last received `id` value
     - Reconnect with `last_id=<saved_id>` to resume from that point
     """
+    # Authorize: caller must be a member of the project they want to stream.
+    await assert_caller_owns_project(project_id=project_id, user=current_user, db=db)
+
     # Check if event bus is available before starting SSE stream
     if not event_publisher or not event_publisher._event_bus:
         logger.warning("[SandboxSSE] Event bus not available, returning 503")

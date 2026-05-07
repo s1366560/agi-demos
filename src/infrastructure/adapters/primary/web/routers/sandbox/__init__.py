@@ -3,9 +3,10 @@
 This module aggregates all sandbox-related endpoints from sub-modules.
 """
 
-
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.dependencies import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -61,11 +62,12 @@ async def list_sandboxes_root(
     status: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> ListSandboxesResponse:
     """List all sandboxes (root path alias)."""
     from .lifecycle import list_sandboxes
 
-    return await list_sandboxes(status=status, current_user=current_user, adapter=adapter)
+    return await list_sandboxes(status=status, current_user=current_user, adapter=adapter, db=db)
 
 
 __all__ = [

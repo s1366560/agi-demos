@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.application.services.sandbox_health_service import HealthCheckLevel, SandboxHealthService
@@ -22,6 +23,7 @@ from src.domain.ports.services.sandbox_port import SandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
+    get_db,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -34,7 +36,14 @@ from .schemas import (
     ProfileInfo,
     SandboxResponse,
 )
-from .utils import extract_project_id, get_event_publisher, get_sandbox_adapter
+from .utils import (
+    assert_caller_owns_project,
+    assert_caller_owns_sandbox,
+    extract_project_id,
+    get_event_publisher,
+    get_sandbox_adapter,
+    list_user_project_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +82,9 @@ async def list_sandbox_profiles() -> ListProfilesResponse:
 async def check_sandbox_health(
     sandbox_id: str,
     level: str = Query("basic", description="Health check level: basic, mcp, services, full"),
-    _current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> HealthCheckResponse:
     """
     Check sandbox health status.
@@ -85,6 +95,11 @@ async def check_sandbox_health(
     - services: Desktop and Terminal service status
     - full: All checks combined
     """
+    # Authorize: caller must own the project the sandbox belongs to.
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
+
     # Validate and parse level
     try:
         health_level = HealthCheckLevel(level)
@@ -118,6 +133,7 @@ async def create_sandbox(
     tenant_id: str = Depends(get_current_user_tenant),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    db: AsyncSession = Depends(get_db),
 ) -> SandboxResponse:
     """
     Create a new MCP sandbox.
@@ -127,6 +143,8 @@ async def create_sandbox(
     try:
         # Extract project_id from project_path
         project_id = extract_project_id(request.project_path)
+        # Authorize: caller must be a member of the project they're targeting.
+        await assert_caller_owns_project(project_id=project_id, user=current_user, db=db)
 
         # CRITICAL: Use ProjectSandboxLifecycleService for proper locking
         from src.configuration.di_container import DIContainer
@@ -210,12 +228,12 @@ async def get_sandbox(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> SandboxResponse:
     """Get sandbox status and information."""
-    instance = await adapter.get_sandbox(sandbox_id)
-
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
+    instance, _project_id = await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     tools = []
     if instance.mcp_client and instance.mcp_client.is_connected:
@@ -241,8 +259,14 @@ async def terminate_sandbox(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Terminate a sandbox and unregister its tools from Agent context."""
+    # Authorize first; this also returns 404 for unknown sandboxes without
+    # leaking ownership info.
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     # Unregister tools from Agent context first
     try:
         from src.configuration.di_container import DIContainer
@@ -269,8 +293,13 @@ async def list_sandboxes(
     status: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> ListSandboxesResponse:
-    """List all sandboxes."""
+    """List sandboxes the caller is allowed to see (member projects only).
+
+    Superusers see all sandboxes; other users only see sandboxes whose
+    project_id matches one of their UserProject memberships.
+    """
     status_filter = None
     if status:
         try:
@@ -279,6 +308,18 @@ async def list_sandboxes(
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
 
     instances = await adapter.list_sandboxes(status=status_filter)
+
+    if not current_user.is_superuser:
+        allowed_project_ids = await list_user_project_ids(user=current_user, db=db)
+        instances = [
+            inst
+            for inst in instances
+            if (
+                getattr(inst, "project_id", None)
+                or extract_project_id(getattr(inst, "project_path", "") or "")
+            )
+            in allowed_project_ids
+        ]
 
     sandboxes = [
         SandboxResponse(
@@ -302,6 +343,11 @@ async def cleanup_expired(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ) -> dict[str, Any]:
-    """Clean up expired sandboxes."""
+    """Clean up expired sandboxes (superuser only — global operation)."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="Cleanup is restricted to administrators",
+        )
     count = await adapter.cleanup_expired(max_age_seconds=max_age_seconds)
     return {"cleaned_up": count}

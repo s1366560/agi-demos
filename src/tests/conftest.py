@@ -578,6 +578,11 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
             hashed_password="hashed_password",
             full_name="Test User",
             is_active=True,
+            # Tests using this fixture treat the user as a global admin so
+            # they can exercise endpoint behavior without setting up
+            # per-project membership rows. Tests that care about
+            # authorization paths construct their own non-superuser user.
+            is_superuser=True,
         )
         # Add tenant_id for agent endpoints that expect it
         user.tenant_id = "default_tenant"

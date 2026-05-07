@@ -7,9 +7,10 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_token_service import SandboxTokenService
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 
 from .schemas import (
@@ -18,7 +19,7 @@ from .schemas import (
     ValidateTokenRequest,
     ValidateTokenResponse,
 )
-from .utils import get_sandbox_token_service
+from .utils import assert_caller_owns_project, get_sandbox_token_service
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ async def generate_sandbox_token(
     request: SandboxTokenRequest,
     current_user: User = Depends(get_current_user),
     token_service: SandboxTokenService = Depends(get_sandbox_token_service),
+    db: AsyncSession = Depends(get_db),
 ) -> SandboxTokenResponse:
     """
     Generate a short-lived access token for sandbox WebSocket connection.
@@ -38,6 +40,9 @@ async def generate_sandbox_token(
     This token is used to authenticate WebSocket connections to sandboxes,
     especially for local sandboxes accessed via tunnel (ngrok/cloudflare).
     """
+    # Authorize: caller must own the project they're minting a token for.
+    await assert_caller_owns_project(project_id=project_id, user=current_user, db=db)
+
     # Get user's tenant (assuming single tenant per user for simplicity)
     tenant_id = current_user.tenants[0].tenant_id if current_user.tenants else "default"
 
@@ -73,8 +78,14 @@ async def validate_sandbox_token(
     """
     Validate a sandbox access token.
 
-    This endpoint is called by the sandbox MCP server to validate
-    incoming WebSocket connection tokens.
+    Called by the sandbox MCP server (service-to-service) to validate
+    incoming WebSocket connection tokens. The response intentionally omits
+    ``user_id`` to avoid cross-tenant identity leakage to any caller that
+    happens to reach this endpoint.
+
+    TODO(P1-15 follow-up): require a service-account bearer token for this
+    endpoint and move it onto an internal-only path so unauthenticated
+    network reachability is no longer enough to probe token validity.
     """
     result = token_service.validate_token(
         token=request.token,
@@ -84,7 +95,7 @@ async def validate_sandbox_token(
     return ValidateTokenResponse(
         valid=result.valid,
         project_id=result.project_id,
-        user_id=result.user_id,
+        user_id=None,
         sandbox_type=result.sandbox_type,
         error=result.error,
     )
@@ -95,12 +106,14 @@ async def revoke_project_tokens(
     project_id: str,
     current_user: User = Depends(get_current_user),
     token_service: SandboxTokenService = Depends(get_sandbox_token_service),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Revoke all active tokens for a project.
 
     Useful when disconnecting a local sandbox or for security purposes.
     """
+    await assert_caller_owns_project(project_id=project_id, user=current_user, db=db)
     count = token_service.revoke_all_for_project(project_id)
 
     return {

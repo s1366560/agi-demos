@@ -14,8 +14,9 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -25,7 +26,7 @@ from .schemas import (
     ToolCallResponse,
     ToolInfo,
 )
-from .utils import get_sandbox_adapter
+from .utils import assert_caller_owns_sandbox, get_sandbox_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,12 @@ async def connect_mcp(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Connect MCP client to sandbox."""
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     try:
         success = await adapter.connect_mcp(sandbox_id)
 
@@ -57,8 +62,12 @@ async def list_tools(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> ListToolsResponse:
     """List available MCP tools in sandbox."""
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     try:
         tools = await adapter.list_tools(sandbox_id)
 
@@ -82,6 +91,8 @@ async def list_tools(
 async def list_agent_tools(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     List sandbox tools registered to Agent context.
@@ -89,6 +100,9 @@ async def list_agent_tools(
     Returns the tool names that have been registered to the Agent
     tool registry for this sandbox.
     """
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     from src.configuration.di_container import DIContainer
 
     try:
@@ -133,6 +147,7 @@ async def call_tool(
     request: ToolCallRequest,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> ToolCallResponse:
     """
     Call an MCP tool on the sandbox.
@@ -145,6 +160,9 @@ async def call_tool(
     - grep: Search file contents
     - bash: Execute shell commands
     """
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     try:
         result = await adapter.call_tool(
             sandbox_id=sandbox_id,
@@ -171,8 +189,12 @@ async def read_file(
     limit: int = 2000,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Read a file from sandbox (convenience endpoint)."""
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     result = await adapter.call_tool(
         sandbox_id=sandbox_id,
         tool_name="read",
@@ -188,8 +210,12 @@ async def write_file(
     content: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Write a file to sandbox (convenience endpoint)."""
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     result = await adapter.call_tool(
         sandbox_id=sandbox_id,
         tool_name="write",
@@ -206,8 +232,12 @@ async def execute_bash(
     working_dir: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Execute bash command in sandbox (convenience endpoint)."""
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
     args = {"command": command, "timeout": timeout}
     if working_dir:
         args["working_dir"] = working_dir

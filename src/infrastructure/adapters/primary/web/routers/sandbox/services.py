@@ -8,6 +8,7 @@ Provides management of interactive services:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.application.services.sandbox_orchestrator import (
@@ -15,7 +16,7 @@ from src.application.services.sandbox_orchestrator import (
     SandboxOrchestrator,
     TerminalConfig,
 )
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -28,7 +29,7 @@ from .schemas import (
     TerminalStopResponse,
 )
 from .utils import (
-    extract_project_id,
+    assert_caller_owns_sandbox,
     get_event_publisher,
     get_sandbox_adapter,
     get_sandbox_orchestrator,
@@ -50,6 +51,7 @@ async def start_desktop(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    db: AsyncSession = Depends(get_db),
 ) -> DesktopStatusResponse:
     """
     Start the remote desktop service (noVNC) for a sandbox.
@@ -57,13 +59,10 @@ async def start_desktop(
     Starts Xvfb (virtual display), VNC server, and noVNC web client,
     allowing browser-based GUI access to the sandbox.
     """
-    # Verify sandbox exists
-    instance = await adapter.get_sandbox(sandbox_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
-
-    # Extract project_id from sandbox instance
-    project_id = extract_project_id(instance.project_path)
+    # Authorize and resolve project_id in a single hop.
+    _instance, project_id = await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     try:
         config = DesktopConfig(
@@ -112,19 +111,16 @@ async def stop_desktop(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    db: AsyncSession = Depends(get_db),
 ) -> DesktopStopResponse:
     """
     Stop the remote desktop service for a sandbox.
 
     Stops the Xvfb, VNC, and noVNC processes.
     """
-    # Verify sandbox exists
-    instance = await adapter.get_sandbox(sandbox_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
-
-    # Extract project_id from sandbox instance
-    project_id = extract_project_id(instance.project_path)
+    _instance, project_id = await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     try:
         success = await orchestrator.stop_desktop(sandbox_id)
@@ -156,14 +152,14 @@ async def get_desktop_status(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
+    db: AsyncSession = Depends(get_db),
 ) -> DesktopStatusResponse:
     """
     Get the current status of the remote desktop service.
     """
-    # Verify sandbox exists
-    instance = await adapter.get_sandbox(sandbox_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     try:
         status = await orchestrator.get_desktop_status(sandbox_id)
@@ -197,19 +193,16 @@ async def start_terminal(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    db: AsyncSession = Depends(get_db),
 ) -> TerminalStatusResponse:
     """
     Start the web terminal service (ttyd) for a sandbox.
 
     Starts a ttyd server that provides shell access via WebSocket.
     """
-    # Verify sandbox exists
-    instance = await adapter.get_sandbox(sandbox_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
-
-    # Extract project_id from sandbox instance
-    project_id = extract_project_id(instance.project_path)
+    _instance, project_id = await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     try:
         config = TerminalConfig(port=request.port)
@@ -252,19 +245,16 @@ async def stop_terminal(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
+    db: AsyncSession = Depends(get_db),
 ) -> TerminalStopResponse:
     """
     Stop the web terminal service for a sandbox.
 
     Stops the ttyd server process.
     """
-    # Verify sandbox exists
-    instance = await adapter.get_sandbox(sandbox_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
-
-    # Extract project_id from sandbox instance
-    project_id = extract_project_id(instance.project_path)
+    _instance, project_id = await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     try:
         success = await orchestrator.stop_terminal(sandbox_id)
@@ -296,14 +286,14 @@ async def get_terminal_status(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
+    db: AsyncSession = Depends(get_db),
 ) -> TerminalStatusResponse:
     """
     Get the current status of the web terminal service.
     """
-    # Verify sandbox exists
-    instance = await adapter.get_sandbox(sandbox_id)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
+    await assert_caller_owns_sandbox(
+        sandbox_id=sandbox_id, user=current_user, db=db, adapter=adapter
+    )
 
     try:
         status = await orchestrator.get_terminal_status(sandbox_id)
