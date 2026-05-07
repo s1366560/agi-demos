@@ -523,3 +523,75 @@ class TestFullPriorityChain:
         )
         result = await router.resolve_agent(msg, sample_context)
         assert result == "agent-conversation"
+
+
+# ---------------------------------------------------------------------------
+# P1-8: Unsupported scopes & regex error visibility
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestUnsupportedScopesRejected:
+    """USER_AGENT and PROJECT_ROLE map to no context field; reject at register."""
+
+    async def test_register_user_agent_scope_raises(self, router: DefaultMessageRouter) -> None:
+        binding = _make_binding(
+            scope=BindingScope.USER_AGENT,
+            scope_id="ua-1",
+        )
+        with pytest.raises(ValueError, match="USER_AGENT"):
+            await router.register_binding(binding)
+
+    async def test_register_project_role_scope_raises(self, router: DefaultMessageRouter) -> None:
+        binding = _make_binding(
+            scope=BindingScope.PROJECT_ROLE,
+            scope_id="role-x",
+        )
+        with pytest.raises(ValueError, match="PROJECT_ROLE"):
+            await router.register_binding(binding)
+
+    async def test_unsupported_scope_does_not_persist(
+        self,
+        router: DefaultMessageRouter,
+        mock_binding_repo: AsyncMock,
+    ) -> None:
+        binding = _make_binding(scope=BindingScope.USER_AGENT, scope_id="ua")
+        with pytest.raises(ValueError):
+            await router.register_binding(binding)
+        mock_binding_repo.save.assert_not_called()
+
+
+@pytest.mark.unit
+class TestRegexErrorVisibility:
+    """Invalid regex patterns must be visible in logs (warning, not debug)."""
+
+    async def test_invalid_regex_logs_warning_with_extras(
+        self,
+        router: DefaultMessageRouter,
+        sample_message: Message,
+        sample_context: RoutingContext,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        import logging
+
+        # Pattern with unbalanced parens triggers re.error at search time.
+        bad_pattern = "(unclosed"
+        binding = _make_binding(
+            agent_id="agent-bad",
+            scope=BindingScope.DEFAULT,
+            filter_pattern=bad_pattern,
+        )
+        await router.register_binding(binding)
+
+        with caplog.at_level(
+            logging.WARNING, logger="src.infrastructure.agent.routing.default_message_router"
+        ):
+            await router.resolve_agent(sample_message, sample_context)
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any(
+            "Invalid regex" in r.getMessage()
+            and getattr(r, "event", None) == "binding_filter_regex_error"
+            and getattr(r, "binding_id", None) == binding.id
+            for r in warnings
+        ), f"expected structured warning, got: {[r.__dict__ for r in warnings]}"

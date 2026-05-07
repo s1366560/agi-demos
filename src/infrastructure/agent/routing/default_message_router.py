@@ -22,6 +22,15 @@ _SCOPE_TO_CONTEXT_FIELD: dict[BindingScope, str | None] = {
     BindingScope.DEFAULT: None,
 }
 
+# Scopes that are declared in the enum but not yet wired into the
+# routing context (they map to ``None`` above). Bindings using these
+# scopes silently never match, which is a footgun: rejecting them at
+# registration surfaces the missing wiring loudly instead of letting
+# the caller create dead bindings.
+_UNSUPPORTED_SCOPES: frozenset[BindingScope] = frozenset(
+    {BindingScope.USER_AGENT, BindingScope.PROJECT_ROLE}
+)
+
 
 class DefaultMessageRouter:
     """Binding-based message router implementing MessageRouterPort.
@@ -60,6 +69,14 @@ class DefaultMessageRouter:
         return None
 
     async def register_binding(self, binding: MessageBinding) -> None:
+        if binding.scope in _UNSUPPORTED_SCOPES:
+            raise ValueError(
+                f"BindingScope.{binding.scope.name} is declared but not yet "
+                f"wired into the routing context. Bindings registered with "
+                f"this scope would never match. Use a supported scope "
+                f"(CONVERSATION, PROJECT, TENANT, DEFAULT) or extend "
+                f"RoutingContext + _SCOPE_TO_CONTEXT_FIELD first."
+            )
         # Persist first so a save failure does NOT leave a binding dangling
         # in the in-memory cache that no other process can see.
         await self._binding_repo.save(binding)
@@ -113,16 +130,34 @@ class DefaultMessageRouter:
 
         try:
             return re.search(pattern, content) is not None
-        except re.error:
-            logger.debug(
+        except re.error as e:
+            # Bump from DEBUG to WARNING so an invalid pattern is visible in
+            # production logs / metrics rather than silently dropping the
+            # binding from match results. Structured extras let log
+            # aggregators (or a future Prometheus counter) alert on
+            # mis-configured filters.
+            logger.warning(
                 "Invalid regex in binding %s: %s",
                 binding.id,
                 pattern,
+                extra={
+                    "event": "binding_filter_regex_error",
+                    "binding_id": binding.id,
+                    "agent_id": binding.agent_id,
+                    "scope": binding.scope.value,
+                    "regex_error": str(e),
+                },
             )
             return False
         except Exception:
             logger.exception(
                 "Regex evaluation failed for binding %s",
                 binding.id,
+                extra={
+                    "event": "binding_filter_eval_error",
+                    "binding_id": binding.id,
+                    "agent_id": binding.agent_id,
+                    "scope": binding.scope.value,
+                },
             )
             return False
