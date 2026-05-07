@@ -23,6 +23,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from src.infrastructure.agent.mcp.oauth_discovery import (
+    AuthorizationServerMetadata,
+    discover_authorization_server_metadata,
+    select_token_endpoint_auth_method,
+)
 from src.infrastructure.security.encryption_service import EncryptionService
 
 logger = logging.getLogger(__name__)
@@ -523,22 +528,45 @@ class MCPOAuthProvider:
         self._client_secret = client_secret
         self._scope = scope
         self._refresh_lock = asyncio.Lock()
+        self._discovered_metadata: AuthorizationServerMetadata | None = None
 
     @property
     def redirect_url(self) -> str:
         """Get OAuth redirect URL."""
         return f"http://127.0.0.1:{OAUTH_CALLBACK_PORT}{OAUTH_CALLBACK_PATH}"
 
+    async def discover(self) -> AuthorizationServerMetadata | None:
+        """Discover RFC 8414 / OIDC authorization-server metadata.
+
+        Caches the result on this provider; subsequent calls hit the
+        process-level discovery cache (1 hour TTL). Safe to call multiple
+        times. Returns ``None`` when the server publishes no well-known
+        document — callers should still proceed with the legacy defaults.
+        """
+        metadata = await discover_authorization_server_metadata(self._server_url)
+        self._discovered_metadata = metadata
+        return metadata
+
     @property
     def client_metadata(self) -> dict[str, Any]:
-        """Get OAuth client metadata for dynamic registration."""
+        """Get OAuth client metadata for dynamic registration.
+
+        When discovery has run (:meth:`discover`) and the server advertises
+        ``token_endpoint_auth_methods_supported``, the auth method is
+        chosen per RFC 6749 §2.3.1 (prefer HTTP Basic when a secret is
+        present). Otherwise we fall back to the legacy hard-coded values.
+        """
+        auth_method = select_token_endpoint_auth_method(
+            self._discovered_metadata,
+            has_secret=bool(self._client_secret),
+        )
         return {
             "redirect_uris": [self.redirect_url],
             "client_name": "MemStack",
             "client_uri": "https://memstack.ai",
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
-            "token_endpoint_auth_method": "client_secret_post" if self._client_secret else "none",
+            "token_endpoint_auth_method": auth_method,
         }
 
     async def client_information(self) -> OAuthClientInfo | None:
