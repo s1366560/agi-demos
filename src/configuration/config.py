@@ -448,10 +448,13 @@ class Settings(BaseSettings):
     )  # ms (increased from 30000 to 120000 = 2 minutes)
     mcp_auto_connect: bool = Field(default=True, alias="MCP_AUTO_CONNECT")
     mcp_websocket_heartbeat: int | None = Field(
-        default=None, alias="MCP_WEBSOCKET_HEARTBEAT"
-    )  # seconds; None disables heartbeat (prevents PONG timeout killing long tool calls)
-    mcp_max_global_connections: int = Field(default=100, alias="MCP_MAX_GLOBAL_CONNECTIONS")
+        default=30, alias="MCP_WEBSOCKET_HEARTBEAT"
+    )  # seconds; 30s default detects dead peers without killing live tool calls
+    mcp_max_global_connections: int = Field(default=64, alias="MCP_MAX_GLOBAL_CONNECTIONS")
     mcp_connection_ttl: int = Field(default=300, alias="MCP_CONNECTION_TTL")  # seconds
+    mcp_tls_verify: bool = Field(
+        default=True, alias="MCP_TLS_VERIFY"
+    )  # set False ONLY for local development; transports also read MCP_TLS_VERIFY directly
 
     # Plan Mode Detection Settings (Hybrid Detection Strategy)
     plan_mode_enabled: bool = Field(default=False, alias="PLAN_MODE_ENABLED")

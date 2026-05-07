@@ -12,6 +12,7 @@ MCP protocol serialization. Domain model equivalents are in:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -216,23 +217,44 @@ class MCPSubprocessClient:
         return ""
 
     async def disconnect(self) -> None:
-        """Close the subprocess."""
-        if self._proc:
-            logger.info("Disconnecting MCP subprocess")
+        """Close the subprocess.
+
+        Termination ladder: ``terminate`` → ``wait_for(5s)`` → ``kill`` →
+        ``await wait()``. If the surrounding task is cancelled mid-teardown
+        we still force-kill the child before re-raising ``CancelledError`` so
+        we never leak orphan processes.
+        """
+        proc = self._proc
+        self._proc = None
+        if proc is None:
+            self._tools = []
+            self.server_info = None
+            return
+
+        logger.info("Disconnecting MCP subprocess")
+        try:
+            with contextlib.suppress(ProcessLookupError):
+                proc.terminate()
             try:
-                self._proc.terminate()
-                try:
-                    await asyncio.wait_for(self._proc.wait(), timeout=5)
-                except TimeoutError:
-                    logger.warning("MCP subprocess did not terminate, killing")
-                    self._proc.kill()
-                    await self._proc.wait()
-            except Exception as e:
-                logger.error(f"Error disconnecting MCP subprocess: {e}")
-            finally:
-                self._proc = None
-                self._tools = []
-                self.server_info = None
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except TimeoutError:
+                logger.warning("MCP subprocess did not terminate, killing")
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                await proc.wait()
+        except asyncio.CancelledError:
+            # Outer task cancelled mid-teardown — still force-kill so we don't
+            # leak the child process, then propagate the cancellation.
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            raise
+        except Exception as e:
+            logger.error(f"Error disconnecting MCP subprocess: {e}")
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+        finally:
+            self._tools = []
+            self.server_info = None
 
     async def list_tools(self, timeout: float | None = None) -> list[MCPToolSchema]:
         """

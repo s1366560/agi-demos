@@ -18,7 +18,7 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 # Default limits
-_DEFAULT_MAX_CONNECTIONS = 100
+_DEFAULT_MAX_CONNECTIONS = 64
 _DEFAULT_TTL = 300.0  # 5 minutes
 
 
@@ -114,11 +114,16 @@ class GlobalConnectionLimiter:
         Args:
             pool_url: Identifier of the pool requesting a connection slot.
         """
-        # Fast path: try non-blocking acquire via zero-timeout wait
-        try:
-            await asyncio.wait_for(self._semaphore.acquire(), timeout=0)
+        # Fast path: try a non-blocking acquire without using
+        # ``asyncio.wait_for(_, timeout=0)`` (which has a known race that can
+        # leak a slot if the inner future completes simultaneously with the
+        # timeout). ``Semaphore.locked()`` returns True only when ``_value``
+        # is zero; in single-threaded asyncio there is no yield between the
+        # check and the immediate ``acquire()``, so this is race-free.
+        if not self._semaphore.locked():
+            await self._semaphore.acquire()
             acquired = True
-        except TimeoutError:
+        else:
             acquired = False
 
         if not acquired:

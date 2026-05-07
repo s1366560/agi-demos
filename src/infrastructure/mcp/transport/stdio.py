@@ -5,6 +5,7 @@ Communicates with MCP servers via subprocess stdin/stdout.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -156,24 +157,38 @@ class StdioTransport(BaseTransport):
 
     @override
     async def stop(self) -> None:
-        """Terminate subprocess."""
+        """Terminate subprocess.
+
+        Termination ladder: ``terminate`` → ``wait_for(5s)`` → ``kill`` →
+        ``await wait()``. ``CancelledError`` is force-killed-then-re-raised
+        so we never leak orphan processes when the outer task is cancelled.
+        """
         if not self._is_open:
             return
 
         self._is_open = False
         self._initialized = False
 
-        if self._process:
+        proc = self._process
+        self._process = None
+        if proc is not None:
             try:
-                self._process.terminate()
-                await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except TimeoutError:
-                self._process.kill()
-                await self._process.wait()
+                with contextlib.suppress(ProcessLookupError):
+                    proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5.0)
+                except TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+                    await proc.wait()
+            except asyncio.CancelledError:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                raise
             except Exception as e:
                 logger.error(f"Error stopping subprocess: {e}")
-            finally:
-                self._process = None
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
 
         logger.info("Stdio transport stopped")
 

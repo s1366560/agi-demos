@@ -23,6 +23,11 @@ from typing import Any, cast
 
 import aiohttp
 
+from src.infrastructure.mcp._security import (
+    DEFAULT_WS_HEARTBEAT_SECONDS,
+    DEFAULT_WS_MAX_MSG_SIZE,
+    tls_verify_default,
+)
 from src.infrastructure.mcp.clients.subprocess_client import (
     MCPToolResult,
     MCPToolSchema,
@@ -218,16 +223,34 @@ class MCPWebSocketClient:
         logger.info(f"Connecting to MCP server via WebSocket: {self.url}")
 
         try:
-            # Create aiohttp session
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout))
+            # Create aiohttp session with explicit total/connect/read timeouts so
+            # a stalled remote cannot pin the connection forever even when the
+            # caller forgets to pass a per-request timeout.
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(
+                    total=timeout,
+                    connect=min(timeout, 10.0),
+                    sock_read=timeout,
+                ),
+            )
 
-            # Connect WebSocket with increased max_msg_size for large file transfers
-            # Default is 4MB, we increase to 100MB to support large attachments
+            # Heartbeat default 30s ensures dead peers are detected; explicit
+            # ssl flag forces certificate verification unless MCP_TLS_VERIFY
+            # has been opted out. max_msg_size caps frame size at 16 MiB —
+            # MCP envelopes are JSON-RPC and should not exceed this; large
+            # binary payloads belong on streaming/signed-URL channels.
+            heartbeat = (
+                self.heartbeat_interval
+                if self.heartbeat_interval is not None
+                else DEFAULT_WS_HEARTBEAT_SECONDS
+            )
+            ssl_flag: bool = tls_verify_default() if self.url.startswith("wss://") else True
             self._ws = await self._session.ws_connect(
                 self.url,
                 headers=self.headers,
-                heartbeat=self.heartbeat_interval,
-                max_msg_size=100 * 1024 * 1024,  # 100MB
+                heartbeat=heartbeat,
+                max_msg_size=DEFAULT_WS_MAX_MSG_SIZE,
+                ssl=ssl_flag,
             )
 
             # Start background task to receive messages

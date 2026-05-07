@@ -10,6 +10,7 @@ from typing import Any, cast, override
 import httpx
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
+from src.infrastructure.mcp._security import tls_verify_default
 from src.infrastructure.mcp.transport.base import (
     BaseTransport,
     MCPTransportClosedError,
@@ -57,7 +58,8 @@ class HTTPTransport(BaseTransport):
         self._client = httpx.AsyncClient(
             base_url=config.url,
             headers=config.headers or {},
-            timeout=timeout,
+            timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
+            verify=tls_verify_default(),
         )
 
         self._is_open = True

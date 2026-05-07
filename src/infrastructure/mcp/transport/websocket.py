@@ -13,6 +13,11 @@ from typing import Any, cast, override
 import aiohttp
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
+from src.infrastructure.mcp._security import (
+    DEFAULT_WS_HEARTBEAT_SECONDS,
+    DEFAULT_WS_MAX_MSG_SIZE,
+    tls_verify_default,
+)
 from src.infrastructure.mcp.transport.base import (
     BaseTransport,
     MCPTransportClosedError,
@@ -69,15 +74,30 @@ class WebSocketTransport(BaseTransport):
             logger.info(f"Connecting to MCP server via WebSocket: {config.url}")
 
             timeout = config.timeout_seconds if config.timeout else 30.0
-            # None disables heartbeat; avoids PONG timeout killing long tool calls
-            heartbeat = config.heartbeat_interval
+            # Heartbeat: default 30s; config may override (zero/negative is ignored).
+            heartbeat: float | int = (
+                config.heartbeat_interval
+                if config.heartbeat_interval and config.heartbeat_interval > 0
+                else DEFAULT_WS_HEARTBEAT_SECONDS
+            )
+            ssl_flag: bool = (
+                tls_verify_default() if config.url and config.url.startswith("wss://") else True
+            )
 
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout))
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(
+                    total=timeout,
+                    connect=min(timeout, 10.0),
+                    sock_read=timeout,
+                ),
+            )
 
             self._ws = await self._session.ws_connect(
                 config.url,
                 headers=config.headers or {},
                 heartbeat=heartbeat,
+                max_msg_size=DEFAULT_WS_MAX_MSG_SIZE,
+                ssl=ssl_flag,
             )
 
             self._is_open = True

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import aiohttp
 
+from src.infrastructure.mcp._security import tls_verify_default
 from src.infrastructure.mcp.clients.subprocess_client import (
     MCPToolResult,
     MCPToolSchema,
@@ -132,12 +133,19 @@ class MCPHttpClient:
     async def _connect_http(self, timeout: float) -> bool:
         """Connect using standard HTTP transport."""
         try:
-            # Create HTTP session
-            connector = aiohttp.TCPConnector(limit=10)
+            # Create HTTP session with explicit TLS verification policy. aiohttp
+            # uses the connector's ssl_context (or ssl arg on requests) to drive
+            # certificate validation; we propagate the global default here.
+            ssl_flag: bool = tls_verify_default() if self.url.startswith("https://") else True
+            connector = aiohttp.TCPConnector(limit=10, ssl=ssl_flag)
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 headers=self.headers,
-                timeout=aiohttp.ClientTimeout(total=timeout),
+                timeout=aiohttp.ClientTimeout(
+                    total=timeout,
+                    connect=min(timeout, 10.0),
+                    sock_read=timeout,
+                ),
             )
 
             # Send initialize request
@@ -208,10 +216,11 @@ class MCPHttpClient:
             self._exit_stack = AsyncExitStack()
             await self._exit_stack.__aenter__()
 
-            # Create httpx client with headers
+            # Create httpx client with headers and explicit TLS verify
             self._http_client = httpx.AsyncClient(
                 headers=self.headers,
-                timeout=httpx.Timeout(timeout),
+                timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
+                verify=tls_verify_default(),
             )
             self._http_client = await self._exit_stack.enter_async_context(self._http_client)
 
