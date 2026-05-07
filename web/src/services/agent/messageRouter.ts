@@ -683,5 +683,16 @@ export function routeToHandler(
     case 'agent_conversation_finished':
       handler.onAgentConversationFinished?.(event as AgentEvent);
       break;
+    default:
+      // Defect #12: surface unhandled event types in dev so new backend events
+      // never silently disappear at the routing layer. In production we stay
+      // quiet to avoid console noise on legacy / experimental event types.
+      if (import.meta.env.DEV) {
+        logger.warn('[AgentWS] unhandled event type', {
+          eventType,
+          data,
+        });
+      }
+      break;
   }
 }

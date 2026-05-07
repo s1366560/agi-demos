@@ -235,9 +235,10 @@ class AgentServiceImpl implements AgentService {
     projectId: string,
     status?: 'active' | 'archived' | 'deleted',
     limit?: number,
-    offset?: number
+    offset?: number,
+    signal?: AbortSignal
   ): Promise<PaginatedConversationsResponse> {
-    return restApi.listConversations(projectId, status, limit, offset);
+    return restApi.listConversations(projectId, status, limit, offset, signal);
   }
 
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null> {

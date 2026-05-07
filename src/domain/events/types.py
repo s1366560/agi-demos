@@ -328,6 +328,10 @@ class AgentEventType(str, Enum):
     WORKSPACE_WORKER_REPORT_SUBMITTED = "workspace_worker_report_submitted"
     WORKSPACE_ADJUDICATION_COMPLETE = "workspace_adjudication_complete"
     WORKSPACE_GOAL_COMPLETED = "workspace_goal_completed"
+    TASK_EXECUTION_SESSION_UPDATED = "task_execution_session_updated"
+    TASK_EXECUTION_INCIDENT_OPENED = "task_execution_incident_opened"
+    TASK_RECOVERY_ACTION_STARTED = "task_recovery_action_started"
+    TASK_RECOVERY_ACTION_COMPLETED = "task_recovery_action_completed"
 
 
 # =============================================================================
@@ -527,6 +531,10 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.WORKSPACE_WORKER_REPORT_SUBMITTED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_ADJUDICATION_COMPLETE: EventCategory.AGENT,
     AgentEventType.WORKSPACE_GOAL_COMPLETED: EventCategory.AGENT,
+    AgentEventType.TASK_EXECUTION_SESSION_UPDATED: EventCategory.AGENT,
+    AgentEventType.TASK_EXECUTION_INCIDENT_OPENED: EventCategory.AGENT,
+    AgentEventType.TASK_RECOVERY_ACTION_STARTED: EventCategory.AGENT,
+    AgentEventType.TASK_RECOVERY_ACTION_COMPLETED: EventCategory.AGENT,
 }
 
 

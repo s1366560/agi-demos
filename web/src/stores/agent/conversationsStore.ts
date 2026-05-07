@@ -53,7 +53,8 @@ interface ConversationsState {
   listConversations: (
     projectId: string,
     status?: ConversationStatus,
-    limit?: number
+    limit?: number,
+    signal?: AbortSignal
   ) => Promise<void>;
   loadMoreConversations: (projectId: string, status?: ConversationStatus) => Promise<void>;
   createConversation: (projectId: string, title?: string) => Promise<Conversation>;
@@ -99,7 +100,12 @@ export const useConversationsStore = create<ConversationsState>()(
        * @param status - Optional status filter
        * @param limit - Optional limit (default 10)
        */
-      listConversations: async (projectId: string, status?: ConversationStatus, limit = 10) => {
+      listConversations: async (
+        projectId: string,
+        status?: ConversationStatus,
+        limit = 10,
+        signal?: AbortSignal
+      ) => {
         // Skip if already loading for the same project
         const state = get();
         if (state.conversationsLoading) {
@@ -108,7 +114,13 @@ export const useConversationsStore = create<ConversationsState>()(
 
         set({ conversationsLoading: true, conversationsError: null });
         try {
-          const response = await agentService.listConversations(projectId, status, limit, 0);
+          const response = await agentService.listConversations(
+            projectId,
+            status,
+            limit,
+            0,
+            signal
+          );
           set({
             conversations: response.items,
             hasMoreConversations: response.has_more,
@@ -116,6 +128,12 @@ export const useConversationsStore = create<ConversationsState>()(
             conversationsLoading: false,
           });
         } catch (error: unknown) {
+          // Defect #15: silently swallow aborted requests so a stale
+          // project switch does not surface as a user-facing error.
+          if (signal?.aborted || (error as { name?: string })?.name === 'CanceledError') {
+            set({ conversationsLoading: false });
+            return;
+          }
           const err = error as {
             response?: { data?: { detail?: string | undefined } | undefined } | undefined;
             message?: string | undefined;

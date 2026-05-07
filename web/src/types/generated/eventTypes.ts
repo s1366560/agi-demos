@@ -1,6 +1,6 @@
 /**
  * Auto-generated event types from Python.
- * Generated at: 2026-04-22T07:04:49.056201Z
+ * Generated at: 2026-05-07T08:22:41.903971Z
  *
  * DO NOT EDIT MANUALLY - run `make generate-event-types` to regenerate.
  */
@@ -167,16 +167,20 @@ export type AgentEventType =
   | "workspace_worker_dispatched"
   | "workspace_worker_report_submitted"
   | "workspace_adjudication_complete"
-  | "workspace_goal_completed";
+  | "workspace_goal_completed"
+  | "task_execution_session_updated"
+  | "task_execution_incident_opened"
+  | "task_recovery_action_started"
+  | "task_recovery_action_completed";
 
 // Delta events (not persisted)
 export const DELTA_EVENT_TYPES: AgentEventType[] = ["act_delta", "thought_delta", "text_end", "text_start", "text_delta"];
 
 // Terminal events (stream completion)
-export const TERMINAL_EVENT_TYPES: AgentEventType[] = ["error", "complete", "cancelled"];
+export const TERMINAL_EVENT_TYPES: AgentEventType[] = ["cancelled", "error", "complete"];
 
 // HITL events (require user response)
-export const HITL_EVENT_TYPES: AgentEventType[] = ["clarification_asked", "permission_asked", "env_var_requested", "decision_asked", "a2ui_action_asked", "elicitation_asked"];
+export const HITL_EVENT_TYPES: AgentEventType[] = ["a2ui_action_asked", "decision_asked", "permission_asked", "clarification_asked", "elicitation_asked", "env_var_requested"];
 
 // Helper functions
 export function isTerminalEvent(eventType: AgentEventType): boolean {
@@ -345,6 +349,10 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   "workspace_worker_report_submitted": "agent",
   "workspace_adjudication_complete": "agent",
   "workspace_goal_completed": "agent",
+  "task_execution_session_updated": "agent",
+  "task_execution_incident_opened": "agent",
+  "task_recovery_action_started": "agent",
+  "task_recovery_action_completed": "agent",
 };
 
 export function getEventCategory(eventType: AgentEventType): EventCategory {
@@ -505,4 +513,8 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   "workspace_worker_report_submitted",
   "workspace_adjudication_complete",
   "workspace_goal_completed",
+  "task_execution_session_updated",
+  "task_execution_incident_opened",
+  "task_recovery_action_started",
+  "task_recovery_action_completed",
 ];

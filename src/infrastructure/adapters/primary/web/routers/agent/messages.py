@@ -14,6 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_llm_client
+from src.domain.events.types import (
+    DELTA_EVENT_TYPES,
+    INTERNAL_EVENT_TYPES,
+    AgentEventType,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -31,36 +36,64 @@ from .utils import get_container_with_db
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_DISPLAYABLE_EVENTS = {
-    "user_message",
-    "assistant_message",
-    "thought",
-    "act",
-    "observe",
-    "work_plan",
-    "artifact_created",
-    "artifact_ready",
-    "artifact_error",
-    # Task timeline events
-    "task_start",
-    "task_complete",
-    # HITL (Human-in-the-Loop) events
-    "clarification_asked",
-    "clarification_answered",
-    "decision_asked",
-    "decision_answered",
-    "env_var_requested",
-    "env_var_provided",
-    "a2ui_action_asked",
-    # Agent emits both permission_asked and permission_requested
-    "permission_asked",
-    "permission_requested",
-    # Agent emits both permission_replied and permission_granted
-    "permission_replied",
-    "permission_granted",
-    # Canvas events (A2UI persistence)
-    "canvas_updated",
+# ---------------------------------------------------------------------------
+# Displayable events — derived from the canonical AgentEventType registry.
+#
+# The history endpoint (GET /conversations/{cid}/messages) replays events from
+# the WAL on reconnect.  For a long-running session the live frontend router
+# (web/src/services/agent/messageRouter.ts) handles ~80+ event types, so a
+# hand-maintained allow-list is brittle and silently drops new types.
+#
+# Strategy: derive ``_DISPLAYABLE_EVENTS`` from ``AgentEventType`` minus an
+# explicit deny-list of types that are unsafe or pointless to replay
+# (streaming fragments, internal control signals, lifecycle markers that the
+# UI doesn't render historically).  Adding a new event type to
+# ``AgentEventType`` automatically makes it replayable unless explicitly
+# excluded here.
+# ---------------------------------------------------------------------------
+
+# Lifecycle / status markers that have no historical UI value.  ``status`` and
+# ``start`` are emitted on every run; ``complete``/``cancelled`` are inferred
+# from the message lifecycle on the client.  ``message`` is a generic carrier
+# already covered by ``user_message`` / ``assistant_message``.
+_LIFECYCLE_NON_DISPLAYABLE: set[AgentEventType] = {
+    AgentEventType.STATUS,
+    AgentEventType.START,
+    AgentEventType.COMPLETE,
+    AgentEventType.CANCELLED,
+    AgentEventType.ERROR,
+    AgentEventType.MESSAGE,
+    AgentEventType.PROGRESS,
+    AgentEventType.TITLE_GENERATED,
 }
+
+# Events derived from other persisted state — replaying them produces
+# duplicates of artefacts already rendered from the timeline + DB.
+_DERIVED_NON_DISPLAYABLE: set[AgentEventType] = {
+    AgentEventType.TOOLS_UPDATED,
+    AgentEventType.CONTEXT_STATUS,
+    AgentEventType.CONTEXT_SUMMARY_GENERATED,
+}
+
+_NON_DISPLAYABLE_EVENT_TYPES: set[AgentEventType] = (
+    DELTA_EVENT_TYPES
+    | INTERNAL_EVENT_TYPES
+    | _LIFECYCLE_NON_DISPLAYABLE
+    | _DERIVED_NON_DISPLAYABLE
+)
+
+_DISPLAYABLE_EVENTS: set[str] = {
+    et.value for et in AgentEventType if et not in _NON_DISPLAYABLE_EVENT_TYPES
+}
+
+# Legacy alias event-type strings that the agent has historically emitted but
+# are not first-class members of ``AgentEventType``.  Preserve replay parity.
+_DISPLAYABLE_EVENTS.update(
+    {
+        "permission_requested",  # legacy alias for permission_asked
+        "permission_granted",  # legacy alias for permission_replied
+    }
+)
 
 _SKIP_EVENT_SENTINEL = object()
 

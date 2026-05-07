@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 import redis.asyncio as aioredis
 
-from src.configuration.config import get_settings
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
@@ -1208,14 +1207,20 @@ async def _publish_error_event(
     error_message: str,
     correlation_id: str | None = None,
 ) -> None:
-    settings = get_settings()
-    redis_client = aioredis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
+    """Publish an error event to the conversation Redis stream.
+
+    Uses the pooled Redis client (``_get_redis_client``) instead of opening a
+    fresh connection per call. The previous implementation called
+    ``aioredis.from_url`` + ``close()`` on every error path, which caused
+    connection churn and a ``RuntimeError: Event loop is closed`` race during
+    actor shutdown.
+    """
     stream_key = f"agent:events:{conversation_id}"
 
     now = datetime.now(UTC)
     now_us = int(now.timestamp() * 1_000_000)
 
-    error_event = {
+    error_event: dict[str, Any] = {
         "type": "error",
         "event_time_us": now_us,
         "event_counter": 0,
@@ -1230,8 +1235,20 @@ async def _publish_error_event(
     if correlation_id:
         error_event["correlation_id"] = correlation_id
 
-    await redis_client.xadd(stream_key, {"data": json.dumps(error_event)}, maxlen=1000)
-    await redis_client.close()
+    try:
+        redis_client = await _get_redis_client()
+        await redis_client.xadd(
+            stream_key, {"data": json.dumps(error_event)}, maxlen=1000
+        )
+    except Exception as e:
+        logger.error(
+            f"[ActorExecution] Failed to publish error event to Redis: {e}",
+            exc_info=True,
+        )
+        agent_metrics.increment(
+            "project_agent.event_publish_errors",
+            labels={"event_type": "error"},
+        )
 
 
 async def _publish_event_to_stream(
@@ -1279,7 +1296,19 @@ async def _publish_event_to_stream(
                 f"conversation={conversation_id}, tasks={task_count}"
             )
     except Exception as e:
-        logger.warning(f"[ActorExecution] Failed to publish event to Redis: {e}")
+        # Promoted from warning to error: when Redis publish fails the live UI
+        # stalls until the WAL replay path catches up on reconnect. The DB
+        # remains the source of truth (``_maybe_incremental_persist``), so we
+        # do not raise; we surface a metric so dashboards can alert.
+        logger.error(
+            f"[ActorExecution] Failed to publish {event_type} event to Redis "
+            f"(conversation={conversation_id}): {e}",
+            exc_info=True,
+        )
+        agent_metrics.increment(
+            "project_agent.event_publish_errors",
+            labels={"event_type": event_type},
+        )
 
 
 async def _get_redis_client() -> aioredis.Redis:

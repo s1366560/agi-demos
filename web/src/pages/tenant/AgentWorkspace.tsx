@@ -46,13 +46,27 @@ export const AgentWorkspace: React.FC = () => {
   const listProjects = useProjectStore((state) => state.listProjects);
   const loadConversations = useAgentV3Store((state) => state.loadConversations);
 
+  // Resolve the effective tenant id early so localStorage keys can be scoped
+  // by tenant. Without scoping, switching tenants would leak the previous
+  // tenant's project id and produce a 404 on first load.
+  const tenantId = useMemo(
+    () => urlTenantId || currentTenant?.id || user?.tenant_id,
+    [urlTenantId, currentTenant?.id, user?.tenant_id]
+  );
+
+  // Tenant-scoped storage keys. Falls back to "global" when the tenant id
+  // is not yet known so the hook receives a stable key.
+  const tenantScope = tenantId ?? 'global';
+  const lastProjectIdKey = `agent:${tenantScope}:lastProjectId`;
+  const lastWorkspaceIdKey = `agent:${tenantScope}:lastWorkspaceId`;
+
   // Track selected project for this session - using useLocalStorage for better performance
   const { value: lastProjectId, setValue: setLastProjectId } = useLocalStorage<string | null>(
-    'agent:lastProjectId',
+    lastProjectIdKey,
     null
   );
   const { value: lastWorkspaceId, setValue: setLastWorkspaceId } = useLocalStorage<string | null>(
-    'agent:lastWorkspaceId',
+    lastWorkspaceIdKey,
     null
   );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -76,12 +90,6 @@ export const AgentWorkspace: React.FC = () => {
 
   // Subscribe to workspace SSE events for real-time group chat updates
   useBlackboardSSE(effectiveWorkspaceId);
-
-  // Get effective tenant ID - memoized to prevent recalculation
-  const tenantId = useMemo(
-    () => urlTenantId || currentTenant?.id || user?.tenant_id,
-    [urlTenantId, currentTenant?.id, user?.tenant_id]
-  );
 
   // Calculate base path for conversation navigation - memoized
   const basePath = useMemo(
@@ -128,16 +136,24 @@ export const AgentWorkspace: React.FC = () => {
 
   // Load conversations when project changes
   useEffect(() => {
-    if (selectedProjectId) {
-      loadConversations(selectedProjectId);
-      // Persist selection using cached hook
-      setLastProjectId(selectedProjectId);
-      // Update global current project for consistency
-      const project = projects.find((p: Project) => p.id === selectedProjectId);
-      if (project) {
-        setCurrentProject(project);
-      }
+    if (!selectedProjectId) {
+      return;
     }
+    // Defect #15: cancel any in-flight conversation list request when the
+    // user switches projects so a slow response can't overwrite the newer
+    // project's list.
+    const controller = new AbortController();
+    loadConversations(selectedProjectId, controller.signal);
+    // Persist selection using cached hook
+    setLastProjectId(selectedProjectId);
+    // Update global current project for consistency
+    const project = projects.find((p: Project) => p.id === selectedProjectId);
+    if (project) {
+      setCurrentProject(project);
+    }
+    return () => {
+      controller.abort();
+    };
   }, [selectedProjectId, loadConversations, projects, setCurrentProject, setLastProjectId]);
 
   // Show loading while initializing projects

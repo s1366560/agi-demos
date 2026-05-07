@@ -27,7 +27,8 @@ export interface AgentService {
     projectId: string,
     status?: ConversationStatus,
     limit?: number,
-    offset?: number
+    offset?: number,
+    signal?: AbortSignal
   ): Promise<PaginatedConversationsResponse>;
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null>;
   chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void>;

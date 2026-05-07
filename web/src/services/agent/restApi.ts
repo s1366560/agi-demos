@@ -27,7 +27,8 @@ export const restApi = {
     projectId: string,
     status?: 'active' | 'archived' | 'deleted',
     limit = 10,
-    offset = 0
+    offset = 0,
+    signal?: AbortSignal
   ): Promise<PaginatedConversationsResponse> {
     const params: Record<string, string | number> = {
       project_id: projectId,
@@ -37,7 +38,10 @@ export const restApi = {
     if (status) {
       params.status = status;
     }
-    return await api.get<PaginatedConversationsResponse>('/agent/conversations', { params });
+    return await api.get<PaginatedConversationsResponse>('/agent/conversations', {
+      params,
+      ...(signal ? { signal } : {}),
+    });
   },
 
   async getConversation(conversationId: string, projectId: string): Promise<Conversation | null> {

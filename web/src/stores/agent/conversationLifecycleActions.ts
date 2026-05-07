@@ -45,7 +45,7 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
   const { get, set, resetCanvasForConversationScope } = deps;
 
   return {
-    loadConversations: async (projectId: string): Promise<void> => {
+    loadConversations: async (projectId: string, signal?: AbortSignal): Promise<void> => {
       logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
 
       // Prevent duplicate calls for the same project
@@ -60,7 +60,11 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
 
       try {
         // Delegate to conversationsStore for API call + list management
-        await useConversationsStore.getState().listConversations(projectId);
+        await useConversationsStore.getState().listConversations(projectId, undefined, undefined, signal);
+        // If the request was aborted (e.g. user switched projects), stop here.
+        if (signal?.aborted) {
+          return;
+        }
         // Sync back to agentV3 state (strangler fig dual-write)
         const convState = useConversationsStore.getState();
         set({
@@ -70,6 +74,9 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         });
         logger.debug(`[agentV3] Loaded ${String(convState.conversations.length)} conversations via conversationsStore`);
       } catch (error) {
+        if (signal?.aborted || (error as { name?: string })?.name === 'CanceledError') {
+          return;
+        }
         console.error('[agentV3] Failed to list conversations', error);
       }
     },

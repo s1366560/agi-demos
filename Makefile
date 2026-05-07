@@ -523,7 +523,7 @@ check: format lint test ## Run all quality checks
 
 generate-event-types: ## Generate TypeScript event types from Python
 	@echo " Generating TypeScript event types..."
-	python scripts/generate_event_types.py
+	uv run python scripts/generate_event_types.py
 	@echo " TypeScript event types generated"
 
 # =============================================================================

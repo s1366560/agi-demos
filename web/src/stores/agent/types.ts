@@ -57,7 +57,7 @@ export interface AgentV3State {
 
   // Actions
   setActiveConversation: (id: string | null) => void;
-  loadConversations: (projectId: string) => Promise<void>;
+  loadConversations: (projectId: string, signal?: AbortSignal) => Promise<void>;
   loadMoreConversations: (projectId: string) => Promise<void>;
   loadMessages: (conversationId: string, projectId: string) => Promise<void>;
   loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;

@@ -27,7 +27,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, cast, runtime_checkable
 
 from src.domain.events.agent_events import (
     AgentActDeltaEvent,
@@ -236,6 +236,23 @@ class ProcessorConfig:
             )
 
 
+@runtime_checkable
+class PendingEventEmitter(Protocol):
+    """Tools that buffer side-effect events between execute() calls.
+
+    The processor calls ``consume_pending_events`` after each tool execution
+    to drain buffered domain events (task list updates, artefact lifecycle,
+    toolset changes, etc.) into the agent stream. The contract is:
+
+    1. Each call must drain *and clear* the internal buffer.
+    2. The returned iterable yields plain ``dict`` events compatible with
+       :class:`AgentDomainEvent` deserialisation, never raw tool results.
+    3. Implementations must be safe to call when the buffer is empty.
+    """
+
+    def consume_pending_events(self) -> list[Any]: ...
+
+
 @dataclass
 class ToolDefinition:
     """Tool definition for LLM."""
@@ -258,6 +275,30 @@ class ToolDefinition:
                 "parameters": self.parameters,
             },
         }
+
+
+def _consume_tool_pending_events(tool_def: "ToolDefinition") -> list[Any]:
+    """Safely drain pending events from a tool's underlying instance.
+
+    Replaces the historical ``getattr(tool_def, "_tool_instance", None)`` +
+    ``hasattr(..., "consume_pending_events")`` boilerplate scattered across
+    the processor.  Returns an empty list when the tool has no instance, the
+    instance does not implement :class:`PendingEventEmitter`, or the call
+    raises (errors are logged but never propagated, so a misbehaving tool
+    can never break the ReAct loop).
+    """
+    instance = getattr(tool_def, "_tool_instance", None)
+    if instance is None or not isinstance(instance, PendingEventEmitter):
+        return []
+    try:
+        events = instance.consume_pending_events()
+    except Exception:
+        logger.exception(
+            "[Processor] consume_pending_events failed for tool %s",
+            getattr(tool_def, "name", "<unknown>"),
+        )
+        return []
+    return list(events) if events else []
 
 
 ProcessorEvent = AgentDomainEvent | dict[str, Any]
@@ -3512,9 +3553,8 @@ class SessionProcessor:
                 if tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
                     tool_instance.set_runtime_context(self._ctx)
                 result = await self._td.execute(**kwargs)
-                if tool_instance is not None and hasattr(tool_instance, "consume_pending_events"):
-                    for event in tool_instance.consume_pending_events():
-                        await self._ctx.emit(event)
+                for event in _consume_tool_pending_events(self._td):
+                    await self._ctx.emit(event)
                 return result
 
         adapter = _ToolAdapter(tool_def, ctx)
