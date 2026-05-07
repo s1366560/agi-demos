@@ -242,13 +242,26 @@ class TaskExecutionSessionMonitor:
         action_reason = reason or _default_action_reason(before, action)
 
         if action == "mark_human_blocked":
+            blocked_attempt = await self._ensure_attempt_for_human_block(
+                task=task,
+                attempt=attempt,
+                before=before,
+                reason=action_reason,
+            )
             await self._command_service.update_task(
                 workspace_id=workspace_id,
                 task_id=task_id,
                 actor_user_id=actor_user_id,
                 status=WorkspaceTaskStatus.BLOCKED,
                 blocker_reason=action_reason,
-                metadata=_metadata_patch(task, action, before, action_reason, "requires_human"),
+                metadata=_metadata_patch(
+                    task,
+                    action,
+                    before,
+                    action_reason,
+                    "requires_human",
+                    current_attempt_id=blocked_attempt.id,
+                ),
                 reason=action_reason,
                 authority=_leader_authority(task),
             )
@@ -640,6 +653,33 @@ class TaskExecutionSessionMonitor:
             adjudication_reason="task_execution_session_recovery",
         )
 
+    async def _ensure_attempt_for_human_block(
+        self,
+        *,
+        task: WorkspaceTask,
+        attempt: WorkspaceTaskSessionAttempt | None,
+        before: TaskExecutionSessionState,
+        reason: str,
+    ) -> WorkspaceTaskSessionAttempt:
+        attempt_service = WorkspaceTaskSessionAttemptService(self._attempt_repo)
+        if attempt is None:
+            metadata = _metadata(task)
+            attempt = await attempt_service.create_attempt(
+                workspace_task_id=task.id,
+                root_goal_task_id=_root_goal_task_id(task) or task.id,
+                workspace_id=task.workspace_id,
+                worker_agent_id=task.assignee_agent_id,
+                leader_agent_id=_text(metadata.get("leader_agent_id")),
+                conversation_id=before.conversation_id,
+            )
+        elif before.conversation_id and not attempt.conversation_id:
+            attempt = await attempt_service.bind_conversation(attempt.id, before.conversation_id)
+        return await attempt_service.block(
+            attempt.id,
+            leader_feedback=reason,
+            adjudication_reason="task_execution_session_recovery",
+        )
+
     async def _enqueue_attempt_retry(
         self,
         *,
@@ -736,15 +776,18 @@ def _metadata_patch(
     before: TaskExecutionSessionState,
     reason: str,
     status: str,
+    *,
+    current_attempt_id: str | None = None,
 ) -> dict[str, object]:
     metadata = _metadata(task)
     ledger = _recovery_ledger(metadata)
+    attempt_id = current_attempt_id or before.attempt_id
     entry = {
         "action": action,
         "status": status,
         "reason": reason,
         "at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "attempt_id": before.attempt_id,
+        "attempt_id": attempt_id,
         "conversation_id": before.conversation_id,
         "incident_types": [incident.type for incident in before.incidents],
     }
@@ -757,8 +800,8 @@ def _metadata_patch(
         .replace("+00:00", "Z"),
         "execution_recovery_actions": [entry, *ledger][:_MAX_RECOVERY_LEDGER_ITEMS],
     }
-    if before.attempt_id:
-        patch[CURRENT_ATTEMPT_ID] = before.attempt_id
+    if attempt_id:
+        patch[CURRENT_ATTEMPT_ID] = attempt_id
     return patch
 
 

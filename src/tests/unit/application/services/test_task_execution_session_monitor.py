@@ -195,6 +195,7 @@ class TestTaskExecutionSessionMonitor:
         command_service = AsyncMock()
         attempt_repo = AsyncMock()
         attempt_repo.find_by_id.return_value = _attempt()
+        attempt_repo.save = AsyncMock(side_effect=lambda attempt: attempt)
         service = TaskExecutionSessionMonitor(
             db=db_session,
             task_service=task_service,
@@ -215,3 +216,80 @@ class TestTaskExecutionSessionMonitor:
         metadata = command_service.update_task.await_args.kwargs["metadata"]
         assert metadata["current_attempt_id"] == "attempt-session-monitor-1"
         assert metadata["task_execution_session_status"] == "initialization_failed"
+
+    async def test_mark_human_blocked_creates_attempt_when_monitor_has_none(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        task = _task()
+        task.metadata.pop("current_attempt_id")
+        before = TaskExecutionSessionState(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            task_status="in_progress",
+            health="degraded",
+            session_status="missing_execution_status",
+            conversation_id="conv-session-monitor-1",
+            attempt_id=None,
+            attempt_status=None,
+            execution_status=None,
+            last_event_at=_NOW,
+            last_assistant_event_at=None,
+            last_error="No execution attempt was found",
+            has_user_input=True,
+            has_assistant_output=False,
+            incidents=(
+                TaskExecutionIncident(
+                    type="missing_execution_status",
+                    severity="error",
+                    summary="No execution status exists for this task.",
+                    opened_at=_NOW,
+                ),
+            ),
+            recommended_recovery_action="mark_human_blocked",
+            available_interventions=("mark_human_blocked",),
+        )
+        task_service = AsyncMock()
+        task_service.get_task.return_value = task
+        command_service = AsyncMock()
+        saved_attempts: dict[str, WorkspaceTaskSessionAttempt] = {}
+
+        async def _save_attempt(
+            attempt: WorkspaceTaskSessionAttempt,
+        ) -> WorkspaceTaskSessionAttempt:
+            saved_attempts[attempt.id] = attempt
+            return attempt
+
+        async def _find_attempt(attempt_id: str) -> WorkspaceTaskSessionAttempt | None:
+            return saved_attempts.get(attempt_id)
+
+        attempt_repo = AsyncMock()
+        attempt_repo.lock_attempt_creation = AsyncMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
+        attempt_repo.find_by_workspace_task_id = AsyncMock(return_value=[])
+        attempt_repo.find_by_id = AsyncMock(side_effect=_find_attempt)
+        attempt_repo.save = AsyncMock(side_effect=_save_attempt)
+        service = TaskExecutionSessionMonitor(
+            db=db_session,
+            task_service=task_service,
+            command_service=command_service,
+            attempt_repo=attempt_repo,
+        )
+        service.get_state = AsyncMock(side_effect=[before, before])  # type: ignore[method-assign]
+
+        result = await service.apply_recovery_action(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            actor_user_id="user-session-monitor-1",
+            action="mark_human_blocked",
+            reason="recovery budget exhausted",
+        )
+
+        assert result.status == "completed"
+        assert attempt_repo.lock_attempt_creation.await_args.args == (task.id,)
+        created_attempt = next(iter(saved_attempts.values()))
+        assert created_attempt.status is WorkspaceTaskSessionAttemptStatus.BLOCKED
+        assert created_attempt.conversation_id == "conv-session-monitor-1"
+        metadata = command_service.update_task.await_args.kwargs["metadata"]
+        assert metadata["current_attempt_id"] == created_attempt.id
+        assert metadata["execution_recovery_actions"][0]["attempt_id"] == created_attempt.id
