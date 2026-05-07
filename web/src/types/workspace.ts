@@ -241,6 +241,74 @@ export interface WorkspaceTaskExperienceSummary {
   activity: Array<Record<string, unknown>>;
 }
 
+export type TaskExecutionSessionHealth = 'healthy' | 'warning' | 'degraded' | 'blocked' | 'unknown';
+
+export type TaskExecutionSessionStatus =
+  | 'not_started'
+  | 'launched'
+  | 'waiting_response'
+  | 'active'
+  | 'degraded'
+  | 'initialization_failed'
+  | 'missing_session'
+  | 'needs_human_intervention'
+  | 'completed';
+
+export type TaskRecoveryAction =
+  | 'retry_launch'
+  | 'new_attempt'
+  | 'reassign'
+  | 'mark_human_blocked'
+  | 'terminate_stale_conversation';
+
+export interface TaskExecutionIncident {
+  type: string;
+  severity: 'info' | 'warning' | 'error' | string;
+  summary: string;
+  evidence: Record<string, unknown>;
+  opened_at?: string | null | undefined;
+}
+
+export interface TaskExecutionSession {
+  workspace_id: string;
+  task_id: string;
+  task_status: WorkspaceTaskStatus | string;
+  health: TaskExecutionSessionHealth | string;
+  session_status: TaskExecutionSessionStatus | string;
+  conversation_id?: string | null | undefined;
+  attempt_id?: string | null | undefined;
+  attempt_status?: string | null | undefined;
+  execution_status?: string | null | undefined;
+  last_event_at?: string | null | undefined;
+  last_assistant_event_at?: string | null | undefined;
+  last_error?: string | null | undefined;
+  has_user_input: boolean;
+  has_assistant_output: boolean;
+  incidents: TaskExecutionIncident[];
+  recommended_recovery_action?: TaskRecoveryAction | 'suppress' | null | undefined;
+  available_interventions: TaskRecoveryAction[];
+  recent_events: Array<Record<string, unknown>>;
+  recovery_actions: Array<Record<string, unknown>>;
+}
+
+export interface TaskRecoveryActionRequest {
+  action: TaskRecoveryAction;
+  reason?: string | null | undefined;
+  workspace_agent_id?: string | null | undefined;
+}
+
+export interface TaskRecoveryActionResult {
+  workspace_id: string;
+  task_id: string;
+  action: TaskRecoveryAction | string;
+  status: string;
+  message: string;
+  conversation_id?: string | null | undefined;
+  attempt_id?: string | null | undefined;
+  outbox_id?: string | null | undefined;
+  session?: TaskExecutionSession | null | undefined;
+}
+
 export type WorkspacePlanStatus = 'draft' | 'active' | 'suspended' | 'completed' | 'abandoned';
 export type WorkspacePlanNodeKind = 'goal' | 'milestone' | 'task' | 'verify';
 export type WorkspacePlanTaskIntent = 'todo' | 'in_progress' | 'blocked' | 'done';

@@ -3,6 +3,9 @@ import { apiFetch } from './client/urlUtils';
 import type {
   BlackboardPost,
   BlackboardReply,
+  TaskExecutionSession,
+  TaskRecoveryActionRequest,
+  TaskRecoveryActionResult,
   TopologyEdge,
   TopologyNode,
   Workspace,
@@ -418,6 +421,30 @@ export const workspaceTaskService = {
     return response.json() as Promise<WorkspaceTaskExperienceSummary>;
   },
 
+  getExecutionSession: async (
+    workspaceId: string,
+    taskId: string
+  ): Promise<TaskExecutionSession> => {
+    const response = await apiFetch.get(`${taskBase(workspaceId)}/${taskId}/execution-session`, {
+      retry: {
+        maxRetries: 1,
+      },
+    });
+    return response.json() as Promise<TaskExecutionSession>;
+  },
+
+  applyRecoveryAction: async (
+    workspaceId: string,
+    taskId: string,
+    data: TaskRecoveryActionRequest
+  ): Promise<TaskRecoveryActionResult> => {
+    const response = await apiFetch.post(
+      `${taskBase(workspaceId)}/${taskId}/recovery-actions`,
+      data
+    );
+    return response.json() as Promise<TaskRecoveryActionResult>;
+  },
+
   create: async (
     workspaceId: string,
     data: Pick<WorkspaceTask, 'title'> &
@@ -544,13 +571,10 @@ export const workspacePlanService = {
     nodeId: string,
     options: { reason?: string; evidenceRefs?: string[] } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(
-      `${planBase(workspaceId)}/nodes/${nodeId}/accept-review`,
-      {
-        reason: options.reason ?? null,
-        evidence_refs: options.evidenceRefs ?? [],
-      }
-    );
+    const response = await apiFetch.post(`${planBase(workspaceId)}/nodes/${nodeId}/accept-review`, {
+      reason: options.reason ?? null,
+      evidence_refs: options.evidenceRefs ?? [],
+    });
     return response.json() as Promise<WorkspacePlanActionResult>;
   },
 

@@ -28,6 +28,8 @@ import {
 } from '@/components/workspace/taskBoardSignals';
 
 import type {
+  TaskExecutionSession,
+  TaskRecoveryAction,
   WorkspaceTask,
   WorkspaceTaskExperienceSummary,
   WorkspaceTaskPriority,
@@ -156,7 +158,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedExperience, setSelectedExperience] =
     useState<WorkspaceTaskExperienceSummary | null>(null);
+  const [selectedExecutionSession, setSelectedExecutionSession] =
+    useState<TaskExecutionSession | null>(null);
   const [isExperienceLoading, setIsExperienceLoading] = useState(false);
+  const [isRecoveryActionRunning, setIsRecoveryActionRunning] = useState(false);
   const [experienceError, setExperienceError] = useState<string | null>(null);
 
   const workspaceTasks = useMemo(() => {
@@ -200,6 +205,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
     }
     setSelectedTaskId(null);
     setSelectedExperience(null);
+    setSelectedExecutionSession(null);
   }, [selectedTask, selectedTaskId]);
 
   useEffect(() => {
@@ -209,12 +215,17 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
     let cancelled = false;
     setIsExperienceLoading(true);
     setExperienceError(null);
+    setSelectedExperience(null);
+    setSelectedExecutionSession(null);
 
-    workspaceTaskService
-      .getExperience(workspaceId, selectedTaskId)
-      .then((summary) => {
+    Promise.all([
+      workspaceTaskService.getExperience(workspaceId, selectedTaskId),
+      workspaceTaskService.getExecutionSession(workspaceId, selectedTaskId),
+    ])
+      .then(([summary, executionSession]) => {
         if (!cancelled) {
           setSelectedExperience(summary);
+          setSelectedExecutionSession(executionSession);
         }
       })
       .catch(() => {
@@ -302,6 +313,33 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
       }
     } catch {
       message?.error(t('workspaceDetail.taskBoard.assignFailed'));
+    }
+  };
+
+  const handleRecoveryAction = async (action: TaskRecoveryAction) => {
+    if (!selectedTaskId) {
+      return;
+    }
+    setIsRecoveryActionRunning(true);
+    try {
+      const result = await workspaceTaskService.applyRecoveryAction(workspaceId, selectedTaskId, {
+        action,
+      });
+      const [summary, executionSession] = await Promise.all([
+        workspaceTaskService.getExperience(workspaceId, selectedTaskId),
+        workspaceTaskService.getExecutionSession(workspaceId, selectedTaskId),
+      ]);
+      setSelectedExperience(summary);
+      setSelectedExecutionSession(result.session ?? executionSession);
+      message?.success(
+        t('workspaceDetail.taskExperience.recoveryQueued', 'Recovery action has been recorded.')
+      );
+    } catch {
+      message?.error(
+        t('workspaceDetail.taskExperience.recoveryFailed', 'Recovery action could not be applied.')
+      );
+    } finally {
+      setIsRecoveryActionRunning(false);
     }
   };
 
@@ -747,11 +785,15 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId }) => {
             task={selectedTask}
             agents={agents}
             experience={selectedExperience}
+            executionSession={selectedExecutionSession}
             loading={isExperienceLoading}
+            recoveryActionLoading={isRecoveryActionRunning}
             error={experienceError}
+            onRecoveryAction={handleRecoveryAction}
             onClose={() => {
               setSelectedTaskId(null);
               setSelectedExperience(null);
+              setSelectedExecutionSession(null);
               setExperienceError(null);
             }}
           />

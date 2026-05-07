@@ -8,9 +8,12 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Clock,
   FileText,
   ListChecks,
   Radio,
+  RefreshCcw,
+  ShieldAlert,
   X,
 } from 'lucide-react';
 
@@ -20,6 +23,8 @@ import { CanonicalStoryCard } from '@/components/agent/canonicalStory/CanonicalS
 import { parseCanonicalStory } from '@/components/agent/canonicalStory/canonicalStory';
 
 import type {
+  TaskExecutionSession,
+  TaskRecoveryAction,
   WorkspaceAgent,
   WorkspaceTask,
   WorkspaceTaskExperienceSummary,
@@ -30,8 +35,11 @@ interface TaskExperiencePanelProps {
   task: WorkspaceTask;
   agents: WorkspaceAgent[];
   experience: WorkspaceTaskExperienceSummary | null;
+  executionSession: TaskExecutionSession | null;
   loading: boolean;
+  recoveryActionLoading: boolean;
   error: string | null;
+  onRecoveryAction: (action: TaskRecoveryAction) => void;
   onClose: () => void;
 }
 
@@ -46,12 +54,35 @@ const TAB_KEYS: PanelTab[] = [
   'activity',
 ];
 
+const SESSION_HEALTH_TONES: Record<string, string> = {
+  healthy:
+    'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
+  warning:
+    'border-warning-border bg-warning-bg text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark',
+  degraded:
+    'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
+  blocked:
+    'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
+  unknown:
+    'border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-muted',
+};
+
+const RECOVERY_ACTION_ORDER: TaskRecoveryAction[] = [
+  'new_attempt',
+  'retry_launch',
+  'terminate_stale_conversation',
+  'mark_human_blocked',
+];
+
 export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
   task,
   agents,
   experience,
+  executionSession,
   loading,
+  recoveryActionLoading,
   error,
+  onRecoveryAction,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -69,15 +100,32 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
     label: tabLabel(key, t),
     children:
       key === 'overview' ? (
-        <OverviewTab task={task} assignedAgent={assignedAgent} experience={experience} />
+        <OverviewTab
+          task={task}
+          assignedAgent={assignedAgent}
+          experience={experience}
+          executionSession={executionSession}
+          recoveryActionLoading={recoveryActionLoading}
+          onRecoveryAction={onRecoveryAction}
+        />
       ) : key === 'contract' ? (
         <ContractTab readiness={readiness} gates={gates} />
       ) : key === 'execution' ? (
-        <ExecutionTab task={task} execution={execution} assignedAgent={assignedAgent} />
+        <ExecutionTab
+          task={task}
+          execution={execution}
+          assignedAgent={assignedAgent}
+          executionSession={executionSession}
+        />
       ) : key === 'evidence' ? (
         <EvidenceTab evidence={evidence} />
       ) : key === 'diagnostics' ? (
-        <DiagnosticsTab task={task} diagnostics={diagnostics} gates={gates} />
+        <DiagnosticsTab
+          task={task}
+          diagnostics={diagnostics}
+          gates={gates}
+          executionSession={executionSession}
+        />
       ) : (
         <ActivityTab activity={activity} />
       ),
@@ -157,15 +205,26 @@ function OverviewTab({
   task,
   assignedAgent,
   experience,
+  executionSession,
+  recoveryActionLoading,
+  onRecoveryAction,
 }: {
   task: WorkspaceTask;
   assignedAgent: string;
   experience: WorkspaceTaskExperienceSummary | null;
+  executionSession: TaskExecutionSession | null;
+  recoveryActionLoading: boolean;
+  onRecoveryAction: (action: TaskRecoveryAction) => void;
 }) {
   const diagnostics = experience?.diagnostics ?? {};
   const evidence = experience?.evidence ?? {};
   return (
     <div className="space-y-4">
+      <SessionHealthSection
+        session={executionSession}
+        recoveryActionLoading={recoveryActionLoading}
+        onRecoveryAction={onRecoveryAction}
+      />
       <Section title="Status" icon={<Radio size={13} />}>
         <MetaRow label="Workspace task" value={task.id} mono />
         <MetaRow label="Assignee" value={assignedAgent || task.assignee_user_id || 'Unassigned'} />
@@ -217,14 +276,17 @@ function ExecutionTab({
   task,
   execution,
   assignedAgent,
+  executionSession,
 }: {
   task: WorkspaceTask;
   execution: Record<string, unknown>;
   assignedAgent: string;
+  executionSession: TaskExecutionSession | null;
 }) {
   const activeAttempt = asRecord(execution.active_attempt);
   return (
     <div className="space-y-4">
+      <ExecutionSessionSection session={executionSession} />
       <Section title="Current owner" icon={<Activity size={13} />}>
         <MetaRow label="Agent" value={assignedAgent || textValue(execution.assignee_agent_id)} />
         <MetaRow
@@ -258,6 +320,155 @@ function ExecutionTab({
   );
 }
 
+function SessionHealthSection({
+  session,
+  recoveryActionLoading,
+  onRecoveryAction,
+}: {
+  session: TaskExecutionSession | null;
+  recoveryActionLoading: boolean;
+  onRecoveryAction: (action: TaskRecoveryAction) => void;
+}) {
+  if (!session) {
+    return (
+      <Section title="Execution session" icon={<ShieldAlert size={13} />}>
+        <EmptyLine label="No session data" />
+      </Section>
+    );
+  }
+  const runnableActions = RECOVERY_ACTION_ORDER.filter((action) =>
+    session.available_interventions.includes(action)
+  );
+  return (
+    <Section title="Execution session" icon={<ShieldAlert size={13} />}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span
+          className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+            SESSION_HEALTH_TONES[session.health] ?? SESSION_HEALTH_TONES.unknown
+          }`}
+        >
+          {formatTaskProjectionLabel(session.health)}
+        </span>
+        <span className="inline-flex rounded-full border border-border-light bg-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-muted">
+          {formatTaskProjectionLabel(session.session_status)}
+        </span>
+      </div>
+      <MetaRow label="Conversation" value={session.conversation_id} mono />
+      <MetaRow label="Attempt" value={session.attempt_id} mono />
+      <MetaRow
+        label="Leader decision"
+        value={formatTaskProjectionLabel(textValue(session.recommended_recovery_action))}
+      />
+      <MetaRow label="Last event" value={session.last_event_at} />
+      <MetaRow label="Assistant event" value={session.last_assistant_event_at} />
+      <MetaRow label="Last error" value={session.last_error} />
+      <InlineList label="Incidents" items={session.incidents.map((incident) => incident.type)} />
+      {runnableActions.length > 0 && (
+        <RecoveryActionRow
+          actions={runnableActions}
+          loading={recoveryActionLoading}
+          onRecoveryAction={onRecoveryAction}
+        />
+      )}
+      {session.available_interventions.includes('reassign') && (
+        <MetaRow label="Reassign" value="Available from agent assignment control" />
+      )}
+    </Section>
+  );
+}
+
+function ExecutionSessionSection({ session }: { session: TaskExecutionSession | null }) {
+  if (!session) {
+    return (
+      <Section title="Session runtime" icon={<Clock size={13} />}>
+        <EmptyLine label="No runtime state" />
+      </Section>
+    );
+  }
+  return (
+    <Section title="Session runtime" icon={<Clock size={13} />}>
+      <MetaRow label="Session" value={formatTaskProjectionLabel(session.session_status)} />
+      <MetaRow label="Execution row" value={session.execution_status} />
+      <MetaRow label="User input" value={boolText(session.has_user_input)} />
+      <MetaRow label="Assistant output" value={boolText(session.has_assistant_output)} />
+      <InlineList
+        label="Recent events"
+        items={session.recent_events.map((event) => textValue(event.type))}
+      />
+    </Section>
+  );
+}
+
+function IncidentSection({ session }: { session: TaskExecutionSession | null }) {
+  if (!session) {
+    return (
+      <Section title="Session incidents" icon={<AlertTriangle size={13} />}>
+        <EmptyLine label="No session data" />
+      </Section>
+    );
+  }
+  const ledger = session.recovery_actions.map((item) =>
+    [textValue(item.action), textValue(item.status), textValue(item.at)].filter(Boolean).join(' · ')
+  );
+  return (
+    <Section title="Session incidents" icon={<AlertTriangle size={13} />}>
+      {session.incidents.length === 0 ? (
+        <EmptyLine label="No open incidents" />
+      ) : (
+        session.incidents.map((incident) => (
+          <div
+            key={`${incident.type}-${incident.opened_at ?? ''}`}
+            className="border-b border-border-light py-2 last:border-0 dark:border-border-dark"
+          >
+            <p className="text-xs font-medium text-text-primary dark:text-text-inverse">
+              {formatTaskProjectionLabel(incident.type)}
+            </p>
+            <p className="mt-0.5 break-words text-[11px] leading-4 text-text-secondary dark:text-text-muted">
+              {incident.summary}
+            </p>
+            {incident.opened_at && (
+              <p className="mt-1 font-mono text-[10px] text-text-muted dark:text-text-muted">
+                {incident.opened_at}
+              </p>
+            )}
+          </div>
+        ))
+      )}
+      <InlineList label="Recovery ledger" items={ledger} />
+    </Section>
+  );
+}
+
+function RecoveryActionRow({
+  actions,
+  loading,
+  onRecoveryAction,
+}: {
+  actions: TaskRecoveryAction[];
+  loading: boolean;
+  onRecoveryAction: (action: TaskRecoveryAction) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
+      <span className="text-text-muted dark:text-text-muted">Actions</span>
+      <div className="flex min-w-0 flex-wrap gap-1.5">
+        {actions.map((action) => (
+          <Button
+            key={action}
+            size="small"
+            icon={<RefreshCcw size={12} />}
+            loading={loading}
+            danger={action === 'mark_human_blocked'}
+            onClick={() => onRecoveryAction(action)}
+          >
+            {recoveryActionLabel(action)}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function EvidenceTab({
   evidence,
 }: {
@@ -285,15 +496,18 @@ function DiagnosticsTab({
   task,
   diagnostics,
   gates,
+  executionSession,
 }: {
   task: WorkspaceTask;
   diagnostics: Record<string, unknown>;
   gates:
     | Record<string, WorkspaceTaskTransitionGate>
     | Partial<Record<string, WorkspaceTaskTransitionGate>>;
+  executionSession: TaskExecutionSession | null;
 }) {
   return (
     <div className="space-y-4">
+      <IncidentSection session={executionSession} />
       <Section title="Diagnostics" icon={<AlertTriangle size={13} />}>
         <MetaRow
           label="Blocker"
@@ -472,6 +686,17 @@ function textValue(value: unknown): string {
 
 function boolText(value: unknown): string {
   return value === true ? 'Yes' : 'No';
+}
+
+function recoveryActionLabel(action: TaskRecoveryAction): string {
+  const labels: Record<TaskRecoveryAction, string> = {
+    retry_launch: 'Retry launch',
+    new_attempt: 'New attempt',
+    reassign: 'Reassign',
+    mark_human_blocked: 'Need human',
+    terminate_stale_conversation: 'Archive stale',
+  };
+  return labels[action];
 }
 
 function stringList(value: unknown): string[] {

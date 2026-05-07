@@ -10,6 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.task_execution_session_monitor import (
+    TaskExecutionSessionMonitor,
+    TaskExecutionSessionState,
+    TaskRecoveryAction,
+    TaskRecoveryActionResult,
+)
 from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
 from src.application.services.workspace_task_event_publisher import WorkspaceTaskEventPublisher
 from src.application.services.workspace_task_experience_service import (
@@ -17,12 +23,16 @@ from src.application.services.workspace_task_experience_service import (
 )
 from src.application.services.workspace_task_service import WorkspaceTaskService
 from src.configuration.di_container import DIContainer
+from src.domain.events.types import AgentEventType
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskPriority,
     WorkspaceTaskStatus,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.workspace_events import (
+    publish_workspace_event_with_retry,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 
@@ -59,6 +69,24 @@ def _get_workspace_task_experience_service(
     return WorkspaceTaskExperienceService(
         task_service=_get_workspace_task_service(request, db),
         attempt_repo=container.workspace_task_session_attempt_repository(),
+    )
+
+
+def _get_task_execution_session_monitor(
+    request: Request,
+    db: AsyncSession,
+) -> tuple[TaskExecutionSessionMonitor, WorkspaceTaskCommandService]:
+    container = get_container_with_db(request, db)
+    task_service = _get_workspace_task_service(request, db)
+    command_service = WorkspaceTaskCommandService(task_service)
+    return (
+        TaskExecutionSessionMonitor(
+            db=db,
+            task_service=task_service,
+            command_service=command_service,
+            attempt_repo=container.workspace_task_session_attempt_repository(),
+        ),
+        command_service,
     )
 
 
@@ -140,6 +168,54 @@ class WorkspaceTaskExperienceResponse(BaseModel):
     evidence: dict[str, Any]
     diagnostics: dict[str, Any]
     activity: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TaskExecutionIncidentResponse(BaseModel):
+    type: str
+    severity: str
+    summary: str
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    opened_at: str | None = None
+
+
+class TaskExecutionSessionResponse(BaseModel):
+    workspace_id: str
+    task_id: str
+    task_status: str
+    health: str
+    session_status: str
+    conversation_id: str | None = None
+    attempt_id: str | None = None
+    attempt_status: str | None = None
+    execution_status: str | None = None
+    last_event_at: str | None = None
+    last_assistant_event_at: str | None = None
+    last_error: str | None = None
+    has_user_input: bool = False
+    has_assistant_output: bool = False
+    incidents: list[TaskExecutionIncidentResponse] = Field(default_factory=list)
+    recommended_recovery_action: str | None = None
+    available_interventions: list[str] = Field(default_factory=list)
+    recent_events: list[dict[str, Any]] = Field(default_factory=list)
+    recovery_actions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TaskRecoveryActionRequest(BaseModel):
+    action: TaskRecoveryAction
+    reason: str | None = Field(default=None, max_length=500)
+    workspace_agent_id: str | None = None
+
+
+class TaskRecoveryActionResponse(BaseModel):
+    workspace_id: str
+    task_id: str
+    action: str
+    status: str
+    message: str
+    conversation_id: str | None = None
+    attempt_id: str | None = None
+    outbox_id: str | None = None
+    session: TaskExecutionSessionResponse | None = None
 
 
 def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
@@ -230,6 +306,84 @@ def _to_http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
+    )
+
+
+def _execution_session_response(
+    state: TaskExecutionSessionState,
+) -> TaskExecutionSessionResponse:
+    return TaskExecutionSessionResponse.model_validate(state.to_dict())
+
+
+def _recovery_action_response(result: TaskRecoveryActionResult) -> TaskRecoveryActionResponse:
+    return TaskRecoveryActionResponse.model_validate(result.to_dict())
+
+
+async def _publish_task_execution_session_event(
+    request: Request,
+    *,
+    workspace_id: str,
+    event_type: AgentEventType,
+    payload: dict[str, Any],
+    task_id: str,
+    source: str,
+) -> None:
+    await publish_workspace_event_with_retry(
+        request.app.state.container.redis(),
+        workspace_id=workspace_id,
+        event_type=event_type,
+        payload=payload,
+        metadata={"source": source, "task_id": task_id},
+        correlation_id=task_id,
+    )
+
+
+async def _publish_recovery_result_events(
+    request: Request,
+    *,
+    result: TaskRecoveryActionResult,
+) -> None:
+    payload = result.to_dict()
+    await _publish_task_execution_session_event(
+        request,
+        workspace_id=result.workspace_id,
+        event_type=AgentEventType.TASK_RECOVERY_ACTION_STARTED,
+        payload=payload,
+        task_id=result.task_id,
+        source="task_execution_session.recovery",
+    )
+    if result.session is not None:
+        session_payload = result.session.to_dict()
+        await _publish_task_execution_session_event(
+            request,
+            workspace_id=result.workspace_id,
+            event_type=AgentEventType.TASK_EXECUTION_SESSION_UPDATED,
+            payload=session_payload,
+            task_id=result.task_id,
+            source="task_execution_session.monitor",
+        )
+        for incident in result.session.incidents:
+            await _publish_task_execution_session_event(
+                request,
+                workspace_id=result.workspace_id,
+                event_type=AgentEventType.TASK_EXECUTION_INCIDENT_OPENED,
+                payload={
+                    "workspace_id": result.workspace_id,
+                    "task_id": result.task_id,
+                    "conversation_id": result.session.conversation_id,
+                    "attempt_id": result.session.attempt_id,
+                    "incident": incident.to_dict(),
+                },
+                task_id=result.task_id,
+                source="task_execution_session.monitor",
+            )
+    await _publish_task_execution_session_event(
+        request,
+        workspace_id=result.workspace_id,
+        event_type=AgentEventType.TASK_RECOVERY_ACTION_COMPLETED,
+        payload=payload,
+        task_id=result.task_id,
+        source="task_execution_session.recovery",
     )
 
 
@@ -355,6 +509,61 @@ async def get_workspace_task_experience(
     except Exception as exc:
         raise _to_http_error(exc) from exc
     return WorkspaceTaskExperienceResponse.model_validate(summary)
+
+
+@router.get("/{task_id}/execution-session", response_model=TaskExecutionSessionResponse)
+async def get_workspace_task_execution_session(
+    workspace_id: str,
+    task_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TaskExecutionSessionResponse:
+    monitor, _command_service = _get_task_execution_session_monitor(request, db)
+    try:
+        state = await monitor.get_state(
+            workspace_id=workspace_id,
+            task_id=task_id,
+            actor_user_id=current_user.id,
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+    return _execution_session_response(state)
+
+
+@router.post("/{task_id}/recovery-actions", response_model=TaskRecoveryActionResponse)
+async def apply_workspace_task_recovery_action(
+    workspace_id: str,
+    task_id: str,
+    body: TaskRecoveryActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TaskRecoveryActionResponse:
+    monitor, command_service = _get_task_execution_session_monitor(request, db)
+    event_publisher = _get_workspace_task_event_publisher(request)
+    try:
+        result = await monitor.apply_recovery_action(
+            workspace_id=workspace_id,
+            task_id=task_id,
+            actor_user_id=current_user.id,
+            action=body.action,
+            reason=body.reason,
+            workspace_agent_id=body.workspace_agent_id,
+        )
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise _to_http_error(exc) from exc
+    try:
+        await event_publisher.publish_pending_events(command_service.consume_pending_events())
+        await _publish_recovery_result_events(request, result=result)
+    except Exception:
+        logger.exception(
+            "Failed to publish task execution recovery events",
+            extra={"workspace_id": workspace_id, "task_id": task_id},
+        )
+    return _recovery_action_response(result)
 
 
 @router.patch("/{task_id}", response_model=WorkspaceTaskResponse)
