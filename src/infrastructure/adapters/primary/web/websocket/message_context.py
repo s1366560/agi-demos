@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.configuration.di_container import DIContainer
 
@@ -43,6 +43,7 @@ class MessageContext:
     session_id: str
     db: AsyncSession
     container: DIContainer
+    session_factory: async_sessionmaker[AsyncSession] | None = None
 
     # Lazy-loaded connection manager (to avoid circular imports)
     _connection_manager: ConnectionManager | None = None

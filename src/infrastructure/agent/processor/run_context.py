@@ -14,7 +14,10 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 @dataclass
@@ -33,6 +36,11 @@ class RunContext:
         start_time: Run start timestamp (epoch seconds).
         langfuse_context: Optional observability context for Langfuse tracing.
             Contains conversation_id, user_id, tenant_id, project_id, extra.
+        session_factory: Optional injected async sessionmaker for components that
+            must open their own short-lived session (HITL handlers, background
+            persistence claims) instead of importing the global module-level
+            factory. When None, callers must fall back to the global factory
+            with a one-shot deprecation log.
     """
 
     abort_signal: asyncio.Event | None = None
@@ -41,3 +49,4 @@ class RunContext:
     trace_id: str | None = None
     start_time: float = field(default_factory=time.time)
     langfuse_context: dict[str, Any] | None = None
+    session_factory: async_sessionmaker[AsyncSession] | None = None

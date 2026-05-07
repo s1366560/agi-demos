@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
@@ -20,7 +20,37 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 logger = logging.getLogger(__name__)
+
+_FACTORY_FALLBACK_WARNED = False
+
+
+def _resolve_session_factory(
+    session_factory: "async_sessionmaker[AsyncSession] | None",
+) -> "async_sessionmaker[AsyncSession]":
+    """Resolve the async sessionmaker, falling back to the global with a one-shot deprecation log.
+
+    P2-18: Helpers should receive an injected sessionmaker via MessageContext /
+    RunContext. The module-level fallback exists only as a transitional shim and
+    will be removed once all call sites are migrated.
+    """
+    if session_factory is not None:
+        return session_factory
+    global _FACTORY_FALLBACK_WARNED
+    if not _FACTORY_FALLBACK_WARNED:
+        logger.warning(
+            "[WS HITL] session_factory not injected; falling back to global "
+            "async_session_factory (deprecated, will be removed)"
+        )
+        _FACTORY_FALLBACK_WARNED = True
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+
+    return async_session_factory
 
 
 # =============================================================================
@@ -78,17 +108,19 @@ async def _publish_hitl_response_to_redis(
         return False
 
 
-async def _load_hitl_request(request_id: str) -> HITLRequest | None:
+async def _load_hitl_request(
+    request_id: str,
+    *,
+    session_factory: "async_sessionmaker[AsyncSession] | None" = None,
+) -> HITLRequest | None:
     """Load the latest HITL request using a fresh ORM-backed session."""
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
         SqlHITLRequestRepository,
     )
 
+    factory = _resolve_session_factory(session_factory)
     try:
-        async with async_session_factory() as fresh_session:
+        async with factory() as fresh_session:
             repo = SqlHITLRequestRepository(fresh_session)
             hitl_request = await repo.get_by_id(request_id)
     except Exception as e:
@@ -109,31 +141,35 @@ async def _user_has_hitl_access(
     tenant_id: str,
     project_id: str | None,
     conversation_id: str,
+    session_factory: "async_sessionmaker[AsyncSession] | None" = None,
 ) -> bool:
     """Return True when the user owns the target conversation in the same tenant."""
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
     from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
-    async with async_session_factory() as auth_session:
+    factory = _resolve_session_factory(session_factory)
+    async with factory() as auth_session:
         conversation_query = select(Conversation.id).where(
             Conversation.id == conversation_id,
             Conversation.tenant_id == tenant_id,
             Conversation.user_id == user_id,
         )
-        conversation_result = await auth_session.execute(refresh_select_statement(conversation_query))
+        conversation_result = await auth_session.execute(
+            refresh_select_statement(conversation_query)
+        )
         return conversation_result.scalar_one_or_none() is not None
 
 
-async def _user_has_project_access(*, user_id: str, project_id: str) -> bool:
+async def _user_has_project_access(
+    *,
+    user_id: str,
+    project_id: str,
+    session_factory: "async_sessionmaker[AsyncSession] | None" = None,
+) -> bool:
     """Return True when the user belongs to the target project."""
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
     from src.infrastructure.adapters.secondary.persistence.models import UserProject
 
-    async with async_session_factory() as auth_session:
+    factory = _resolve_session_factory(session_factory)
+    async with factory() as auth_session:
         membership_query = select(UserProject.id).where(
             UserProject.user_id == user_id,
             UserProject.project_id == project_id,
@@ -168,16 +204,16 @@ async def _persist_hitl_response(
     request_id: str,
     response_str: str,
     response_metadata: dict[str, Any] | None,
+    *,
+    session_factory: "async_sessionmaker[AsyncSession] | None" = None,
 ) -> None:
     """Persist a validated HITL response with a single-winner claim."""
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
         SqlHITLRequestRepository,
     )
 
-    async with async_session_factory() as update_session:
+    factory = _resolve_session_factory(session_factory)
+    async with factory() as update_session:
         repo = SqlHITLRequestRepository(update_session)
         updated_request = await repo.update_response(
             request_id,
@@ -189,16 +225,18 @@ async def _persist_hitl_response(
         await update_session.commit()
 
 
-async def _mark_hitl_timeout(request_id: str) -> bool:
+async def _mark_hitl_timeout(
+    request_id: str,
+    *,
+    session_factory: "async_sessionmaker[AsyncSession] | None" = None,
+) -> bool:
     """Persist TIMEOUT for an expired request before rejecting late responses."""
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
         SqlHITLRequestRepository,
     )
 
-    async with async_session_factory() as update_session:
+    factory = _resolve_session_factory(session_factory)
+    async with factory() as update_session:
         repo = SqlHITLRequestRepository(update_session)
         timed_out_request = await repo.mark_timeout(request_id)
         if timed_out_request is None:
@@ -215,7 +253,7 @@ async def _load_authorized_pending_hitl_request(
     """Load a pending HITL request after tenant/project/conversation authorization."""
     from src.domain.model.agent.hitl_request import HITLRequestStatus
 
-    hitl_request = await _load_hitl_request(request_id)
+    hitl_request = await _load_hitl_request(request_id, session_factory=context.session_factory)
     if not hitl_request:
         logger.error(f"[WS HITL] HITL request {request_id} not found in database")
         await context.send_error(f"HITL request {request_id} not found")
@@ -233,6 +271,7 @@ async def _load_authorized_pending_hitl_request(
         has_access = bool(hitl_request.project_id) and await _user_has_project_access(
             user_id=context.user_id,
             project_id=hitl_request.project_id,
+            session_factory=context.session_factory,
         )
     else:
         has_access = await _user_has_hitl_access(
@@ -240,6 +279,7 @@ async def _load_authorized_pending_hitl_request(
             tenant_id=context.tenant_id,
             project_id=hitl_request.project_id,
             conversation_id=conversation_id,
+            session_factory=context.session_factory,
         )
     if not has_access:
         await context.send_error("Access denied", conversation_id=conversation_id)
@@ -247,7 +287,7 @@ async def _load_authorized_pending_hitl_request(
 
     expires_at = hitl_request.expires_at
     if expires_at is not None and expires_at <= datetime.now(UTC):
-        await _mark_hitl_timeout(request_id)
+        await _mark_hitl_timeout(request_id, session_factory=context.session_factory)
         await context.send_error(
             f"HITL request {request_id} has expired (status: timeout)",
             conversation_id=conversation_id,
@@ -363,6 +403,7 @@ async def _handle_hitl_response(
             request_id=request_id,
             response_str=response_str,
             response_metadata=response_metadata,
+            session_factory=context.session_factory,
         )
     except Exception as e:
         logger.error(f"[WS HITL] Failed to update HITL request: {e}", exc_info=True)

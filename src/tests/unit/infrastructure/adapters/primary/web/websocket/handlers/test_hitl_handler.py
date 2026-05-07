@@ -180,6 +180,7 @@ async def test_load_authorized_pending_hitl_request_allows_target_user_with_proj
     project_access.assert_awaited_once_with(
         user_id="user-1",
         project_id="project-1",
+        session_factory=None,
     )
     conversation_access.assert_not_awaited()
 
@@ -351,7 +352,82 @@ async def test_handle_hitl_response_rejects_expired_request(monkeypatch) -> None
         ack_type="env_var_response_ack",
     )
 
-    hitl_handler._mark_hitl_timeout.assert_awaited_once_with("req-1")
+    hitl_handler._mark_hitl_timeout.assert_awaited_once_with("req-1", session_factory=None)
     payload = context.websocket.send_json.await_args.args[0]
     assert payload["type"] == "error"
     assert payload["data"]["message"] == "HITL request req-1 has expired (status: timeout)"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_hitl_response_threads_injected_session_factory(monkeypatch) -> None:
+    """P2-18: helpers must receive the injected sessionmaker from MessageContext."""
+    sentinel_factory = MagicMock(name="sentinel_session_factory")
+    websocket = SimpleNamespace(send_json=AsyncMock())
+    context = MessageContext(
+        websocket=websocket,
+        user_id="user-1",
+        tenant_id="tenant-1",
+        session_id="session-1",
+        db=MagicMock(),
+        container=MagicMock(),
+        session_factory=sentinel_factory,
+    )
+
+    hitl_request = _make_hitl_request(request_type=HITLRequestType.CLARIFICATION)
+
+    load_mock = AsyncMock(return_value=hitl_request)
+    access_mock = AsyncMock(return_value=True)
+    persist_mock = AsyncMock()
+    publish_mock = AsyncMock(return_value=True)
+    bridge_mock = AsyncMock()
+
+    monkeypatch.setattr(hitl_handler, "_load_hitl_request", load_mock)
+    monkeypatch.setattr(hitl_handler, "_user_has_hitl_access", access_mock)
+    monkeypatch.setattr(hitl_handler, "_persist_hitl_response", persist_mock)
+    monkeypatch.setattr(hitl_handler, "_publish_hitl_response_to_redis", publish_mock)
+    monkeypatch.setattr(hitl_handler, "_start_hitl_stream_bridge", bridge_mock)
+
+    await hitl_handler._handle_hitl_response(
+        context=context,
+        request_id="req-1",
+        hitl_type="clarification",
+        response_data={"answer": "ok"},
+        ack_type="clarification_response_ack",
+    )
+
+    load_mock.assert_awaited_once_with("req-1", session_factory=sentinel_factory)
+    access_kwargs = access_mock.await_args.kwargs
+    assert access_kwargs["session_factory"] is sentinel_factory
+    persist_kwargs = persist_mock.await_args.kwargs
+    assert persist_kwargs["session_factory"] is sentinel_factory
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_session_factory_warns_once_when_falling_back(monkeypatch, caplog) -> None:
+    """P2-18: missing factory triggers exactly one deprecation warning."""
+    monkeypatch.setattr(hitl_handler, "_FACTORY_FALLBACK_WARNED", False)
+    sentinel_global = MagicMock(name="global_factory")
+
+    import src.infrastructure.adapters.secondary.persistence.database as database_mod
+
+    monkeypatch.setattr(database_mod, "async_session_factory", sentinel_global)
+
+    with caplog.at_level(
+        "WARNING", logger="src.infrastructure.adapters.primary.web.websocket.handlers.hitl_handler"
+    ):
+        first = hitl_handler._resolve_session_factory(None)
+        second = hitl_handler._resolve_session_factory(None)
+
+    assert first is sentinel_global
+    assert second is sentinel_global
+    fallback_records = [r for r in caplog.records if "session_factory not injected" in r.message]
+    assert len(fallback_records) == 1
+
+
+@pytest.mark.unit
+def test_resolve_session_factory_passes_through_injected() -> None:
+    """P2-18: when factory is provided, no fallback or warning fires."""
+    injected = MagicMock(name="injected_factory")
+    assert hitl_handler._resolve_session_factory(injected) is injected

@@ -32,7 +32,7 @@ from src.infrastructure.adapters.primary.web.websocket.connection_manager import
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.primary.web.websocket.message_router import get_message_router
-from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +179,7 @@ async def agent_websocket_endpoint(
             session_id=session_id,
             db=db,
             container=container,
+            session_factory=async_session_factory,
         )
 
         # Message handling loop
