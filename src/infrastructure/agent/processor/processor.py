@@ -91,7 +91,7 @@ from .message_utils import (
     extract_user_query,
     sanitize_tool_call_messages,
 )
-from .run_context import RunContext
+from .run_context import RunContext, set_current_run_context
 
 logger = logging.getLogger(__name__)
 
@@ -1198,6 +1198,14 @@ class SessionProcessor:
         self._tool_reminder_issued_for_streak = False
         self._langfuse_context = effective_langfuse_context
         self._artifact_handler.set_langfuse_context(self._langfuse_context)
+
+        # Publish the active RunContext via ContextVar so cached, tool-set-keyed
+        # tool wrappers (constructed once per tools_hash by the agent session
+        # pool) can recover the per-invocation abort_signal at execute time.
+        # ContextVars are task-local: the binding is visible only inside this
+        # task and auto-cleans when the task ends, so concurrent processor
+        # runs cannot see each other's state.
+        set_current_run_context(run_ctx)
 
         # Emit start event
         yield AgentStartEvent()

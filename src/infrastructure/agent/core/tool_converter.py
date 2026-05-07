@@ -146,19 +146,32 @@ def _make_toolinfo_execute_wrapper(tool_info: ToolInfo) -> Any:
         """Wrapper that supplies a stub ToolContext when none is provided."""
         import asyncio
 
+        from src.infrastructure.agent.processor.run_context import RunContext
         from src.infrastructure.agent.tools.context import ToolContext
 
         # Synthesize a non-empty call_id so error correlation is never lost
         # on the legacy (pipeline-less) path. The real pipeline path passes
         # its own ToolContext via _ToolAdapter and never reaches this stub.
         call_id = uuid.uuid4().hex
+
+        # Recover the active RunContext (published by SessionProcessor.process
+        # via ContextVar) so a tool that consults ctx.abort_signal honors the
+        # per-invocation cancellation event instead of a fresh, never-set one.
+        # When there is no active run (e.g. unit tests calling the wrapper
+        # directly) fall back to a fresh Event so the type contract holds.
+        active_run = RunContext.current()
+        abort_signal = (
+            active_run.abort_signal
+            if active_run is not None and active_run.abort_signal is not None
+            else asyncio.Event()
+        )
         ctx = ToolContext(
             session_id="",
             message_id="",
             call_id=call_id,
             agent_name="",
-            conversation_id="",
-            abort_signal=asyncio.Event(),
+            conversation_id=(active_run.conversation_id or "") if active_run else "",
+            abort_signal=abort_signal,
         )
         try:
             return await tool_info.execute(ctx, **kwargs)

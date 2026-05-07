@@ -317,3 +317,80 @@ class TestToolConverter:
         assert result["tool"] == "nomethod_tool"
         # Internal exception text must NOT be exposed.
         assert "has no execute method" not in str(result)
+
+
+class TestToolInfoWrapperRunContext:
+    """ToolInfo-wrapped tools must observe the active RunContext (P1-13)."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_toolinfo_wrapper_inherits_active_abort_signal(self):
+        """The stub ToolContext must reuse the per-run abort_signal, not a fresh Event."""
+        import asyncio
+
+        from src.infrastructure.agent.processor.run_context import (
+            RunContext,
+            set_current_run_context,
+        )
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+
+        captured: dict[str, ToolContext] = {}
+
+        async def _execute(ctx: ToolContext, **_: object) -> str:
+            captured["ctx"] = ctx
+            return "ok"
+
+        info = ToolInfo(
+            name="signal_probe",
+            description="probe",
+            parameters={"type": "object", "properties": {}, "required": []},
+            execute=_execute,
+        )
+
+        external_signal = asyncio.Event()
+        set_current_run_context(RunContext(abort_signal=external_signal, conversation_id="conv-42"))
+
+        definitions = convert_tools({"signal_probe": info})
+        await definitions[0].execute()
+
+        ctx = captured["ctx"]
+        assert ctx.abort_signal is external_signal
+        assert ctx.conversation_id == "conv-42"
+        assert ctx.call_id  # non-empty
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_toolinfo_wrapper_falls_back_when_no_run_active(self):
+        """Without an active RunContext (e.g. ad-hoc call) a fresh signal is used."""
+        import asyncio
+
+        from src.infrastructure.agent.processor.run_context import (
+            RunContext,
+            set_current_run_context,
+        )
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+
+        captured: dict[str, ToolContext] = {}
+
+        async def _execute(ctx: ToolContext, **_: object) -> str:
+            captured["ctx"] = ctx
+            return "ok"
+
+        info = ToolInfo(
+            name="probe2",
+            description="probe",
+            parameters={"type": "object", "properties": {}, "required": []},
+            execute=_execute,
+        )
+
+        # Explicitly clear any binding leaked from sibling tests.
+        set_current_run_context(RunContext(abort_signal=None))
+
+        definitions = convert_tools({"probe2": info})
+        await definitions[0].execute()
+
+        assert isinstance(captured["ctx"].abort_signal, asyncio.Event)
+        assert not captured["ctx"].abort_signal.is_set()
+        assert captured["ctx"].conversation_id == ""
