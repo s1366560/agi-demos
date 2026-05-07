@@ -17,8 +17,10 @@ Resolution order:
     2. MULTI_AGENT_ISOLATED   → ``focused_agent_id`` (if set).
     3. MULTI_AGENT_SHARED / MULTI_AGENT_ISOLATED / AUTONOMOUS →
        ``coordinator_agent_id`` (if set).
-    4. AUTONOMOUS without coordinator → raise — invariant violation caught
-       elsewhere, but we log and fall through rather than crash.
+    4. AUTONOMOUS without coordinator → raise ``InvariantViolation``: an
+       AUTONOMOUS conversation has no human-driven turn-taking, so falling
+       through to the binding router would silently elect an arbitrary
+       agent. We surface the bug instead.
     5. SINGLE_AGENT, None (legacy), or no winner above → delegate to inner
        binding router.
 """
@@ -28,6 +30,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from src.domain.exceptions import InvariantViolation
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
 from src.domain.ports.agent.message_router_port import MessageRouterPort
 
@@ -110,13 +113,14 @@ class ConversationAwareRouter:
             if coordinator and coordinator in roster:
                 return coordinator
             if mode == ConversationMode.AUTONOMOUS:
-                # Invariant says AUTONOMOUS requires a coordinator; do not
-                # silently elect a participant — log and fall through so the
-                # binding layer (or supervisor) can surface the problem.
-                logger.warning(
-                    "AUTONOMOUS conversation %s has no valid coordinator; "
-                    "falling through",
-                    conversation.id,
+                # Invariant: AUTONOMOUS conversations are coordinator-driven.
+                # Falling through to the binding router would silently elect
+                # an arbitrary agent on a multi-agent stage. Surface the bug
+                # so the orchestration layer can repair the conversation.
+                raise InvariantViolation(
+                    f"AUTONOMOUS conversation {conversation.id} has no valid "
+                    f"coordinator (coordinator_agent_id={coordinator!r}, "
+                    f"roster_size={len(roster)})"
                 )
         return None
 

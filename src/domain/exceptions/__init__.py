@@ -5,6 +5,7 @@ This module provides a hierarchy of domain-specific exceptions that
 can be raised by repositories and application services.
 """
 
+from src.domain.exceptions.invariant import InvariantViolation
 from src.domain.exceptions.mcp import (
     MCPConnectionError,
     MCPError,
@@ -29,6 +30,7 @@ __all__ = [
     "ConnectionError",
     "DuplicateEntityError",
     "EntityNotFoundError",
+    "InvariantViolation",
     "MCPConnectionError",
     "MCPError",
     "MCPServerAlreadyExistsError",

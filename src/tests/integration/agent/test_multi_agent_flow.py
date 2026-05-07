@@ -182,8 +182,10 @@ class TestRoutingComposition:
         assert await router.resolve_agent(_message(), _ctx()) == "b"
 
     async def test_autonomous_requires_coordinator(self) -> None:
-        """AUTONOMOUS without coordinator falls through to inner router
-        rather than silently electing someone."""
+        """AUTONOMOUS without coordinator raises InvariantViolation
+        rather than silently electing someone (P3-22)."""
+        from src.domain.exceptions import InvariantViolation
+
         conv = _build_conversation(
             mode=ConversationMode.AUTONOMOUS,
             participants=["a", "b"],
@@ -195,8 +197,9 @@ class TestRoutingComposition:
         inner.resolve_agent.return_value = "fallback-binding"
         router = ConversationAwareRouter(inner=inner, conversation_repository=repo)
 
-        assert await router.resolve_agent(_message(), _ctx()) == "fallback-binding"
-        inner.resolve_agent.assert_awaited_once()
+        with pytest.raises(InvariantViolation):
+            await router.resolve_agent(_message(), _ctx())
+        inner.resolve_agent.assert_not_awaited()
 
     async def test_unknown_mention_ignored_falls_back_to_mode(self) -> None:
         """Mention of non-participant is a no-op; mode-resolution continues."""
