@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 
+from src.application.services.channels._session import with_session
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -81,11 +83,7 @@ class HITLChannelResponder:
             persisted for later delivery, or rejected.
         """
         try:
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
-
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 return await self._submit_response(
                     session,
                     request_id,
@@ -178,7 +176,7 @@ class HITLChannelResponder:
 
         return HITLChannelResponseOutcome.QUEUED
 
-    async def _load_validated_request(
+    async def _load_validated_request(  # noqa: PLR0911
         self,
         *,
         session: AsyncSession,
