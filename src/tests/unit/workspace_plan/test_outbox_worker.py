@@ -898,9 +898,10 @@ async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch
             title="Accepted projection",
             description="",
             created_by="worker-user-1",
-            status="done",
+            status="blocked",
             priority=0,
             assignee_agent_id="worker-agent",
+            blocker_reason="stale recovery blocker",
             metadata_json={
                 AUTONOMY_SCHEMA_VERSION_KEY: 1,
                 TASK_ROLE: "execution_task",
@@ -990,6 +991,19 @@ async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch
     assert reconciled_leaf.metadata["last_verification_attempt_id"] == ("accepted-terminal-attempt")
     assert reconciled_leaf.metadata["candidate_artifacts"] == ["docs/final-report.md"]
     assert reconciled_leaf.metadata["candidate_verifications"] == ["test_run:pytest final"]
+    task = await db_session.get(WorkspaceTaskModel, "accepted-node-task")
+    assert task is not None
+    assert task.status == "done"
+    assert task.blocker_reason is None
+    assert task.completed_at is not None
+    assert task.metadata_json["current_attempt_id"] == "accepted-terminal-attempt"
+    assert task.metadata_json["last_attempt_status"] == "accepted"
+    assert task.metadata_json["durable_plan_verdict"] == "accepted"
+    assert task.metadata_json["last_worker_report_summary"] == "accepted by durable verifier"
+    assert task.metadata_json["progress_events"][-1]["evidence_refs"] == [
+        "artifact:docs/final-report.md",
+        "test_run:pytest final",
+    ]
     outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
         "workspace-1",
         limit=5,

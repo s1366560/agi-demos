@@ -556,7 +556,7 @@ class TaskExecutionSessionMonitor:
                     opened_at=error_event.created_at,
                 )
             )
-        if conversation_id and not execution_rows:
+        if conversation_id and not execution_rows and not events:
             incidents.append(
                 TaskExecutionIncident(
                     type="missing_execution_status",

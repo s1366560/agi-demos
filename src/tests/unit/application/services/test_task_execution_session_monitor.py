@@ -144,10 +144,10 @@ class TestTaskExecutionSessionMonitor:
         assert state.recommended_recovery_action == "new_attempt"
         assert {
             "agent_initialization_failed",
-            "missing_execution_status",
             "no_assistant_response",
             "lost_binding",
         }.issubset(incident_types)
+        assert "missing_execution_status" not in incident_types
         assert "new_attempt" in state.available_interventions
         assert "mark_human_blocked" in state.available_interventions
 
@@ -157,6 +157,49 @@ class TestTaskExecutionSessionMonitor:
             actor_user_id=test_user.id,
         )
         attempt_repo.find_by_workspace_task_id.assert_awaited_once_with(task.id, limit=5)
+
+    async def test_detects_missing_execution_status_when_conversation_has_no_events(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        task = _task()
+        attempt = _attempt()
+        task_service = AsyncMock()
+        task_service.get_task.return_value = task
+        attempt_repo = AsyncMock()
+        attempt_repo.find_by_workspace_task_id.return_value = [attempt]
+        db_session.add(
+            Conversation(
+                id="conv-session-monitor-1",
+                project_id=test_project_db.id,
+                tenant_id=test_project_db.tenant_id,
+                user_id=test_user.id,
+                title="Silent worker conversation",
+                status="active",
+                workspace_id=task.workspace_id,
+                linked_workspace_task_id=task.id,
+            )
+        )
+        await db_session.flush()
+
+        service = TaskExecutionSessionMonitor(
+            db=db_session,
+            task_service=task_service,
+            command_service=AsyncMock(),
+            attempt_repo=attempt_repo,
+        )
+
+        state = await service.get_state(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            actor_user_id=test_user.id,
+        )
+
+        incident_types = {incident.type for incident in state.incidents}
+        assert "missing_execution_status" in incident_types
+        assert "lost_binding" not in incident_types
 
     async def test_mark_human_blocked_patches_current_attempt_id_for_task_guard(
         self,

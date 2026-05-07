@@ -35,7 +35,7 @@ import logging
 import os
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from src.application.services.workspace_autonomy_profiles import evaluate_workspace_code_context
 from src.domain.model.workspace.workspace_task import WorkspaceTask
@@ -74,6 +74,18 @@ _NATIVE_TOOL_PROTOCOL_GUARD = (
 )
 
 
+class _WorkspaceProjection(Protocol):
+    project_id: str
+    tenant_id: str
+
+
+class _WorkerConversationProjection(Protocol):
+    workspace_id: str | None
+    linked_workspace_task_id: str | None
+    metadata: dict[str, object]
+    updated_at: datetime | None
+
+
 def _conversation_scope_for_task(task_id: str, attempt_id: str | None = None) -> str:
     """Stable scope string for a worker session bound to a task."""
     if attempt_id:
@@ -103,6 +115,101 @@ def _conversation_id_for_worker(
         worker_agent_id,
         conversation_scope=_conversation_scope_for_task(task_id, attempt_id),
     )
+
+
+def _worker_conversation_kwargs(
+    *,
+    conversation_id: str,
+    workspace_id: str,
+    workspace: _WorkspaceProjection,
+    task: WorkspaceTask,
+    actor_user_id: str,
+    worker_agent_id: str,
+    worker_binding_id: str,
+    root_goal_task_id: str,
+    attempt_id: str,
+    active_status: object,
+) -> dict[str, Any]:
+    created_at = datetime.now(UTC)
+    return {
+        "id": conversation_id,
+        "project_id": workspace.project_id,
+        "tenant_id": workspace.tenant_id,
+        "user_id": actor_user_id,
+        "title": f"Workspace Worker - {task.title[:80]}",
+        "status": active_status,
+        "agent_config": {"selected_agent_id": worker_agent_id},
+        "metadata": {
+            "workspace_id": workspace_id,
+            "agent_id": worker_agent_id,
+            "workspace_agent_binding_id": worker_binding_id,
+            "workspace_task_id": task.id,
+            ROOT_GOAL_TASK_ID: root_goal_task_id,
+            "attempt_id": attempt_id,
+            "conversation_scope": _conversation_scope_for_task(task.id, attempt_id),
+            "source": "workspace_worker_launch",
+            "created_at": created_at.isoformat(),
+        },
+        "message_count": 0,
+        "created_at": created_at,
+        "workspace_id": workspace_id,
+        "linked_workspace_task_id": task.id,
+    }
+
+
+def _worker_conversation_linkage_conflict(
+    conversation: _WorkerConversationProjection,
+    *,
+    workspace_id: str,
+    task_id: str,
+) -> dict[str, str] | None:
+    conversation_workspace_id = _non_empty_text(conversation.workspace_id)
+    linked_workspace_task_id = _non_empty_text(conversation.linked_workspace_task_id)
+    has_workspace_conflict = (
+        conversation_workspace_id is not None and conversation_workspace_id != workspace_id
+    )
+    has_task_conflict = linked_workspace_task_id is not None and linked_workspace_task_id != task_id
+    if has_workspace_conflict or has_task_conflict:
+        return {
+            "conversation_workspace_id": conversation_workspace_id or "",
+            "linked_workspace_task_id": linked_workspace_task_id or "",
+            "expected_workspace_id": workspace_id,
+            "expected_workspace_task_id": task_id,
+        }
+    return None
+
+
+def _patch_worker_conversation_linkage(
+    conversation: _WorkerConversationProjection,
+    *,
+    workspace_id: str,
+    task_id: str,
+) -> bool:
+    changed = False
+    if _non_empty_text(conversation.workspace_id) != workspace_id:
+        conversation.workspace_id = workspace_id
+        changed = True
+    if _non_empty_text(conversation.linked_workspace_task_id) != task_id:
+        conversation.linked_workspace_task_id = task_id
+        changed = True
+    metadata = dict(conversation.metadata or {})
+    metadata_changed = False
+    if not metadata.get("workspace_id"):
+        metadata["workspace_id"] = workspace_id
+        metadata_changed = True
+    if not metadata.get("workspace_task_id"):
+        metadata["workspace_task_id"] = task_id
+        metadata_changed = True
+    if metadata_changed:
+        conversation.metadata = metadata
+        changed = True
+    if changed:
+        conversation.updated_at = datetime.now(UTC)
+    return changed
+
+
+def _non_empty_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]:
@@ -966,28 +1073,67 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             existing = await conversation_repo.find_by_id(resolved_conversation_id)
             if existing is None:
                 conversation = Conversation(
-                    id=resolved_conversation_id,
-                    project_id=workspace.project_id,
-                    tenant_id=workspace.tenant_id,
-                    user_id=actor_user_id,
-                    title=f"Workspace Worker - {task.title[:80]}",
-                    status=ConversationStatus.ACTIVE,
-                    agent_config={"selected_agent_id": worker_agent_id},
-                    metadata={
-                        "workspace_id": workspace_id,
-                        "agent_id": worker_agent_id,
-                        "workspace_agent_binding_id": worker_binding.id,
-                        "workspace_task_id": task.id,
-                        ROOT_GOAL_TASK_ID: root_goal_task_id,
-                        "attempt_id": attempt.id,
-                        "conversation_scope": _conversation_scope_for_task(task.id, attempt.id),
-                        "source": "workspace_worker_launch",
-                        "created_at": datetime.now(UTC).isoformat(),
-                    },
-                    message_count=0,
-                    created_at=datetime.now(UTC),
+                    **_worker_conversation_kwargs(
+                        conversation_id=resolved_conversation_id,
+                        workspace_id=workspace_id,
+                        workspace=workspace,
+                        task=task,
+                        actor_user_id=actor_user_id,
+                        worker_agent_id=worker_agent_id,
+                        worker_binding_id=worker_binding.id,
+                        root_goal_task_id=root_goal_task_id,
+                        attempt_id=attempt.id,
+                        active_status=ConversationStatus.ACTIVE,
+                    )
                 )
                 await conversation_repo.save(conversation)
+            else:
+                linkage_conflict = _worker_conversation_linkage_conflict(
+                    existing,
+                    workspace_id=workspace_id,
+                    task_id=task.id,
+                )
+                if linkage_conflict is not None:
+                    logger.error(
+                        "workspace_worker_launch.lost_binding_conflict",
+                        extra={
+                            "event": "workspace_worker_launch.lost_binding_conflict",
+                            "workspace_id": workspace_id,
+                            "task_id": task.id,
+                            "attempt_id": resolved_attempt_id,
+                            "conversation_id": resolved_conversation_id,
+                            **linkage_conflict,
+                        },
+                    )
+                    await db.commit()
+                    await _report_pre_stream_launch_failure(
+                        workspace_id=workspace_id,
+                        root_goal_task_id=root_goal_task_id,
+                        task_id=task.id,
+                        attempt_id=resolved_attempt_id,
+                        conversation_id=resolved_conversation_id,
+                        actor_user_id=actor_user_id,
+                        worker_agent_id=worker_agent_id,
+                        leader_agent_id=leader_agent_id,
+                        launch_state="lost_binding_conflict",
+                        summary=(
+                            "worker_launch.lost_binding_conflict: deterministic worker "
+                            "conversation is already linked to another workspace task"
+                        ),
+                        apply_fn=apply_workspace_worker_report,
+                    )
+                    return {
+                        "launched": False,
+                        "conversation_id": resolved_conversation_id,
+                        "attempt_id": resolved_attempt_id,
+                        "reason": "lost_binding_conflict",
+                    }
+                if _patch_worker_conversation_linkage(
+                    existing,
+                    workspace_id=workspace_id,
+                    task_id=task.id,
+                ):
+                    await conversation_repo.save(existing)
 
             # Bind conversation to attempt so the UI (via task metadata
             # projection below) and downstream record_candidate_output

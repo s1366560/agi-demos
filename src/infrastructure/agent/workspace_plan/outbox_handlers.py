@@ -104,7 +104,10 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
-from src.infrastructure.agent.workspace_plan.factory import build_sql_orchestrator
+from src.infrastructure.agent.workspace_plan.factory import (
+    _project_verification_to_task,
+    build_sql_orchestrator,
+)
 from src.infrastructure.agent.workspace_plan.iteration_review import (
     LLMIterationReviewProvider,
     UnavailableIterationReviewProvider,
@@ -447,6 +450,14 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             summary = str(
                 attempt.leader_feedback or attempt.candidate_summary or "accepted terminal attempt"
             )
+            await _project_accepted_terminal_attempt_to_task(
+                session=session,
+                workspace_id=workspace_id,
+                node=node,
+                attempt=attempt,
+                summary=summary,
+                now=now,
+            )
             plan.replace_node(
                 replace(
                     node,
@@ -481,6 +492,71 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     if changed:
         await repo.save(plan)
     return changed
+
+
+async def _project_accepted_terminal_attempt_to_task(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttemptModel,
+    summary: str,
+    now: datetime,
+) -> None:
+    task_id = node.workspace_task_id or attempt.workspace_task_id
+    if not task_id:
+        return
+    task = await session.get(WorkspaceTaskModel, task_id)
+    if task is None or task.workspace_id != workspace_id:
+        return
+    evidence_refs = _accepted_attempt_evidence_refs(attempt)
+    commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:")
+    git_diff_summary = _first_prefixed_ref(evidence_refs, "git_diff_summary:")
+    test_commands = [
+        ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
+    ]
+    await _project_verification_to_task(
+        db=session,
+        task=task,
+        attempt_id=attempt.id,
+        passed=True,
+        hard_fail=False,
+        summary=summary,
+        evidence_refs=evidence_refs,
+        commit_ref=commit_ref,
+        git_diff_summary=git_diff_summary,
+        test_commands=test_commands,
+        now=now,
+    )
+
+
+def _accepted_attempt_evidence_refs(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> list[str]:
+    refs: list[str] = []
+    refs.extend(
+        f"artifact:{artifact}" if not artifact.startswith("artifact:") else artifact
+        for artifact in _attempt_list_field(
+            attempt,
+            domain_field="candidate_artifacts",
+            model_field="candidate_artifacts_json",
+        )
+    )
+    refs.extend(
+        _attempt_list_field(
+            attempt,
+            domain_field="candidate_verifications",
+            model_field="candidate_verifications_json",
+        )
+    )
+    return list(dict.fromkeys(ref for ref in refs if ref))
+
+
+def _first_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
+    for ref in refs:
+        if ref.startswith(prefix):
+            return ref.removeprefix(prefix)
+    return None
 
 
 def _accepted_attempt_evidence_metadata(

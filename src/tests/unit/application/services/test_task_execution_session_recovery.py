@@ -164,3 +164,39 @@ class TestTaskExecutionSessionRecoveryService:
         assert recovered == 0
         monitor.apply_recovery_action.assert_not_awaited()
         session.commit.assert_not_awaited()
+
+    async def test_recovery_budget_exhaustion_does_not_auto_mark_human_blocked(self) -> None:
+        session = _Session()
+        state = _degraded_state(
+            recommended_action="mark_human_blocked",
+            recovery_actions=(
+                {"action": "new_attempt", "status": "completed", "at": "2026-05-07T11:00:00Z"},
+                {"action": "new_attempt", "status": "completed", "at": "2026-05-07T11:10:00Z"},
+                {"action": "retry_launch", "status": "completed", "at": "2026-05-07T11:20:00Z"},
+            ),
+        )
+        monitor = MagicMock()
+        monitor.get_state = AsyncMock(return_value=state)
+        monitor.apply_recovery_action = AsyncMock()
+        command_service = MagicMock()
+        service = TaskExecutionSessionRecoveryService(
+            session_factory=lambda: _SessionContext(session),  # type: ignore[arg-type]
+            monitor_factory=lambda _session: (monitor, command_service),  # type: ignore[return-value]
+            redis_client=None,
+            action_cooldown_seconds=0,
+        )
+        service._fetch_candidates = AsyncMock(  # type: ignore[method-assign]
+            return_value=[
+                TaskExecutionSessionRecoveryCandidate(
+                    workspace_id=state.workspace_id,
+                    task_id=state.task_id,
+                    actor_user_id="user-recovery-1",
+                )
+            ]
+        )
+
+        recovered = await service.periodic_sweep()
+
+        assert recovered == 0
+        monitor.apply_recovery_action.assert_not_awaited()
+        session.commit.assert_not_awaited()

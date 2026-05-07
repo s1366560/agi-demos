@@ -53,7 +53,6 @@ _AUTO_RECOVERY_ACTIONS = frozenset(
     {
         "new_attempt",
         "retry_launch",
-        "mark_human_blocked",
     }
 )
 _PENDING_RECOVERY_STATUSES = frozenset({"queued", "recovering"})

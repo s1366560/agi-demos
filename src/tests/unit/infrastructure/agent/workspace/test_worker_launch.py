@@ -75,6 +75,86 @@ class TestConversationId:
         assert a != b
 
 
+class TestWorkerConversationLinkage:
+    def test_worker_conversation_kwargs_include_canonical_linkage(self) -> None:
+        class _Workspace:
+            project_id = "project-1"
+            tenant_id = "tenant-1"
+
+        task = _make_task(task_id="task-link-1", workspace_id="workspace-link-1")
+
+        kwargs = wl._worker_conversation_kwargs(
+            conversation_id="conversation-link-1",
+            workspace_id=task.workspace_id,
+            workspace=_Workspace(),
+            task=task,
+            actor_user_id="user-1",
+            worker_agent_id="agent-1",
+            worker_binding_id="binding-1",
+            root_goal_task_id="root-1",
+            attempt_id="attempt-1",
+            active_status="active",
+        )
+
+        assert kwargs["workspace_id"] == task.workspace_id
+        assert kwargs["linked_workspace_task_id"] == task.id
+        assert kwargs["metadata"]["workspace_id"] == task.workspace_id
+        assert kwargs["metadata"]["workspace_task_id"] == task.id
+
+    def test_worker_conversation_linkage_backfills_empty_existing_row(self) -> None:
+        class _Conversation:
+            def __init__(self) -> None:
+                self.workspace_id = None
+                self.linked_workspace_task_id = None
+                self.metadata: dict = {}
+                self.updated_at = None
+
+        conversation = _Conversation()
+
+        conflict = wl._worker_conversation_linkage_conflict(
+            conversation,
+            workspace_id="workspace-link-1",
+            task_id="task-link-1",
+        )
+        changed = wl._patch_worker_conversation_linkage(
+            conversation,
+            workspace_id="workspace-link-1",
+            task_id="task-link-1",
+        )
+
+        assert conflict is None
+        assert changed is True
+        assert conversation.workspace_id == "workspace-link-1"
+        assert conversation.linked_workspace_task_id == "task-link-1"
+        assert conversation.metadata["workspace_id"] == "workspace-link-1"
+        assert conversation.metadata["workspace_task_id"] == "task-link-1"
+        assert conversation.updated_at is not None
+
+    def test_worker_conversation_linkage_reports_conflict_without_overwrite(self) -> None:
+        class _Conversation:
+            def __init__(self) -> None:
+                self.workspace_id = "other-workspace"
+                self.linked_workspace_task_id = "task-link-1"
+                self.metadata: dict = {}
+                self.updated_at = None
+
+        conversation = _Conversation()
+
+        conflict = wl._worker_conversation_linkage_conflict(
+            conversation,
+            workspace_id="workspace-link-1",
+            task_id="task-link-1",
+        )
+
+        assert conflict == {
+            "conversation_workspace_id": "other-workspace",
+            "linked_workspace_task_id": "task-link-1",
+            "expected_workspace_id": "workspace-link-1",
+            "expected_workspace_task_id": "task-link-1",
+        }
+        assert conversation.workspace_id == "other-workspace"
+
+
 class TestWorkerLaunchHeartbeat:
     @pytest.mark.asyncio
     async def test_publish_worker_launch_heartbeat_emits_wtp_liveness(
