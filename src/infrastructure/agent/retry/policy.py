@@ -5,8 +5,9 @@ provider-specific retry-after header support.
 """
 
 import re
+import secrets
 from dataclasses import dataclass
-from typing import ClassVar, cast
+from typing import ClassVar
 
 
 @dataclass
@@ -68,6 +69,15 @@ class RetryPolicy:
     # HTTP status codes that indicate retryable errors
     RETRYABLE_STATUS_CODES: ClassVar[set[int]] = {429, 500, 502, 503, 504}
 
+    # Hard cap on the error string we feed to regex pattern matching. Errors
+    # carrying multi-megabyte payloads (e.g. raw HTTP bodies) would otherwise
+    # let an adversarial response amplify CPU cost on every classification.
+    _MAX_ERROR_STR_LEN: ClassVar[int] = 4096
+
+    # Jitter fraction applied to exponential-backoff delay (full jitter range
+    # is [delay * (1 - JITTER), delay * (1 + JITTER)]).
+    _JITTER_FRACTION: ClassVar[float] = 0.25
+
     def __init__(
         self,
         initial_delay_ms: int = INITIAL_DELAY_MS,
@@ -104,7 +114,16 @@ class RetryPolicy:
         Returns:
             True if the error is retryable, False otherwise
         """
+        # Fast-path classification by exception type. We deliberately probe by
+        # class name + isinstance against a curated set so we do not have to
+        # import optional third-party exception classes (httpx, aiohttp, ...)
+        # at module load time.
+        if isinstance(error, (TimeoutError, ConnectionError, ConnectionResetError)):
+            return True
+
         error_str = str(error).lower()
+        if len(error_str) > self._MAX_ERROR_STR_LEN:
+            error_str = error_str[: self._MAX_ERROR_STR_LEN]
 
         # Check for retryable patterns in error message
         for pattern in self.RETRYABLE_PATTERNS:
@@ -142,9 +161,15 @@ class RetryPolicy:
             if header_delay is not None:
                 return header_delay
 
-        # 2. Fall back to exponential backoff
+        # 2. Fall back to exponential backoff with full jitter to avoid
+        #    thundering-herd reconnects when many sessions retry in lockstep.
         delay = self.initial_delay_ms * (self.backoff_factor ** (attempt - 1))
-        return cast(int, min(delay, self.max_delay_ms))
+        capped = min(delay, self.max_delay_ms)
+        # secrets.SystemRandom() avoids the global random.seed and gives a
+        # cryptographically-seeded jitter; we still treat the value as advisory.
+        jitter_span = capped * self._JITTER_FRACTION
+        offset = (secrets.SystemRandom().random() * 2.0 - 1.0) * jitter_span
+        return max(0, int(capped + offset))
 
     def should_retry(self, attempt: int, error: Exception) -> bool:
         """
