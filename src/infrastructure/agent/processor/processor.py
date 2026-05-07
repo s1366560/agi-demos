@@ -198,7 +198,7 @@ class ProcessorConfig:
     # Hard ceilings — defensive bounds against misconfiguration / a malicious
     # agent definition setting absurd values that would let a single ReAct
     # session monopolize a worker indefinitely.
-    HARD_MAX_STEPS: ClassVar[int] = 1000
+    HARD_MAX_STEPS: ClassVar[int] = 50000
     HARD_MAX_COST_PER_REQUEST: ClassVar[float] = 1000.0  # USD
 
     def __post_init__(self) -> None:
