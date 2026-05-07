@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -17,7 +17,7 @@ logging.basicConfig(
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
@@ -315,13 +315,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
                 return None
 
             class _SessionScopedReflection:
-                async def reflect_window(
-                    self, pid: str
-                ) -> list[ReflectionVerdict]:
+                async def reflect_window(self, pid: str) -> list[ReflectionVerdict]:
                     async with session_factory() as session:
-                        service = await container.reflection_service(
-                            pid, session=session
-                        )
+                        service = await container.reflection_service(pid, session=session)
                         verdicts = await service.reflect_window(pid)
                         await session.commit()
                         return verdicts
@@ -505,6 +501,11 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
+        # P0-4: disable redirect_slashes. FastAPI's default 307 redirect strips
+        # the Authorization header on cross-origin clients (Vite 3000 → API 8000)
+        # and produces silent 401s. Routes must be registered with their canonical
+        # form; clients are expected to use the documented path.
+        redirect_slashes=False,
         openapi_tags=[
             {
                 "name": "agents",
@@ -549,6 +550,31 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         configure_tracer_provider()
         if instrument_fastapi(app):
             logger.info("FastAPI instrumented for OpenTelemetry")
+
+    # P0-4: with ``redirect_slashes=False`` we must still tolerate clients that
+    # send the alternate trailing-slash form. A 307/308 redirect would strip the
+    # Authorization header on cross-origin requests, so we rewrite the path
+    # in-process instead of redirecting.
+    @app.middleware("http")
+    async def _trailing_slash_normalizer(  # pyright: ignore[reportUnusedFunction]
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        scope = request.scope
+        if scope.get("type") == "http":
+            path: str = scope.get("path", "")
+            # Only rewrite for /api/* paths to avoid clobbering /docs, /static.
+            if path.startswith("/api/") and path not in ("/api/", "/api"):
+                routes = request.app.router.routes
+                # Try the request as-is; if no match, try the toggled-slash form.
+                # Cheap heuristic: check if any registered APIRoute path matches.
+                registered = {getattr(r, "path", None) for r in routes}
+                if path not in registered:
+                    alt = path[:-1] if path.endswith("/") else path + "/"
+                    if alt in registered:
+                        scope["path"] = alt
+                        scope["raw_path"] = alt.encode("latin-1")
+        return await call_next(request)
 
     app.add_middleware(
         CORSMiddleware,

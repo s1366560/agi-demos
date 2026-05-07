@@ -215,9 +215,19 @@ class SubscribeHandler(WebSocketMessageHandler):
             )
             await context.send_ack("subscribe", conversation_id=conversation_id)
 
-        except Exception as e:
-            logger.error(f"[WS] Error subscribing: {e}", exc_info=True)
-            await context.send_error(str(e), conversation_id=conversation_id)
+        except Exception:
+            logger.exception(
+                "[WS] Error subscribing",
+                extra={
+                    "session_id": context.session_id,
+                    "conversation_id": conversation_id,
+                    "user_id": context.user_id,
+                },
+            )
+            await context.send_error(
+                "Failed to subscribe (see server logs)",
+                conversation_id=conversation_id,
+            )
 
 
 class UnsubscribeHandler(WebSocketMessageHandler):

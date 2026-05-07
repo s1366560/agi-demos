@@ -241,6 +241,26 @@ class HITLCoordinator:
         unregister_coordinator(request_id)
         return pending
 
+    def cancel_request_if_pending(self, request_id: str | None) -> None:
+        """Idempotent cleanup safe to call from ``finally`` blocks.
+
+        Releases coordinator/future state for ``request_id`` if (and only if)
+        it is still pending. Used by tool handlers to guarantee no Future or
+        registered-coordinator entry is leaked when a generator is cancelled
+        or raises a non-TimeoutError exception between
+        ``prepare_request()`` and ``wait_for_response()``.
+        """
+        if not request_id:
+            return
+        pending = self._cleanup_pending_request(request_id)
+        if pending is None:
+            return
+        # Wake any pending waiter so awaiters don't hang indefinitely.
+        if not pending.future.done():
+            pending.future.cancel()
+        if not pending.completion_future.done():
+            pending.completion_future.set_result(None)
+
     async def request(
         self,
         hitl_type: HITLType,
@@ -568,6 +588,7 @@ async def mark_hitl_request_completed(
             await session.commit()
             return True
         return False
+
 
 async def mark_hitl_request_timeout(
     request_id: str,

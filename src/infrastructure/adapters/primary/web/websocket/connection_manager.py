@@ -60,6 +60,10 @@ class ConnectionManager:
         self.session_project_subscriptions: dict[str, set[tuple[str, str]]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+        # Strong references to in-flight cleanup tasks scheduled from sync
+        # paths (e.g. ``send_to_session`` failure). Without this set the
+        # tasks could be garbage-collected mid-execution.
+        self._pending_cleanup_tasks: set[asyncio.Task[None]] = set()
         # Event dispatcher manager for async event delivery
         self.dispatcher_manager: DispatcherManager = dispatcher_manager or get_dispatcher_manager()
 
@@ -214,7 +218,11 @@ class ConnectionManager:
     # ==========================================================================
 
     async def send_to_session(self, session_id: str, message: dict[str, Any]) -> bool:
-        """Send a message to a specific session."""
+        """Send a message to a specific session.
+
+        On send failure the dead session is scheduled for cleanup so we don't
+        accumulate stale entries in ``active_connections`` / subscriptions.
+        """
         ws = self.active_connections.get(session_id)
         if ws:
             try:
@@ -222,12 +230,23 @@ class ConnectionManager:
                 return True
             except Exception as e:
                 logger.warning(f"[WS] Failed to send to session {session_id[:8]}...: {e}")
+                # Schedule async cleanup; do not block caller and do not raise.
+                # Store reference to the cleanup task so it doesn't get GC'd
+                # mid-execution. We intentionally don't await it.
+                try:
+                    cleanup_task = asyncio.create_task(self.disconnect(session_id))
+                    self._pending_cleanup_tasks.add(cleanup_task)
+                    cleanup_task.add_done_callback(self._pending_cleanup_tasks.discard)
+                except RuntimeError:
+                    # No running loop (e.g. shutdown) — best-effort silent drop.
+                    pass
                 return False
         return False
 
     async def send_to_user(self, user_id: str, message: dict[str, Any]) -> int:
         """Send a message to all sessions of a specific user."""
-        session_ids = self.user_sessions.get(user_id, set())
+        async with self._lock:
+            session_ids = list(self.user_sessions.get(user_id, set()))
         sent_count = 0
         for session_id in session_ids:
             if await self.send_to_session(session_id, message):
@@ -241,17 +260,24 @@ class ConnectionManager:
         Uses EventDispatcher for async, non-blocking event delivery with
         backpressure handling and priority queuing.
         """
-        subscribers = self.conversation_subscribers.get(conversation_id, set())
-        enqueued_count = 0
+        # Snapshot subscriber set + their websockets under the lock to avoid
+        # "set changed size during iteration" when concurrent disconnect /
+        # unsubscribe mutate ``conversation_subscribers``.
+        async with self._lock:
+            subscribers = list(self.conversation_subscribers.get(conversation_id, set()))
+            ws_by_session = {
+                sid: self.active_connections.get(sid)
+                for sid in subscribers
+                if sid in self.active_connections
+            }
 
-        for session_id in subscribers:
-            ws = self.active_connections.get(session_id)
-            if ws:
-                # Get or create dispatcher for this session
-                dispatcher = await self.dispatcher_manager.get_dispatcher(session_id, ws)
-                # Enqueue event (non-blocking)
-                if await dispatcher.enqueue(message):
-                    enqueued_count += 1
+        enqueued_count = 0
+        for session_id, ws in ws_by_session.items():
+            if ws is None:
+                continue
+            dispatcher = await self.dispatcher_manager.get_dispatcher(session_id, ws)
+            if await dispatcher.enqueue(message):
+                enqueued_count += 1
 
         return enqueued_count
 
@@ -356,7 +382,9 @@ class ConnectionManager:
     # Status Subscriptions
     # ==========================================================================
 
-    async def subscribe_status(self, session_id: str, project_id: str, task: asyncio.Task[None]) -> None:
+    async def subscribe_status(
+        self, session_id: str, project_id: str, task: asyncio.Task[None]
+    ) -> None:
         """Subscribe a session to status updates for a project."""
         async with self._lock:
             if session_id not in self.status_subscriptions:
@@ -393,7 +421,9 @@ class ConnectionManager:
         """Get the WebSocket connection for a session."""
         return self.active_connections.get(session_id)
 
-    def add_bridge_task(self, session_id: str, conversation_id: str, task: asyncio.Task[None]) -> None:
+    def add_bridge_task(
+        self, session_id: str, conversation_id: str, task: asyncio.Task[None]
+    ) -> None:
         """Register a bridge task for a session's conversation."""
         if session_id not in self.bridge_tasks:
             self.bridge_tasks[session_id] = {}

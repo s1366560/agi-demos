@@ -65,6 +65,31 @@ logger = logging.getLogger(__name__)
 _PENDING_HITL_COMPLETION_REQUEST_IDS_KEY = "_pending_hitl_completion_request_ids"
 
 
+def _redacted_hitl_tool_error(tool_name: str, call_id: str | None) -> str:
+    """Build a non-leaky error message for HITL/tool observe events.
+
+    The full exception (including upstream stack/secrets) is logged at
+    server side via ``logger.exception``; the message returned here is
+    safe to expose to the LLM and to the frontend event stream.
+    """
+    suffix = f" (call_id={call_id})" if call_id else ""
+    return f"{tool_name} failed; see server logs{suffix}"
+
+
+def _user_safe_error(exc: BaseException, tool_name: str, call_id: str | None) -> str:
+    """Return a user/LLM-safe error string.
+
+    For deterministic input-validation errors raised by our own code
+    (``ValueError``/``TypeError``) we surface the original message because
+    it is intentionally written to be actionable and contains no secrets.
+    Everything else (network, DB, filesystem, third-party) is redacted to
+    avoid leaking internal context — full traceback goes to ``logger.exception``.
+    """
+    if isinstance(exc, ValueError | TypeError):
+        return str(exc)
+    return _redacted_hitl_tool_error(tool_name, call_id)
+
+
 def _ensure_dict(raw: Any) -> dict[str, Any]:
     """Ensure context argument is a dictionary."""
     if isinstance(raw, str):
@@ -202,6 +227,7 @@ async def handle_clarification_tool(
     tool_part: ToolPart,
 ) -> AsyncIterator[AgentDomainEvent]:
     """Handle clarification tool via HITLCoordinator (Future-based)."""
+    request_id: str | None = None
     try:
         question = arguments.get("question", "")
         clarification_type = arguments.get("clarification_type", "custom")
@@ -315,17 +341,23 @@ async def handle_clarification_tool(
         )
 
     except Exception as e:
-        logger.error(f"Clarification tool error: {e}", exc_info=True)
+        logger.exception(
+            "Clarification tool error",
+            extra={"tool_name": tool_name, "call_id": call_id},
+        )
+        coordinator.cancel_request_if_pending(request_id)
+        redacted = _user_safe_error(e, tool_name, call_id)
         tool_part.status = ToolState.ERROR
-        tool_part.error = str(e)
+        tool_part.error = redacted
         tool_part.end_time = time.time()
 
         yield AgentObserveEvent(
             tool_name=tool_name,
-            error=str(e),
+            error=redacted,
             call_id=call_id,
             tool_execution_id=tool_part.tool_execution_id,
         )
+        del e  # avoid leaking via locals
 
 
 async def handle_decision_tool(
@@ -336,6 +368,7 @@ async def handle_decision_tool(
     tool_part: ToolPart,
 ) -> AsyncIterator[AgentDomainEvent]:
     """Handle decision tool via HITLCoordinator (Future-based)."""
+    request_id: str | None = None
     try:
         question = arguments.get("question", "")
         decision_type = arguments.get("decision_type", "custom")
@@ -454,17 +487,23 @@ async def handle_decision_tool(
         )
 
     except Exception as e:
-        logger.error(f"Decision tool error: {e}", exc_info=True)
+        logger.exception(
+            "Decision tool error",
+            extra={"tool_name": tool_name, "call_id": call_id},
+        )
+        coordinator.cancel_request_if_pending(request_id)
+        redacted = _user_safe_error(e, tool_name, call_id)
         tool_part.status = ToolState.ERROR
-        tool_part.error = str(e)
+        tool_part.error = redacted
         tool_part.end_time = time.time()
 
         yield AgentObserveEvent(
             tool_name=tool_name,
-            error=str(e),
+            error=redacted,
             call_id=call_id,
             tool_execution_id=tool_part.tool_execution_id,
         )
+        del e
 
 
 def _prepare_fields_for_sse(fields_raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -500,6 +539,7 @@ async def handle_env_var_tool(
     langfuse_context: dict[str, Any] | None = None,
 ) -> AsyncIterator[AgentDomainEvent]:
     """Handle environment variable request tool via HITLCoordinator."""
+    request_id: str | None = None
     try:
         target_tool_name = arguments.get("tool_name", "")
         fields_raw = arguments.get("fields", [])
@@ -667,14 +707,19 @@ async def handle_env_var_tool(
         )
 
     except Exception as e:
-        logger.error(f"Environment variable tool error: {e}", exc_info=True)
+        logger.exception(
+            "Environment variable tool error",
+            extra={"tool_name": tool_name, "call_id": call_id},
+        )
+        coordinator.cancel_request_if_pending(request_id)
         yield _observe_env_var_error(
             tool_name=tool_name,
-            error_message=str(e),
+            error_message=_user_safe_error(e, tool_name, call_id),
             call_id=call_id,
             tool_part=tool_part,
             end_time=time.time(),
         )
+        del e
 
 
 async def _save_env_vars(
@@ -1128,11 +1173,16 @@ async def handle_a2ui_action_tool(
             )
             if cleared_event is not None:
                 yield cleared_event
-        logger.error(f"A2UI action tool error: {e}", exc_info=True)
-        _set_tool_part_error(tool_part, str(e))
+        logger.exception(
+            "A2UI action tool error",
+            extra={"tool_name": tool_name, "call_id": call_id},
+        )
+        redacted = _user_safe_error(e, tool_name, call_id)
+        _set_tool_part_error(tool_part, redacted)
         yield _observe_event(
             tool_name=tool_name,
-            error=str(e),
+            error=redacted,
             call_id=call_id,
             tool_part=tool_part,
         )
+        del e

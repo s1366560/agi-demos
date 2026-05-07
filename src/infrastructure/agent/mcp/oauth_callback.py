@@ -71,10 +71,16 @@ class PendingAuth:
         resolve: Callable[[str], None],
         reject: Callable[[Exception], None],
         timeout_handle: asyncio.Handle,
+        mcp_name: str | None = None,
     ) -> None:
         self.resolve = resolve
         self.reject = reject
         self.timeout_handle = timeout_handle
+        # P0-6: state is bound to the MCP server that initiated the auth flow.
+        # Callers MUST cross-check via ``get_pending_mcp_name(state)`` before
+        # applying the resolved authorization code, so that a stolen / guessed
+        # state cannot be used to plant tokens against a different MCP server.
+        self.mcp_name = mcp_name
 
 
 class MCPOAuthCallbackServer:
@@ -116,7 +122,12 @@ class MCPOAuthCallbackServer:
         error = request.query.get("error")
         error_description = request.query.get("error_description")
 
-        logger.info(f"Received OAuth callback: state={state}, error={error}")
+        logger.info(
+            "Received OAuth callback: state=%s, error=%s, bound_mcp_name=%s",
+            state,
+            error,
+            self._pending_auths[state].mcp_name if state and state in self._pending_auths else None,
+        )
 
         # Validate state parameter (required for CSRF protection)
         if not state:
@@ -217,11 +228,15 @@ class MCPOAuthCallbackServer:
 
         logger.info("OAuth callback server stopped")
 
-    def wait_for_callback(self, oauth_state: str) -> Awaitable[str]:
+    def wait_for_callback(self, oauth_state: str, *, mcp_name: str | None = None) -> Awaitable[str]:
         """Wait for OAuth callback with given state.
 
         Args:
             oauth_state: OAuth state parameter to wait for
+            mcp_name: Optional MCP server name to bind to this state. When
+                provided, callers should verify it via
+                :meth:`get_pending_mcp_name` before applying the resolved
+                authorization code (P0-6 CSRF / state-rebinding mitigation).
 
         Returns:
             Awaitable that resolves with authorization code
@@ -248,9 +263,20 @@ class MCPOAuthCallbackServer:
             resolve=lambda code: (loop.call_soon_threadsafe(future.set_result, code), None)[-1],
             reject=lambda exc: (loop.call_soon_threadsafe(future.set_exception, exc), None)[-1],
             timeout_handle=timeout_handle,
+            mcp_name=mcp_name,
         )
 
         return future
+
+    def get_pending_mcp_name(self, oauth_state: str) -> str | None:
+        """Return the ``mcp_name`` bound to a pending state, if any.
+
+        Used by callers (e.g. ``MCPOAuthProvider``) to verify that a resolved
+        authorization code is being applied to the same MCP server that
+        initiated the authorization request.
+        """
+        pending = self._pending_auths.get(oauth_state)
+        return pending.mcp_name if pending is not None else None
 
     def _timeout_callback(self, future: asyncio.Future[Any], oauth_state: str) -> None:
         """Handle callback timeout.

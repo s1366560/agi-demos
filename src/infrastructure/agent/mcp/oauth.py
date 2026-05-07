@@ -12,6 +12,7 @@ Based on vendor/opencode/packages/opencode/src/mcp/ implementation.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -30,6 +31,30 @@ logger = logging.getLogger(__name__)
 OAUTH_CALLBACK_PORT = 19876
 OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
 CALLBACK_TIMEOUT_MS = 5 * 60 * 1000  # 5 minutes
+
+
+def _atomic_write_secret_json(filepath: Path, data: dict[str, Any]) -> None:
+    """Atomically write JSON to filepath with 0o600 from creation.
+
+    Avoids the race window between ``write_text`` (default umask) and a
+    follow-up ``chmod`` where another process could read the secret.
+    """
+    payload = json.dumps(data, indent=2).encode("utf-8")
+    tmp_path = filepath.with_name(filepath.name + ".tmp")
+    fd = os.open(tmp_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fp:
+            fp.write(payload)
+            fp.flush()
+            os.fsync(fp.fileno())
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+    os.replace(tmp_path, filepath)
+    # Defensive: ensure final perms even if pre-existing file had looser mode.
+    with contextlib.suppress(OSError):
+        os.chmod(filepath, 0o600)
 
 
 # ============================================
@@ -112,17 +137,33 @@ class MCPAuthStorage:
                 logger.warning("EncryptionService not available; OAuth tokens stored unencrypted")
 
     async def _ensure_dir(self) -> None:
-        """Ensure data directory exists."""
-        await asyncio.to_thread(self._data_dir.mkdir, parents=True, exist_ok=True)
+        """Ensure data directory exists with restrictive permissions."""
+        await asyncio.to_thread(self._data_dir.mkdir, mode=0o700, parents=True, exist_ok=True)
+        # Defensive: tighten perms even if dir pre-existed with looser mode.
+        with contextlib.suppress(OSError):
+            await asyncio.to_thread(os.chmod, self._data_dir, 0o700)
 
     def _encrypt_value(self, value: str) -> str:
-        """Encrypt a sensitive string value. Returns original if no encryption available."""
-        if self._encryption and value:
-            try:
-                return "enc:" + self._encryption.encrypt(value)
-            except Exception:
-                logger.warning("Failed to encrypt value, storing as plaintext")
-        return value
+        """Encrypt a sensitive string value.
+
+        Fail-closed: if no EncryptionService is configured or encryption raises,
+        we refuse to persist the value rather than silently fall back to
+        plaintext (which would write tokens/client secrets to disk in cleartext).
+        """
+        if not value:
+            return value
+        if self._encryption is None:
+            raise RuntimeError(
+                "Refusing to persist sensitive OAuth value: EncryptionService is unavailable. "
+                "Configure LLM_ENCRYPTION_KEY / encryption service before using OAuth storage."
+            )
+        try:
+            return "enc:" + self._encryption.encrypt(value)
+        except Exception as exc:
+            # Do NOT fall back to plaintext. Surface the failure.
+            raise RuntimeError(
+                "Refusing to persist sensitive OAuth value: encryption failed."
+            ) from exc
 
     def _decrypt_value(self, value: str) -> str:
         """Decrypt a sensitive string value. Handles both encrypted and legacy plaintext."""
@@ -308,9 +349,8 @@ class MCPAuthStorage:
 
             all_data[mcp_name] = self._entry_to_dict(entry)
 
-            # Write with restricted permissions
-            await asyncio.to_thread(self._filepath.write_text, json.dumps(all_data, indent=2))
-            await asyncio.to_thread(os.chmod, self._filepath, 0o600)
+            # Atomic write with restrictive perms from creation (no race window).
+            await asyncio.to_thread(_atomic_write_secret_json, self._filepath, all_data)
 
             logger.info(f"Saved auth entry for MCP server: {mcp_name}")
 
@@ -326,8 +366,7 @@ class MCPAuthStorage:
             if mcp_name in all_data:
                 del all_data[mcp_name]
                 await self._ensure_dir()
-                await asyncio.to_thread(self._filepath.write_text, json.dumps(all_data, indent=2))
-                await asyncio.to_thread(os.chmod, self._filepath, 0o600)
+                await asyncio.to_thread(_atomic_write_secret_json, self._filepath, all_data)
                 logger.info(f"Removed auth entry for MCP server: {mcp_name}")
 
     async def update_tokens(
@@ -439,8 +478,7 @@ class MCPAuthStorage:
 
             del all_data[mcp_name]
             await self._ensure_dir()
-            await asyncio.to_thread(self._filepath.write_text, json.dumps(all_data, indent=2))
-            await asyncio.to_thread(os.chmod, self._filepath, 0o600)
+            await asyncio.to_thread(_atomic_write_secret_json, self._filepath, all_data)
             logger.info(f"Revoked all OAuth credentials for MCP server: {mcp_name}")
             return True
 

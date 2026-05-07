@@ -1212,7 +1212,11 @@ async def test_a2ui_tool_cleans_prepared_request_when_metadata_attach_fails(monk
     ]
 
     observe_event = next(e for e in events if isinstance(e, AgentObserveEvent))
-    assert observe_event.error == "attach failed"
+    # Generic internal exceptions are redacted (P0-2 secret-leak fix); the
+    # original RuntimeError is still logged via ``logger.exception``.
+    assert observe_event.error is not None
+    assert "see server logs" in observe_event.error
+    assert "call_id=call-a2ui" in observe_event.error
     assert coordinator.pending_request_ids == []
     assert cancelled_request_ids == ["a2ui-req-4"]
     assert manager.get_blocks("conv-a2ui") == []
