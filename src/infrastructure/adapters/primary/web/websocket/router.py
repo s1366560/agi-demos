@@ -12,6 +12,7 @@ Features:
 - Multiple browser tabs per user (via session_id)
 """
 
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -24,6 +25,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers.event_dispatcher import (
     get_dispatcher_manager,
+)
+from src.infrastructure.adapters.primary.web.websocket._limits import (
+    InboundMessageTooLarge,
+    receive_json_with_limit,
 )
 from src.infrastructure.adapters.primary.web.websocket.auth import authenticate_websocket
 from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
@@ -185,9 +190,34 @@ async def agent_websocket_endpoint(
         # Message handling loop
         while True:
             try:
-                data = await websocket.receive_json()
+                data = await receive_json_with_limit(websocket)
                 await message_router.route(context, data)
+            except InboundMessageTooLarge as e:
+                logger.warning(
+                    f"[WS] Oversized message from session {session_id[:8]}...: "
+                    f"{e.size} > {e.limit} bytes"
+                )
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "code": "payload_too_large",
+                        "data": {
+                            "message": "Inbound message exceeds size limit",
+                            "limit_bytes": e.limit,
+                        },
+                    }
+                )
+                await websocket.close(code=1009)
+                return
             except orjson.JSONDecodeError as e:
+                logger.warning(f"[WS] Invalid JSON from session {session_id[:8]}...: {e}")
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "data": {"message": "Invalid JSON format"},
+                    }
+                )
+            except json.JSONDecodeError as e:
                 logger.warning(f"[WS] Invalid JSON from session {session_id[:8]}...: {e}")
                 await websocket.send_json(
                     {

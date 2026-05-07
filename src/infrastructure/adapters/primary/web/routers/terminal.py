@@ -15,6 +15,10 @@ from pydantic import BaseModel, Field
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.websocket._limits import (
+    InboundMessageTooLarge,
+    receive_json_with_limit,
+)
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
@@ -271,7 +275,23 @@ async def terminal_websocket(
 
         try:
             while True:
-                msg = await websocket.receive_json()
+                try:
+                    msg = await receive_json_with_limit(websocket)
+                except InboundMessageTooLarge as e:
+                    logger.warning(
+                        f"Terminal WS oversized message for session "
+                        f"{session.session_id}: {e.size} > {e.limit} bytes"
+                    )
+                    with contextlib.suppress(Exception):
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": "payload_too_large",
+                                "limit_bytes": e.limit,
+                            }
+                        )
+                    await websocket.close(code=1009)
+                    return
                 await _handle_terminal_message(proxy, websocket, session, msg)
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected for session {session.session_id}")

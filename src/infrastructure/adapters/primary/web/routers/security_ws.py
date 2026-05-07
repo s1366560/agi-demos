@@ -7,6 +7,11 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from src.infrastructure.adapters.primary.web.websocket._limits import (
+    InboundMessageTooLarge,
+    receive_json_with_limit,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["security"])
@@ -119,7 +124,18 @@ async def security_ws(websocket: WebSocket) -> None:
 
     try:
         while True:
-            data: dict[str, Any] = await websocket.receive_json()
+            try:
+                data: dict[str, Any] = await receive_json_with_limit(websocket)
+            except InboundMessageTooLarge as e:
+                logger.warning(f"Security WS oversized message: {e.size} > {e.limit} bytes")
+                await websocket.send_json(
+                    {
+                        "error": "payload_too_large",
+                        "limit_bytes": e.limit,
+                    }
+                )
+                await websocket.close(code=1009)
+                return
             msg_type: str = data.get("type", "")
             msg_id: str = data.get("id", "")
 
