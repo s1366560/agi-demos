@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from src.application.services.channels._session import with_session
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 
@@ -171,11 +172,8 @@ class ChannelMessageRouter:
             from src.application.services.channels.channel_service_factory import (
                 create_media_import_service_from_config,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as init_session:
+            async with with_session() as init_session:
                 self._media_import_service = await create_media_import_service_from_config(
                     init_session
                 )
@@ -200,11 +198,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.primary.web.startup.container import (
                 get_app_container,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as db_session:
+            async with with_session() as db_session:
                 app_container = get_app_container()
                 if not app_container:
                     raise RuntimeError("Application container not initialized")
@@ -409,11 +404,7 @@ class ChannelMessageRouter:
 
         # Look up or create conversation in database
         try:
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
-
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 conversation_id = await self._find_or_create_conversation_db(
                     session=session,
                     message=message,
@@ -573,11 +564,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelMessageRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelMessageRepository(session)
                 channel_config_id = await self._resolve_channel_config_id(session, message)
 
@@ -1176,11 +1164,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelOutboxRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelOutboxRepository(session)
                 await repo.create(
                     ChannelOutboxModel(
@@ -1484,11 +1469,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelMessageRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelMessageRepository(session)
                 outbound_id = outbound_message_id or f"generated-{uuid.uuid4().hex}"
                 inbound_message_id = self._extract_channel_message_id(message)
@@ -1535,11 +1517,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelOutboxRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelOutboxRepository(session)
                 outbox = ChannelOutboxModel(
                     project_id=message.project_id or "",
@@ -1571,11 +1550,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelOutboxRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelOutboxRepository(session)
                 updated = await repo.mark_sent(outbox_id, sent_channel_message_id)
                 if updated:
@@ -1589,11 +1565,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelOutboxRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelOutboxRepository(session)
                 updated = await repo.mark_failed(outbox_id, error_message)
                 if updated:
@@ -1697,12 +1670,9 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelSessionBindingRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
             from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 binding_repo = ChannelSessionBindingRepository(session)
                 binding = await binding_repo.get_by_conversation_id(conversation_id)
                 if binding:
@@ -1769,11 +1739,8 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.channel_models import (
                 ChannelConfigModel,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 return await session.get(ChannelConfigModel, config_id)
         except Exception as e:
             logger.warning(f"[MessageRouter] Failed to load channel config: {e}")
@@ -2017,14 +1984,11 @@ def get_channel_message_router() -> ChannelMessageRouter:
             from src.application.services.channels.channel_service_factory import (
                 create_media_import_service_from_config,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
             async def _init_media_service() -> MediaImportService | None:  # type: ignore[reportUnusedFunction]
                 """Initialize media import service asynchronously."""
                 try:
-                    async with async_session_factory() as session:
+                    async with with_session() as session:
                         service = await create_media_import_service_from_config(session)
                         if service:
                             logger.info(

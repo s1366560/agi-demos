@@ -15,6 +15,7 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
 
+from src.application.services.channels._session import with_session
 from src.configuration.config import get_settings
 from src.domain.model.channels.message import ChannelAdapter
 
@@ -174,11 +175,8 @@ class ChannelEventBridge:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelSessionBindingRepository,
             )
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
 
-            async with async_session_factory() as session:
+            async with with_session() as session:
                 repo = ChannelSessionBindingRepository(session)
                 return await repo.get_by_conversation_id(conversation_id)
         except Exception as e:
