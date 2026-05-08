@@ -686,6 +686,7 @@ class TestVerifier:
         quality_policy = " ".join(payload["policy"]["quality_evidence"])
         assert "Tests must contain assertions or checks that can fail" in quality_policy
         assert "weaker or substituted assertions" in quality_policy
+        assert "bounded path, environment, or worktree-compatibility repairs" in quality_policy
         assert any(
             "allow_verification_script_changes" in item
             for item in payload["policy"]["needs_rework_for"]
@@ -1651,7 +1652,7 @@ class TestVerifier:
         assert "execution_verifications" not in judge.requests[0].task_metadata
         assert "last_worker_report_artifacts" not in judge.requests[0].task_metadata
 
-    async def test_verification_judge_cannot_accept_test_node_that_changes_test_scripts(
+    async def test_verification_judge_can_accept_bounded_test_infra_script_changes(
         self,
     ) -> None:
         commands: list[str] = []
@@ -1705,13 +1706,77 @@ class TestVerifier:
             )
         )
 
-        assert not rep.passed
-        assert "verification_script_mutation" in rep.summary()
+        assert rep.passed
+        script_result = next(
+            result
+            for result in rep.results
+            if result.criterion.spec.get("name") == "verification_script_mutation"
+        )
+        assert not script_result.passed
+        assert not script_result.criterion.required
+        assert script_result.message.startswith("advisory evidence before judge acceptance")
         assert any(
             "verification/review node changed test or audit scripts" in item
             for item in judge.requests[0].guard_failures
         )
         assert commands == ["git -C /workspace/my-evo status --short"]
+
+    async def test_verification_judge_rejects_weakened_test_script_changes(self) -> None:
+        class ScriptChangeSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                return {
+                    "exit_code": 0,
+                    "stdout": " M e2e-journey-complete.js\n",
+                    "stderr": "",
+                }
+
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+                rationale="test script diff replaces failing assertions with unconditional success",
+                failed_criteria=("verification_script_mutation",),
+                required_next_action="restore assertions before rerunning verification",
+                confidence=0.86,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Re-run full E2E journey tests",
+            metadata={
+                "iteration_phase": "test",
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Test verification",
+                expected_artifacts=("test-results/",),
+            ),
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:e2e-journey-complete.js 23 passed 0 failed",
+                    ],
+                },
+                sandbox=ScriptChangeSandbox(),
+            )
+        )
+
+        assert not rep.passed
+        assert "verification_script_mutation" in rep.summary()
+        assert any(
+            result.criterion.spec.get("name") == "workspace_verification_judge"
+            and result.criterion.spec.get("judge_verdict") == "needs_rework"
+            for result in rep.results
+        )
 
     @pytest.mark.parametrize(
         ("verdict", "passed", "hard_fail", "retryable"),

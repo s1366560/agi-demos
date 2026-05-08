@@ -306,6 +306,7 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
             "quality_evidence": [
                 "Tests must contain assertions or checks that can fail for the claimed behavior.",
                 "If a test/review node changed test, E2E, audit, or benchmark code, compare the diff against the node contract and reject weaker or substituted assertions.",
+                "Treat verification-script mutation guard failures as evidence to adjudicate, not as automatic failure: reject weakened, substituted, or unconditional scripts; accept bounded path, environment, or worktree-compatibility repairs only when assertions are preserved or strengthened.",
                 "Accessibility and security audits must verify the claimed property, not only count generic page structure.",
                 "Performance evidence must distinguish HTTP response timing, browser page-load timing, and synthetic simulations.",
             ],

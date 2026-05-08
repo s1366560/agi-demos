@@ -901,24 +901,6 @@ def _coerce_judge_result_for_required_context(
             required_next_action="fix or explicitly disposition failing tests before acceptance",
             confidence=max(result.confidence, 0.8),
         )
-    if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
-        results,
-        "verification_script_mutation",
-    ):
-        return WorkspaceVerificationJudgeResult(
-            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
-            rationale=(
-                "This verification/review node changed test, E2E, audit, or benchmark scripts. "
-                "That can weaken acceptance evidence, so the node cannot be accepted unless the "
-                f"plan explicitly allows verification script changes. Judge rationale: {result.rationale}"
-            ),
-            failed_criteria=("verification_script_mutation", *result.failed_criteria),
-            required_next_action=(
-                "restore the verification contract and fix product code, or add an explicit "
-                "allow_verification_script_changes contract with rationale"
-            ),
-            confidence=max(result.confidence, 0.8),
-        )
     return result
 
 
