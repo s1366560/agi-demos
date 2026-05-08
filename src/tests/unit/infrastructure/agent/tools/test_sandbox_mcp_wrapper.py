@@ -671,6 +671,43 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
 
+    async def test_workspace_worker_bash_parses_bracketed_worktree_override(self):
+        """The runtime should honor [worktree-setup] worktree_path lines too."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "[worktree-setup] worktree_path='/workspace/my-evo/../"
+                        ".memstack/worktrees/att-2' branch=feature"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="pwd",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-2"
+
     async def test_workspace_worker_bash_rejects_heredoc_when_worktree_override_active(self):
         """Attempt-scoped workers should use file tools instead of bash heredoc writes."""
         adapter = MockSandboxAdapter()

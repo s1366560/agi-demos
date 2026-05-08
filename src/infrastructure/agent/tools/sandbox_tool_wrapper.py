@@ -205,9 +205,11 @@ def _workspace_root_override_from_context(ctx: ToolContext) -> str | None:
         return None
     for raw_line in rendered_extra.splitlines():
         line = raw_line.strip()
-        if not line.startswith("worktree_path="):
+        if "worktree_path=" not in line:
             continue
-        value = posixpath.normpath(line.split("=", 1)[1].strip().rstrip("/"))
+        value_part = line.split("worktree_path=", 1)[1].strip()
+        raw_value = value_part.split(maxsplit=1)[0].strip("'\"").rstrip("/")
+        value = posixpath.normpath(raw_value)
         if value and value != "/workspace" and value.startswith("/workspace/"):
             return value
     return None
