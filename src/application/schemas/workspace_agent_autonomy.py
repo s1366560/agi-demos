@@ -63,6 +63,11 @@ HandoffReasonValue = Literal[
     "replan",
     "manual",
 ]
+VerificationIntegritySource = Literal[
+    "workspace_task_metadata",
+    "workspace_plan_node_metadata",
+]
+VerificationIntegrityPhase = Literal["test", "review"]
 
 
 class ContractModel(BaseModel):
@@ -288,6 +293,14 @@ class RootGoalMetadataModel(ContractModel):
         return self
 
 
+class WorkspaceVerificationIntegrityModel(ContractModel):
+    source: VerificationIntegritySource
+    iteration_phase: VerificationIntegrityPhase
+    allow_verification_script_changes: bool
+    protected_script_changes: bool
+    rule: str
+
+
 class ExecutionTaskMetadataModel(ContractModel):
     autonomy_schema_version: Literal[1]
     task_role: Literal["execution_task"]
@@ -306,6 +319,9 @@ class ExecutionTaskMetadataModel(ContractModel):
     write_set: list[str] = Field(default_factory=list)
     verification_commands: list[str] = Field(default_factory=list)
     preferred_language: PreferredLanguage | None = None
+    iteration_phase: str | None = None
+    allow_verification_script_changes: bool | None = None
+    workspace_verification_integrity: WorkspaceVerificationIntegrityModel | None = None
     launch_state: str | None = None
     current_attempt_id: str | None = None
     last_attempt_id: str | None = None

@@ -9,6 +9,7 @@ from src.application.services.workspace_agent_autonomy import (
     build_harness_feature_item,
     build_workspace_harness_contract,
     ensure_goal_completion_allowed_for_workspace,
+    merge_validated_metadata,
     reconcile_root_goal_progress,
     synthesize_goal_evidence_from_children,
     upsert_workspace_harness_feature_ledger,
@@ -186,6 +187,58 @@ def test_execution_task_metadata_accepts_execution_session_recovery_ledger() -> 
     assert metadata["execution_recovery_actions"][0]["incident_types"] == [
         "agent_initialization_failed"
     ]
+
+
+@pytest.mark.unit
+def test_execution_task_metadata_accepts_verification_integrity_policy() -> None:
+    metadata = validate_autonomy_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "iteration_phase": "test",
+            "allow_verification_script_changes": False,
+            "workspace_verification_integrity": {
+                "source": "workspace_plan_node_metadata",
+                "iteration_phase": "test",
+                "allow_verification_script_changes": False,
+                "protected_script_changes": True,
+                "rule": "Protect verification scripts unless explicitly allowed.",
+            },
+        }
+    )
+
+    policy = metadata["workspace_verification_integrity"]
+    assert metadata["iteration_phase"] == "test"
+    assert metadata["allow_verification_script_changes"] is False
+    assert policy["source"] == "workspace_plan_node_metadata"
+    assert policy["protected_script_changes"] is True
+
+
+@pytest.mark.unit
+def test_merge_execution_task_metadata_accepts_verification_integrity_patch() -> None:
+    metadata = merge_validated_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+        },
+        {
+            "iteration_phase": "review",
+            "workspace_verification_integrity": {
+                "source": "workspace_plan_node_metadata",
+                "iteration_phase": "review",
+                "allow_verification_script_changes": False,
+                "protected_script_changes": True,
+                "rule": "Protect verification scripts unless explicitly allowed.",
+            },
+        },
+    )
+
+    assert metadata["iteration_phase"] == "review"
+    assert metadata["workspace_verification_integrity"]["iteration_phase"] == "review"
 
 
 @pytest.mark.unit
