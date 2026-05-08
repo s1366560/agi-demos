@@ -797,6 +797,13 @@ def _criterion_result_payload(result: CriterionResult) -> dict[str, Any]:
 
 
 def _metadata_summary(ctx: VerificationContext) -> dict[str, Any]:
+    has_attempt_candidate_evidence = bool(
+        ctx.attempt_id
+        and (
+            _text_values(ctx.artifacts.get("candidate_artifacts"))
+            or _text_values(ctx.artifacts.get("candidate_verifications"))
+        )
+    )
     allowed_keys = (
         "code_context",
         "current_attempt_conversation_id",
@@ -816,12 +823,14 @@ def _metadata_summary(ctx: VerificationContext) -> dict[str, Any]:
         "verification_commands",
         "write_set",
     )
-    return {
-        key: _bounded_jsonish(value)
-        for key in allowed_keys
-        for value in [ctx.node.metadata.get(key, ctx.artifacts.get(key))]
-        if value not in (None, "", [], {})
-    }
+    metadata: dict[str, Any] = {}
+    for key in allowed_keys:
+        if has_attempt_candidate_evidence and key in _ATTEMPT_AGGREGATE_EVIDENCE_KEYS:
+            continue
+        value = ctx.node.metadata.get(key, ctx.artifacts.get(key))
+        if value not in (None, "", [], {}):
+            metadata[key] = _bounded_jsonish(value)
+    return metadata
 
 
 def _bounded_jsonish(value: object, *, limit: int = 1600) -> object:

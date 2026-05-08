@@ -1587,6 +1587,9 @@ class TestVerifier:
             "git_diff_summary:backend test setup fixed",
         )
         assert "test_run:84 passed 33 failed" not in judge.requests[0].task_evidence_refs
+        assert "evidence_refs" not in judge.requests[0].task_metadata
+        assert "execution_verifications" not in judge.requests[0].task_metadata
+        assert "last_worker_report_artifacts" not in judge.requests[0].task_metadata
 
     async def test_verification_judge_cannot_accept_test_node_that_changes_test_scripts(
         self,
