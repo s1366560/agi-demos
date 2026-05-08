@@ -23,6 +23,11 @@ _WORKSPACE_BINDING_RE = re.compile(
     re.DOTALL,
 )
 _WORKSPACE_ID_RE = re.compile(r"^\s*workspace_id=(?P<workspace_id>[^\s]+)\s*$", re.MULTILINE)
+_SECRET_KEY_VALUE_RE = re.compile(
+    r"(?im)(\b(?:api[_ -]?key|client[_ -]?secret|node[_ -]?secret|password|"
+    r"passphrase|private[_ -]?key|secret|token)\b\s*(?::|=|is)\s*)([^\s,;]+)"
+)
+_BEARER_TOKEN_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._-]{16,}\b")
 
 
 class MemoryRecallPreprocessor:
@@ -97,8 +102,12 @@ class MemoryRecallPreprocessor:
             self.last_search_ms = int((time.monotonic() - start) * 1000)
             return None
 
+        # Redact before deduplicating so prompt context and emitted events never
+        # expose recalled credentials.
+        redacted_results = [_redact_memory_result_secrets(r) for r in safe_results]
+
         # Sort by score and deduplicate
-        unique_results = self._deduplicate_results(safe_results)
+        unique_results = self._deduplicate_results(redacted_results)
 
         # Track for event emission
         self.last_results = unique_results
@@ -235,3 +244,13 @@ def _is_other_workspace_task_memory(content: str, current_workspace_id: str) -> 
     """Return true when a recalled workspace task binding belongs to another workspace."""
     recalled_workspace_id = _extract_workspace_binding_id(content)
     return recalled_workspace_id is not None and recalled_workspace_id != current_workspace_id
+
+
+def _redact_memory_result_secrets(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of one recalled memory with secret-like values redacted."""
+    content = result.get("content")
+    if not isinstance(content, str) or not content:
+        return dict(result)
+    redacted = _SECRET_KEY_VALUE_RE.sub(lambda match: f"{match.group(1)}[REDACTED]", content)
+    redacted = _BEARER_TOKEN_RE.sub("Bearer [REDACTED]", redacted)
+    return {**result, "content": redacted}

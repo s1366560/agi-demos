@@ -94,3 +94,30 @@ Prior task content.
 
     assert context is not None
     assert "Prior task content" in context
+
+
+@pytest.mark.unit
+async def test_recall_redacts_secret_like_memory_content_from_context_and_events() -> None:
+    secret_value = "a" * 64
+    token_value = "b" * 48
+    memory = f"""EvoMap node credentials:
+NODE_SECRET: {secret_value}
+Current verified secret is {token_value}
+Bearer abcdefghijklmnopqrstuvwxyz123456
+Keep the node id and status context.
+"""
+    preprocessor = MemoryRecallPreprocessor(
+        chunk_search=_ChunkSearch([_ChunkResult(content=memory)])
+    )
+
+    context = await preprocessor.recall("what is the node status?", "project-1")
+
+    assert context is not None
+    assert secret_value not in context
+    assert token_value not in context
+    assert "Bearer abcdefghijklmnopqrstuvwxyz123456" not in context
+    assert "NODE_SECRET: [REDACTED]" in context
+    assert "Current verified secret is [REDACTED]" in context
+    assert "Bearer [REDACTED]" in context
+    assert secret_value not in preprocessor.last_results[0]["content"]
+    assert token_value not in preprocessor.last_results[0]["content"]
