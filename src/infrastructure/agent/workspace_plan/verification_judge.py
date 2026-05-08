@@ -298,6 +298,8 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "The sandbox.worktree_path is the active execution root for worker attempts.",
                 "A tool denial caused by writing verification artifacts outside sandbox.worktree_path is an intentional policy failure, not a transient retry_infrastructure condition.",
                 "Do not recommend running from the main checkout, symlinking into the main checkout, copying artifacts outside the attempt worktree, or bypassing the worktree root.",
+                "Judge candidate state from sandbox.worktree_path and reported commit_refs; do not require commit_refs to already be merged into sandbox.code_root, the main checkout, or another master branch before acceptance.",
+                "If prior criteria mention master or main checkout while sandbox.worktree_path is present, reinterpret that as the active attempt worktree branch unless a separate integration node explicitly owns merging.",
                 "If protected test or review scripts hardcode main-checkout artifact paths, use needs_rework and require bounded follow-up work to make those scripts worktree-relative or environment-configurable.",
             ],
             "quality_evidence": [

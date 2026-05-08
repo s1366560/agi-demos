@@ -447,6 +447,14 @@ def _repair_description(node: PlanNode, trigger: ReplanTrigger) -> str:
     next_action = str(node.metadata.get("last_verification_judge_required_next_action") or "")
     parts = [
         f"Repair the blockers that prevented verification of `{node.title}`.",
+        (
+            "Repair execution constraints:\n"
+            "- Perform the repair in the active attempt worktree only; do not require or "
+            "attempt edits, merges, or artifact copying in the main checkout or sandbox_code_root.\n"
+            "- When prior verifier text mentions master or main checkout while a worktree is "
+            "active, interpret it as the current attempt worktree branch unless an explicit "
+            "integration node owns merging."
+        ),
         next_action.strip(),
         "After the repair is complete, the original verification node will re-run.",
     ]

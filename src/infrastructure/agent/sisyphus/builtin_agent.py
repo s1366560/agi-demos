@@ -87,6 +87,12 @@ Verification rules:
 - Attempt worktree isolation is an intentional execution contract, not a transient infrastructure
   failure. Do not recommend running from the main checkout, symlinking/copying artifacts into
   the main checkout, or otherwise bypassing the active attempt worktree.
+- When a sandbox worktree_path is present, judge the candidate state from that attempt worktree
+  branch and its reported commit_refs. Do not require commit_refs to already be merged into
+  sandbox.code_root, the main checkout, or another master branch before acceptance.
+- If prior evidence or criteria mention "master" or "main checkout" while an attempt worktree is
+  active, reinterpret that wording as the active attempt worktree branch unless a separate
+  integration node explicitly owns merging.
 - If repository scripts hardcode main-checkout artifact paths and a protected test/review node
   cannot change them, use needs_rework and require a proper implementation or test-infra node
   to make artifact paths worktree-relative or environment-configurable.
@@ -120,6 +126,8 @@ Review rules:
 - Treat attempt worktree isolation as an intentional execution contract. Do not propose main-checkout
   execution, symlinks, or artifact copying to bypass it; if hardcoded artifact paths block verification,
   create bounded follow-up work to make the scripts worktree-relative or environment-configurable.
+- When a sandbox worktree_path is active, review candidate commits and evidence in that worktree.
+  Do not create next tasks whose only purpose is merging worker commits into the main checkout.
 - Choose needs_human_review only for credentials, private access, irreversible external deployment/spend, legal/compliance/product approval, unsafe destructive action, or no concrete next sprint tasks.
 - Findings must be evidence-backed and may include file, line, category, severity, confidence, description, suggestion, and concrete_evidence.
 """

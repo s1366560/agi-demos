@@ -354,6 +354,11 @@ class TestLLMGoalPlanner:
         assert repair.metadata["allow_verification_script_changes"] is True
         assert repair.metadata["iteration_phase"] == "implement"
         assert repair.metadata["repair_source"] == "verification_judge_create_repair_node"
+        assert "active attempt worktree only" in repair.description
+        assert "do not require or attempt edits, merges" in repair.description
+        assert repair.description.index("active attempt worktree only") < repair.description.index(
+            "Make E2E report paths worktree-relative"
+        )
         assert reset.intent is TaskIntent.TODO
         assert reset.execution is TaskExecution.IDLE
         assert reset.current_attempt_id is None
@@ -628,6 +633,8 @@ class TestVerifier:
         assert "weaken, replace, delete, or bypass" in prompt
         assert "Attempt worktree isolation is an intentional execution contract" in prompt
         assert "Do not recommend running from the main checkout" in prompt
+        assert "Do not require commit_refs to already be merged into" in prompt
+        assert "active attempt worktree branch" in prompt
         assert "environment-configurable" in prompt
         assert "next_action_kind=create_repair_node" in prompt
         assert "next_action_kind=retry_same_node" in prompt
@@ -641,6 +648,7 @@ class TestVerifier:
 
         assert "attempt worktree isolation as an intentional execution contract" in prompt
         assert "Do not propose main-checkout" in prompt
+        assert "Do not create next tasks whose only purpose is merging worker commits" in prompt
         assert "environment-configurable" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
@@ -688,6 +696,8 @@ class TestVerifier:
         assert "sandbox.worktree_path is the active execution root" in isolation_policy
         assert "not a transient retry_infrastructure condition" in isolation_policy
         assert "Do not recommend running from the main checkout" in isolation_policy
+        assert "reported commit_refs" in isolation_policy
+        assert "active attempt worktree branch" in isolation_policy
         assert "environment-configurable" in isolation_policy
         assert payload["policy"]["next_action_kinds"]["create_repair_node"].startswith(
             "Use when"
