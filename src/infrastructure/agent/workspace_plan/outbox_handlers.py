@@ -167,6 +167,7 @@ _TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
         "cancelled",
     }
 )
+_WORKER_LAUNCHABLE_ATTEMPT_STATUS_VALUES = frozenset({"pending", "running"})
 _NO_OUTPUT_SENTINELS = frozenset(
     {
         "(no output)",
@@ -1097,6 +1098,28 @@ def make_worker_launch_handler(
         if not resolved_worker_agent_id:
             raise ValueError(f"workspace task {task_id} has no worker agent")
 
+        stale_reason = await _stale_worker_launch_reason(
+            session=session,
+            task=task,
+            plan_id=item.plan_id,
+            node_id=_payload_string(payload, "node_id"),
+            attempt_id=attempt_id,
+        )
+        if stale_reason is not None:
+            logger.info(
+                "workspace_plan.worker_launch.skip_stale",
+                extra={
+                    "event": "workspace_plan.worker_launch.skip_stale",
+                    "workspace_id": workspace_id,
+                    "plan_id": item.plan_id,
+                    "node_id": _payload_string(payload, "node_id"),
+                    "task_id": task.id,
+                    "attempt_id": attempt_id,
+                    "reason": stale_reason,
+                },
+            )
+            return
+
         if await _should_defer_worker_launch(
             session=session,
             workspace_id=workspace_id,
@@ -1175,6 +1198,53 @@ async def _attempt_has_conversation(session: AsyncSession, attempt_id: str) -> b
     )
     conversation_id = result.scalar_one_or_none()
     return isinstance(conversation_id, str) and bool(conversation_id)
+
+
+async def _stale_worker_launch_reason(
+    *,
+    session: AsyncSession,
+    task: WorkspaceTask,
+    plan_id: str | None,
+    node_id: str | None,
+    attempt_id: str | None,
+) -> str | None:
+    """Return why a worker launch payload should no longer be scheduled."""
+
+    if not attempt_id:
+        return None
+    reason: str | None = None
+    result = await session.execute(
+        select(
+            WorkspaceTaskSessionAttemptModel.workspace_task_id,
+            WorkspaceTaskSessionAttemptModel.workspace_id,
+            WorkspaceTaskSessionAttemptModel.status,
+        ).where(WorkspaceTaskSessionAttemptModel.id == attempt_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        reason = "attempt_missing"
+    else:
+        attempt_task_id, attempt_workspace_id, attempt_status = row
+        if attempt_task_id != task.id or attempt_workspace_id != task.workspace_id:
+            reason = "attempt_task_mismatch"
+        elif str(attempt_status) not in _WORKER_LAUNCHABLE_ATTEMPT_STATUS_VALUES:
+            reason = f"attempt_{attempt_status}"
+
+    current_task_attempt_id = _mapping_string(dict(task.metadata or {}), CURRENT_ATTEMPT_ID)
+    if reason is None and current_task_attempt_id and current_task_attempt_id != attempt_id:
+        reason = "task_current_attempt_changed"
+
+    if reason is None and plan_id and node_id:
+        plan = await SqlPlanRepository(session).get(plan_id)
+        node = plan.nodes.get(PlanNodeId(node_id)) if plan is not None else None
+        if node is not None:
+            if node.workspace_task_id and node.workspace_task_id != task.id:
+                reason = "node_task_mismatch"
+            elif node.current_attempt_id and node.current_attempt_id != attempt_id:
+                reason = "node_current_attempt_changed"
+            elif node.intent is TaskIntent.DONE or node.execution is TaskExecution.IDLE:
+                reason = "node_not_launchable"
+    return reason
 
 
 async def _defer_worker_launch(

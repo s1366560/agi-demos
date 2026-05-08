@@ -865,6 +865,212 @@ async def test_worker_launch_handler_defers_when_active_worker_capacity_reached(
 
 
 @pytest.mark.asyncio
+async def test_worker_launch_handler_skips_terminal_stale_attempt_before_capacity_defer(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="active-capacity-task",
+                workspace_id="workspace-1",
+                title="Already running task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="active-capacity-attempt",
+                workspace_task_id="active-capacity-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="running",
+                conversation_id="active-capacity-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+            WorkspaceTaskModel(
+                id="retry-task",
+                workspace_id="workspace-1",
+                title="Retry task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                assignee_agent_id="worker-agent",
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                    CURRENT_ATTEMPT_ID: "retry-attempt-new",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="retry-attempt-old",
+                workspace_task_id="retry-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="blocked",
+                conversation_id=None,
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="retry-attempt-new",
+                workspace_task_id="retry-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=2,
+                status="running",
+                conversation_id=None,
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+        ]
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "retry-task",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "attempt_id": "retry-attempt-old",
+        },
+        metadata={"source": "test"},
+    )
+    await db_session.commit()
+
+    monkeypatch.setenv("WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE", "1")
+    launched: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **kwargs: launched.append(kwargs),
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+
+    assert not launched
+    original = await repo.get_by_id(item.id)
+    assert original is not None
+    assert original.status == "completed"
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [job.id for job in launch_jobs] == [item.id]
+
+
+@pytest.mark.asyncio
+async def test_worker_launch_handler_skips_attempt_when_task_current_attempt_changed(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="stale-running-task",
+                workspace_id="workspace-1",
+                title="Stale running launch",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                assignee_agent_id="worker-agent",
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                    CURRENT_ATTEMPT_ID: "current-running-attempt",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="stale-running-attempt",
+                workspace_task_id="stale-running-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="running",
+                conversation_id=None,
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="current-running-attempt",
+                workspace_task_id="stale-running-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=2,
+                status="running",
+                conversation_id=None,
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+        ]
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "stale-running-task",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "attempt_id": "stale-running-attempt",
+        },
+        metadata={"source": "test"},
+    )
+    await db_session.commit()
+
+    launched: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **kwargs: launched.append(kwargs),
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+
+    assert not launched
+
+
+@pytest.mark.asyncio
 async def test_run_once_returns_zero_when_no_due_items(
     db_session: AsyncSession,
 ) -> None:
