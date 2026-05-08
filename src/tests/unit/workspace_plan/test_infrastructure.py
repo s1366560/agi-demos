@@ -1513,6 +1513,81 @@ class TestVerifier:
             "test_run:117 passed 0 failed npm test exit 0",
         )
 
+    async def test_current_attempt_checkpoint_ignores_aggregated_task_evidence(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="current attempt checkpoint evidence is green",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Repair backend test setup",
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("backend/jest.config.js",),
+                test_commands=("npm test",),
+            ),
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                attempt_id="attempt-current",
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Current attempt: npm test -> 117 passed, 0 failed."
+                    ),
+                    "evidence_refs": [
+                        "commit_ref:stale",
+                        "test_run:84 passed 33 failed",
+                    ],
+                    "last_worker_report_artifacts": [
+                        "git_diff_summary:stale dirty screenshots",
+                    ],
+                    "execution_verifications": [
+                        "preflight:test-command-1 (npm test -> 84 passed 33 failed)"
+                    ],
+                    "candidate_artifacts": [
+                        "commit_ref:current",
+                        "git_diff_summary:backend test setup fixed",
+                    ],
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "preflight:test-command-1",
+                        "test_run:117 passed 0 failed npm test exit 0",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert "failed_test_evidence" not in rep.summary()
+        checkpoint_result = next(
+            result
+            for result in rep.results
+            if result.message == "feature checkpoint evidence recorded"
+        )
+        assert {evidence.ref for evidence in checkpoint_result.evidence} == {
+            "commit_ref:current",
+            "git_diff_summary:backend test setup fixed",
+            "test_run:117 passed 0 failed npm test exit 0",
+        }
+        assert len(judge.requests) == 1
+        assert judge.requests[0].candidate_artifacts == (
+            "commit_ref:current",
+            "git_diff_summary:backend test setup fixed",
+        )
+        assert "test_run:84 passed 33 failed" not in judge.requests[0].task_evidence_refs
+
     async def test_verification_judge_cannot_accept_test_node_that_changes_test_scripts(
         self,
     ) -> None:

@@ -759,7 +759,7 @@ def _build_judge_request(
         task_evidence_refs=tuple(
             _bounded_text(value, limit=600)
             for value in sorted(
-                _artifact_text_values(
+                _attempt_scoped_artifact_text_values(
                     ctx,
                     "evidence_refs",
                     "pipeline_evidence_refs",
@@ -1321,7 +1321,7 @@ async def _git_commit_changed_paths(
 
 
 def _reported_commit_refs(ctx: VerificationContext) -> list[str]:
-    values = _artifact_text_values(
+    values = _attempt_scoped_artifact_text_values(
         ctx,
         "evidence_refs",
         "last_worker_report_artifacts",
@@ -1341,7 +1341,7 @@ def _reported_commit_refs(ctx: VerificationContext) -> list[str]:
 
 
 def _reported_changed_paths(ctx: VerificationContext) -> set[str]:
-    values = _artifact_text_values(
+    values = _attempt_scoped_artifact_text_values(
         ctx,
         "git_diff_summary",
         "evidence_refs",
@@ -1610,9 +1610,29 @@ def _artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:
     return values
 
 
+_ATTEMPT_AGGREGATE_EVIDENCE_KEYS = frozenset(
+    {
+        "evidence_refs",
+        "execution_verifications",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+    }
+)
+
+
 def _attempt_scoped_artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:
     values: set[str] = set()
+    has_attempt_candidate_evidence = bool(
+        _text_values(ctx.artifacts.get("candidate_artifacts"))
+        or _text_values(ctx.artifacts.get("candidate_verifications"))
+    )
     for key in keys:
+        if (
+            ctx.attempt_id
+            and has_attempt_candidate_evidence
+            and key in _ATTEMPT_AGGREGATE_EVIDENCE_KEYS
+        ):
+            continue
         values.update(_text_values(ctx.artifacts.get(key)))
     if ctx.attempt_id:
         return values
