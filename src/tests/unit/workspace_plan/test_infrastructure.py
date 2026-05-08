@@ -1464,6 +1464,55 @@ class TestVerifier:
         assert len(judge.requests) == 1
         assert not judge.requests[0].guard_failures
 
+    async def test_failed_test_guard_ignores_stale_node_verifications_for_current_attempt(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="current attempt evidence is green",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Repair backend test setup",
+            metadata={
+                "candidate_verifications": [
+                    "preflight:test-command-1 (npm test -> 84 passed 33 failed, exit 0)"
+                ],
+                "execution_verifications": ["test_run:84 passed 33 failed"],
+            },
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                attempt_id="attempt-current",
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Tests now pass: npm test -> 117 passed, 0 failed, exit 0."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:117 passed 0 failed npm test exit 0",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert "failed_test_evidence" not in rep.summary()
+        assert len(judge.requests) == 1
+        assert judge.requests[0].candidate_verifications == (
+            "preflight:git-status",
+            "preflight:read-progress",
+            "test_run:117 passed 0 failed npm test exit 0",
+        )
+
     async def test_verification_judge_cannot_accept_test_node_that_changes_test_scripts(
         self,
     ) -> None:

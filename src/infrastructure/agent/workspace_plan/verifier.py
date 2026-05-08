@@ -738,7 +738,7 @@ def _build_judge_request(
         candidate_artifacts=tuple(
             _bounded_text(value, limit=600)
             for value in sorted(
-                _artifact_text_values(
+                _attempt_scoped_artifact_text_values(
                     ctx,
                     "candidate_artifacts",
                     "last_worker_report_artifacts",
@@ -748,7 +748,7 @@ def _build_judge_request(
         candidate_verifications=tuple(
             _bounded_text(value, limit=600)
             for value in sorted(
-                _artifact_text_values(
+                _attempt_scoped_artifact_text_values(
                     ctx,
                     "candidate_verifications",
                     "last_worker_report_verifications",
@@ -1136,7 +1136,7 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
         required=True,
         description="feature checkpoint requires git/test evidence before acceptance",
     )
-    evidence_values = _artifact_text_values(
+    evidence_values = _attempt_scoped_artifact_text_values(
         ctx,
         "evidence_refs",
         "last_worker_report_artifacts",
@@ -1181,7 +1181,7 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
 def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
     if ctx.node.metadata.get("allow_failed_tests") is True:
         return None
-    values = _artifact_text_values(
+    values = _attempt_scoped_artifact_text_values(
         ctx,
         "evidence_refs",
         "last_worker_report_verifications",
@@ -1606,6 +1606,17 @@ def _artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:
     values: set[str] = set()
     for key in keys:
         values.update(_text_values(ctx.artifacts.get(key)))
+        values.update(_text_values(ctx.node.metadata.get(key)))
+    return values
+
+
+def _attempt_scoped_artifact_text_values(ctx: VerificationContext, *keys: str) -> set[str]:
+    values: set[str] = set()
+    for key in keys:
+        values.update(_text_values(ctx.artifacts.get(key)))
+    if ctx.attempt_id:
+        return values
+    for key in keys:
         values.update(_text_values(ctx.node.metadata.get(key)))
     return values
 
