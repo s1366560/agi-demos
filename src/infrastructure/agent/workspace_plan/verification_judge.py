@@ -128,11 +128,20 @@ def _system_prompt() -> str:
         "secret handling, artifact rules, prohibited patterns/content forms, or commit "
         "isolation in a shared worktree. Reject evidence that suggests a worker swept "
         "unrelated dirty files, another node's artifact, or files outside the assigned task "
-        "into its commit. Do not accept if the completed worker report is missing. Use "
+        "into its commit. Treat recent_git_status and guard_failures as stronger evidence "
+        "than a worker's textual claim that the worktree is clean. Do not accept tests, "
+        "audits, or benchmarks that cannot actually fail, such as identical pass/fail "
+        "branches, unconditional success counters, catch blocks that convert assertion or "
+        "network failures into passes, or scripts that claim a property without checking it. "
+        "Do not accept synthetic simulations, raw HTTP timing, or shallow custom scans when "
+        "the report claims real browser page-load, rendering, accessibility, security, or "
+        "end-to-end evidence unless the limitation is explicitly labeled and still satisfies "
+        "the node criteria. Do not accept if the completed worker report is missing. Use "
         "needs_rework for missing evidence, failed tests, dirty worktree evidence, incomplete "
-        "output, repository-guidance noncompliance, cross-task commit contamination, or "
-        "quality gaps that an agent can fix. Use retry_infrastructure for sandbox, model, "
-        "tool, rate-limit, or transient platform failures. Use "
+        "output, repository-guidance noncompliance, cross-task commit contamination, "
+        "non-proving tests, overstated benchmark/audit evidence, or quality gaps that an "
+        "agent can fix. Use retry_infrastructure for sandbox, model, tool, rate-limit, or "
+        "transient platform failures. Use "
         "blocked_human_required only for missing credentials, private access, permission, "
         "irreversible external deployment/spend, legal or product approval, unsafe destructive "
         "action, or another authority boundary that an agent cannot resolve. Do not choose "
@@ -190,6 +199,9 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "incomplete worker output",
                 "explicit repository guidance or AGENTS.md noncompliance",
                 "cross-task commit contamination or unrelated files in the reported diff",
+                "tests or audits that cannot fail because every branch records success",
+                "unconditional success counters or catch blocks that convert failures into passes",
+                "synthetic benchmarks or shallow scans reported as real browser, rendering, accessibility, security, or end-to-end proof",
             ],
             "repository_guidance": [
                 "If task_metadata.code_context.agents_excerpt is present, use it as acceptance context.",
@@ -200,6 +212,12 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "In shared worktrees, a node must only commit files owned by its task.",
                 "Reject commits whose diff includes another node's artifact or unrelated dirty files.",
                 "Prefer explicit changed-file evidence over broad git add/git commit summaries.",
+                "If recent_git_status or a guard failure reports dirty files, do not accept a worker's textual clean-worktree claim without stronger contrary evidence.",
+            ],
+            "quality_evidence": [
+                "Tests must contain assertions or checks that can fail for the claimed behavior.",
+                "Accessibility and security audits must verify the claimed property, not only count generic page structure.",
+                "Performance evidence must distinguish HTTP response timing, browser page-load timing, and synthetic simulations.",
             ],
         },
     }

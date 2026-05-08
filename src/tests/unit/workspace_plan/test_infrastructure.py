@@ -592,6 +592,10 @@ class TestVerifier:
         assert "repository guidance as acceptance context" in prompt
         assert "repository-guidance noncompliance" in prompt
         assert "cross-task commit contamination" in prompt
+        assert "tests, audits, or benchmarks that cannot actually fail" in prompt
+        assert "identical pass/fail branches" in prompt
+        assert "synthetic simulations, raw HTTP timing, or shallow custom scans" in prompt
+        assert "stronger evidence than a worker's textual claim" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
         payload = json.loads(
@@ -621,6 +625,13 @@ class TestVerifier:
         commit_policy = " ".join(payload["policy"]["commit_isolation"])
         assert "shared worktrees" in commit_policy
         assert "another node's artifact" in commit_policy
+        assert "recent_git_status" in commit_policy
+        quality_policy = " ".join(payload["policy"]["quality_evidence"])
+        assert "Tests must contain assertions or checks that can fail" in quality_policy
+        assert "Performance evidence must distinguish HTTP response timing" in quality_policy
+        rework_policy = " ".join(payload["policy"]["needs_rework_for"])
+        assert "every branch records success" in rework_policy
+        assert "synthetic benchmarks" in rework_policy
 
     async def test_file_exists_passes_when_artifact_present(self, tmp_path: Any) -> None:
         target = tmp_path / "out.json"
