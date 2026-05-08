@@ -69,6 +69,11 @@ _TRANSIENT_INFRA_FAILURE_MARKERS = (
     "Rate limit exceeded",
     "Please wait a moment and try again",
 )
+_FAILED_TEST_EVIDENCE_PATTERNS = (
+    re.compile(r"\b[1-9]\d*/\d+\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
+    re.compile(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
+    re.compile(r"\b(?:failed|failing|failure|failures)\s*[:=]\s*[1-9]\d*\b", re.I),
+)
 
 
 # --- Sandbox shim -----------------------------------------------------
@@ -591,6 +596,9 @@ class AcceptanceCriterionVerifier(VerifierPort):
         checkpoint_guard = _feature_checkpoint_evidence_guard(ctx)
         if checkpoint_guard is not None:
             results.append(checkpoint_guard)
+        failed_test_guard = _failed_test_evidence_guard(ctx)
+        if failed_test_guard is not None:
+            results.append(failed_test_guard)
         clean_worktree_guard = await _clean_worktree_after_commit_guard(ctx)
         if clean_worktree_guard is not None:
             results.append(clean_worktree_guard)
@@ -641,7 +649,7 @@ async def _apply_verification_judge(
             required_next_action="retry verification judge",
             confidence=0.5,
         )
-    judge_result = _coerce_judge_result_for_required_context(ctx, judge_result)
+    judge_result = _coerce_judge_result_for_required_context(ctx, judge_result, results)
     return [
         *_normalize_results_for_judge(results, judge_result),
         _judge_criterion_result(judge_result),
@@ -803,6 +811,7 @@ def _recent_git_status_from_results(results: list[CriterionResult]) -> str:
 def _coerce_judge_result_for_required_context(
     ctx: VerificationContext,
     result: WorkspaceVerificationJudgeResult,
+    results: list[CriterionResult],
 ) -> WorkspaceVerificationJudgeResult:
     if (
         result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED
@@ -819,7 +828,30 @@ def _coerce_judge_result_for_required_context(
             required_next_action="collect a completed worker report and rerun verification",
             confidence=max(result.confidence, 0.7),
         )
+    if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
+        results,
+        "failed_test_evidence",
+    ):
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Test evidence reports at least one failed/failing test, so the node cannot be "
+                f"accepted as complete. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=("failed_test_evidence", *result.failed_criteria),
+            required_next_action="fix or explicitly disposition failing tests before acceptance",
+            confidence=max(result.confidence, 0.8),
+        )
     return result
+
+
+def _required_guard_failed(results: list[CriterionResult], name: str) -> bool:
+    return any(
+        result.criterion.required
+        and not result.passed
+        and result.criterion.spec.get("name") == name
+        for result in results
+    )
 
 
 def _normalize_results_for_judge(
@@ -1073,6 +1105,44 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
         confidence=1.0,
         message="feature checkpoint evidence recorded",
         evidence=tuple(EvidenceRef(kind="checkpoint", ref=value) for value in refs),
+    )
+
+
+def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
+    if ctx.node.metadata.get("allow_failed_tests") is True:
+        return None
+    values = _artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "last_worker_report_verifications",
+        "candidate_verifications",
+        "execution_verifications",
+    )
+    summary = _artifact_text(ctx, "last_worker_report_summary")
+    if summary:
+        values.add(summary)
+    failed_value = next(
+        (
+            value
+            for value in sorted(values)
+            if any(pattern.search(value) for pattern in _FAILED_TEST_EVIDENCE_PATTERNS)
+        ),
+        None,
+    )
+    if failed_value is None:
+        return None
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "failed_test_evidence"},
+        required=True,
+        description="completed worker reports must not include failing test evidence",
+    )
+    return CriterionResult(
+        criterion=criterion,
+        passed=False,
+        confidence=1.0,
+        message=f"test evidence reports failing tests: {_bounded_text(failed_value, limit=360)}",
+        evidence=(EvidenceRef(kind="verification", ref=_bounded_text(failed_value, limit=500)),),
     )
 
 

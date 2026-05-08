@@ -596,6 +596,7 @@ class TestVerifier:
         assert "identical pass/fail branches" in prompt
         assert "synthetic simulations, raw HTTP timing, or shallow custom scans" in prompt
         assert "stronger evidence than a worker's textual claim" in prompt
+        assert "non-zero failed/failing test count" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
         payload = json.loads(
@@ -632,6 +633,7 @@ class TestVerifier:
         rework_policy = " ".join(payload["policy"]["needs_rework_for"])
         assert "every branch records success" in rework_policy
         assert "synthetic benchmarks" in rework_policy
+        assert "non-zero failed or failing test count" in rework_policy
 
     async def test_file_exists_passes_when_artifact_present(self, tmp_path: Any) -> None:
         target = tmp_path / "out.json"
@@ -1314,6 +1316,42 @@ class TestVerifier:
         assert not rep.passed
         assert not rep.hard_fail
         assert "terminal_worker_report_completed" in rep.summary()
+
+    async def test_verification_judge_cannot_accept_failed_test_evidence(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="minor failure is acceptable",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(title="Run full E2E journey tests")
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Results: 22 passed, 1 failed. The single failure is minor."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:e2e-journey-complete.js 22 passed 1 failed",
+                    ],
+                },
+            )
+        )
+
+        assert not rep.passed
+        assert "failed_test_evidence" in rep.summary()
+        assert len(judge.requests) == 1
+        assert any("test evidence reports failing tests" in item for item in judge.requests[0].guard_failures)
 
     @pytest.mark.parametrize(
         ("verdict", "passed", "hard_fail", "retryable"),

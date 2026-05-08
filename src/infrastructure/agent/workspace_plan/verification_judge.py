@@ -136,7 +136,10 @@ def _system_prompt() -> str:
         "Do not accept synthetic simulations, raw HTTP timing, or shallow custom scans when "
         "the report claims real browser page-load, rendering, accessibility, security, or "
         "end-to-end evidence unless the limitation is explicitly labeled and still satisfies "
-        "the node criteria. Do not accept if the completed worker report is missing. Use "
+        "the node criteria. Do not accept when test_run evidence or the worker summary reports "
+        "a non-zero failed/failing test count; a failed test is not minor completion evidence "
+        "unless the node contract explicitly allows known failures. Do not accept if the "
+        "completed worker report is missing. Use "
         "needs_rework for missing evidence, failed tests, dirty worktree evidence, incomplete "
         "output, repository-guidance noncompliance, cross-task commit contamination, "
         "non-proving tests, overstated benchmark/audit evidence, or quality gaps that an "
@@ -195,6 +198,7 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
             "needs_rework_for": [
                 "missing evidence",
                 "failed tests or failed quality checks",
+                "test_run evidence that reports a non-zero failed or failing test count",
                 "dirty or ambiguous git worktree evidence",
                 "incomplete worker output",
                 "explicit repository guidance or AGENTS.md noncompliance",
