@@ -37,6 +37,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.application.services.workspace_autonomy_profiles import evaluate_workspace_code_context
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.infrastructure.agent.workspace.code_context import (
@@ -69,6 +71,7 @@ WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
 _WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
+_WORKER_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
 _NATIVE_TOOL_PROTOCOL_GUARD = (
     "Use only the platform's native tool-call channel for tools. Do not print "
     "tool-call markup, JSON/function-call stubs, or shell command code blocks as "
@@ -284,6 +287,46 @@ def _preferred_language_from_metadata(metadata: Mapping[str, Any] | None) -> str
     return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
 
 
+def _metadata_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped if stripped else None
+
+
+def _workspace_verification_integrity_context(
+    task_metadata: Mapping[str, Any] | None,
+    plan_node_metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    task_meta = task_metadata if isinstance(task_metadata, Mapping) else {}
+    node_meta = plan_node_metadata if isinstance(plan_node_metadata, Mapping) else {}
+    phase = _metadata_text(task_meta.get("iteration_phase")) or _metadata_text(
+        node_meta.get("iteration_phase")
+    )
+    if phase is None or phase.lower() not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
+        return None
+    allow_script_changes = (
+        task_meta.get("allow_verification_script_changes") is True
+        or node_meta.get("allow_verification_script_changes") is True
+    )
+    source = (
+        "workspace_task_metadata"
+        if _metadata_text(task_meta.get("iteration_phase"))
+        else "workspace_plan_node_metadata"
+    )
+    return {
+        "source": source,
+        "iteration_phase": phase.lower(),
+        "allow_verification_script_changes": allow_script_changes,
+        "protected_script_changes": not allow_script_changes,
+        "rule": (
+            "For test/review workspace nodes, sandbox write tools must not modify "
+            "test, spec, E2E, integration, audit, or benchmark scripts unless the "
+            "plan node explicitly sets allow_verification_script_changes=true."
+        ),
+    }
+
+
 def _launch_authority_actor_id(leader_agent_id: str | None) -> str:
     return leader_agent_id or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
@@ -342,6 +385,7 @@ def _build_worker_system_context(
     extra_instructions: str | None = None,
     code_context: WorkspaceCodeContext | None = None,
     preferred_language: str | None = None,
+    plan_node_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build system-level workspace context for a launched worker session."""
     binding = _workspace_binding_metadata(
@@ -494,6 +538,12 @@ def _build_worker_system_context(
     }
     if preferred_language in {"en-US", "zh-CN"}:
         context[PREFERRED_LANGUAGE] = preferred_language
+    verification_integrity = _workspace_verification_integrity_context(
+        task.metadata,
+        plan_node_metadata,
+    )
+    if verification_integrity is not None:
+        context["workspace_verification_integrity"] = verification_integrity
     harness_context = _task_harness_context(task)
     if harness_context:
         context["harness"] = harness_context
@@ -578,6 +628,28 @@ def _task_harness_context(task: WorkspaceTask) -> dict[str, Any] | None:
             "Report blocked with the failing check_id when a required preflight cannot pass.",
         ],
     }
+
+
+async def _load_plan_node_metadata_for_task(
+    db: AsyncSession,
+    task: WorkspaceTask,
+) -> dict[str, Any]:
+    metadata = task.metadata if isinstance(task.metadata, Mapping) else {}
+    node_id = metadata.get("workspace_plan_node_id")
+    if not isinstance(node_id, str) or not node_id:
+        return {}
+    plan_id = metadata.get("workspace_plan_id")
+
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.models import PlanNodeModel
+
+    stmt = select(PlanNodeModel.metadata_json).where(PlanNodeModel.id == node_id)
+    if isinstance(plan_id, str) and plan_id:
+        stmt = stmt.where(PlanNodeModel.plan_id == plan_id)
+    result = await db.execute(stmt)
+    value = result.scalar_one_or_none()
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _normalize_preflight_checks(raw_checks: object) -> list[dict[str, Any]]:
@@ -1001,6 +1073,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     resolved_attempt_id = attempt_id
     resolved_conversation_id: str | None = None
     code_context: WorkspaceCodeContext | None = None
+    plan_node_metadata: dict[str, Any] = {}
     root_goal_task_id = ""
     candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
     if isinstance(candidate, str) and candidate:
@@ -1054,6 +1127,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                                 root_metadata
                             )
             workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
+            plan_node_metadata = await _load_plan_node_metadata_for_task(db, task)
             code_context_evaluation = evaluate_workspace_code_context(
                 root_metadata=root_metadata,
                 workspace_metadata=workspace_metadata,
@@ -1350,6 +1424,16 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     "launch_state": "bound",
                 }
                 metadata_patch["code_context"] = _code_context_metadata(code_context)
+                verification_integrity = _workspace_verification_integrity_context(
+                    task.metadata,
+                    plan_node_metadata,
+                )
+                if verification_integrity is not None:
+                    metadata_patch["workspace_verification_integrity"] = verification_integrity
+                    metadata_patch.setdefault(
+                        "iteration_phase",
+                        verification_integrity["iteration_phase"],
+                    )
                 await command_service.update_task(
                     workspace_id=workspace_id,
                     task_id=task.id,
@@ -1421,6 +1505,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         extra_instructions=extra_instructions,
         code_context=code_context,
         preferred_language=resolved_preferred_language,
+        plan_node_metadata=plan_node_metadata,
     )
     final_content = ""
     accumulated_text = ""

@@ -476,6 +476,43 @@ class TestBuildBrief:
         assert harness["preflight_checks"][1]["check_id"] == "test-command-1"
         assert "preflight:<check_id>" in " ".join(harness["instructions"])
 
+    def test_system_context_protects_verification_scripts_from_plan_node_phase(self) -> None:
+        task = _make_task()
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={"iteration_phase": "test"},
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert policy["source"] == "workspace_plan_node_metadata"
+        assert policy["iteration_phase"] == "test"
+        assert policy["protected_script_changes"] is True
+        assert policy["allow_verification_script_changes"] is False
+        assert "allow_verification_script_changes=true" in policy["rule"]
+
+    def test_system_context_honors_explicit_verification_script_change_contract(self) -> None:
+        task = _make_task()
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={
+                "iteration_phase": "review",
+                "allow_verification_script_changes": True,
+            },
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert policy["iteration_phase"] == "review"
+        assert policy["protected_script_changes"] is False
+        assert policy["allow_verification_script_changes"] is True
+
     def test_handles_missing_description(self) -> None:
         task = _make_task(description=None)
         brief = wl._build_worker_brief(

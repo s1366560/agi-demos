@@ -899,6 +899,166 @@ class TestSandboxMCPToolExecute:
         ) in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_verification_phase_rejects_test_script_edit(self):
+        """Test/review nodes should not be able to rewrite their own evidence scripts."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            file_path="/workspace/my-evo/test-data-persistence.js",
+            old_string="passed",
+            new_string="passed",
+        )
+
+        assert result.is_error is True
+        assert "targets verification script test-data-persistence.js" in result.output
+        assert "allow_verification_script_changes" in result.output
+        assert adapter.call_count == 0
+
+    async def test_workspace_verification_phase_allows_product_file_edit(self):
+        """The protection should not block real product fixes."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "review",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            file_path="/workspace/my-evo/frontend/src/app/page.tsx",
+            old_string="old",
+            new_string="new",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
+    async def test_workspace_verification_phase_honors_explicit_script_change_contract(self):
+        """Planner-authored exceptions can still allow script maintenance tasks."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "allow_verification_script_changes": True,
+                        "protected_script_changes": False,
+                    },
+                }
+            ),
+            file_path="/workspace/my-evo/test-data-persistence.js",
+            old_string="old",
+            new_string="new",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
+    async def test_workspace_verification_phase_rejects_bash_script_mutation(self):
+        """Bash mutation commands should respect the same test/review guard."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            command="sed -i 's/passed/passed/' test-data-persistence.js",
+        )
+
+        assert result.is_error is True
+        assert "attempts to modify verification script test-data-persistence.js" in result.output
+        assert adapter.call_count == 0
+
     async def test_workspace_worker_write_allows_relative_path_under_code_root(self):
         """Relative writes should resolve under the injected code root working directory."""
         adapter = MockSandboxAdapter()

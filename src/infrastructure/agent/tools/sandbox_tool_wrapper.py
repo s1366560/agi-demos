@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import posixpath
+import re
 import shlex
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
@@ -53,6 +54,26 @@ _WORKSPACE_CODE_ROOT_WRITE_TOOLS = frozenset(
     {"create_file", "write", "edit", "file_write", "file_edit"}
 )
 _PATH_ARGUMENT_KEYS = ("file_path", "path")
+_WORKSPACE_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
+_WORKSPACE_VERIFICATION_SCRIPT_NAME_PATTERN = re.compile(
+    r"(^|/)([^/]*(test|spec|e2e|integration|audit|benchmark)[^/]*"
+    r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh)|"
+    r"(tests?|spec|e2e|integration|audit|benchmarks?)/.+"
+    r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh))$",
+    re.I,
+)
+_WORKSPACE_VERIFICATION_OUTPUT_PATH_PREFIXES = (
+    "coverage/",
+    "playwright-report/",
+    "reports/",
+    "screenshots/",
+    "test-results/",
+)
+_WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN = re.compile(
+    r"\b(?:sed\s+-i|perl\s+-pi|python\s+-c|node\s+-e|rm\s+|mv\s+|cp\s+|git\s+add\s+)",
+    re.I,
+)
+_WORKSPACE_BASH_REDIRECT_TARGET_PATTERN = re.compile(r"(?:^|[\s;&|])(?:>|>>)\s*([^\s;&|]+)")
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -221,6 +242,45 @@ def _path_is_inside_code_root(path: str, code_root: str) -> bool:
     return path == code_root or path.startswith(f"{code_root}/")
 
 
+def _path_relative_to_code_root(path: str, code_root: str | None) -> str:
+    normalized_path = posixpath.normpath(path)
+    if code_root:
+        normalized_root = posixpath.normpath(code_root.rstrip("/"))
+        if normalized_path == normalized_root:
+            return ""
+        if normalized_path.startswith(f"{normalized_root}/"):
+            return normalized_path[len(normalized_root) + 1 :]
+    return normalized_path.lstrip("/")
+
+
+def _is_verification_script_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("./")
+    if not normalized:
+        return False
+    if normalized.startswith(_WORKSPACE_VERIFICATION_OUTPUT_PATH_PREFIXES):
+        return False
+    return bool(_WORKSPACE_VERIFICATION_SCRIPT_NAME_PATTERN.search(normalized))
+
+
+def _workspace_verification_integrity_policy_from_context(
+    ctx: ToolContext,
+) -> Mapping[str, Any] | None:
+    runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
+    policy = runtime.get("workspace_verification_integrity")
+    if not isinstance(policy, Mapping):
+        return None
+    phase = policy.get("iteration_phase")
+    if not isinstance(phase, str) or phase.strip().lower() not in (
+        _WORKSPACE_VERIFICATION_INTEGRITY_PHASES
+    ):
+        return None
+    if policy.get("allow_verification_script_changes") is True:
+        return None
+    if policy.get("protected_script_changes") is False:
+        return None
+    return policy
+
+
 def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
     try:
         tokens = shlex.split(command, posix=True)
@@ -239,6 +299,22 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
+def _command_path_tokens(command: str) -> tuple[str, ...]:
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    paths: list[str] = []
+    for token in tokens:
+        cleaned = token.strip("'\"")
+        cleaned = cleaned.rstrip(";,|&)")
+        if cleaned:
+            paths.append(posixpath.normpath(cleaned))
+    for match in _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN.finditer(command):
+        paths.append(posixpath.normpath(match.group(1).strip("'\"")))
+    return tuple(paths)
+
+
 def _workspace_bash_escape_error(command: str, root_override: str | None) -> str | None:
     if not root_override:
         return None
@@ -251,6 +327,58 @@ def _workspace_bash_escape_error(command: str, root_override: str | None) -> str
             f"worktree {normalized_root}. Retry from inside {normalized_root}; install or link "
             "dependencies there instead of cd'ing to the main checkout."
         )
+    return None
+
+
+def _workspace_verification_script_argument_error(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    code_root: str | None,
+    policy: Mapping[str, Any] | None,
+) -> str | None:
+    if policy is None:
+        return None
+    if tool_name in _WORKSPACE_CODE_ROOT_WRITE_TOOLS:
+        for key in _PATH_ARGUMENT_KEYS:
+            value = kwargs.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            path = value.strip()
+            scoped_path = (
+                _path_scoped_to_code_root(path, code_root)
+                if code_root and not path.startswith("/")
+                else posixpath.normpath(path)
+            )
+            relative_path = _path_relative_to_code_root(scoped_path, code_root)
+            if _is_verification_script_path(relative_path):
+                return (
+                    f"{tool_name}.{key} targets verification script {relative_path}. "
+                    "This workspace test/review node is protected from changing test, "
+                    "E2E, integration, audit, or benchmark scripts. Fix product behavior "
+                    "or report the remaining failure; only an explicit "
+                    "allow_verification_script_changes contract can permit this edit."
+                )
+    if tool_name == "bash":
+        command = kwargs.get("command")
+        if not isinstance(command, str) or not _WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN.search(
+            command
+        ):
+            return None
+        for path in _command_path_tokens(command):
+            relative_path = _path_relative_to_code_root(
+                _path_scoped_to_code_root(path, code_root)
+                if code_root and not path.startswith("/")
+                else path,
+                code_root,
+            )
+            if _is_verification_script_path(relative_path):
+                return (
+                    f"bash.command attempts to modify verification script {relative_path}. "
+                    "This workspace test/review node is protected from changing test, "
+                    "E2E, integration, audit, or benchmark scripts. Fix product behavior "
+                    "or report the remaining failure; only an explicit "
+                    "allow_verification_script_changes contract can permit this mutation."
+                )
     return None
 
 
@@ -614,6 +742,14 @@ def create_sandbox_mcp_tool(
             normalized_kwargs = _apply_workspace_code_root_defaults(
                 tool_name, normalized_kwargs, code_root
             )
+            verification_policy = _workspace_verification_integrity_policy_from_context(ctx)
+            if argument_error := _workspace_verification_script_argument_error(
+                tool_name,
+                normalized_kwargs,
+                code_root,
+                verification_policy,
+            ):
+                return ToolResult(output=argument_error, is_error=True)
             if argument_error := _workspace_harness_argument_error(
                 tool_name,
                 normalized_kwargs,
