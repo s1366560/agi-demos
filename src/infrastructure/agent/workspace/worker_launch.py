@@ -34,6 +34,7 @@ import contextlib
 import json
 import logging
 import os
+import posixpath
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -734,7 +735,57 @@ def _render_workspace_placeholders(
 ) -> str:
     if code_context is None or not code_context.sandbox_code_root:
         return instructions
-    return instructions.replace("${sandbox_code_root}", code_context.sandbox_code_root)
+    rendered = instructions.replace("${sandbox_code_root}", code_context.sandbox_code_root)
+    return _rewrite_command_roots_for_attempt_worktree(rendered, code_context.sandbox_code_root)
+
+
+def _rewrite_command_roots_for_attempt_worktree(instructions: str, sandbox_code_root: str) -> str:
+    worktree_path = _extract_rendered_worktree_path(instructions)
+    if not worktree_path:
+        return instructions
+    sandbox_root = sandbox_code_root.rstrip("/")
+    if not sandbox_root:
+        return instructions
+    worktree_root = posixpath.normpath(worktree_path.strip()).rstrip("/")
+    if not worktree_root or worktree_root == sandbox_root:
+        return instructions
+
+    return "\n".join(
+        _rewrite_command_line_root(line, sandbox_root=sandbox_root, worktree_root=worktree_root)
+        for line in instructions.splitlines()
+    )
+
+
+def _extract_rendered_worktree_path(instructions: str) -> str | None:
+    for line in instructions.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("worktree_path="):
+            continue
+        value = stripped.split("=", 1)[1].strip()
+        if value:
+            return value
+    return None
+
+
+def _rewrite_command_line_root(line: str, *, sandbox_root: str, worktree_root: str) -> str:
+    stripped = line.lstrip()
+    indent = line[: len(line) - len(stripped)]
+    for key in ("test_command=", "init_command="):
+        if stripped.startswith(key):
+            command = stripped[len(key) :]
+            return f"{indent}{key}{_rewrite_shell_command_root(command, sandbox_root, worktree_root)}"
+
+    marker = " command="
+    if marker in line:
+        prefix, command = line.split(marker, 1)
+        return f"{prefix}{marker}{_rewrite_shell_command_root(command, sandbox_root, worktree_root)}"
+    return line
+
+
+def _rewrite_shell_command_root(command: str, sandbox_root: str, worktree_root: str) -> str:
+    if sandbox_root not in command:
+        return command
+    return command.replace(sandbox_root, worktree_root)
 
 
 def _build_worker_brief(

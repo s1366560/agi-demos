@@ -727,6 +727,45 @@ class TestBuildBrief:
             system_context["code_context"]["rule"]
         )
 
+    def test_rewrites_checkpoint_commands_to_attempt_worktree_root(self) -> None:
+        task = _make_task()
+        code_context = WorkspaceCodeContext(sandbox_code_root="/workspace/my-evo")
+        extra_instructions = (
+            "[feature-checkpoint]\n"
+            "worktree_path=${sandbox_code_root}/../.memstack/worktrees/att-2\n"
+            "test_command=cd /workspace/my-evo && npm test\n"
+            "[/feature-checkpoint]\n\n"
+            "[preflight-checks]\n"
+            "check_id=test-command-1 kind=test_command required=True "
+            "command=cd /workspace/my-evo && npm test\n"
+            "[/preflight-checks]"
+        )
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+            extra_instructions=extra_instructions,
+        )
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+            extra_instructions=extra_instructions,
+        )
+
+        worktree_command = "cd /workspace/.memstack/worktrees/att-2 && npm test"
+        assert f"test_command={worktree_command}" in brief
+        assert f"command={worktree_command}" in brief
+        assert "test_command=cd /workspace/my-evo && npm test" not in brief
+        assert "command=cd /workspace/my-evo && npm test" not in brief
+        assert f"test_command={worktree_command}" in system_context["additional_instructions"]
+        assert f"command={worktree_command}" in system_context["additional_instructions"]
+
     def test_code_context_metadata_preserves_digest_and_agents_scope(self) -> None:
         code_context = WorkspaceCodeContext(
             sandbox_code_root="/workspace/my-evo",
