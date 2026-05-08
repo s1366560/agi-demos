@@ -28,6 +28,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlanModel,
     WorkspaceTaskModel,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
+    SqlWorkspacePlanEventRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
@@ -133,6 +136,20 @@ async def kickoff_v2_plan(
                 conversation_context=planning_context,
                 start_supervisor=False,
             )
+            if plan.status is PlanStatus.SUSPENDED and plan.goal_node.metadata.get(
+                "planner_contract_missing"
+            ):
+                await SqlWorkspacePlanEventRepository(db).append(
+                    plan_id=plan.id,
+                    workspace_id=workspace_id,
+                    node_id=plan.goal_id.value,
+                    actor_id=created_by or None,
+                    event_type="planner_contract_missing",
+                    source="v2_bridge",
+                    payload=dict(plan.goal_node.metadata),
+                )
+                await db.commit()
+                return True
             _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
                 plan_id=plan.id,
                 workspace_id=workspace_id,

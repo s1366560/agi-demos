@@ -15,6 +15,7 @@ from fastapi import Request
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.agent import TenantAgentConfig
 from src.domain.model.workspace_plan import PlanNode, PlanStatus, TaskExecution, TaskIntent
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.infrastructure.adapters.primary.web.routers import workspace_plans
@@ -24,12 +25,21 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant as DBTenant,
     User as DBUser,
     WorkspaceModel,
+    WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
+from src.infrastructure.agent.core.react_agent_profile import AgentRuntimeProfile
+from src.infrastructure.agent.core.react_agent_tool_policy import (
+    with_workspace_worker_tool_allowlist,
+)
+from src.infrastructure.agent.sisyphus.builtin_agent import build_builtin_workspace_planner_agent
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.tools import workspace_planning_contract as planning_contract_tools
+from src.infrastructure.agent.tools.workspace_planning_contract import (
+    WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
+)
 from src.infrastructure.agent.workspace.goal_runtime import v2_bridge
 from src.infrastructure.agent.workspace.goal_runtime.v2_bridge import (
     kickoff_v2_plan,
@@ -101,6 +111,35 @@ def test_workspace_decomposer_max_subtasks_bounds_invalid_env(
 
     monkeypatch.setenv("WORKSPACE_V2_MAX_SUBTASKS", "99")
     assert v2_bridge._workspace_decomposer_max_subtasks() == 12
+
+
+def test_builtin_workspace_planner_worker_profile_keeps_read_only_contract_tools() -> None:
+    planner = build_builtin_workspace_planner_agent(tenant_id="tenant-1", project_id="project-1")
+    profile = AgentRuntimeProfile(
+        selected_agent=planner,
+        tenant_agent_config=TenantAgentConfig.create_default("tenant-1"),
+        available_skills=[],
+        allow_tools=list(planner.allowed_tools),
+        deny_tools=[],
+        effective_model="default",
+        effective_temperature=0.0,
+        effective_max_tokens=8192,
+        effective_max_steps=12,
+    )
+
+    scoped = with_workspace_worker_tool_allowlist(profile)
+
+    assert set(scoped.allow_tools) == {
+        "read",
+        "grep",
+        "glob",
+        "bash",
+        WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
+    }
+    assert "write" not in scoped.allow_tools
+    assert "edit" not in scoped.allow_tools
+    assert "todoread" not in scoped.allow_tools
+    assert "workspace_report_complete" not in scoped.allow_tools
 
 
 @pytest.mark.asyncio
@@ -358,6 +397,55 @@ def _patch_planner_llm(monkeypatch: pytest.MonkeyPatch, *, response: dict[str, A
     )
 
 
+def _patch_planner_llm_with_turn_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    turn_runner: object,
+) -> None:
+    from src.infrastructure.llm import provider_factory
+
+    class _FakePlannerLLM:
+        async def generate(self, **_kwargs: Any) -> dict[str, Any]:
+            return _planner_tool_response()
+
+    class _FakeAIServiceFactory:
+        async def resolve_provider(self, *_args: Any, **_kwargs: Any) -> object:
+            return object()
+
+        def create_unified_llm_client(self, *_args: Any, **_kwargs: Any) -> _FakePlannerLLM:
+            return _FakePlannerLLM()
+
+    monkeypatch.setattr(provider_factory, "AIServiceFactory", _FakeAIServiceFactory)
+    monkeypatch.setattr(
+        v2_bridge,
+        "_build_workspace_planner_agent_turn_runner",
+        lambda **_kwargs: turn_runner,
+    )
+
+
+class _MissingContractTurnRunner:
+    def __init__(self) -> None:
+        self.calls: list[bool] = []
+        self._last_diagnostics: dict[str, Any] = {}
+
+    @property
+    def last_diagnostics(self) -> dict[str, Any]:
+        return dict(self._last_diagnostics)
+
+    async def run_planning_turn(self, **kwargs: Any) -> dict[str, Any] | None:
+        contract_only = bool(kwargs.get("contract_only", False))
+        self.calls.append(contract_only)
+        self._last_diagnostics = {
+            "conversation_id": f"planner-turn-{len(self.calls)}",
+            "contract_only": contract_only,
+            "event_count": 3,
+            "observed_tools": ["bash"],
+            "evidence_summaries": ["bash: package.json and backend route were inspected"],
+            "contract_submitted": False,
+        }
+        return None
+
+
 class _WorkspaceServiceStub:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
@@ -452,6 +540,65 @@ async def test_kickoff_creates_durable_plan_and_outbox(
         "frontend",
         "backend",
     ]
+    root_metadata = dict(plan.goal_node.metadata or {})
+    assert root_metadata["decomposition_source"] == "planner_agent_code_analysis"
+    assert root_metadata["planning_contract"]["evidence_refs"] == [
+        "read:package.json",
+        "grep:backend health route",
+    ]
+
+
+async def test_kickoff_suspends_software_workspace_when_planner_contract_missing(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace(db_session)
+    workspace = await db_session.get(WorkspaceModel, "ws-abc")
+    assert workspace is not None
+    workspace.metadata_json = {
+        "workspace_type": "software_development",
+        "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+    }
+    await db_session.flush()
+    runner = _MissingContractTurnRunner()
+    _patch_planner_llm_with_turn_runner(monkeypatch, turn_runner=runner)
+
+    with _patch_session_factory(db_session):
+        started = await kickoff_v2_plan(
+            workspace_id="ws-abc",
+            title="Build frontend and backend",
+            description="Ship the full-stack preview.",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    assert started is True
+    assert runner.calls == [False, True]
+    plan = await SqlPlanRepository(db_session).get_by_workspace("ws-abc")
+    assert plan is not None
+    assert plan.status is PlanStatus.SUSPENDED
+    assert plan.leaf_tasks() == []
+    assert plan.goal_node.intent is TaskIntent.BLOCKED
+    assert plan.goal_node.metadata["planner_contract_missing"] is True
+    assert plan.goal_node.metadata["retry_count"] == 1
+
+    outbox_items = (
+        (await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all()
+    )
+    assert outbox_items == []
+    events = (
+        (
+            await db_session.execute(
+                select(WorkspacePlanEventModel).where(
+                    WorkspacePlanEventModel.plan_id == plan.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [event.event_type for event in events] == ["planner_contract_missing"]
+    assert events[0].payload_json["failure_reason"].startswith("builtin workspace planner")
 
 
 async def test_kickoff_passes_software_context_to_planner_for_pipeline_gate(

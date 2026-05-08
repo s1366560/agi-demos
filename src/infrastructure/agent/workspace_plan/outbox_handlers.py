@@ -89,6 +89,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
     SqlWorkspaceTaskSessionAttemptRepository,
 )
+from src.infrastructure.agent.tools.workspace_planning_contract import PLANNING_CONTRACT_SOURCE
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
     CURRENT_ATTEMPT_ID,
@@ -1744,13 +1745,11 @@ def _pipeline_contract_for_workspace(
 
 
 def _needs_agent_managed_pipeline_proposal(contract: PipelineContractSpec) -> bool:
-    return (
-        contract.agent_managed
-        and contract.auto_deploy
-        and not contract.services
-        and not contract.deploy_command
-        and not contract.health_url
-    )
+    if not contract.agent_managed or not contract.auto_deploy:
+        return False
+    if contract.contract_source != PLANNING_CONTRACT_SOURCE:
+        return True
+    return not contract.services and not contract.deploy_command and not contract.health_url
 
 
 def _requires_preview_deployment(contract: PipelineContractSpec) -> bool:

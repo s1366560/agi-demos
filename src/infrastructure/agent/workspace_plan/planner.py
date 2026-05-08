@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from dataclasses import replace
 from typing import Protocol, cast
 
 from src.application.services.workspace_agent_autonomy import build_harness_preflight_checks
@@ -26,6 +27,8 @@ from src.domain.model.workspace_plan import (
     PlanNodeId,
     PlanNodeKind,
     PlanStatus,
+    TaskExecution,
+    TaskIntent,
 )
 from src.domain.ports.services.goal_planner_port import (
     GoalPlannerPort,
@@ -76,6 +79,14 @@ _SCRUM_ARTIFACT_BY_PHASE = {
 }
 
 
+class PlanningSuspended(Exception):
+    """Raised when a planning adapter intentionally suspends kickoff."""
+
+    def __init__(self, metadata: dict[str, object]) -> None:
+        super().__init__(str(metadata.get("failure_reason") or "planning suspended"))
+        self.metadata = metadata
+
+
 class LLMGoalPlanner(GoalPlannerPort):
     """Produces :class:`Plan` DAGs by asking a :class:`TaskDecomposer`."""
 
@@ -86,6 +97,7 @@ class LLMGoalPlanner(GoalPlannerPort):
     ) -> None:
         self._decomposer = decomposer
         self._default_cap = default_capability_hint
+        self._last_decomposition_metadata: dict[str, object] = {}
 
     async def plan(self, goal: GoalSpec, ctx: PlanningContext) -> Plan:
         plan_id = self._new_id("plan")
@@ -107,7 +119,35 @@ class LLMGoalPlanner(GoalPlannerPort):
         )
         plan.add_node(goal_node)
 
-        decomposition = await self._decompose(goal, ctx)
+        try:
+            decomposition = await self._decompose(goal, ctx)
+        except PlanningSuspended as exc:
+            failure_metadata = {
+                "planning_status": "suspended",
+                "planner_contract_missing": True,
+                **exc.metadata,
+            }
+            plan.replace_node(
+                replace(
+                    goal_node,
+                    intent=TaskIntent.BLOCKED,
+                    execution=TaskExecution.IDLE,
+                    metadata=failure_metadata,
+                )
+            )
+            return replace(plan, status=PlanStatus.SUSPENDED)
+
+        planner_metadata = dict(self._last_decomposition_metadata)
+        if planner_metadata:
+            plan.replace_node(
+                replace(
+                    goal_node,
+                    metadata={
+                        **dict(goal_node.metadata or {}),
+                        **_goal_planning_metadata(planner_metadata),
+                    },
+                )
+            )
 
         if not decomposition:
             # Single-task fallback under the goal.
@@ -269,13 +309,21 @@ class LLMGoalPlanner(GoalPlannerPort):
 
     async def _decompose(self, goal: GoalSpec, ctx: PlanningContext) -> list[SubTaskLike]:
         if self._decomposer is None:
+            self._last_decomposition_metadata = {}
             return []
         try:
             result = await self._decomposer.decompose(
                 query=f"{goal.title}\n\n{goal.description}".strip(),
                 conversation_context=ctx.conversation_context,
             )
+            metadata = dict(getattr(result, "metadata", {}) or {})
+            self._last_decomposition_metadata = metadata
+            if metadata.get("suspend_planning"):
+                raise PlanningSuspended(metadata)
         except Exception as exc:
+            if isinstance(exc, PlanningSuspended):
+                raise
+            self._last_decomposition_metadata = {}
             logger.warning("LLMGoalPlanner decompose failed: %s", exc)
             return []
         subs = [cast(SubTaskLike, sub) for sub in (getattr(result, "subtasks", ()) or ())]
@@ -400,6 +448,17 @@ def _planning_context_requires_pipeline(ctx: PlanningContext) -> bool:
     return "Software workspace planning contract:" in value
 
 
+def _goal_planning_metadata(metadata: dict[str, object]) -> dict[str, object]:
+    output: dict[str, object] = {}
+    source = metadata.get("decomposition_source")
+    if source:
+        output["decomposition_source"] = source
+    planning_contract = metadata.get("planning_contract")
+    if isinstance(planning_contract, dict):
+        output["planning_contract"] = planning_contract
+    return output
+
+
 def _iteration_phase_for_sequence(sequence: int | None) -> str:
     """Map planner output order to the current sprint lifecycle phase.
 
@@ -507,3 +566,6 @@ class TaskDecomposerProtocol(Protocol):  # pragma: no cover - typing only
 
 class DecompositionResultLike(Protocol):  # pragma: no cover
     subtasks: tuple[SubTaskLike, ...]
+    reasoning: str
+    is_decomposed: bool
+    metadata: dict[str, object]

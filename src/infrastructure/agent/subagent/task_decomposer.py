@@ -52,6 +52,7 @@ class DecompositionResult:
     subtasks: tuple[SubTask, ...]
     reasoning: str = ""
     is_decomposed: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _build_decomposition_tool_schema(

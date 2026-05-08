@@ -441,6 +441,31 @@ def test_agent_managed_auto_deploy_requires_planner_delivery_contract() -> None:
     assert _needs_agent_managed_pipeline_proposal(contract)
 
 
+def test_agent_managed_auto_deploy_rejects_stale_delivery_contract_source() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "agent_managed": True,
+                "auto_deploy": True,
+                "contract_source": "agent_regeneration_requested",
+                "services": [
+                    {
+                        "service_id": "default",
+                        "name": "Legacy Preview",
+                        "start_command": "npm --prefix backend start",
+                        "internal_port": 3001,
+                        "health_path": "/",
+                    }
+                ],
+            }
+        },
+        fallback_code_root="/workspace/app",
+    )
+
+    assert [service.service_id for service in contract.services] == ["default"]
+    assert _needs_agent_managed_pipeline_proposal(contract)
+
+
 def test_workspace_proxy_service_id_is_stable_and_workspace_scoped() -> None:
     service_a = _workspace_proxy_service_id(
         workspace_id="cb8139b9-3744-462e-8415-5ef684781fec",

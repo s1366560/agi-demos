@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_WORKSPACE_PLANNER_ID
+
 from .react_agent_profile import (
     _WORKSPACE_LEADER_REPLAN_TOOL_NAMES,
     _WORKSPACE_WORKER_CODE_TOOL_NAMES,
@@ -67,6 +69,11 @@ def with_workspace_worker_tool_allowlist(
     runtime_profile: AgentRuntimeProfile,
 ) -> AgentRuntimeProfile:
     """Ensure workspace workers can inspect/edit/report despite persona allowlists."""
+    if (
+        runtime_profile.selected_agent is not None
+        and runtime_profile.selected_agent.id == BUILTIN_WORKSPACE_PLANNER_ID
+    ):
+        return runtime_profile
     if not runtime_profile.allow_tools or "*" in runtime_profile.allow_tools:
         return runtime_profile
     required_tools = list(_WORKSPACE_WORKER_REPORT_TOOL_NAMES)
