@@ -77,6 +77,23 @@ class OutputSandboxAdapter(MockSandboxAdapter):
         }
 
 
+class ErrorOutputSandboxAdapter(MockSandboxAdapter):
+    """Mock sandbox adapter that returns a fixed MCP error output."""
+
+    def __init__(self, output: str) -> None:
+        super().__init__()
+        self.output = output
+
+    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
+        self.call_count += 1
+        self.last_kwargs = kwargs
+        self.last_call_options = kw
+        return {
+            "content": [{"text": self.output}],
+            "is_error": True,
+        }
+
+
 class TestSandboxMCPToolPermission:
     """Test create_sandbox_mcp_tool permission attribute."""
 
@@ -1050,6 +1067,50 @@ class TestSandboxMCPToolExecute:
         assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
             result.output
         )
+        assert adapter.call_count == 1
+
+    async def test_workspace_worker_bash_rejects_main_checkout_report_output_on_failed_command(
+        self,
+    ):
+        """Failed test commands must not expose main-checkout artifact output as evidence."""
+        adapter = ErrorOutputSandboxAdapter(
+            "Exit code: 1\n"
+            "Reports saved: /workspace/my-evo/test-results/data-persistence/report.md\n"
+            "Failed: 1"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cd /workspace/.memstack/worktrees/att-1 && node test-data-persistence.js",
+        )
+
+        assert result.is_error is True
+        assert "verification artifact path /workspace/my-evo/test-results" in result.output
+        assert "remaining failing command evidence" in result.output
         assert adapter.call_count == 1
 
     async def test_workspace_worker_bash_allows_worktree_report_output(self):

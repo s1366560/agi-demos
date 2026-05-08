@@ -383,9 +383,46 @@ def _workspace_output_artifact_escape_error(
         return (
             f"bash.output references verification artifact path {path}, which is outside "
             f"the active attempt worktree {normalized_root}. Configure reports, coverage, "
-            "screenshots, and test-results to stay inside the attempt worktree, then rerun."
+            "screenshots, and test-results to stay inside the attempt worktree, then rerun. "
+            "If the command also failed, rerun after fixing artifact paths and report the "
+            "remaining failing command evidence."
         )
     return None
+
+
+def _workspace_bash_output_artifact_error_from_exception(
+    exc: RuntimeError,
+    *,
+    command: str | None,
+    root_override: str | None,
+    declared_code_root: str | None,
+) -> str | None:
+    return _workspace_output_artifact_escape_error(
+        str(exc),
+        command=command,
+        root_override=root_override,
+        declared_code_root=declared_code_root,
+    )
+
+
+def _workspace_runtime_error_output(
+    exc: RuntimeError,
+    *,
+    tool_name: str,
+    kwargs: Mapping[str, Any],
+    root_override: str | None,
+    declared_code_root: str | None,
+) -> str:
+    command = kwargs.get("command") if isinstance(kwargs.get("command"), str) else None
+    if tool_name == "bash":
+        if artifact_error := _workspace_bash_output_artifact_error_from_exception(
+            exc,
+            command=command,
+            root_override=root_override,
+            declared_code_root=declared_code_root,
+        ):
+            return artifact_error
+    return str(exc)
 
 
 def _workspace_bash_may_emit_verification_artifacts(command: str) -> bool:
@@ -942,6 +979,9 @@ def create_sandbox_mcp_tool(
 
     async def execute(ctx: ToolContext, **kwargs: Any) -> ToolResult:
         """Execute the sandbox MCP tool with retry logic."""
+        normalized_kwargs = kwargs
+        root_override = None
+        declared_code_root = None
         try:
             normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
             root_override = _workspace_root_override_from_context(ctx)
@@ -1005,7 +1045,16 @@ def create_sandbox_mcp_tool(
             metadata = raw_result if raw_result else {}
             return ToolResult(output=output, metadata=metadata)
         except RuntimeError as exc:
-            return ToolResult(output=str(exc), is_error=True)
+            return ToolResult(
+                output=_workspace_runtime_error_output(
+                    exc,
+                    tool_name=tool_name,
+                    kwargs=normalized_kwargs,
+                    root_override=root_override,
+                    declared_code_root=declared_code_root,
+                ),
+                is_error=True,
+            )
 
     info = ToolInfo(
         name=tool_name,
