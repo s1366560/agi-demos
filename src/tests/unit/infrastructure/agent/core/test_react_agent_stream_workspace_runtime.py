@@ -9,6 +9,10 @@ def test_workspace_runtime_forwarded_fields_preserves_worktree_override() -> Non
     payload = {
         "additional_instructions": "worktree_path=/workspace/.memstack/worktrees/att-1",
         "workspace_root_override": {"source": "additional_instructions"},
+        "workspace_verification_integrity": {
+            "iteration_phase": "test",
+            "protected_script_changes": True,
+        },
         "code_context": {"sandbox_code_root": "/workspace/my-evo"},
     }
 
@@ -17,6 +21,10 @@ def test_workspace_runtime_forwarded_fields_preserves_worktree_override() -> Non
     assert forwarded == {
         "additional_instructions": "worktree_path=/workspace/.memstack/worktrees/att-1",
         "workspace_root_override": {"source": "additional_instructions"},
+        "workspace_verification_integrity": {
+            "iteration_phase": "test",
+            "protected_script_changes": True,
+        },
     }
 
 
@@ -25,6 +33,7 @@ def test_workspace_runtime_forwarded_fields_ignores_empty_or_invalid_values() ->
         {
             "additional_instructions": " ",
             "workspace_root_override": True,
+            "workspace_verification_integrity": False,
         }
     )
 

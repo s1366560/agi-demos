@@ -84,6 +84,9 @@ def _workspace_runtime_forwarded_fields(payload: Mapping[str, Any]) -> dict[str,
     root_override = payload.get("workspace_root_override")
     if isinstance(root_override, Mapping):
         forwarded["workspace_root_override"] = dict(root_override)
+    verification_integrity = payload.get("workspace_verification_integrity")
+    if isinstance(verification_integrity, Mapping):
+        forwarded["workspace_verification_integrity"] = dict(verification_integrity)
     return forwarded
 
 
