@@ -533,6 +533,7 @@ class TestBuildBrief:
         )
         assert code_context_payload["agents_files"][0]["content"] == "Always run npm test."
         assert "Before the first file operation" in code_context_payload["rule"]
+        assert "Bash commands must also start from the selected root" in code_context_payload["rule"]
         assert (
             "Do not create project files directly under /workspace" in code_context_payload["rule"]
         )
@@ -563,6 +564,8 @@ class TestBuildBrief:
         assert "${sandbox_code_root}" not in brief
         assert "use that path as the task root" in brief
         assert "every absolute file_path must start with that worktree_path" in brief
+        assert "bash commands must not create temp scripts" in brief
+        assert "For bash, do not write temp scripts" in brief
         assert "Do not edit the main sandbox checkout" in brief
         system_context = wl._build_worker_system_context(
             workspace_id="w",
@@ -581,6 +584,8 @@ class TestBuildBrief:
             system_context["workspace_root_override"]["rule"]
         )
         assert "file_path arguments" in system_context["workspace_root_override"]["rule"]
+        assert "bash writes" in system_context["workspace_root_override"]["rule"]
+        assert "temp scripts" in system_context["workspace_root_override"]["rule"]
         assert "check additional_instructions for a worktree_path" in (
             system_context["code_context"]["rule"]
         )

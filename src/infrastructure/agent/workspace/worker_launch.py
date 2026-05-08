@@ -505,10 +505,12 @@ def _build_worker_system_context(
                 "Before the first file operation or shell command, check additional_instructions "
                 "for a worktree_path. If present, it overrides sandbox_code_root: use that "
                 "worktree as the working directory and make every file tool file_path start with "
-                "that worktree_path. If no worktree_path is present, ensure sandbox_code_root "
-                "exists and make it the working directory. Perform repository inspection, file "
-                "edits, terminal commands, git diff, and tests from the selected root. Do not "
-                "create project files directly under /workspace or another sibling directory. "
+                "that worktree_path. Bash commands must also start from the selected root and "
+                "must not create, edit, copy, move, or remove project artifacts outside it. If "
+                "no worktree_path is present, ensure sandbox_code_root exists and make it the "
+                "working directory. Perform repository inspection, file edits, terminal "
+                "commands, git diff, and tests from the selected root. Do not create project "
+                "files directly under /workspace or another sibling directory. "
                 "Ignore unrelated files outside the selected root unless the task explicitly "
                 "asks for them. Read and follow the listed AGENTS.md files before decomposing "
                 "or executing the task."
@@ -536,9 +538,10 @@ def _build_worker_system_context(
                     "source": "additional_instructions",
                     "rule": (
                         "The rendered worktree_path overrides code_context.sandbox_code_root. "
-                        "All file tool file_path arguments, shell working directories, git "
-                        "operations, test outputs, and generated artifacts must stay under that "
-                        "worktree_path unless the task explicitly names another path."
+                        "All file tool file_path arguments, bash working directories, bash "
+                        "writes, temp scripts, git operations, test outputs, and generated "
+                        "artifacts must stay under that worktree_path unless the task "
+                        "explicitly names another path."
                     ),
                 }
 
@@ -670,7 +673,9 @@ def _build_worker_brief(
             "more specific attempt worktree_path. If a Workspace checkpoint/worktree section "
             "below lists a worktree_path, cd into that worktree and use it as the root for "
             "repository inspection, file edits, terminal commands, git status, commits, and "
-            "tests; every file tool file_path must also start with that worktree_path. "
+            "tests; every file tool file_path must also start with that worktree_path, and "
+            "bash commands must not create temp scripts, reports, commits, or copied "
+            "artifacts outside that worktree. "
             "Otherwise, before creating, reading, editing, or testing project files, "
             f"run `mkdir -p {code_root} && cd {code_root}` or pass the same directory as the "
             "tool working directory. Do not place `package.json`, source files, tests, build "
@@ -688,8 +693,9 @@ def _build_worker_brief(
                 "use that path as the task root before any project read, edit, test, git "
                 "status, or commit operation. For file tools, every absolute file_path must "
                 "start with that worktree_path; never pass a main-checkout path for "
-                "attempt-scoped files. Do not edit the main sandbox checkout for "
-                "attempt-scoped work."
+                "attempt-scoped files. For bash, do not write temp scripts, generated "
+                "reports, commits, or copied artifacts outside that worktree. Do not edit "
+                "the main sandbox checkout for attempt-scoped work."
             )
     sections.append(
         "## Code quality gate\n"
