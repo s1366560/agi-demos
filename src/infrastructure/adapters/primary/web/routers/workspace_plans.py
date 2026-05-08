@@ -72,6 +72,7 @@ router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["works
 logger = logging.getLogger(__name__)
 _SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS = 180
 _SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS = 300
+_SNAPSHOT_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS = 300
 
 
 class _RedisExistsClient(Protocol):
@@ -2691,6 +2692,7 @@ async def _has_pending_node_recovery_job(
     workspace_id: str,
     plan_id: str,
     node_id: str,
+    previous_attempt_id: str | None = None,
 ) -> bool:
     result = await session.execute(
         refresh_select_statement(
@@ -2702,6 +2704,29 @@ async def _has_pending_node_recovery_job(
             )
             .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
             .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
+            .limit(1)
+        )
+    )
+    if result.scalar_one_or_none() is not None:
+        return True
+    if not previous_attempt_id:
+        return False
+    recent_cutoff = datetime.now(UTC) - timedelta(
+        seconds=_SNAPSHOT_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS
+    )
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanOutboxModel.id)
+            .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+            .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+            .where(WorkspacePlanOutboxModel.event_type == HANDOFF_RESUME_EVENT)
+            .where(WorkspacePlanOutboxModel.status == "completed")
+            .where(WorkspacePlanOutboxModel.created_at >= recent_cutoff)
+            .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
+            .where(
+                WorkspacePlanOutboxModel.payload_json["previous_attempt_id"].as_string()
+                == previous_attempt_id
+            )
             .limit(1)
         )
     )
@@ -2853,6 +2878,7 @@ async def _enqueue_stale_plan_node_recovery(
             workspace_id=workspace_id,
             plan_id=plan.id,
             node_id=node.id,
+            previous_attempt_id=node.current_attempt_id,
         ):
             continue
         _ = await repo.enqueue(

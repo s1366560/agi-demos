@@ -463,6 +463,73 @@ async def test_stale_plan_node_recovery_enqueues_handoff_resume(
     assert events[0].event_type == "auto_stale_node_recovery_queued"
 
 
+@pytest.mark.asyncio
+async def test_stale_plan_node_recovery_throttles_recent_completed_handoff_resume(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-stale-dedupe"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    stale_node = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        workspace_task_id="workspace-task-api",
+        assignee_agent_id="agent-api",
+        current_attempt_id="attempt-stale",
+    )
+    plan.nodes[task_node_id] = stale_node
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    enqueued = await workspace_plans._enqueue_stale_plan_node_recovery(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        nodes=[stale_node],
+        actor_id="plan-api-user",
+    )
+
+    assert enqueued == 1
+    outbox_repo = SqlWorkspacePlanOutboxRepository(db_session)
+    outbox = await outbox_repo.list_by_workspace(workspace_id, limit=5)
+    outbox[0].status = "completed"
+    outbox[0].processed_at = datetime.now(UTC)
+    await db_session.commit()
+
+    assert (
+        await workspace_plans._enqueue_stale_plan_node_recovery(
+            session=db_session,
+            workspace_id=workspace_id,
+            plan=plan,
+            nodes=[stale_node],
+            actor_id="plan-api-user",
+        )
+        == 0
+    )
+
+    fresh_attempt_node = replace(stale_node, current_attempt_id="attempt-next")
+    plan.nodes[task_node_id] = fresh_attempt_node
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    assert (
+        await workspace_plans._enqueue_stale_plan_node_recovery(
+            session=db_session,
+            workspace_id=workspace_id,
+            plan=plan,
+            nodes=[fresh_attempt_node],
+            actor_id="plan-api-user",
+        )
+        == 1
+    )
+    outbox = await outbox_repo.list_by_workspace(workspace_id, limit=5)
+    assert [item.payload_json["previous_attempt_id"] for item in outbox[:2]] == [
+        "attempt-next",
+        "attempt-stale",
+    ]
+
+
 def test_stale_plan_node_snapshot_recovery_uses_live_worker_grace() -> None:
     plan = _make_plan("workspace-plan-api-stale-grace")
     task_node_id = PlanNodeId(value="task-api")
