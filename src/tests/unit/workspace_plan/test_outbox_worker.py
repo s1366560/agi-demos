@@ -58,12 +58,16 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     EXECUTION_STATE,
     LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
+    PENDING_LEADER_ADJUDICATION,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
-from src.infrastructure.agent.workspace_plan.factory import build_sql_orchestrator
+from src.infrastructure.agent.workspace_plan.factory import (
+    _project_verification_to_workspace_task,
+    build_sql_orchestrator,
+)
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     HANDOFF_RESUME_EVENT,
@@ -283,6 +287,99 @@ def test_extract_task_evidence_keeps_worker_report_for_current_attempt() -> None
     assert artifacts["last_worker_report_type"] == "completed"
     assert artifacts["last_worker_report_artifacts"] == ["commit_ref:current"]
     assert artifacts["evidence_refs"] == ["commit_ref:current"]
+
+
+@pytest.mark.asyncio
+async def test_verification_judge_retry_projection_keeps_attempt_non_terminal(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_plan_verification",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Completed docs updates.",
+            candidate_verifications_json=["test_run:pytest docs 117 passed 0 failed"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Verify architecture docs",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": False,
+            "retry_verification_only": True,
+            "summary": "judge verdict=retry_infrastructure; retry verification judge",
+            "results": [
+                {
+                    "kind": "custom",
+                    "name": "retryable_infrastructure_failure",
+                    "judge_verdict": "retry_infrastructure",
+                    "required_next_action": "retry verification judge",
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.5,
+                    "message": "workspace verification judge failed",
+                    "evidence": [],
+                }
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "awaiting_leader_adjudication"
+    assert attempt.completed_at is None
+    assert attempt.leader_feedback == "judge verdict=retry_infrastructure; retry verification judge"
+    assert attempt.adjudication_reason == "verification_retry_scheduled"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "in_progress"
+    assert task.metadata_json[PENDING_LEADER_ADJUDICATION] is False
+    assert task.metadata_json["last_attempt_status"] == "awaiting_plan_verification"
+    assert task.metadata_json["durable_plan_verdict"] == "verification_retry_scheduled"
+    assert task.metadata_json[CURRENT_ATTEMPT_ID] == "attempt-a"
 
 
 @pytest.mark.asyncio
@@ -1405,9 +1502,7 @@ async def test_supervisor_tick_releases_done_node_with_rejected_attempt(
     assert retried_leaf.intent is TaskIntent.IN_PROGRESS
     assert retried_leaf.execution is TaskExecution.DISPATCHED
     assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
-    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == (
-        "terminal_attempt_rejected"
-    )
+    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == ("terminal_attempt_rejected")
     assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
 
 

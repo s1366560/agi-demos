@@ -1351,7 +1351,10 @@ class TestVerifier:
         assert not rep.passed
         assert "failed_test_evidence" in rep.summary()
         assert len(judge.requests) == 1
-        assert any("test evidence reports failing tests" in item for item in judge.requests[0].guard_failures)
+        assert any(
+            "test evidence reports failing tests" in item
+            for item in judge.requests[0].guard_failures
+        )
 
     @pytest.mark.parametrize(
         ("verdict", "passed", "hard_fail", "retryable"),
@@ -1686,6 +1689,31 @@ class _RetryableInfrastructureVerifier:
                     passed=False,
                     confidence=0.5,
                     message="retryable infrastructure failure; redispatch node",
+                ),
+            ),
+        )
+
+
+class _VerificationJudgeRetryVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "retryable_infrastructure_failure",
+                            "judge_verdict": "retry_infrastructure",
+                            "failed_criteria": ["workspace_verification_judge"],
+                            "required_next_action": "retry verification judge",
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.5,
+                    message="judge verdict=retry_infrastructure; retry verification judge",
                 ),
             ),
         )
@@ -2312,6 +2340,81 @@ class TestSupervisorTick:
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_count"] == 1
+
+    async def test_verification_judge_infrastructure_retry_keeps_reported_attempt(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-search",
+                    display_name="S",
+                    capabilities=frozenset({"web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("verification judge retry must not redispatch worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerificationJudgeRetryVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.allocations_made == 0
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        retry_node = reloaded.nodes[PlanNodeId("a")]
+        assert retry_node.intent is TaskIntent.IN_PROGRESS
+        assert retry_node.execution is TaskExecution.REPORTED
+        assert retry_node.current_attempt_id == "attempt-a"
+        assert retry_node.metadata["retry_count"] == 1
+        assert retry_node.metadata["retry_not_before"].endswith("Z")
+        assert retry_node.metadata["last_verification_judge_verdict"] == "retry_infrastructure"
+        retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
+        assert len(retry_events) == 1
+        assert retry_events[0][2]["retry_verification_only"] is True
 
     async def test_pipeline_gate_does_not_hide_non_pipeline_verification_failures(self) -> None:
         repo = InMemoryPlanRepository()

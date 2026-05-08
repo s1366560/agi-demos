@@ -10,8 +10,9 @@ transactional path.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,6 +67,16 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
 from src.infrastructure.agent.workspace_plan.verifier import AcceptanceCriterionVerifier
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_INFRASTRUCTURE_CRITERION = "retryable_infrastructure_failure"
+_TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
+    {
+        WorkspaceTaskSessionAttemptStatus.ACCEPTED.value,
+        WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+        WorkspaceTaskSessionAttemptStatus.BLOCKED.value,
+        WorkspaceTaskSessionAttemptStatus.CANCELLED.value,
+    }
+)
 
 
 async def _empty_agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
@@ -197,33 +208,71 @@ async def _project_verification_to_workspace_task(
     test_commands = [
         ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
     ]
+    retry_verification_only = _verification_payload_requests_verification_retry(payload)
 
     if attempt_id:
-        await _project_verification_to_attempt(
-            db=db,
-            attempt_id=attempt_id,
-            passed=passed,
-            hard_fail=hard_fail,
-            summary=summary,
-            now=now,
-        )
-
-    if node.workspace_task_id:
-        task = await db.get(WorkspaceTaskModel, node.workspace_task_id)
-        if task is not None:
-            await _project_verification_to_task(
+        if retry_verification_only:
+            await _project_verification_retry_to_attempt(
                 db=db,
-                task=task,
+                attempt_id=attempt_id,
+                summary=summary,
+                now=now,
+            )
+        else:
+            await _project_verification_to_attempt(
+                db=db,
                 attempt_id=attempt_id,
                 passed=passed,
                 hard_fail=hard_fail,
                 summary=summary,
-                evidence_refs=evidence_refs,
-                commit_ref=commit_ref,
-                git_diff_summary=git_diff_summary,
-                test_commands=test_commands,
                 now=now,
             )
+
+    if node.workspace_task_id:
+        task = await db.get(WorkspaceTaskModel, node.workspace_task_id)
+        if task is not None:
+            if retry_verification_only:
+                _project_verification_retry_to_task(
+                    task=task,
+                    attempt_id=attempt_id,
+                    summary=summary,
+                    now=now,
+                )
+            else:
+                await _project_verification_to_task(
+                    db=db,
+                    task=task,
+                    attempt_id=attempt_id,
+                    passed=passed,
+                    hard_fail=hard_fail,
+                    summary=summary,
+                    evidence_refs=evidence_refs,
+                    commit_ref=commit_ref,
+                    git_diff_summary=git_diff_summary,
+                    test_commands=test_commands,
+                    now=now,
+                )
+
+
+def _verification_payload_requests_verification_retry(payload: dict[str, Any]) -> bool:
+    if payload.get("retry_verification_only") is True:
+        return True
+    raw_results_obj = payload.get("results")
+    if not isinstance(raw_results_obj, list):
+        return False
+    raw_results = cast(list[object], raw_results_obj)
+    for raw_result in raw_results:
+        if not isinstance(raw_result, Mapping):
+            continue
+        result = cast(Mapping[str, object], raw_result)
+        if result.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
+            continue
+        if result.get("judge_verdict") != "retry_infrastructure":
+            continue
+        next_action = str(result.get("required_next_action") or "").casefold()
+        if "retry verification" in next_action:
+            return True
+    return False
 
 
 async def _project_verification_to_attempt(
@@ -248,6 +297,23 @@ async def _project_verification_to_attempt(
         attempt.status = WorkspaceTaskSessionAttemptStatus.REJECTED.value
         attempt.leader_feedback = summary or "replan requested by durable plan verifier"
     attempt.completed_at = now
+    attempt.updated_at = now
+
+
+async def _project_verification_retry_to_attempt(
+    *,
+    db: AsyncSession,
+    attempt_id: str,
+    summary: str,
+    now: datetime,
+) -> None:
+    attempt = await db.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+    if attempt is None or attempt.status in _TERMINAL_ATTEMPT_STATUS_VALUES:
+        return
+    attempt.status = WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
+    attempt.leader_feedback = summary or "verification judge retry scheduled"
+    attempt.adjudication_reason = "verification_retry_scheduled"
+    attempt.completed_at = None
     attempt.updated_at = now
 
 
@@ -305,6 +371,27 @@ async def _project_verification_to_task(
         task.blocker_reason = summary or "durable plan verification failed"
     task.updated_at = now
     await _reconcile_root_goal_if_present(db, task, metadata)
+
+
+def _project_verification_retry_to_task(
+    *,
+    task: WorkspaceTaskModel,
+    attempt_id: str | None,
+    summary: str,
+    now: datetime,
+) -> None:
+    metadata = dict(task.metadata_json or {})
+    metadata[PENDING_LEADER_ADJUDICATION] = False
+    metadata["durable_plan_verdict"] = "verification_retry_scheduled"
+    metadata["durable_plan_verification_summary"] = summary
+    metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
+    metadata["last_attempt_status"] = "awaiting_plan_verification"
+    metadata[LAST_LEADER_ADJUDICATION_STATUS] = "verification_retry_scheduled"
+    if attempt_id:
+        metadata["last_attempt_id"] = attempt_id
+        metadata[CURRENT_ATTEMPT_ID] = attempt_id
+    task.metadata_json = metadata
+    task.updated_at = now
 
 
 def _verification_attempt_status(*, passed: bool, hard_fail: bool) -> str:

@@ -241,6 +241,8 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         reported = [n for n in plan.nodes.values() if n.execution is TaskExecution.REPORTED]
         for node in reported:
             try:
+                if _node_retry_not_before(node) > datetime.now(UTC):
+                    continue
                 plan.replace_node(_force_execution(node, TaskExecution.VERIFYING))
                 ctx = await self._attempt_context(workspace_id, node)
                 report = await self._verifier.verify(ctx)
@@ -308,6 +310,22 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         )
                     )
                     nodes_blocked += 1
+                elif _is_verification_judge_retry_report(report):
+                    retry_node = _node_with_verification_retry_backoff(node, report)
+                    plan.replace_node(retry_node)
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        retry_node,
+                        "verification_retry_scheduled",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "summary": report.summary(),
+                            "retry_count": retry_node.metadata.get("retry_count"),
+                            "retry_not_before": retry_node.metadata.get("retry_not_before"),
+                            "retry_verification_only": True,
+                        },
+                    )
                 elif _is_retryable_infrastructure_report(report):
                     retry_node = _node_with_retry_backoff(node, report)
                     plan.replace_node(retry_node)
@@ -1436,6 +1454,21 @@ def _is_retryable_infrastructure_report(report: VerificationReport) -> bool:
     return False
 
 
+def _is_verification_judge_retry_report(report: VerificationReport) -> bool:
+    for result in report.results:
+        if not result.criterion.required or result.passed:
+            continue
+        if result.criterion.spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
+            continue
+        if result.criterion.spec.get("judge_verdict") != "retry_infrastructure":
+            continue
+        next_action = str(result.criterion.spec.get("required_next_action") or "").casefold()
+        failed = set(_string_list(result.criterion.spec.get("failed_criteria")))
+        if "retry verification" in next_action or "workspace_verification_judge" in failed:
+            return True
+    return False
+
+
 def _should_request_pipeline_after_verification(
     node: PlanNode,
     artifacts: Mapping[str, Any],
@@ -1531,6 +1564,30 @@ def _node_with_retry_backoff(node: PlanNode, report: VerificationReport) -> Plan
     )
 
 
+def _node_with_verification_retry_backoff(
+    node: PlanNode,
+    report: VerificationReport,
+) -> PlanNode:
+    evidenced = _node_with_verification_evidence(node, report)
+    metadata = dict(evidenced.metadata)
+    retry_count = _coerce_positive_int(metadata.get("retry_count")) + 1
+    delay_seconds = min(
+        _RETRY_BACKOFF_BASE_SECONDS * (2 ** (retry_count - 1)),
+        _RETRY_BACKOFF_MAX_SECONDS,
+    )
+    retry_at = datetime.now(UTC) + timedelta(seconds=delay_seconds)
+    metadata["retry_count"] = retry_count
+    metadata["retry_not_before"] = retry_at.isoformat().replace("+00:00", "Z")
+    metadata["retry_last_reason"] = report.summary()
+    return replace(
+        evidenced,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.REPORTED,
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
+
+
 def _ready_nodes_due(ready_nodes: list[PlanNode], *, now: datetime) -> list[PlanNode]:
     return [node for node in ready_nodes if _node_retry_not_before(node) <= now]
 
@@ -1562,6 +1619,8 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
         "attempt_id": report.attempt_id,
         "passed": report.passed,
         "hard_fail": report.hard_fail,
+        "retryable_infrastructure": _is_retryable_infrastructure_report(report),
+        "retry_verification_only": _is_verification_judge_retry_report(report),
         "summary": report.summary(),
         "ran_at": report.ran_at.isoformat().replace("+00:00", "Z"),
         "results": [
