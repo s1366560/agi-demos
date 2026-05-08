@@ -780,6 +780,8 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "workspace_cancel_task",
             "workspace_health_verdict",
             "workspace_submit_planning_contract",
+            "workspace_submit_verification_judgment",
+            "workspace_submit_iteration_review",
         )
         for name in agent_tool_names:
             if name in registry:
@@ -791,22 +793,33 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
 
 
 def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
-    """Register the builtin workspace planner terminal tool in every agent toolset."""
+    """Register builtin workspace plan terminal tools in every agent toolset."""
     try:
         from src.infrastructure.agent.tools.define import get_registered_tools
+        from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
+            WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
+            WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+            workspace_submit_iteration_review_tool,
+            workspace_submit_verification_judgment_tool,
+        )
         from src.infrastructure.agent.tools.workspace_planning_contract import (
             WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
             workspace_submit_planning_contract_tool,
         )
 
         _ = workspace_submit_planning_contract_tool
+        _ = workspace_submit_verification_judgment_tool
+        _ = workspace_submit_iteration_review_tool
         registry = get_registered_tools()
-        if WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME in registry:
-            tools[WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME] = registry[
-                WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME
-            ]
+        for tool_name in (
+            WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
+            WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+            WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
+        ):
+            if tool_name in registry:
+                tools[tool_name] = registry[tool_name]
     except Exception as e:
-        logger.warning("Agent Worker: Failed to add workspace planning contract tool: %s", e)
+        logger.warning("Agent Worker: Failed to add workspace plan contract tools: %s", e)
 
 
 def _add_model_awareness_tools(

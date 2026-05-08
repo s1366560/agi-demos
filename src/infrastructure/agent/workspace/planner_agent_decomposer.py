@@ -15,18 +15,14 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_workspace_planner_agent,
 )
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
-from src.infrastructure.agent.tools.define import tool_info_to_openai_format
 from src.infrastructure.agent.tools.workspace_planning_contract import (
     WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
-    normalize_workspace_planning_contract,
     persist_workspace_planning_contract,
-    workspace_submit_planning_contract_tool,
 )
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.domain.llm_providers.llm_types import LLMClient
     from src.domain.model.agent.agent_definition import Agent
 
 logger = logging.getLogger(__name__)
@@ -168,10 +164,9 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
 class WorkspacePlannerAgentDecomposer:
     """TaskDecomposerProtocol implementation backed by the builtin planner agent."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
-        llm_client: LLMClient,
         tenant_id: str,
         project_id: str | None,
         workspace_id: str,
@@ -186,7 +181,6 @@ class WorkspacePlannerAgentDecomposer:
         turn_runner: WorkspacePlannerAgentTurnRunner | None = None,
     ) -> None:
         super().__init__()
-        self._llm_client = llm_client
         self._tenant_id = tenant_id
         self._project_id = project_id
         self._workspace_id = workspace_id
@@ -210,70 +204,50 @@ class WorkspacePlannerAgentDecomposer:
         query: str,
         conversation_context: str | None = None,
     ) -> DecompositionResult:
-        if not self._llm_client:
-            return self._fallback(query, "No LLM client available for builtin workspace planner")
+        if self._turn_runner is None:
+            return self._fallback(query, "No agent turn runner available for builtin workspace planner")
 
-        messages = [
-            {"role": "system", "content": self._planner_agent.system_prompt},
-            {
-                "role": "user",
-                "content": self._build_user_prompt(
-                    query=query,
-                    conversation_context=conversation_context,
-                ),
-            },
-        ]
-        tools = [tool_info_to_openai_format(workspace_submit_planning_contract_tool)]
+        user_prompt = self._build_user_prompt(
+            query=query,
+            conversation_context=conversation_context,
+        )
         try:
             payload: dict[str, Any] | None = None
-            if self._turn_runner is not None:
+            payload = await self._turn_runner.run_planning_turn(
+                planner_agent=self._planner_agent,
+                user_prompt=user_prompt,
+                workspace_id=self._workspace_id,
+                root_task_id=self._root_task_id,
+                actor_user_id=self._actor_user_id,
+                workspace_metadata=self._workspace_metadata,
+                root_metadata=self._root_metadata,
+            )
+            diagnostics = [self._runner_diagnostics("initial")]
+            rejection_reason = self._software_contract_rejection(payload, query)
+            if rejection_reason and self._should_suspend_on_missing_contract():
                 payload = await self._turn_runner.run_planning_turn(
-                    planner_agent=self._planner_agent,
-                    user_prompt=messages[1]["content"],
+                    planner_agent=self._contract_only_planner_agent(),
+                    user_prompt=self._build_contract_repair_prompt(
+                        query=query,
+                        conversation_context=conversation_context,
+                        diagnostics=diagnostics,
+                        rejection_reason=rejection_reason,
+                    ),
                     workspace_id=self._workspace_id,
                     root_task_id=self._root_task_id,
                     actor_user_id=self._actor_user_id,
                     workspace_metadata=self._workspace_metadata,
                     root_metadata=self._root_metadata,
+                    contract_only=True,
                 )
-                diagnostics = [self._runner_diagnostics("initial")]
-                rejection_reason = self._software_contract_rejection(payload, query)
-                if rejection_reason and self._should_suspend_on_missing_contract():
-                    payload = await self._turn_runner.run_planning_turn(
-                        planner_agent=self._contract_only_planner_agent(),
-                        user_prompt=self._build_contract_repair_prompt(
-                            query=query,
-                            conversation_context=conversation_context,
-                            diagnostics=diagnostics,
-                            rejection_reason=rejection_reason,
-                        ),
-                        workspace_id=self._workspace_id,
-                        root_task_id=self._root_task_id,
-                        actor_user_id=self._actor_user_id,
-                        workspace_metadata=self._workspace_metadata,
-                        root_metadata=self._root_metadata,
-                        contract_only=True,
-                    )
-                    diagnostics.append(self._runner_diagnostics("contract_only_retry"))
-                final_rejection_reason = self._software_contract_rejection(payload, query)
-                if final_rejection_reason and self._should_suspend_on_missing_contract():
-                    return self._suspended_contract_missing(
-                        query=query,
-                        reasoning=final_rejection_reason,
-                        diagnostics=diagnostics,
-                    )
-            else:
-                response = await self._generate_contract(messages=messages, tools=tools)
-                args = self._parse_tool_arguments(response)
-                if args is not None:
-                    payload = await self._capture_contract(args)
-                rejection_reason = self._software_contract_rejection(payload, query)
-                if rejection_reason and self._should_suspend_on_missing_contract():
-                    return self._suspended_contract_missing(
-                        query=query,
-                        reasoning=rejection_reason,
-                        diagnostics=[],
-                    )
+                diagnostics.append(self._runner_diagnostics("contract_only_retry"))
+            final_rejection_reason = self._software_contract_rejection(payload, query)
+            if final_rejection_reason and self._should_suspend_on_missing_contract():
+                return self._suspended_contract_missing(
+                    query=query,
+                    reasoning=final_rejection_reason,
+                    diagnostics=diagnostics,
+                )
             if payload is None:
                 return self._fallback(
                     query,
@@ -303,60 +277,6 @@ class WorkspacePlannerAgentDecomposer:
                 exc_info=True,
             )
             return self._fallback(query, f"builtin workspace planner failed: {exc}")
-
-    async def _generate_contract(
-        self,
-        *,
-        messages: list[dict[str, str]],
-        tools: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        try:
-            return await self._llm_client.generate(
-                messages=messages,
-                tools=tools,
-                temperature=0.0,
-                max_tokens=2048,
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME},
-                },
-            )
-        except Exception as forced_exc:
-            logger.debug(
-                "workspace planner forced tool_choice failed; retrying without tool_choice: %s",
-                forced_exc,
-            )
-            return await self._llm_client.generate(
-                messages=messages,
-                tools=tools,
-                temperature=0.0,
-                max_tokens=2048,
-            )
-
-    async def _capture_contract(self, args: dict[str, Any]) -> dict[str, Any]:
-        payload = normalize_workspace_planning_contract(
-            task_graph=args.get("task_graph") or {},
-            delivery_cicd=args.get("delivery_cicd") or {},
-            reasoning=str(args.get("reasoning") or ""),
-            evidence_refs=args.get("evidence_refs") or [],
-            confidence=args.get("confidence", 0),
-            actor_user_id=self._actor_user_id,
-        )
-        if payload["delivery_cicd"].get("services"):
-            payload = await persist_workspace_planning_contract(
-                workspace_id=self._workspace_id,
-                task_graph=args.get("task_graph") or {},
-                delivery_cicd=args.get("delivery_cicd") or {},
-                reasoning=str(args.get("reasoning") or ""),
-                evidence_refs=args.get("evidence_refs") or [],
-                confidence=args.get("confidence", 0),
-                actor_user_id=self._actor_user_id,
-                session=self._session,
-                commit=False,
-            )
-        else:
-            payload["metadata_written"] = False
-        return payload
 
     def _build_user_prompt(self, *, query: str, conversation_context: str | None) -> str:
         context = "\n\n".join(
@@ -418,48 +338,6 @@ class WorkspacePlannerAgentDecomposer:
             ensure_ascii=False,
             sort_keys=True,
         )
-
-    def _parse_tool_arguments(self, response: dict[str, Any]) -> dict[str, Any] | None:
-        tool_calls = response.get("tool_calls", [])
-        if tool_calls:
-            tool_call = tool_calls[0]
-            function_data = self._read_field(tool_call, "function", tool_call)
-            name = self._read_field(function_data, "name", WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME)
-            if name != WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME:
-                return None
-            return self._parse_arguments(self._read_field(function_data, "arguments", "{}"))
-        return self._parse_json_content(response.get("content"))
-
-    def _parse_arguments(self, args_raw: object) -> dict[str, Any] | None:
-        if isinstance(args_raw, str):
-            try:
-                parsed = json.loads(args_raw)
-            except json.JSONDecodeError:
-                return None
-        else:
-            parsed = args_raw
-        return parsed if isinstance(parsed, dict) else None
-
-    def _parse_json_content(self, content: object) -> dict[str, Any] | None:
-        if not isinstance(content, str) or not content.strip():
-            return None
-        text = content.strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if len(lines) >= 3:
-                text = "\n".join(lines[1:-1]).strip()
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            start = text.find("{")
-            end = text.rfind("}")
-            if start < 0 or end <= start:
-                return None
-            try:
-                parsed = json.loads(text[start : end + 1])
-            except json.JSONDecodeError:
-                return None
-        return parsed if isinstance(parsed, dict) else None
 
     def _result_from_contract(self, payload: dict[str, Any], original_query: str) -> DecompositionResult:
         raw_tasks = list(payload["task_graph"].get("subtasks") or [])[: self._max_subtasks]
@@ -560,11 +438,6 @@ class WorkspacePlannerAgentDecomposer:
         if _normalized_text(first_description) == _normalized_text(original_query):
             return "software workspace planner produced a root-goal duplicate subtask"
         return None
-
-    def _read_field(self, source: object, key: str, default: object) -> object:
-        if isinstance(source, dict):
-            return source.get(key, default)
-        return getattr(source, key, default)
 
 
 def _planning_contract_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:

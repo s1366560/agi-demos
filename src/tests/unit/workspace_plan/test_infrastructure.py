@@ -39,13 +39,19 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
 )
+from src.infrastructure.agent.sisyphus.builtin_agent import (
+    build_builtin_workspace_iteration_reviewer_agent,
+    build_builtin_workspace_verifier_agent,
+)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     LAST_WORKER_REPORT_ATTEMPT_ID,
 )
 from src.infrastructure.agent.workspace_plan import factory as workspace_plan_factory
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
-from src.infrastructure.agent.workspace_plan.iteration_review import LLMIterationReviewProvider
+from src.infrastructure.agent.workspace_plan.iteration_review import (
+    WorkspaceIterationReviewAgentProvider,
+)
 from src.infrastructure.agent.workspace_plan.orchestrator import (
     OrchestratorConfig,
     WorkspaceOrchestrator,
@@ -59,7 +65,6 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
 )
 from src.infrastructure.agent.workspace_plan.verification_judge import (
     _request_payload,
-    _system_prompt,
 )
 from src.infrastructure.agent.workspace_plan.verifier import (
     AcceptanceCriterionVerifier,
@@ -116,17 +121,12 @@ class _RecordingVerificationJudge:
 
 
 @dataclass
-class _CapturingIterationReviewLLM:
-    response: dict[str, Any] | list[dict[str, Any]]
+class _CapturingIterationReviewRunner:
+    response: dict[str, Any]
     calls: list[dict[str, Any]] = field(default_factory=list)
-    _index: int = 0
 
-    async def generate(self, **kwargs: Any) -> dict[str, Any]:
+    async def run_review_turn(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
-        if isinstance(self.response, list):
-            index = min(self._index, len(self.response) - 1)
-            self._index += 1
-            return self.response[index]
         return self.response
 
 
@@ -177,34 +177,29 @@ def _plan_with_two_tasks() -> Plan:
 # ---------------------------------------------------------------------------
 
 
-class TestLLMIterationReviewProvider:
+class TestWorkspaceIterationReviewAgentProvider:
     async def test_prompt_treats_actionable_evidence_gaps_as_next_sprint_work(self) -> None:
-        llm = _CapturingIterationReviewLLM(
+        runner = _CapturingIterationReviewRunner(
             response={
-                "tool_calls": [
+                "verdict": "continue_next_iteration",
+                "confidence": 0.82,
+                "summary": "A browser parity pass is still actionable.",
+                "next_sprint_goal": "Verify product parity.",
+                "next_tasks": [
                     {
-                        "function": {
-                            "arguments": json.dumps(
-                                {
-                                    "verdict": "continue_next_iteration",
-                                    "confidence": 0.82,
-                                    "summary": "A browser parity pass is still actionable.",
-                                    "next_sprint_goal": "Verify product parity.",
-                                    "next_tasks": [
-                                        {
-                                            "id": "parity-1",
-                                            "description": "Run browser parity verification.",
-                                            "phase": "test",
-                                        }
-                                    ],
-                                }
-                            )
-                        }
+                        "id": "parity-1",
+                        "description": "Run browser parity verification.",
+                        "phase": "test",
                     }
-                ]
+                ],
             }
         )
-        provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+        provider = WorkspaceIterationReviewAgentProvider(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            max_next_tasks=6,
+            turn_runner=runner,
+        )
 
         verdict = await provider.review(
             IterationReviewContext(
@@ -217,13 +212,16 @@ class TestLLMIterationReviewProvider:
             )
         )
 
-        system_prompt = llm.calls[0]["messages"][0]["content"]
-        user_payload = json.loads(llm.calls[0]["messages"][1]["content"])
-        assert "browser/product parity checks" in system_prompt
-        assert "Missing evidence is normally next-sprint work" in system_prompt
-        assert "fix all P0/P1 gaps" in system_prompt
-        assert "one concrete artifact" in system_prompt
-        assert "cannot browse" in system_prompt
+        agent_prompt = build_builtin_workspace_iteration_reviewer_agent(
+            tenant_id="tenant-1",
+            project_id="project-1",
+        ).system_prompt
+        user_prompt = runner.calls[0]["user_prompt"]
+        user_payload = json.loads(user_prompt.split("\n\n", 1)[1].split("\n\nMaximum", 1)[0])
+        assert "Missing evidence is normally next-sprint work" in agent_prompt
+        assert "fix all gaps" in agent_prompt
+        assert "one functional area" in agent_prompt
+        assert "workspace_submit_iteration_review" in user_prompt
         assert (
             "browser_e2e workflows with screenshots and console capture"
             in (user_payload["review_policy"]["available_next_sprint_capabilities"])
@@ -231,32 +229,14 @@ class TestLLMIterationReviewProvider:
         assert verdict.verdict == "continue_next_iteration"
         assert verdict.next_tasks[0].description == "Run browser parity verification."
 
-    async def test_retries_as_json_when_tool_call_response_is_unstructured(self) -> None:
-        llm = _CapturingIterationReviewLLM(
-            response=[
-                {"content": "The sprint is close, but it still needs a browser proof pass."},
-                {
-                    "content": json.dumps(
-                        {
-                            "verdict": "continue_next_iteration",
-                            "confidence": 0.78,
-                            "summary": "The work is actionable but still lacks browser proof.",
-                            "next_sprint_goal": "Collect browser parity evidence.",
-                            "feedback_items": ["Browser evidence is missing."],
-                            "next_tasks": [
-                                {
-                                    "id": "browser-proof",
-                                    "description": "Run browser parity and console verification.",
-                                    "phase": "test",
-                                    "expected_artifacts": ["screenshot", "console log"],
-                                }
-                            ],
-                        }
-                    )
-                },
-            ]
+    async def test_missing_contract_submission_requires_human_review(self) -> None:
+        runner = _CapturingIterationReviewRunner(response={})
+        provider = WorkspaceIterationReviewAgentProvider(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            max_next_tasks=6,
+            turn_runner=runner,
         )
-        provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
 
         verdict = await provider.review(
             IterationReviewContext(
@@ -269,12 +249,9 @@ class TestLLMIterationReviewProvider:
             )
         )
 
-        assert len(llm.calls) == 2
-        assert "return ONLY one JSON object" in llm.calls[1]["messages"][0]["content"]
-        assert "tools" not in llm.calls[1]
-        assert verdict.verdict == "continue_next_iteration"
-        assert verdict.summary == "The work is actionable but still lacks browser proof."
-        assert verdict.next_tasks[0].id == "browser-proof"
+        assert len(runner.calls) == 1
+        assert verdict.verdict == "needs_human_review"
+        assert "did not submit iteration review" in verdict.summary
 
 
 class TestLLMGoalPlanner:
@@ -586,17 +563,19 @@ class TestCapabilityAllocator:
 
 class TestVerifier:
     def test_verification_judge_prompt_enforces_repository_guidance(self) -> None:
-        prompt = _system_prompt()
+        prompt = build_builtin_workspace_verifier_agent(
+            tenant_id="tenant-1",
+            project_id="project-1",
+        ).system_prompt
 
-        assert "loaded AGENTS.md files" in prompt
-        assert "repository guidance as acceptance context" in prompt
-        assert "repository-guidance noncompliance" in prompt
+        assert "AGENTS.md and project guidance" in prompt
+        assert "prove the node goal" in prompt
+        assert "project-guidance noncompliance" in prompt
         assert "cross-task commit contamination" in prompt
-        assert "tests, audits, or benchmarks that cannot actually fail" in prompt
-        assert "identical pass/fail branches" in prompt
-        assert "synthetic simulations, raw HTTP timing, or shallow custom scans" in prompt
-        assert "stronger evidence than a worker's textual claim" in prompt
-        assert "non-zero failed/failing test count" in prompt
+        assert "cannot fail" in prompt
+        assert "synthetic evidence" in prompt
+        assert "failed or failing tests" in prompt
+        assert "workspace_submit_verification_judgment" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
         payload = json.loads(

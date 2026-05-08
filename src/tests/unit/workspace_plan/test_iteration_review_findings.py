@@ -1,8 +1,7 @@
-"""Tests for the structured-findings channel on LLMIterationReviewProvider."""
+"""Tests for the structured-findings channel on WorkspaceIterationReviewAgentProvider."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,30 +10,18 @@ import pytest
 from src.domain.model.review.review_finding import FindingVerdict, ReviewSeverity
 from src.domain.ports.services.iteration_review_port import IterationReviewContext
 from src.infrastructure.agent.workspace_plan.iteration_review import (
-    LLMIterationReviewProvider,
+    WorkspaceIterationReviewAgentProvider,
 )
 
 
 @dataclass
-class _StubLLM:
+class _StubReviewRunner:
     response: dict[str, Any]
     calls: list[dict[str, Any]] = field(default_factory=list)
 
-    async def generate(self, **kwargs: Any) -> dict[str, Any]:
+    async def run_review_turn(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         return self.response
-
-
-def _tool_response(args: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "tool_calls": [
-            {
-                "function": {
-                    "arguments": json.dumps(args),
-                }
-            }
-        ]
-    }
 
 
 def _base_context(**overrides: Any) -> IterationReviewContext:
@@ -50,39 +37,46 @@ def _base_context(**overrides: Any) -> IterationReviewContext:
     return IterationReviewContext(**defaults)
 
 
+def _provider(runner: _StubReviewRunner) -> WorkspaceIterationReviewAgentProvider:
+    return WorkspaceIterationReviewAgentProvider(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        max_next_tasks=6,
+        turn_runner=runner,
+    )
+
+
 @pytest.mark.asyncio
 async def test_provider_filters_test_file_and_keeps_critical() -> None:
-    llm = _StubLLM(
-        response=_tool_response(
-            {
-                "verdict": "complete_goal",
-                "confidence": 0.9,
-                "summary": "Done.",
-                "findings": [
-                    {
-                        "file": "src/tests/unit/test_x.py",
-                        "line": 12,
-                        "category": "input validation",
-                        "severity": "WARNING",
-                        "raw_confidence": 70,
-                        "description": "Missing input validation in fixture.",
-                        "suggestion": "Add validation.",
-                    },
-                    {
-                        "file": "src/server.py",
-                        "line": 42,
-                        "category": "sql injection",
-                        "severity": "CRITICAL",
-                        "raw_confidence": 95,
-                        "description": "User input concatenated into SQL query.",
-                        "suggestion": "Use parameterized queries.",
-                        "concrete_evidence": True,
-                    },
-                ],
-            }
-        )
+    runner = _StubReviewRunner(
+        response={
+            "verdict": "complete_goal",
+            "confidence": 0.9,
+            "summary": "Done.",
+            "findings": [
+                {
+                    "file": "src/tests/unit/test_x.py",
+                    "line": 12,
+                    "category": "input validation",
+                    "severity": "WARNING",
+                    "raw_confidence": 70,
+                    "description": "Missing input validation in fixture.",
+                    "suggestion": "Add validation.",
+                },
+                {
+                    "file": "src/server.py",
+                    "line": 42,
+                    "category": "sql injection",
+                    "severity": "CRITICAL",
+                    "raw_confidence": 95,
+                    "description": "User input concatenated into SQL query.",
+                    "suggestion": "Use parameterized queries.",
+                    "concrete_evidence": True,
+                },
+            ],
+        }
     )
-    provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+    provider = _provider(runner)
 
     verdict = await provider.review(_base_context())
 
@@ -96,16 +90,14 @@ async def test_provider_filters_test_file_and_keeps_critical() -> None:
 
 @pytest.mark.asyncio
 async def test_provider_handles_missing_findings_field() -> None:
-    llm = _StubLLM(
-        response=_tool_response(
-            {
-                "verdict": "complete_goal",
-                "confidence": 0.9,
-                "summary": "Done.",
-            }
-        )
+    runner = _StubReviewRunner(
+        response={
+            "verdict": "complete_goal",
+            "confidence": 0.9,
+            "summary": "Done.",
+        }
     )
-    provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+    provider = _provider(runner)
 
     verdict = await provider.review(_base_context())
 
@@ -115,48 +107,43 @@ async def test_provider_handles_missing_findings_field() -> None:
 
 @pytest.mark.asyncio
 async def test_provider_skips_malformed_findings() -> None:
-    llm = _StubLLM(
-        response=_tool_response(
-            {
-                "verdict": "complete_goal",
-                "confidence": 0.9,
-                "summary": "Done.",
-                "findings": [
-                    # Missing severity → skipped silently.
-                    {
-                        "file": "src/server.py",
-                        "line": 1,
-                        "category": "logic",
-                        "raw_confidence": 50,
-                        "description": "Something.",
-                        "suggestion": "Fix.",
-                    },
-                    # Bad line type → skipped.
-                    {
-                        "file": "src/server.py",
-                        "line": "not-an-int",
-                        "category": "logic",
-                        "severity": "WARNING",
-                        "raw_confidence": 50,
-                        "description": "Something.",
-                        "suggestion": "Fix.",
-                    },
-                    # Well-formed.
-                    {
-                        "file": "src/server.py",
-                        "line": 99,
-                        "category": "race condition",
-                        "severity": "CRITICAL",
-                        "raw_confidence": 90,
-                        "description": "Concrete race shown by trace.",
-                        "suggestion": "Add lock.",
-                        "concrete_evidence": True,
-                    },
-                ],
-            }
-        )
+    runner = _StubReviewRunner(
+        response={
+            "verdict": "complete_goal",
+            "confidence": 0.9,
+            "summary": "Done.",
+            "findings": [
+                {
+                    "file": "src/server.py",
+                    "line": 1,
+                    "category": "logic",
+                    "raw_confidence": 50,
+                    "description": "Something.",
+                    "suggestion": "Fix.",
+                },
+                {
+                    "file": "src/server.py",
+                    "line": "not-an-int",
+                    "category": "logic",
+                    "severity": "WARNING",
+                    "raw_confidence": 50,
+                    "description": "Something.",
+                    "suggestion": "Fix.",
+                },
+                {
+                    "file": "src/server.py",
+                    "line": 99,
+                    "category": "race condition",
+                    "severity": "CRITICAL",
+                    "raw_confidence": 90,
+                    "description": "Concrete race shown by trace.",
+                    "suggestion": "Add lock.",
+                    "concrete_evidence": True,
+                },
+            ],
+        }
     )
-    provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+    provider = _provider(runner)
 
     verdict = await provider.review(_base_context())
 
@@ -167,27 +154,25 @@ async def test_provider_skips_malformed_findings() -> None:
 
 @pytest.mark.asyncio
 async def test_linter_covered_categories_threaded_from_context() -> None:
-    llm = _StubLLM(
-        response=_tool_response(
-            {
-                "verdict": "complete_goal",
-                "confidence": 0.9,
-                "summary": "Done.",
-                "findings": [
-                    {
-                        "file": "src/server.py",
-                        "line": 5,
-                        "category": "import-order",
-                        "severity": "WARNING",
-                        "raw_confidence": 60,
-                        "description": "Imports out of order.",
-                        "suggestion": "Reorder.",
-                    },
-                ],
-            }
-        )
+    runner = _StubReviewRunner(
+        response={
+            "verdict": "complete_goal",
+            "confidence": 0.9,
+            "summary": "Done.",
+            "findings": [
+                {
+                    "file": "src/server.py",
+                    "line": 5,
+                    "category": "import-order",
+                    "severity": "WARNING",
+                    "raw_confidence": 60,
+                    "description": "Imports out of order.",
+                    "suggestion": "Reorder.",
+                },
+            ],
+        }
     )
-    provider = LLMIterationReviewProvider(llm, max_next_tasks=6)  # type: ignore[arg-type]
+    provider = _provider(runner)
 
     verdict = await provider.review(_base_context(linter_covered_categories=("import-order",)))
 

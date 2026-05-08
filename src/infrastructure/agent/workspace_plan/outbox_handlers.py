@@ -110,8 +110,8 @@ from src.infrastructure.agent.workspace_plan.factory import (
     build_sql_orchestrator,
 )
 from src.infrastructure.agent.workspace_plan.iteration_review import (
-    LLMIterationReviewProvider,
     UnavailableIterationReviewProvider,
+    WorkspaceIterationReviewAgentProvider,
 )
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxHandler
@@ -134,8 +134,8 @@ from src.infrastructure.agent.workspace_plan.system_actor import (
     persisted_attempt_leader_agent_id,
 )
 from src.infrastructure.agent.workspace_plan.verification_judge import (
-    LLMWorkspaceVerificationJudge,
     UnavailableWorkspaceVerificationJudge,
+    WorkspaceVerifierAgentJudge,
 )
 
 if TYPE_CHECKING:
@@ -336,17 +336,9 @@ async def _make_sql_iteration_reviewer(
     if resolve_workspace_type(root_metadata, workspace.metadata) != "software_development":
         return None
     try:
-        from src.domain.llm_providers.models import OperationType
-        from src.infrastructure.llm.provider_factory import AIServiceFactory
-
-        factory = AIServiceFactory()
-        provider = await factory.resolve_provider(
-            workspace.tenant_id,
-            operation_type=OperationType.LLM,
-        )
-        llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
-        return LLMIterationReviewProvider(
-            llm_client,
+        return WorkspaceIterationReviewAgentProvider(
+            tenant_id=workspace.tenant_id,
+            project_id=workspace.project_id,
             max_next_tasks=_software_iteration_task_budget(),
         )
     except Exception:
@@ -375,16 +367,10 @@ async def _make_sql_verification_judge(
     if resolve_workspace_type(root_metadata, workspace.metadata) != "software_development":
         return None
     try:
-        from src.domain.llm_providers.models import OperationType
-        from src.infrastructure.llm.provider_factory import AIServiceFactory
-
-        factory = AIServiceFactory()
-        provider = await factory.resolve_provider(
-            workspace.tenant_id,
-            operation_type=OperationType.LLM,
+        return WorkspaceVerifierAgentJudge(
+            tenant_id=workspace.tenant_id,
+            project_id=workspace.project_id,
         )
-        llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
-        return LLMWorkspaceVerificationJudge(llm_client)
     except Exception:
         logger.warning(
             "workspace_plan.verification_judge_unavailable",

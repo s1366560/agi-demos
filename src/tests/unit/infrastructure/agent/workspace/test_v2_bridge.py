@@ -34,7 +34,11 @@ from src.infrastructure.agent.core.react_agent_profile import AgentRuntimeProfil
 from src.infrastructure.agent.core.react_agent_tool_policy import (
     with_workspace_worker_tool_allowlist,
 )
-from src.infrastructure.agent.sisyphus.builtin_agent import build_builtin_workspace_planner_agent
+from src.infrastructure.agent.sisyphus.builtin_agent import (
+    build_builtin_workspace_iteration_reviewer_agent,
+    build_builtin_workspace_planner_agent,
+    build_builtin_workspace_verifier_agent,
+)
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
 from src.infrastructure.agent.tools import workspace_planning_contract as planning_contract_tools
 from src.infrastructure.agent.tools.workspace_planning_contract import (
@@ -146,29 +150,70 @@ def test_builtin_workspace_planner_worker_profile_keeps_read_only_contract_tools
     assert "workspace_report_complete" not in scoped.allow_tools
 
 
+def test_builtin_workspace_judgment_agents_keep_contract_only_tool_surface() -> None:
+    verifier = build_builtin_workspace_verifier_agent(tenant_id="tenant-1", project_id="project-1")
+    reviewer = build_builtin_workspace_iteration_reviewer_agent(
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+
+    for agent, terminal_tool in (
+        (verifier, "workspace_submit_verification_judgment"),
+        (reviewer, "workspace_submit_iteration_review"),
+    ):
+        profile = AgentRuntimeProfile(
+            selected_agent=agent,
+            tenant_agent_config=TenantAgentConfig.create_default("tenant-1"),
+            available_skills=[],
+            allow_tools=list(agent.allowed_tools),
+            deny_tools=[],
+            effective_model="default",
+            effective_temperature=0.0,
+            effective_max_tokens=8192,
+            effective_max_steps=8,
+        )
+
+        scoped = with_workspace_worker_tool_allowlist(profile)
+
+        assert set(scoped.allow_tools) == {"read", "grep", "glob", "bash", terminal_tool}
+        assert "write" not in scoped.allow_tools
+        assert "edit" not in scoped.allow_tools
+        assert "todoread" not in scoped.allow_tools
+        assert "workspace_report_complete" not in scoped.allow_tools
+
+
 @pytest.mark.asyncio
 async def test_workspace_planner_agent_decomposer_adds_iteration_context() -> None:
     captured: dict[str, Any] = {}
 
-    class _PlannerLLM:
-        async def generate(self, **kwargs: Any) -> dict[str, Any]:
+    class _PlannerTurnRunner:
+        async def run_planning_turn(self, **kwargs: Any) -> dict[str, Any]:
             captured.update(kwargs)
-            return _planner_tool_response(
+            raw_response = _planner_tool_response(
                 subtasks=[{"id": "research", "description": "Research"}],
                 services=[],
             )
+            arguments = json.loads(raw_response["tool_calls"][0]["function"]["arguments"])
+            return planning_contract_tools.normalize_workspace_planning_contract(
+                task_graph=arguments["task_graph"],
+                delivery_cicd=arguments["delivery_cicd"],
+                reasoning=arguments["reasoning"],
+                evidence_refs=arguments["evidence_refs"],
+                confidence=arguments["confidence"],
+                actor_user_id="bridge-user-1",
+            )
 
     decomposer = WorkspacePlannerAgentDecomposer(
-        llm_client=cast(Any, _PlannerLLM()),
         tenant_id="tenant-1",
         project_id="project-1",
         workspace_id="ws-1",
         extra_context="Software workspace planning contract",
+        turn_runner=_PlannerTurnRunner(),
     )
 
     await decomposer.decompose(query="Ship feature", conversation_context="Existing context")
 
-    prompt = captured["messages"][1]["content"]
+    prompt = captured["user_prompt"]
     assert "builtin workspace planner contract" in prompt
     assert "Software workspace planning contract" in prompt
     assert "Existing context" in prompt
@@ -367,12 +412,6 @@ def _planner_tool_response(
 
 
 def _patch_planner_llm(monkeypatch: pytest.MonkeyPatch, *, response: dict[str, Any] | None = None):
-    from src.infrastructure.llm import provider_factory
-
-    class _FakePlannerLLM:
-        async def generate(self, **_kwargs: Any) -> dict[str, Any]:
-            return response or _planner_tool_response()
-
     class _FakePlannerTurnRunner:
         async def run_planning_turn(self, **_kwargs: Any) -> dict[str, Any]:
             raw_response = response or _planner_tool_response()
@@ -386,14 +425,6 @@ def _patch_planner_llm(monkeypatch: pytest.MonkeyPatch, *, response: dict[str, A
                 actor_user_id="bridge-user-1",
             )
 
-    class _FakeAIServiceFactory:
-        async def resolve_provider(self, *_args: Any, **_kwargs: Any) -> object:
-            return object()
-
-        def create_unified_llm_client(self, *_args: Any, **_kwargs: Any) -> _FakePlannerLLM:
-            return _FakePlannerLLM()
-
-    monkeypatch.setattr(provider_factory, "AIServiceFactory", _FakeAIServiceFactory)
     monkeypatch.setattr(
         v2_bridge,
         "_build_workspace_planner_agent_turn_runner",
@@ -406,20 +437,6 @@ def _patch_planner_llm_with_turn_runner(
     *,
     turn_runner: object,
 ) -> None:
-    from src.infrastructure.llm import provider_factory
-
-    class _FakePlannerLLM:
-        async def generate(self, **_kwargs: Any) -> dict[str, Any]:
-            return _planner_tool_response()
-
-    class _FakeAIServiceFactory:
-        async def resolve_provider(self, *_args: Any, **_kwargs: Any) -> object:
-            return object()
-
-        def create_unified_llm_client(self, *_args: Any, **_kwargs: Any) -> _FakePlannerLLM:
-            return _FakePlannerLLM()
-
-    monkeypatch.setattr(provider_factory, "AIServiceFactory", _FakeAIServiceFactory)
     monkeypatch.setattr(
         v2_bridge,
         "_build_workspace_planner_agent_turn_runner",

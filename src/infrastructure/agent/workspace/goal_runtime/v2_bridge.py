@@ -236,15 +236,6 @@ async def _build_workspace_task_decomposer(
             if root_task is not None and root_task.workspace_id == workspace_id:
                 root_metadata = root_task.metadata
 
-        from src.domain.llm_providers.models import OperationType
-        from src.infrastructure.llm.provider_factory import AIServiceFactory
-
-        factory = AIServiceFactory()
-        provider = await factory.resolve_provider(
-            workspace.tenant_id,
-            operation_type=OperationType.LLM,
-        )
-        llm_client = factory.create_unified_llm_client(provider, temperature=0.0)
         workspace_type = resolve_workspace_type(root_metadata, workspace.metadata)
         max_subtasks = _workspace_decomposer_max_subtasks(
             root_metadata=root_metadata,
@@ -258,7 +249,6 @@ async def _build_workspace_task_decomposer(
         return cast(
             "TaskDecomposerProtocol",
             WorkspacePlannerAgentDecomposer(
-                llm_client=llm_client,
                 tenant_id=workspace.tenant_id,
                 project_id=workspace.project_id,
                 workspace_id=workspace_id,

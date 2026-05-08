@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+import uuid
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Protocol
 
-from src.domain.llm_providers.llm_types import LLMClient
+from src.infrastructure.agent.sisyphus.builtin_agent import (
+    build_builtin_workspace_verifier_agent,
+)
+from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
+    WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+)
+
+if TYPE_CHECKING:
+    from src.domain.model.agent.agent_definition import Agent
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeRequest,
     WorkspaceVerificationJudgeResult,
@@ -18,79 +28,168 @@ logger = logging.getLogger(__name__)
 _VALID_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
 
 
-class LLMWorkspaceVerificationJudge:
-    """Ask an LLM judge to make the final subjective verification verdict."""
+class WorkspaceVerifierAgentTurnRunner(Protocol):
+    """Runs one builtin workspace-verifier turn and returns the captured judgment."""
 
-    def __init__(self, llm_client: LLMClient) -> None:
+    async def run_verification_turn(
+        self,
+        *,
+        verifier_agent: Agent,
+        user_prompt: str,
+        workspace_id: str,
+        node_id: str,
+        attempt_id: str | None,
+    ) -> dict[str, Any] | None: ...
+
+
+class RuntimeWorkspaceVerifierAgentTurnRunner:
+    """Run the builtin verifier through the normal project ReAct runtime."""
+
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        max_steps: int = 8,
+        max_tokens: int = 8192,
+    ) -> None:
         super().__init__()
-        self._llm_client = llm_client
+        self._tenant_id = tenant_id
+        self._project_id = project_id
+        self._max_steps = max_steps
+        self._max_tokens = max_tokens
+        self._last_diagnostics: dict[str, Any] = {}
+
+    @property
+    def last_diagnostics(self) -> dict[str, Any]:
+        return dict(self._last_diagnostics)
+
+    async def run_verification_turn(
+        self,
+        *,
+        verifier_agent: Agent,
+        user_prompt: str,
+        workspace_id: str,
+        node_id: str,
+        attempt_id: str | None,
+    ) -> dict[str, Any] | None:
+        from src.infrastructure.agent.core.project_react_agent import (
+            ProjectAgentConfig,
+            ProjectReActAgent,
+        )
+        from src.infrastructure.agent.workspace.runtime_role_contract import (
+            WORKSPACE_ROLE_WORKER,
+            WORKSPACE_SESSION_ROLE_KEY,
+        )
+
+        turn_id = uuid.uuid4().hex
+        conversation_id = f"workspace-verifier:{workspace_id}:{node_id}:{attempt_id or 'none'}:{turn_id}"
+        diagnostics: dict[str, Any] = {
+            "conversation_id": conversation_id,
+            "event_count": 0,
+            "observed_tools": [],
+            "judgment_submitted": False,
+        }
+        agent = ProjectReActAgent(
+            ProjectAgentConfig(
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                agent_mode="workspace-verifier",
+                temperature=0.0,
+                max_tokens=self._max_tokens,
+                max_steps=self._max_steps,
+                persistent=False,
+                enable_subagents=False,
+            )
+        )
+        if not await agent.initialize():
+            self._last_diagnostics = diagnostics
+            return None
+
+        conversation_context = [
+            {
+                "role": "system",
+                "content": "workspace_worker_runtime\n"
+                + json.dumps(
+                    {
+                        "context_type": "workspace_worker_runtime",
+                        WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
+                        "workspace_binding": {
+                            "workspace_id": workspace_id,
+                            "current_plan_node_id": node_id,
+                            "current_attempt_id": attempt_id or "",
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+        ]
+        try:
+            async for event in agent.execute_chat(
+                conversation_id=conversation_id,
+                user_message=user_prompt,
+                user_id="workspace-verifier",
+                tenant_id=self._tenant_id,
+                message_id=f"workspace-verifier-{turn_id}",
+                conversation_context=conversation_context,
+                agent_id=verifier_agent.id,
+            ):
+                diagnostics["event_count"] += 1
+                tool_name = _tool_name_from_event(event)
+                if tool_name:
+                    observed_tools = diagnostics["observed_tools"]
+                    if tool_name not in observed_tools:
+                        observed_tools.append(tool_name)
+                payload = _verification_judgment_from_event(event)
+                if payload is not None:
+                    diagnostics["judgment_submitted"] = True
+                    self._last_diagnostics = diagnostics
+                    return payload
+        finally:
+            await agent.stop()
+        self._last_diagnostics = diagnostics
+        return None
+
+
+class WorkspaceVerifierAgentJudge:
+    """Workspace verification judge backed by the builtin verifier agent."""
+
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        turn_runner: WorkspaceVerifierAgentTurnRunner | None = None,
+    ) -> None:
+        super().__init__()
+        self._verifier_agent = build_builtin_workspace_verifier_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        self._turn_runner = turn_runner or RuntimeWorkspaceVerifierAgentTurnRunner(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
     async def judge(
         self,
         request: WorkspaceVerificationJudgeRequest,
     ) -> WorkspaceVerificationJudgeResult:
-        payload = _request_payload(request)
-        try:
-            response = await self._llm_client.generate(
-                messages=[
-                    {"role": "system", "content": _system_prompt()},
-                    {"role": "user", "content": payload},
-                ],
-                tools=[_judge_tool_schema()],
-                temperature=0.0,
-                max_tokens=1200,
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "judge_workspace_verification"},
-                },
-            )
-        except Exception as forced_exc:
-            logger.debug(
-                "workspace verification judge forced tool call failed; retrying: %s",
-                forced_exc,
-            )
-            response = await self._llm_client.generate(
-                messages=[
-                    {"role": "system", "content": _system_prompt()},
-                    {"role": "user", "content": payload},
-                ],
-                tools=[_judge_tool_schema()],
-                temperature=0.0,
-                max_tokens=1200,
-            )
-        parsed = _parse_judge_response(response)
-        if parsed is not None:
-            return parsed
-
-        repaired_response = await self._llm_client.generate(
-            messages=[
-                {"role": "system", "content": _json_repair_system_prompt()},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "context": json.loads(payload),
-                            "previous_unstructured_response": _response_text(response)[:4000],
-                            "required_json_shape": {
-                                "verdict": "needs_rework",
-                                "rationale": "short evidence-backed rationale",
-                                "failed_criteria": ["criterion or guard that still fails"],
-                                "required_next_action": "single concrete next action",
-                                "confidence": 0.75,
-                            },
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                },
-            ],
-            temperature=0.0,
-            max_tokens=1200,
+        payload = await self._turn_runner.run_verification_turn(
+            verifier_agent=self._verifier_agent,
+            user_prompt=_build_agent_user_prompt(request),
+            workspace_id=request.workspace_id,
+            node_id=request.node_id,
+            attempt_id=request.attempt_id,
         )
-        repaired = _parse_judge_response(repaired_response)
-        if repaired is None:
-            raise ValueError("workspace verification judge did not return structured arguments")
-        return repaired
+        parsed = _parse_judge_response({"content": json.dumps(payload or {}, ensure_ascii=False)})
+        if parsed is None:
+            diagnostics = getattr(self._turn_runner, "last_diagnostics", {})
+            raise ValueError(
+                "builtin workspace verifier did not submit verification judgment: "
+                f"{json.dumps(diagnostics, ensure_ascii=False, default=str)}"
+            )
+        return parsed
 
 
 class UnavailableWorkspaceVerificationJudge:
@@ -113,51 +212,13 @@ class UnavailableWorkspaceVerificationJudge:
         )
 
 
-def _system_prompt() -> str:
+def _build_agent_user_prompt(request: WorkspaceVerificationJudgeRequest) -> str:
     return (
-        "You are the workspace verification judge. Make exactly one structured tool call named "
-        "judge_workspace_verification. You make the final semantic judgment for whether the "
-        "reported node output is acceptable, needs more agent work, is blocked by human-only "
-        "authority, or should retry because infrastructure failed. Deterministic guards are "
-        "evidence, not the final semantic verdict. Use accepted only when the worker report, "
-        "artifacts, verification evidence, and acceptance criteria together show the node goal "
-        "is satisfied. When task_metadata includes code_context, loaded AGENTS.md files, or "
-        "agents_excerpt, treat that repository guidance as acceptance context. Do not accept "
-        "software changes that violate explicit guidance requirements visible in the request, "
-        "such as required migrations, dependency lockfile discipline, commit/report style, "
-        "secret handling, artifact rules, prohibited patterns/content forms, or commit "
-        "isolation in a shared worktree. Reject evidence that suggests a worker swept "
-        "unrelated dirty files, another node's artifact, or files outside the assigned task "
-        "into its commit. Treat recent_git_status and guard_failures as stronger evidence "
-        "than a worker's textual claim that the worktree is clean. Do not accept tests, "
-        "audits, or benchmarks that cannot actually fail, such as identical pass/fail "
-        "branches, unconditional success counters, catch blocks that convert assertion or "
-        "network failures into passes, or scripts that claim a property without checking it. "
-        "Do not accept synthetic simulations, raw HTTP timing, or shallow custom scans when "
-        "the report claims real browser page-load, rendering, accessibility, security, or "
-        "end-to-end evidence unless the limitation is explicitly labeled and still satisfies "
-        "the node criteria. Do not accept when test_run evidence or the worker summary reports "
-        "a non-zero failed/failing test count; a failed test is not minor completion evidence "
-        "unless the node contract explicitly allows known failures. Do not accept if the "
-        "completed worker report is missing. Use "
-        "needs_rework for missing evidence, failed tests, dirty worktree evidence, incomplete "
-        "output, repository-guidance noncompliance, cross-task commit contamination, "
-        "non-proving tests, overstated benchmark/audit evidence, or quality gaps that an "
-        "agent can fix. Use retry_infrastructure for sandbox, model, tool, rate-limit, or "
-        "transient platform failures. Use "
-        "blocked_human_required only for missing credentials, private access, permission, "
-        "irreversible external deployment/spend, legal or product approval, unsafe destructive "
-        "action, or another authority boundary that an agent cannot resolve. Do not choose "
-        "blocked_human_required for ordinary verification failure, missing evidence, "
-        "clean-worktree sentinel output, or low quality."
-    )
-
-
-def _json_repair_system_prompt() -> str:
-    return (
-        "Return only one JSON object with verdict, rationale, failed_criteria, "
-        "required_next_action, and confidence. verdict must be one of accepted, needs_rework, "
-        "blocked_human_required, retry_infrastructure."
+        "Verify this workspace plan node using the builtin workspace verifier contract.\n\n"
+        f"{_request_payload(request)}\n\n"
+        "You are in read-only verification mode. Do not implement, edit files, mutate "
+        "workspace state, or finish in prose. Your final action must be exactly one "
+        f"{WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME} call."
     )
 
 
@@ -228,39 +289,27 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
 
 
-def _judge_tool_schema() -> dict[str, Any]:
-    return {
-        "type": "function",
-        "function": {
-            "name": "judge_workspace_verification",
-            "description": "Return the final semantic verification verdict for one plan node.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "verdict": {
-                        "type": "string",
-                        "enum": sorted(_VALID_VERDICTS),
-                    },
-                    "rationale": {"type": "string"},
-                    "failed_criteria": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "maxItems": 12,
-                    },
-                    "required_next_action": {"type": "string"},
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                },
-                "required": [
-                    "verdict",
-                    "rationale",
-                    "failed_criteria",
-                    "required_next_action",
-                    "confidence",
-                ],
-                "additionalProperties": False,
-            },
-        },
-    }
+def _verification_judgment_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:
+    if event.get("type") != "observe":
+        return None
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    if data.get("tool_name") != WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME:
+        return None
+    observation = data.get("observation") or data.get("result")
+    if not isinstance(observation, Mapping):
+        return None
+    payload = observation.get("verification_judgment")
+    return dict(payload) if isinstance(payload, Mapping) else None
+
+
+def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    tool_name = data.get("tool_name") or data.get("name")
+    return tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else None
 
 
 def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudgeResult | None:
@@ -317,16 +366,6 @@ def _response_arguments(response: dict[str, Any]) -> dict[str, Any] | None:  # n
     return parsed if isinstance(parsed, dict) else None
 
 
-def _response_text(response: dict[str, Any]) -> str:
-    content = response.get("content")
-    if isinstance(content, str) and content.strip():
-        return content.strip()
-    try:
-        return json.dumps(response, ensure_ascii=False, default=str)
-    except TypeError:
-        return str(response)
-
-
 def _read_field(source: object, key: str, default: object) -> object:
     if isinstance(source, dict):
         return source.get(key, default)
@@ -354,4 +393,9 @@ def _float_between(value: object, *, default: float) -> float:
     return max(0.0, min(parsed, 1.0))
 
 
-__all__ = ["LLMWorkspaceVerificationJudge", "UnavailableWorkspaceVerificationJudge"]
+__all__ = [
+    "RuntimeWorkspaceVerifierAgentTurnRunner",
+    "UnavailableWorkspaceVerificationJudge",
+    "WorkspaceVerifierAgentJudge",
+    "WorkspaceVerifierAgentTurnRunner",
+]

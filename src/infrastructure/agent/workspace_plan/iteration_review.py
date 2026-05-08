@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+import uuid
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Protocol
 
-from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.model.review.finding_filter import filter_findings
 from src.domain.model.review.review_finding import (
     FindingVerdict,
@@ -20,6 +21,15 @@ from src.domain.ports.services.iteration_review_port import (
     IterationReviewContext,
     IterationReviewVerdict,
 )
+from src.infrastructure.agent.sisyphus.builtin_agent import (
+    build_builtin_workspace_iteration_reviewer_agent,
+)
+from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
+    WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
+)
+
+if TYPE_CHECKING:
+    from src.domain.model.agent.agent_definition import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -30,79 +40,177 @@ _MIN_REVIEW_CONFIDENCE = 0.6
 _MAX_FINDINGS = 12
 
 
-class LLMIterationReviewProvider:
-    """Ask an LLM to make the subjective sprint review decision via tool call."""
+class WorkspaceIterationReviewAgentTurnRunner(Protocol):
+    """Runs one builtin workspace-iteration-reviewer turn."""
 
-    def __init__(self, llm_client: LLMClient, *, max_next_tasks: int = 6) -> None:
+    async def run_review_turn(
+        self,
+        *,
+        reviewer_agent: Agent,
+        user_prompt: str,
+        workspace_id: str,
+        plan_id: str,
+        iteration_index: int,
+    ) -> dict[str, Any] | None: ...
+
+
+class RuntimeWorkspaceIterationReviewAgentTurnRunner:
+    """Run the builtin iteration reviewer through the normal project ReAct runtime."""
+
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        max_steps: int = 8,
+        max_tokens: int = 8192,
+    ) -> None:
         super().__init__()
-        self._llm_client = llm_client
+        self._tenant_id = tenant_id
+        self._project_id = project_id
+        self._max_steps = max_steps
+        self._max_tokens = max_tokens
+        self._last_diagnostics: dict[str, Any] = {}
+
+    @property
+    def last_diagnostics(self) -> dict[str, Any]:
+        return dict(self._last_diagnostics)
+
+    async def run_review_turn(
+        self,
+        *,
+        reviewer_agent: Agent,
+        user_prompt: str,
+        workspace_id: str,
+        plan_id: str,
+        iteration_index: int,
+    ) -> dict[str, Any] | None:
+        from src.infrastructure.agent.core.project_react_agent import (
+            ProjectAgentConfig,
+            ProjectReActAgent,
+        )
+        from src.infrastructure.agent.workspace.runtime_role_contract import (
+            WORKSPACE_ROLE_WORKER,
+            WORKSPACE_SESSION_ROLE_KEY,
+        )
+
+        turn_id = uuid.uuid4().hex
+        conversation_id = f"workspace-review:{workspace_id}:{plan_id}:{iteration_index}:{turn_id}"
+        diagnostics: dict[str, Any] = {
+            "conversation_id": conversation_id,
+            "event_count": 0,
+            "observed_tools": [],
+            "review_submitted": False,
+        }
+        agent = ProjectReActAgent(
+            ProjectAgentConfig(
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                agent_mode="workspace-iteration-reviewer",
+                temperature=0.0,
+                max_tokens=self._max_tokens,
+                max_steps=self._max_steps,
+                persistent=False,
+                enable_subagents=False,
+            )
+        )
+        if not await agent.initialize():
+            self._last_diagnostics = diagnostics
+            return None
+
+        conversation_context = [
+            {
+                "role": "system",
+                "content": "workspace_worker_runtime\n"
+                + json.dumps(
+                    {
+                        "context_type": "workspace_worker_runtime",
+                        WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
+                        "workspace_binding": {
+                            "workspace_id": workspace_id,
+                            "plan_id": plan_id,
+                            "iteration_index": iteration_index,
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+        ]
+        try:
+            async for event in agent.execute_chat(
+                conversation_id=conversation_id,
+                user_message=user_prompt,
+                user_id="workspace-iteration-reviewer",
+                tenant_id=self._tenant_id,
+                message_id=f"workspace-iteration-reviewer-{turn_id}",
+                conversation_context=conversation_context,
+                agent_id=reviewer_agent.id,
+            ):
+                diagnostics["event_count"] += 1
+                tool_name = _tool_name_from_event(event)
+                if tool_name:
+                    observed_tools = diagnostics["observed_tools"]
+                    if tool_name not in observed_tools:
+                        observed_tools.append(tool_name)
+                payload = _iteration_review_from_event(event)
+                if payload is not None:
+                    diagnostics["review_submitted"] = True
+                    self._last_diagnostics = diagnostics
+                    return payload
+        finally:
+            await agent.stop()
+        self._last_diagnostics = diagnostics
+        return None
+
+
+class WorkspaceIterationReviewAgentProvider:
+    """Iteration review provider backed by the builtin iteration reviewer agent."""
+
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        max_next_tasks: int = 6,
+        turn_runner: WorkspaceIterationReviewAgentTurnRunner | None = None,
+    ) -> None:
+        super().__init__()
         self._max_next_tasks = max(1, max_next_tasks)
+        self._reviewer_agent = build_builtin_workspace_iteration_reviewer_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        self._turn_runner = turn_runner or RuntimeWorkspaceIterationReviewAgentTurnRunner(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
     async def review(self, context: IterationReviewContext) -> IterationReviewVerdict:
-        user_payload = _user_payload(context)
-        try:
-            response = await self._llm_client.generate(
-                messages=[
-                    {"role": "system", "content": _system_prompt(self._max_next_tasks)},
-                    {"role": "user", "content": user_payload},
-                ],
-                tools=[_review_tool_schema(self._max_next_tasks)],
-                temperature=0.0,
-                max_tokens=1600,
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "review_workspace_iteration"},
-                },
+        prompt = _build_agent_user_prompt(context, max_next_tasks=self._max_next_tasks)
+        payload = await self._turn_runner.run_review_turn(
+            reviewer_agent=self._reviewer_agent,
+            user_prompt=prompt,
+            workspace_id=context.workspace_id,
+            plan_id=context.plan_id,
+            iteration_index=context.iteration_index,
+        )
+        if not payload:
+            diagnostics = getattr(self._turn_runner, "last_diagnostics", {})
+            return _needs_human_review(
+                "builtin workspace iteration reviewer did not submit iteration review: "
+                f"{json.dumps(diagnostics, ensure_ascii=False, default=str)}"
             )
-        except Exception as forced_exc:
-            logger.debug(
-                "workspace iteration review forced tool call failed; retrying: %s",
-                forced_exc,
-            )
-            try:
-                response = await self._llm_client.generate(
-                    messages=[
-                        {"role": "system", "content": _system_prompt(self._max_next_tasks)},
-                        {"role": "user", "content": user_payload},
-                    ],
-                    tools=[_review_tool_schema(self._max_next_tasks)],
-                    temperature=0.0,
-                    max_tokens=1600,
-                )
-            except Exception as exc:
-                logger.warning("workspace iteration review failed: %s", exc)
-                return _needs_human_review(f"iteration review failed: {exc}")
-
-        parsed = _parse_review_response(response, context=context)
-        if parsed.summary != "iteration review did not return structured arguments":
-            return parsed
-
-        try:
-            repaired_response = await self._llm_client.generate(
-                messages=[
-                    {"role": "system", "content": _json_repair_system_prompt(self._max_next_tasks)},
-                    {
-                        "role": "user",
-                        "content": _json_repair_user_payload(
-                            context_payload=user_payload,
-                            prior_response=_response_text(response),
-                        ),
-                    },
-                ],
-                temperature=0.0,
-                max_tokens=1600,
-            )
-        except Exception as exc:
-            logger.warning("workspace iteration review json repair failed: %s", exc)
-            return parsed
-
-        repaired = _parse_review_response(
-            repaired_response,
+        parsed = _parse_review_response(
+            {"content": json.dumps(payload, ensure_ascii=False)},
             context=context,
         )
-        if repaired.summary == "iteration review did not return structured arguments":
+        if parsed.summary != "iteration review did not return structured arguments":
             return parsed
-        return repaired
+        diagnostics = getattr(self._turn_runner, "last_diagnostics", {})
+        return _needs_human_review(
+            "builtin workspace iteration reviewer did not submit iteration review: "
+            f"{json.dumps(diagnostics, ensure_ascii=False, default=str)}"
+        )
 
 
 class UnavailableIterationReviewProvider:
@@ -117,38 +225,14 @@ class UnavailableIterationReviewProvider:
         return _needs_human_review(self._reason)
 
 
-def _system_prompt(max_next_tasks: int) -> str:
+def _build_agent_user_prompt(context: IterationReviewContext, *, max_next_tasks: int) -> str:
     return (
-        "You are the workspace iteration review agent. Make exactly one structured "
-        "tool call named review_workspace_iteration. Decide whether the overall goal "
-        "is complete, whether a bounded next sprint is needed, or whether human review "
-        "is required. Do not create a full future backlog. If continuing, return at "
-        f"most {max_next_tasks} next_tasks for only the next sprint. Use phases in this "
-        "order when useful: research, plan, implement, test, deploy, review. Choose "
-        "continue_next_iteration when remaining uncertainty can be converted into "
-        "bounded agent work such as research, browser/product parity checks, API "
-        "verification, UI comparison, E2E testing, documentation, or release readiness "
-        "tasks. Missing evidence is normally next-sprint work, not human review. Do not "
-        "produce aggregate implementation tasks such as 'fix all P0/P1 gaps' or "
-        "'complete the frontend/backend'; each next_task must target one functional area, "
-        "one user journey, or one concrete artifact that can be verified independently. "
-        "For CI/CD, deploy, and release-readiness gaps, stay on the MemStack "
-        "sandbox-native delivery path: pipeline run, sandbox preview proxy, health check, "
-        "and preview evidence. Do not propose Vercel, Netlify, Railway, Render, GitHub "
-        "Actions, Drone, Kubernetes, or other external production deployment tasks unless "
-        "the user explicitly granted external deployment credentials and approval. "
-        "If there are more actionable gaps than the task budget, choose the highest-risk "
-        "bounded items for next_tasks and put the rest in feedback_items. Do not "
-        "choose needs_human_review solely because you, as the review agent, cannot browse "
-        "a public reference site or run the app yourself; turn that into next-sprint "
-        "browser_e2e, screenshot comparison, public-web research, or API verification "
-        "tasks. Choose needs_human_review only when progress is blocked by a truly "
-        "human-only decision or authority boundary, such as missing credentials or "
-        "permissions, irreversible external deployment/spend, legal/compliance/product "
-        "approval, unsafe destructive action, or inability to produce concrete next_tasks. "
-        "If confidence is low, choose needs_human_review and leave next_tasks empty. In "
-        "summary and next_sprint_goal text, refer only to the provided iteration_index; "
-        "do not invent or increment iteration numbers."
+        "Review this completed workspace iteration using the builtin iteration review contract.\n\n"
+        f"{_user_payload(context)}\n\n"
+        f"Maximum next sprint tasks: {max_next_tasks}\n"
+        "You are in read-only review mode. Do not implement, edit files, mutate workspace "
+        "state, or finish in prose. Your final action must be exactly one "
+        f"{WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME} call."
     )
 
 
@@ -193,155 +277,27 @@ def _user_payload(context: IterationReviewContext) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def _json_repair_system_prompt(max_next_tasks: int) -> str:
-    return (
-        "You are the workspace iteration review agent. Your previous response did not "
-        "produce machine-readable arguments. Make the same subjective review decision, "
-        "but return ONLY one JSON object and no markdown. The JSON object must contain "
-        "verdict, confidence, summary, next_sprint_goal, feedback_items, and next_tasks. "
-        "verdict must be one of complete_goal, continue_next_iteration, or "
-        "needs_human_review. If verdict is continue_next_iteration, include between 1 "
-        f"and {max_next_tasks} next_tasks for only the next sprint."
-    )
+def _iteration_review_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:
+    if event.get("type") != "observe":
+        return None
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    if data.get("tool_name") != WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME:
+        return None
+    observation = data.get("observation") or data.get("result")
+    if not isinstance(observation, Mapping):
+        return None
+    payload = observation.get("iteration_review")
+    return dict(payload) if isinstance(payload, Mapping) else None
 
 
-def _json_repair_user_payload(*, context_payload: str, prior_response: str) -> str:
-    payload = {
-        "context": json.loads(context_payload),
-        "previous_unstructured_response": prior_response[:4000],
-        "required_json_shape": {
-            "verdict": "continue_next_iteration",
-            "confidence": 0.75,
-            "summary": "short review summary",
-            "next_sprint_goal": "bounded goal for the next sprint",
-            "feedback_items": ["feedback or evidence gap"],
-            "next_tasks": [
-                {
-                    "id": "t1",
-                    "description": "bounded next sprint task",
-                    "target_subagent": None,
-                    "dependencies": [],
-                    "priority": 0,
-                    "phase": "test",
-                    "expected_artifacts": ["artifact or evidence"],
-                }
-            ],
-        },
-    }
-    return json.dumps(payload, ensure_ascii=False, indent=2)
-
-
-def _review_tool_schema(max_next_tasks: int) -> dict[str, Any]:
-    return {
-        "type": "function",
-        "function": {
-            "name": "review_workspace_iteration",
-            "description": "Review a completed workspace sprint and choose the next action.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "verdict": {
-                        "type": "string",
-                        "description": (
-                            "Use continue_next_iteration for actionable gaps; reserve "
-                            "needs_human_review for human-only authority or judgment."
-                        ),
-                        "enum": [
-                            "complete_goal",
-                            "continue_next_iteration",
-                            "needs_human_review",
-                        ],
-                    },
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "summary": {"type": "string"},
-                    "next_sprint_goal": {"type": "string"},
-                    "feedback_items": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "maxItems": 8,
-                    },
-                    "next_tasks": {
-                        "type": "array",
-                        "description": (
-                            "Required for continue_next_iteration; leave empty for "
-                            "complete_goal or needs_human_review."
-                        ),
-                        "maxItems": max_next_tasks,
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "description": {"type": "string"},
-                                "target_subagent": {"type": ["string", "null"]},
-                                "dependencies": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                },
-                                "priority": {"type": "integer"},
-                                "phase": {
-                                    "type": "string",
-                                    "enum": [
-                                        "research",
-                                        "plan",
-                                        "implement",
-                                        "test",
-                                        "deploy",
-                                        "review",
-                                    ],
-                                },
-                                "expected_artifacts": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "maxItems": 6,
-                                },
-                            },
-                            "required": ["id", "description"],
-                        },
-                    },
-                    "findings": {
-                        "type": "array",
-                        "description": (
-                            "Optional structured per-file review findings. A "
-                            "deterministic guardrail will drop test-file noise, "
-                            "lint-covered, framework-handled, and speculative "
-                            "items, so emit them rather than self-censoring."
-                        ),
-                        "maxItems": _MAX_FINDINGS,
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "file": {"type": "string"},
-                                "line": {"type": "integer", "minimum": 0},
-                                "category": {"type": "string"},
-                                "severity": {
-                                    "type": "string",
-                                    "enum": sorted(_VALID_SEVERITIES),
-                                },
-                                "raw_confidence": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 100,
-                                },
-                                "description": {"type": "string"},
-                                "suggestion": {"type": "string"},
-                                "concrete_evidence": {"type": "boolean"},
-                            },
-                            "required": [
-                                "file",
-                                "line",
-                                "category",
-                                "severity",
-                                "raw_confidence",
-                                "description",
-                                "suggestion",
-                            ],
-                        },
-                    },
-                },
-                "required": ["verdict", "confidence", "summary"],
-            },
-        },
-    }
+def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    tool_name = data.get("tool_name") or data.get("name")
+    return tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else None
 
 
 def _parse_review_response(
@@ -481,22 +437,6 @@ def _response_arguments(response: dict[str, Any]) -> dict[str, Any] | None:  # n
     return parsed if isinstance(parsed, dict) else None
 
 
-def _response_text(response: dict[str, Any]) -> str:
-    content = response.get("content")
-    if isinstance(content, str) and content.strip():
-        return content.strip()
-    tool_calls = response.get("tool_calls")
-    if tool_calls:
-        try:
-            return json.dumps(tool_calls, ensure_ascii=False, default=str)
-        except TypeError:
-            return str(tool_calls)
-    try:
-        return json.dumps(response, ensure_ascii=False, default=str)
-    except TypeError:
-        return str(response)
-
-
 def _read_field(source: object, key: str, default: object) -> object:
     if isinstance(source, dict):
         return source.get(key, default)
@@ -561,4 +501,9 @@ def _needs_human_review(summary: str) -> IterationReviewVerdict:
     )
 
 
-__all__ = ["LLMIterationReviewProvider", "UnavailableIterationReviewProvider"]
+__all__ = [
+    "RuntimeWorkspaceIterationReviewAgentTurnRunner",
+    "UnavailableIterationReviewProvider",
+    "WorkspaceIterationReviewAgentProvider",
+    "WorkspaceIterationReviewAgentTurnRunner",
+]
