@@ -326,6 +326,59 @@ class TestStreamCompletionFallback:
             == "Worker stream completed without an explicit workspace terminal report."
         )
 
+    def test_terminal_report_tool_denial_disables_text_completion_fallback(self) -> None:
+        event = {
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_complete",
+                "result": (
+                    '{"error": "completion denied: protected test/review node includes '
+                    'failed evidence"}'
+                ),
+                "error": None,
+            },
+        }
+
+        assert wl._terminal_report_tool_observation_status(event) == "denied"
+        assert (
+            wl._should_synthesize_stream_completion_report(
+                terminal_report_tool_observed=True
+            )
+            is False
+        )
+
+    def test_terminal_report_tool_apply_disables_text_completion_fallback(self) -> None:
+        event = {
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_blocked",
+                "result": '{"applied_report": {"applied": true}}',
+                "error": None,
+            },
+        }
+
+        assert wl._terminal_report_tool_observation_status(event) == "applied"
+        assert (
+            wl._should_synthesize_stream_completion_report(
+                terminal_report_tool_observed=True
+            )
+            is False
+        )
+
+    def test_text_completion_fallback_remains_available_without_terminal_tool(self) -> None:
+        event = {
+            "type": "observe",
+            "data": {"tool_name": "bash", "result": "done", "error": None},
+        }
+
+        assert wl._terminal_report_tool_observation_status(event) is None
+        assert (
+            wl._should_synthesize_stream_completion_report(
+                terminal_report_tool_observed=False
+            )
+            is True
+        )
+
 
 class TestBuildBrief:
     def test_includes_binding_block_and_title(self) -> None:

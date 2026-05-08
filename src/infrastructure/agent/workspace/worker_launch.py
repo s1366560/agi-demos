@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 from collections.abc import Awaitable, Callable, Mapping
@@ -72,6 +73,7 @@ WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
 _WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
 _WORKER_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
+_TERMINAL_REPORT_TOOLS = frozenset({"workspace_report_complete", "workspace_report_blocked"})
 _NATIVE_TOOL_PROTOCOL_GUARD = (
     "Use only the platform's native tool-call channel for tools. Do not print "
     "tool-call markup, JSON/function-call stubs, or shell command code blocks as "
@@ -1575,6 +1577,9 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     final_content = ""
     accumulated_text = ""
     terminal_event: str | None = None  # "complete" | "error" | None
+    terminal_report_tool_observed = False
+    terminal_report_tool_denied = False
+    terminal_report_tool_applied = False
     heartbeat_stop = asyncio.Event()
     heartbeat_task: asyncio.Task[None] | None = None
 
@@ -1629,6 +1634,14 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 event_type = event.get("type")
                 if event_type == "text_delta":
                     accumulated_text += event.get("data", {}).get("text", "")
+                elif event_type == "observe":
+                    terminal_tool_status = _terminal_report_tool_observation_status(event)
+                    if terminal_tool_status is not None:
+                        terminal_report_tool_observed = True
+                        if terminal_tool_status == "denied":
+                            terminal_report_tool_denied = True
+                        elif terminal_tool_status == "applied":
+                            terminal_report_tool_applied = True
                 elif event_type == "complete":
                     terminal_event = "complete"
                     final_content = event.get("data", {}).get("content", "")
@@ -1667,38 +1680,70 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     outcome_reason: str
     if terminal_event == "complete":
         summary = _stream_completion_summary(final_content, accumulated_text)
-        reported = await _report_terminal(
-            workspace_id=workspace_id,
-            root_goal_task_id=root_goal_task_id,
-            task_id=task.id,
-            attempt_id=resolved_attempt_id,
-            conversation_id=resolved_conversation_id,
-            actor_user_id=actor_user_id,
-            worker_agent_id=worker_agent_id,
-            leader_agent_id=leader_agent_id,
-            report_type="completed",
-            summary=summary,
-            apply_fn=apply_workspace_worker_report,
-        )
-        outcome_reason = "completed" if reported else "report_failed"
-        await _patch_task_launch_state(
-            workspace_id=workspace_id,
-            task_id=task.id,
-            actor_user_id=actor_user_id,
-            leader_agent_id=leader_agent_id,
-            launch_state=("completed_via_stream" if reported else "terminal_report_failed"),
-        )
-        logger.info(
-            "workspace_worker_launch.stream_complete_synthesized_report",
-            extra={
-                "event": "workspace_worker_launch.stream_complete_synthesized_report",
-                "workspace_id": workspace_id,
-                "task_id": task.id,
-                "conversation_id": resolved_conversation_id,
-                "attempt_id": resolved_attempt_id,
-                "reported": reported,
-            },
-        )
+        if _should_synthesize_stream_completion_report(
+            terminal_report_tool_observed=terminal_report_tool_observed
+        ):
+            reported = await _report_terminal(
+                workspace_id=workspace_id,
+                root_goal_task_id=root_goal_task_id,
+                task_id=task.id,
+                attempt_id=resolved_attempt_id,
+                conversation_id=resolved_conversation_id,
+                actor_user_id=actor_user_id,
+                worker_agent_id=worker_agent_id,
+                leader_agent_id=leader_agent_id,
+                report_type="completed",
+                summary=summary,
+                apply_fn=apply_workspace_worker_report,
+            )
+            outcome_reason = "completed" if reported else "report_failed"
+            await _patch_task_launch_state(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                actor_user_id=actor_user_id,
+                leader_agent_id=leader_agent_id,
+                launch_state=("completed_via_stream" if reported else "terminal_report_failed"),
+            )
+            logger.info(
+                "workspace_worker_launch.stream_complete_synthesized_report",
+                extra={
+                    "event": "workspace_worker_launch.stream_complete_synthesized_report",
+                    "workspace_id": workspace_id,
+                    "task_id": task.id,
+                    "conversation_id": resolved_conversation_id,
+                    "attempt_id": resolved_attempt_id,
+                    "reported": reported,
+                },
+            )
+        else:
+            outcome_reason = (
+                "terminal_report_tool_applied"
+                if terminal_report_tool_applied
+                else (
+                    "terminal_report_tool_denied"
+                    if terminal_report_tool_denied
+                    else "terminal_report_tool_observed"
+                )
+            )
+            await _patch_task_launch_state(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                actor_user_id=actor_user_id,
+                leader_agent_id=leader_agent_id,
+                launch_state=outcome_reason,
+            )
+            logger.info(
+                "workspace_worker_launch.stream_complete_after_terminal_tool",
+                extra={
+                    "event": "workspace_worker_launch.stream_complete_after_terminal_tool",
+                    "workspace_id": workspace_id,
+                    "task_id": task.id,
+                    "conversation_id": resolved_conversation_id,
+                    "attempt_id": resolved_attempt_id,
+                    "terminal_report_tool_denied": terminal_report_tool_denied,
+                    "terminal_report_tool_applied": terminal_report_tool_applied,
+                },
+            )
     elif terminal_event == "error":
         outcome_reason = "blocked"
         summary = (final_content or "").strip()[:2000] or "Worker stream errored."
@@ -1885,6 +1930,65 @@ def _stream_completion_summary(final_content: str, accumulated_text: str) -> str
     if len(summary) > 2000:
         return summary[:1997] + "..."
     return summary
+
+
+def _should_synthesize_stream_completion_report(*, terminal_report_tool_observed: bool) -> bool:
+    """Allow text-only completion fallback only when no terminal tool was involved."""
+    return not terminal_report_tool_observed
+
+
+def _terminal_report_tool_observation_status(event: Mapping[str, Any]) -> str | None:
+    """Classify terminal report tool observations from the agent event stream.
+
+    A rejected ``workspace_report_complete`` must not be followed by the legacy
+    text-completion fallback, otherwise failed test evidence can become a
+    durable completed report after the tool already denied it.
+    """
+    if event.get("type") != "observe":
+        return None
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    tool_name = str(data.get("tool_name") or "").strip()
+    if tool_name not in _TERMINAL_REPORT_TOOLS:
+        return None
+    if data.get("error"):
+        return "denied"
+    return _terminal_report_tool_result_status(data.get("result"))
+
+
+def _terminal_report_tool_result_status(result: object) -> str:
+    result_text = result if isinstance(result, str) else ""
+    parsed: object | None = None
+    if result_text:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
+            parsed = json.loads(result_text)
+
+    if isinstance(parsed, Mapping):
+        parsed_status = _parsed_terminal_report_tool_status(parsed)
+        if parsed_status is not None:
+            return parsed_status
+
+    lowered = result_text.lower()
+    denied = (
+        "completion denied:" in lowered
+        or "terminal_report_apply_failed" in lowered
+        or '"error"' in lowered
+    )
+    return "denied" if denied else "attempted"
+
+
+def _parsed_terminal_report_tool_status(parsed: Mapping[str, Any]) -> str | None:
+    applied_report = parsed.get("applied_report")
+    if isinstance(applied_report, Mapping) and (
+        applied_report.get("applied") is True or applied_report.get("skipped") is True
+    ):
+        return "applied"
+    if parsed.get("ok") is True:
+        return "applied"
+    if parsed.get("error"):
+        return "denied"
+    return None
 
 
 def schedule_worker_session(
