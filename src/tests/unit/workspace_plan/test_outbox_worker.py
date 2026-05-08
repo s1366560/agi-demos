@@ -69,6 +69,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     HANDOFF_RESUME_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
+    _apply_attempt_worktree_checkpoint,
     _extract_task_evidence,
     _is_structural_sandbox_command,
     _node_allowed_sandbox_commands,
@@ -467,6 +468,30 @@ def test_worktree_setup_command_installs_local_push_remote_when_missing() -> Non
     assert 'git init --bare "$fallback_remote"' in command
     assert 'git remote add origin "$fallback_remote"' in command
     assert "git config push.default current" in command
+
+
+def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> None:
+    node = PlanNode(
+        id="node-1",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("goal-1"),
+        title="retryable task",
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-1",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/old-attempt",
+            branch_name="workspace/node-1-old-attempt",
+            base_ref="HEAD",
+        ),
+    )
+
+    _apply_attempt_worktree_checkpoint(node, "new-attempt")
+
+    assert node.feature_checkpoint is not None
+    assert node.feature_checkpoint.worktree_path == (
+        "${sandbox_code_root}/../.memstack/worktrees/new-attempt"
+    )
+    assert node.feature_checkpoint.branch_name == "workspace/node-1-new-attempt"
 
 
 def test_node_allowed_sandbox_commands_collects_checkpoint_and_preflight_commands() -> None:

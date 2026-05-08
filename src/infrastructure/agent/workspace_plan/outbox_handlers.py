@@ -3020,12 +3020,8 @@ def _apply_attempt_worktree_checkpoint(node: PlanNode, attempt_id: str) -> None:
     feature = node.feature_checkpoint
     if feature is None:
         return
-    branch_name = feature.branch_name or _worktree_branch_name(
-        node_id=node.id, attempt_id=attempt_id
-    )
-    worktree_path = (
-        feature.worktree_path or f"${{sandbox_code_root}}/../.memstack/worktrees/{attempt_id}"
-    )
+    branch_name = _worktree_branch_name(node_id=node.id, attempt_id=attempt_id)
+    worktree_path = f"${{sandbox_code_root}}/../.memstack/worktrees/{attempt_id}"
     node.feature_checkpoint = replace(
         feature,
         worktree_path=worktree_path,
