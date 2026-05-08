@@ -1426,6 +1426,44 @@ class TestVerifier:
             for item in judge.requests[0].guard_failures
         )
 
+    async def test_failed_test_guard_allows_historical_failure_explanation_when_current_run_is_green(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="current evidence is green",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(title="Run backend tests")
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Repair completed.\n"
+                        "Root cause of 33 failing tests: missing worktree database setup.\n"
+                        "Test result: npm test -> 6 suites, 117 passed, 0 failed, exit 0."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:117 passed 0 failed npm test exit 0",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert "failed_test_evidence" not in rep.summary()
+        assert len(judge.requests) == 1
+        assert not judge.requests[0].guard_failures
+
     async def test_verification_judge_cannot_accept_test_node_that_changes_test_scripts(
         self,
     ) -> None:

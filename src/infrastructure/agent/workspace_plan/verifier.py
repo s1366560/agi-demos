@@ -74,6 +74,21 @@ _FAILED_TEST_EVIDENCE_PATTERNS = (
     re.compile(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
     re.compile(r"\b(?:failed|failing|failure|failures)\s*[:=]\s*[1-9]\d*\b", re.I),
 )
+_CURRENT_TEST_FAILURE_CUE_PATTERN = re.compile(
+    r"\b("
+    r"results?|final\s+state|test\s+results?|test_run|"
+    r"npm\s+test|pytest|vitest|jest|playwright|"
+    r"passed|pass(?:ed|ing)?\s+with"
+    r")\b",
+    re.I,
+)
+_HISTORICAL_FAILURE_CUE_PATTERN = re.compile(
+    r"\b("
+    r"prior|previous|previously|before|earlier|old|"
+    r"root\s+cause|resolved|fixed|unblocked|after|now\s+pass"
+    r")\b",
+    re.I,
+)
 _VERIFICATION_INTEGRITY_PHASES = {"test", "review"}
 _VERIFICATION_SCRIPT_NAME_PATTERN = re.compile(
     r"(^|/)([^/]*(test|spec|e2e|integration|audit|benchmark)[^/]*"
@@ -1173,9 +1188,6 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         "candidate_verifications",
         "execution_verifications",
     )
-    summary = _artifact_text(ctx, "last_worker_report_summary")
-    if summary:
-        values.add(summary)
     failed_value = next(
         (
             value
@@ -1184,6 +1196,8 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         ),
         None,
     )
+    if failed_value is None:
+        failed_value = _failed_test_summary_value(_artifact_text(ctx, "last_worker_report_summary"))
     if failed_value is None:
         return None
     criterion = AcceptanceCriterion(
@@ -1199,6 +1213,33 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         message=f"test evidence reports failing tests: {_bounded_text(failed_value, limit=360)}",
         evidence=(EvidenceRef(kind="verification", ref=_bounded_text(failed_value, limit=500)),),
     )
+
+
+def _failed_test_summary_value(summary: str) -> str | None:
+    if not summary:
+        return None
+    for line in summary.splitlines():
+        value = line.strip()
+        if not value:
+            continue
+        if not any(pattern.search(value) for pattern in _FAILED_TEST_EVIDENCE_PATTERNS):
+            continue
+        if _summary_line_reports_current_failed_tests(value):
+            return value
+    return None
+
+
+def _summary_line_reports_current_failed_tests(value: str) -> bool:
+    if not _CURRENT_TEST_FAILURE_CUE_PATTERN.search(value):
+        return False
+    failed_match = next(
+        (pattern.search(value) for pattern in _FAILED_TEST_EVIDENCE_PATTERNS if pattern.search(value)),
+        None,
+    )
+    if failed_match is None:
+        return False
+    prefix = value[: failed_match.start()]
+    return not _HISTORICAL_FAILURE_CUE_PATTERN.search(prefix)
 
 
 async def _verification_script_mutation_guard(ctx: VerificationContext) -> CriterionResult | None:
