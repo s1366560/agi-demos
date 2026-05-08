@@ -85,6 +85,21 @@ _WORKSPACE_OUTPUT_ARTIFACT_WRITE_HINTS = (
     "saved results",
     "screenshot saved",
 )
+_WORKSPACE_OUTPUT_ARTIFACT_COMMAND_TOKENS = frozenset(
+    {
+        "bun",
+        "jest",
+        "node",
+        "npm",
+        "npx",
+        "playwright",
+        "pnpm",
+        "pytest",
+        "uv",
+        "vitest",
+        "yarn",
+    }
+)
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -343,10 +358,13 @@ def _workspace_output_absolute_paths(output: str) -> tuple[str, ...]:
 def _workspace_output_artifact_escape_error(
     output: str,
     *,
+    command: str | None,
     root_override: str | None,
     declared_code_root: str | None,
 ) -> str | None:
     if not root_override or not declared_code_root or not output:
+        return None
+    if not command or not _workspace_bash_may_emit_verification_artifacts(command):
         return None
     lower_output = output.lower()
     if not any(hint in lower_output for hint in _WORKSPACE_OUTPUT_ARTIFACT_WRITE_HINTS):
@@ -367,6 +385,17 @@ def _workspace_output_artifact_escape_error(
             "screenshots, and test-results to stay inside the attempt worktree, then rerun."
         )
     return None
+
+
+def _workspace_bash_may_emit_verification_artifacts(command: str) -> bool:
+    tokens = _command_tokens(command)
+    for token in tokens:
+        basename = posixpath.basename(token).lower()
+        if basename in _WORKSPACE_OUTPUT_ARTIFACT_COMMAND_TOKENS:
+            return True
+        if basename.endswith((".test.js", ".spec.js", ".test.ts", ".spec.ts")):
+            return True
+    return False
 
 
 def _command_path_tokens(command: str) -> tuple[str, ...]:
@@ -936,6 +965,11 @@ def create_sandbox_mcp_tool(
             if tool_name == "bash":
                 if artifact_error := _workspace_output_artifact_escape_error(
                     output,
+                    command=(
+                        normalized_kwargs.get("command")
+                        if isinstance(normalized_kwargs.get("command"), str)
+                        else None
+                    ),
                     root_override=root_override,
                     declared_code_root=declared_code_root,
                 ):

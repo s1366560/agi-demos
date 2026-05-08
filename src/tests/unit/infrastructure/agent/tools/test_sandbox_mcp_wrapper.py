@@ -1083,6 +1083,47 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.call_count == 1
 
+    async def test_workspace_worker_bash_allows_grep_of_report_save_strings(self):
+        """A grep result can show report-write strings without performing the write."""
+        adapter = OutputSandboxAdapter(
+            "console.log('Reports saved: /workspace/my-evo/test-results/report.md')"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command=(
+                "grep -n \"Reports saved\" "
+                "/workspace/.memstack/worktrees/att-1/test-data-persistence.js"
+            ),
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
     async def test_workspace_worker_read_allows_source_path_constants(self):
         """Read/grep outputs may expose constants without implying artifact writes."""
         adapter = OutputSandboxAdapter(
