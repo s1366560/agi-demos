@@ -15,6 +15,7 @@ Migration Benefits:
 """
 
 import logging
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import cast, override
@@ -39,11 +40,24 @@ logger = logging.getLogger(__name__)
 _MESSAGE_EVENT_TYPES = ("user_message", "assistant_message")
 type JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 
+_JWT_PATTERN = re.compile(
+    r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
+)
+_MEMSTACK_API_KEY_PATTERN = re.compile(r"\bms_sk_[A-Za-z0-9_-]{32,}\b")
+_BEARER_TOKEN_PATTERN = re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]{20,}")
+
+
+def _redact_sensitive_text(value: str) -> str:
+    redacted = value.replace("\x00", "[NUL]")
+    redacted = _JWT_PATTERN.sub("[REDACTED_JWT]", redacted)
+    redacted = _MEMSTACK_API_KEY_PATTERN.sub("[REDACTED_API_KEY]", redacted)
+    return _BEARER_TOKEN_PATTERN.sub(r"\1[REDACTED_TOKEN]", redacted)
+
 
 def _sanitize_json_for_postgres(value: object) -> JsonValue:
-    """Remove NUL bytes from JSON payloads before PostgreSQL JSON storage."""
+    """Remove unsafe bytes and secrets from JSON payloads before PostgreSQL storage."""
     if isinstance(value, str):
-        return value.replace("\x00", "[NUL]")
+        return _redact_sensitive_text(value)
     if isinstance(value, list):
         return [_sanitize_json_for_postgres(item) for item in value]
     if isinstance(value, Mapping):

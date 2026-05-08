@@ -78,3 +78,34 @@ def test_to_db_sanitizes_nested_nul_bytes() -> None:
 
     assert model.event_data["observation"] == "binary[NUL]output"
     assert model.event_data["nested"][0] == "ok[NUL]value"
+
+
+@pytest.mark.unit
+def test_to_db_redacts_tokens_from_nested_payloads() -> None:
+    """Persisted agent event payloads must not store credentials from tool output."""
+    session = MagicMock(spec=AsyncSession)
+    repo = SqlAgentExecutionEventRepository(session)
+    jwt = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+        "eyJ1c2VySWQiOiJ1c2VyLTEiLCJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20ifQ."
+        "abc123abc123abc123abc123abc123abc123"
+    )
+    api_key = "ms_sk_" + "a" * 64
+    event = AgentExecutionEvent(
+        conversation_id="conv-a",
+        message_id="msg-a",
+        event_type="observe",
+        event_data={
+            "observation": f'{{"token":"{jwt}","apiKey":"{api_key}"}}',
+            "nested": [{"authorization": f"Bearer {jwt}"}],
+        },
+    )
+
+    model = repo._to_db(event)
+
+    serialized = str(model.event_data)
+    assert jwt not in serialized
+    assert api_key not in serialized
+    assert "[REDACTED_JWT]" in model.event_data["observation"]
+    assert "[REDACTED_API_KEY]" in model.event_data["observation"]
+    assert model.event_data["nested"][0]["authorization"] == "Bearer [REDACTED_JWT]"
