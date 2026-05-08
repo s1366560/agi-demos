@@ -74,6 +74,7 @@ _WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN = re.compile(
     re.I,
 )
 _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN = re.compile(r"(?:^|[\s;&|])(?:>|>>)\s*([^\s;&|]+)")
+_WORKSPACE_BASH_ALLOWED_REDIRECT_TARGETS = frozenset({"/dev/null"})
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -299,6 +300,19 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
+def _workspace_absolute_redirect_targets(command: str) -> tuple[str, ...]:
+    paths: list[str] = []
+    for match in _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN.finditer(command):
+        raw_path = match.group(1).strip("'\"")
+        if not raw_path.startswith("/"):
+            continue
+        path = posixpath.normpath(raw_path)
+        if path in _WORKSPACE_BASH_ALLOWED_REDIRECT_TARGETS:
+            continue
+        paths.append(path)
+    return tuple(paths)
+
+
 def _command_path_tokens(command: str) -> tuple[str, ...]:
     try:
         tokens = shlex.split(command, posix=True)
@@ -401,6 +415,14 @@ def _workspace_bash_escape_error(command: str, root_override: str | None) -> str
             f"bash.command references {path}, which is outside the active attempt "
             f"worktree {normalized_root}. Retry from inside {normalized_root}; install or link "
             "dependencies there instead of cd'ing to the main checkout."
+        )
+    for path in _workspace_absolute_redirect_targets(command):
+        if _path_is_inside_code_root(path, normalized_root):
+            continue
+        return (
+            f"bash.command redirects output to {path}, which is outside the active attempt "
+            f"worktree {normalized_root}. Write logs, pid files, reports, and temporary "
+            "artifacts inside the attempt worktree instead."
         )
     return None
 

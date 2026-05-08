@@ -822,6 +822,89 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
 
+    async def test_workspace_worker_bash_rejects_tmp_redirection_with_worktree_override(self):
+        """Attempt-scoped worker logs and pid files should stay inside the worktree."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command=(
+                "cd /workspace/.memstack/worktrees/att-1 && "
+                "nohup npm run dev > /tmp/frontend.log 2>&1 & echo $! > /tmp/frontend.pid"
+            ),
+        )
+
+        assert result.is_error is True
+        assert "redirects output to /tmp/frontend.log" in result.output
+        assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
+            result.output
+        )
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_bash_allows_worktree_redirection_and_dev_null(self):
+        """Worktree-local logs and /dev/null remain valid under root override."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command=(
+                "cd /workspace/.memstack/worktrees/att-1 && "
+                "nohup npm run dev > logs/frontend.log 2>&1 & "
+                "curl -s http://127.0.0.1:3002/ >/dev/null"
+            ),
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+
     async def test_workspace_worker_write_rejects_absolute_path_outside_code_root(self):
         """Worker writes should not silently create project files outside sandbox_code_root."""
         adapter = MockSandboxAdapter()
