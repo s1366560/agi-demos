@@ -635,6 +635,79 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/my-game"
 
+    async def test_workspace_worker_bash_uses_attempt_worktree_override(self):
+        """Attempt-scoped worker bash calls should prefer the rendered worktree path."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="pwd",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+
+    async def test_workspace_worker_bash_rejects_heredoc_when_worktree_override_active(self):
+        """Attempt-scoped workers should use file tools instead of bash heredoc writes."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cat > report.md << 'EOF'\nhello\nEOF",
+        )
+
+        assert result.is_error is True
+        assert "uses a heredoc while an attempt worktree override is active" in result.output
+        assert adapter.call_count == 0
+
     async def test_workspace_worker_write_rejects_absolute_path_outside_code_root(self):
         """Worker writes should not silently create project files outside sandbox_code_root."""
         adapter = MockSandboxAdapter()
@@ -668,6 +741,48 @@ class TestSandboxMCPToolExecute:
         assert (
             "outside the configured workspace sandbox_code_root /workspace/my-game" in result.output
         )
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_write_rejects_main_checkout_with_worktree_override(self):
+        """Attempt-scoped worker writes must target the rendered worktree root."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="write",
+            tool_schema={
+                "name": "write",
+                "description": "Write file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            file_path="/workspace/my-evo/test-results/report.md",
+            content="report",
+        )
+
+        assert result.is_error is True
+        assert (
+            "outside the configured workspace sandbox_code_root "
+            "/workspace/.memstack/worktrees/att-1"
+        ) in result.output
         assert adapter.call_count == 0
 
     async def test_workspace_worker_write_allows_relative_path_under_code_root(self):

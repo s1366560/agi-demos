@@ -178,6 +178,9 @@ def _normalize_workspace_harness_kwargs(tool_name: str, kwargs: dict[str, Any]) 
 
 
 def _sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
+    if override := _workspace_root_override_from_context(ctx):
+        return override
+
     runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
     raw = runtime.get("sandbox_code_root")
     if not isinstance(raw, str) or not raw.strip():
@@ -190,6 +193,24 @@ def _sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
     if not value or value == "/workspace" or not value.startswith("/workspace/"):
         return None
     return value
+
+
+def _workspace_root_override_from_context(ctx: ToolContext) -> str | None:
+    runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
+    if not runtime.get("workspace_root_override"):
+        return None
+
+    rendered_extra = runtime.get("additional_instructions")
+    if not isinstance(rendered_extra, str):
+        return None
+    for raw_line in rendered_extra.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("worktree_path="):
+            continue
+        value = posixpath.normpath(line.split("=", 1)[1].strip().rstrip("/"))
+        if value and value != "/workspace" and value.startswith("/workspace/"):
+            return value
+    return None
 
 
 def _path_is_inside_code_root(path: str, code_root: str) -> bool:
@@ -281,7 +302,12 @@ def _with_bash_timeout_guard(
     return guarded
 
 
-def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) -> str | None:
+def _workspace_harness_argument_error(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    *,
+    root_override: str | None = None,
+) -> str | None:
     if tool_name == "write":
         content = kwargs.get("content")
         if isinstance(content, str) and len(content) > WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS:
@@ -298,6 +324,12 @@ def _workspace_harness_argument_error(tool_name: str, kwargs: dict[str, Any]) ->
                 "bash.command exceeds the workspace harness hard limit "
                 f"({len(command)} > {WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS} characters). "
                 "Retry with a short command; do not embed large heredocs."
+            )
+        if root_override and isinstance(command, str) and "<<" in command:
+            return (
+                "bash.command uses a heredoc while an attempt worktree override is active. "
+                f"Retry with write/edit/append tools under {root_override}, or run a short "
+                "bash command that executes an existing script in that worktree."
             )
     if tool_name == "edit":
         old_string = kwargs.get("old_string")
@@ -529,6 +561,7 @@ def create_sandbox_mcp_tool(
         """Execute the sandbox MCP tool with retry logic."""
         try:
             normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
+            root_override = _workspace_root_override_from_context(ctx)
             code_root = _sandbox_code_root_from_context(ctx)
             if argument_error := _workspace_code_root_argument_error(
                 tool_name, normalized_kwargs, code_root
@@ -537,7 +570,11 @@ def create_sandbox_mcp_tool(
             normalized_kwargs = _apply_workspace_code_root_defaults(
                 tool_name, normalized_kwargs, code_root
             )
-            if argument_error := _workspace_harness_argument_error(tool_name, normalized_kwargs):
+            if argument_error := _workspace_harness_argument_error(
+                tool_name,
+                normalized_kwargs,
+                root_override=root_override,
+            ):
                 return ToolResult(output=argument_error, is_error=True)
             output, raw_result = await _execute_with_retry(
                 sandbox_id=sandbox_id,
