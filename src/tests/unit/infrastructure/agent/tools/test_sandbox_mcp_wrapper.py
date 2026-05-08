@@ -1045,6 +1045,82 @@ class TestSandboxMCPToolExecute:
         assert adapter.call_count == 1
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
 
+    async def test_workspace_worker_bash_allows_reading_source_path_constants(self):
+        """Reading a source file that contains report constants is not an artifact write."""
+        adapter = OutputSandboxAdapter(
+            "const SCREENSHOT_DIR = '/workspace/my-evo/test-results/e2e-journey';"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="head -80 /workspace/.memstack/worktrees/att-1/e2e-journey-complete.js",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
+    async def test_workspace_worker_read_allows_source_path_constants(self):
+        """Read/grep outputs may expose constants without implying artifact writes."""
+        adapter = OutputSandboxAdapter(
+            "const REPORT_FILE = '/workspace/my-evo/test-results/report.md';"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="read",
+            tool_schema={
+                "name": "read",
+                "description": "Read file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                    },
+                    "required": ["file_path"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            file_path="/workspace/.memstack/worktrees/att-1/e2e-journey-complete.js",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
     async def test_workspace_worker_write_rejects_absolute_path_outside_code_root(self):
         """Worker writes should not silently create project files outside sandbox_code_root."""
         adapter = MockSandboxAdapter()

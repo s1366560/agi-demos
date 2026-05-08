@@ -76,6 +76,15 @@ _WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN = re.compile(
 _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN = re.compile(r"(?:^|[\s;&|])(?:>|>>)\s*([^\s;&|]+)")
 _WORKSPACE_BASH_ALLOWED_REDIRECT_TARGETS = frozenset({"/dev/null"})
 _WORKSPACE_OUTPUT_ABSOLUTE_PATH_PATTERN = re.compile(r"/workspace(?:/[^\s'\"`<>{}\[\]|]+)?")
+_WORKSPACE_OUTPUT_ARTIFACT_WRITE_HINTS = (
+    "[screenshot]",
+    "report saved",
+    "reports saved",
+    "results saved",
+    "saved report",
+    "saved results",
+    "screenshot saved",
+)
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -338,6 +347,9 @@ def _workspace_output_artifact_escape_error(
     declared_code_root: str | None,
 ) -> str | None:
     if not root_override or not declared_code_root or not output:
+        return None
+    lower_output = output.lower()
+    if not any(hint in lower_output for hint in _WORKSPACE_OUTPUT_ARTIFACT_WRITE_HINTS):
         return None
     normalized_root = posixpath.normpath(root_override.rstrip("/"))
     normalized_code_root = posixpath.normpath(declared_code_root.rstrip("/"))
@@ -921,12 +933,13 @@ def create_sandbox_mcp_tool(
                 retry_config=cfg,
                 kwargs=normalized_kwargs,
             )
-            if artifact_error := _workspace_output_artifact_escape_error(
-                output,
-                root_override=root_override,
-                declared_code_root=declared_code_root,
-            ):
-                raise RuntimeError(artifact_error)
+            if tool_name == "bash":
+                if artifact_error := _workspace_output_artifact_escape_error(
+                    output,
+                    root_override=root_override,
+                    declared_code_root=declared_code_root,
+                ):
+                    raise RuntimeError(artifact_error)
             metadata = raw_result if raw_result else {}
             return ToolResult(output=output, metadata=metadata)
         except RuntimeError as exc:
