@@ -557,7 +557,11 @@ class TestBuildBrief:
             extra_instructions="worktree_path=${sandbox_code_root}/../.memstack/worktrees/att-2",
         )
 
-        assert "worktree_path=" not in brief
+        assert "## Workspace checkpoint and worktree" in brief
+        assert "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2" in brief
+        assert "${sandbox_code_root}" not in brief
+        assert "use that path as the task root" in brief
+        assert "Do not edit the main sandbox checkout" in brief
         system_context = wl._build_worker_system_context(
             workspace_id="w",
             task=task,

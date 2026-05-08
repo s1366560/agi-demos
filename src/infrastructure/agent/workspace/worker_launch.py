@@ -600,8 +600,9 @@ def _build_worker_brief(
 
     Operational policy, code-root context, AGENTS.md content, and reporting
     requirements are injected as system model context by
-    :func:`_build_worker_system_context`. Keeping the visible user message
-    task-focused avoids teaching the model to imitate tool-call protocol text.
+    :func:`_build_worker_system_context`. Attempt-scoped checkpoint/worktree
+    instructions are also rendered into the visible brief because they must
+    override the default sandbox checkout before any file operation.
     """
     description = (task.description or "").strip()
     binding = _workspace_binding_metadata(
@@ -647,12 +648,31 @@ def _build_worker_brief(
         code_root = code_context.sandbox_code_root
         sections.append(
             "## Code root discipline\n"
-            f"Use `{code_root}` as the project root for this task. Before creating, reading, "
-            f"editing, or testing project files, run `mkdir -p {code_root} && cd {code_root}` "
-            "or pass the same directory as the tool working directory. Do not place "
-            "`package.json`, source files, tests, build output, or service code directly under "
-            "`/workspace` or a sibling directory unless the task explicitly says to do so."
+            f"Use `{code_root}` as the project root only when this brief does not provide a "
+            "more specific attempt worktree_path. If a Workspace checkpoint/worktree section "
+            "below lists a worktree_path, cd into that worktree and use it as the root for "
+            "repository inspection, file edits, terminal commands, git status, commits, and "
+            "tests. Otherwise, before creating, reading, editing, or testing project files, "
+            f"run `mkdir -p {code_root} && cd {code_root}` or pass the same directory as the "
+            "tool working directory. Do not place `package.json`, source files, tests, build "
+            "output, or service code directly under `/workspace` or a sibling directory "
+            "unless the task explicitly says to do so."
         )
+    if extra_instructions:
+        rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
+        should_surface_workspace_root = any(
+            marker in rendered_extra
+            for marker in ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
+        )
+        if rendered_extra and should_surface_workspace_root:
+            sections.append(
+                "## Workspace checkpoint and worktree\n"
+                f"{rendered_extra}\n\n"
+                "If this section provides a worktree_path or [worktree-setup] worktree_path, "
+                "use that path as the task root before any project read, edit, test, git "
+                "status, or commit operation. Do not edit the main sandbox checkout for "
+                "attempt-scoped work."
+            )
     sections.append(
         "## Code quality gate\n"
         "Before editing, read the applicable AGENTS.md/project guidance and inspect nearby "
