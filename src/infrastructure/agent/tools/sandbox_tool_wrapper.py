@@ -315,6 +315,70 @@ def _command_path_tokens(command: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
+def _command_tokens(command: str) -> tuple[str, ...]:
+    try:
+        return tuple(shlex.split(command, posix=True))
+    except ValueError:
+        return tuple(command.split())
+
+
+def _command_tail_until_separator(tokens: tuple[str, ...], start: int) -> tuple[str, ...]:
+    tail: list[str] = []
+    for token in tokens[start:]:
+        if token in {"&&", ";", "||", "|"}:
+            break
+        tail.append(token)
+    return tuple(tail)
+
+
+def _workspace_verification_dependency_install_error(
+    kwargs: dict[str, Any],
+    policy: Mapping[str, Any] | None,
+) -> str | None:
+    if policy is None:
+        return None
+    command = kwargs.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return None
+    tokens = _command_tokens(command)
+    normalized = tuple(posixpath.basename(token).lower() for token in tokens)
+    error: str | None = None
+    for index, token in enumerate(normalized):
+        next_token = normalized[index + 1] if index + 1 < len(normalized) else ""
+        tail = tuple(item.lower() for item in _command_tail_until_separator(tokens, index + 2))
+        if token == "npm" and next_token in {"install", "i", "add"}:
+            error = (
+                "bash.command uses mutable dependency install 'npm install' in a protected "
+                "workspace test/review node. Use 'npm ci' from the attempt worktree so "
+                "verification does not rewrite package-lock.json."
+            )
+            break
+        if token == "pnpm" and next_token == "install" and "--frozen-lockfile" not in tail:
+            error = (
+                "bash.command uses mutable dependency install 'pnpm install' in a protected "
+                "workspace test/review node. Add '--frozen-lockfile' so verification does not "
+                "rewrite lockfiles."
+            )
+            break
+        if token == "yarn" and next_token in {"", "install", "add"} and not (
+            "--immutable" in tail or "--frozen-lockfile" in tail
+        ):
+            error = (
+                "bash.command uses mutable dependency install 'yarn install' in a protected "
+                "workspace test/review node. Add '--immutable' or '--frozen-lockfile' so "
+                "verification does not rewrite lockfiles."
+            )
+            break
+        if token == "bun" and next_token == "install" and "--frozen-lockfile" not in tail:
+            error = (
+                "bash.command uses mutable dependency install 'bun install' in a protected "
+                "workspace test/review node. Add '--frozen-lockfile' so verification does not "
+                "rewrite lockfiles."
+            )
+            break
+    return error
+
+
 def _workspace_bash_escape_error(command: str, root_override: str | None) -> str | None:
     if not root_override:
         return None
@@ -748,6 +812,13 @@ def create_sandbox_mcp_tool(
                 normalized_kwargs,
                 code_root,
                 verification_policy,
+            ):
+                return ToolResult(output=argument_error, is_error=True)
+            if tool_name == "bash" and (
+                argument_error := _workspace_verification_dependency_install_error(
+                    normalized_kwargs,
+                    verification_policy,
+                )
             ):
                 return ToolResult(output=argument_error, is_error=True)
             if argument_error := _workspace_harness_argument_error(
