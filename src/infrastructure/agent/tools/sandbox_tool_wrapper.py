@@ -499,8 +499,10 @@ def _workspace_bash_escape_error(command: str, root_override: str | None) -> str
             continue
         return (
             f"bash.command references {path}, which is outside the active attempt "
-            f"worktree {normalized_root}. Retry from inside {normalized_root}; install or link "
-            "dependencies there instead of cd'ing to the main checkout."
+            f"worktree {normalized_root}. Retry from inside {normalized_root}. Do not read, "
+            "link, or reuse dependencies from the main checkout; if dependencies are missing, "
+            "run an immutable setup command inside the attempt worktree or report an "
+            "environment blocker."
         )
     for path in _workspace_absolute_redirect_targets(command):
         if _path_is_inside_code_root(path, normalized_root):

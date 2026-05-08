@@ -801,6 +801,8 @@ class TestSandboxMCPToolExecute:
         assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
             result.output
         )
+        assert "Do not read, link, or reuse dependencies from the main checkout" in result.output
+        assert "environment blocker" in result.output
         assert adapter.call_count == 0
 
     async def test_workspace_worker_bash_rejects_workspace_root_scan_with_worktree_override(
