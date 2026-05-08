@@ -49,6 +49,7 @@ from ..workspace.runtime_role_contract import (
     WORKSPACE_TOOL_MODE_KEY,
     WORKSPACE_TURN_TYPE_KEY,
 )
+from ..workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
 # Runtime imports (not TYPE_CHECKING) — used to construct values inside ``stream``.
 from .processor import ToolDefinition
@@ -62,6 +63,16 @@ if TYPE_CHECKING:
     from .processor import ProcessorConfig, SessionProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_preferred_language(value: object) -> str | None:
+    return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
+
+
+def _preferred_language_from_payload(payload: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(payload, Mapping):
+        return None
+    return _normalize_preferred_language(payload.get(PREFERRED_LANGUAGE))
 
 
 class _StreamAgent(Protocol):
@@ -1237,6 +1248,7 @@ class StreamMixin:
         model_override: str | None = None,
         agent_id: str | None = None,
         tenant_agent_config_data: dict[str, Any] | None = None,
+        preferred_language: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -1323,6 +1335,9 @@ class StreamMixin:
         )
         has_workspace_binding = False
         workspace_runtime_payload = self._workspace_runtime_context(conversation_context)
+        runtime_preferred_language = _normalize_preferred_language(
+            preferred_language
+        ) or _preferred_language_from_payload(workspace_runtime_payload)
         workspace_replan_turn = self._is_workspace_leader_replan_context(workspace_runtime_payload)
         workspace_binding = self._normalize_workspace_binding(
             workspace_runtime_payload.get("workspace_binding")
@@ -1354,6 +1369,7 @@ class StreamMixin:
                         user_id,
                         leader_agent_id=selected_agent.id,
                         user_query=processed_user_message,
+                        preferred_language=runtime_preferred_language,
                     )
             else:
                 workspace_root_task = None
@@ -1619,6 +1635,8 @@ class StreamMixin:
             "route_id": selection_context.metadata.get("route_id"),
             "trace_id": selection_context.metadata.get("trace_id"),
         }
+        if runtime_preferred_language:
+            config.runtime_context[PREFERRED_LANGUAGE] = runtime_preferred_language
         if (
             workspace_root_task is not None
             or workspace_binding is not None
@@ -1642,6 +1660,8 @@ class StreamMixin:
                 "task_authority": "workspace",
                 WORKSPACE_SESSION_ROLE_KEY: workspace_session_role,
             }
+            if runtime_preferred_language:
+                workspace_runtime_context[PREFERRED_LANGUAGE] = runtime_preferred_language
             workspace_id_value = getattr(workspace_root_task, "workspace_id", None)
             if not workspace_id_value and workspace_binding is not None:
                 workspace_id_value = workspace_binding.get("workspace_id")

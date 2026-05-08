@@ -30,6 +30,7 @@ from src.domain.model.workspace.cyber_objective import CyberObjective
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
+    PREFERRED_LANGUAGE,
     REMEDIATION_STATUS,
     REMEDIATION_SUMMARY,
     REPLAN_ATTEMPT_COUNT,
@@ -48,6 +49,12 @@ _PROTECTED_ROOT_METADATA_KEYS = {
     "root_goal_policy",
     "goal_evidence_bundle",
 }
+
+
+def _preferred_language_metadata(preferred_language: str | None) -> dict[str, str]:
+    if preferred_language in {"en-US", "zh-CN"}:
+        return {PREFERRED_LANGUAGE: preferred_language}
+    return {}
 
 
 def validate_autonomy_metadata(metadata: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -317,7 +324,10 @@ def ensure_goal_completion_allowed_for_workspace(
         raise ValueError(evaluation.reason or "Root goal completion evidence is insufficient")
 
 
-def build_projected_objective_root_metadata(objective: CyberObjective) -> dict[str, Any]:
+def build_projected_objective_root_metadata(
+    objective: CyberObjective,
+    preferred_language: str | None = None,
+) -> dict[str, Any]:
     return {
         AUTONOMY_SCHEMA_VERSION_KEY: AUTONOMY_SCHEMA_VERSION,
         TASK_ROLE: "goal_root",
@@ -335,10 +345,14 @@ def build_projected_objective_root_metadata(objective: CyberObjective) -> dict[s
             goal_title=objective.title,
             harness_id=f"harness:objective:{objective.id}",
         ),
+        **_preferred_language_metadata(preferred_language),
     }
 
 
-def build_inferred_goal_root_metadata(candidate: GoalCandidateRecordModel) -> dict[str, Any]:
+def build_inferred_goal_root_metadata(
+    candidate: GoalCandidateRecordModel,
+    preferred_language: str | None = None,
+) -> dict[str, Any]:
     return {
         AUTONOMY_SCHEMA_VERSION_KEY: AUTONOMY_SCHEMA_VERSION,
         TASK_ROLE: "goal_root",
@@ -368,6 +382,7 @@ def build_inferred_goal_root_metadata(candidate: GoalCandidateRecordModel) -> di
             goal_title=candidate.candidate_text,
             harness_id=f"harness:candidate:{candidate.candidate_id}",
         ),
+        **_preferred_language_metadata(preferred_language),
     }
 
 

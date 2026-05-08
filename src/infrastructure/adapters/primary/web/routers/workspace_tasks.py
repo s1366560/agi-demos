@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -35,13 +35,25 @@ from src.infrastructure.adapters.primary.web.routers.workspace_events import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
 logger = logging.getLogger(__name__)
+
+PreferredLanguage = Literal["en-US", "zh-CN"]
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """Get a request-scoped container with DB session."""
     return cast(DIContainer, request.app.state.container.with_db(db))
+
+
+def _with_preferred_language_metadata(
+    metadata: dict[str, Any] | None,
+    preferred_language: PreferredLanguage | None,
+) -> dict[str, Any] | None:
+    if preferred_language is None:
+        return metadata
+    return {**dict(metadata or {}), PREFERRED_LANGUAGE: preferred_language}
 
 
 def _get_workspace_task_service(request: Request, db: AsyncSession) -> WorkspaceTaskService:
@@ -110,6 +122,7 @@ class WorkspaceTaskCreateRequest(BaseModel):
     description: str | None = None
     assignee_user_id: str | None = None
     metadata: dict[str, Any] | None = None
+    preferred_language: PreferredLanguage | None = None
     estimated_effort: str | None = None
     blocker_reason: str | None = None
 
@@ -127,6 +140,7 @@ class WorkspaceTaskUpdateRequest(BaseModel):
 
 class AssignAgentRequest(BaseModel):
     workspace_agent_id: str
+    preferred_language: PreferredLanguage | None = None
 
 
 class WorkspaceTaskResponse(BaseModel):
@@ -404,7 +418,7 @@ async def create_workspace_task(
             title=body.title,
             description=body.description,
             assignee_user_id=body.assignee_user_id,
-            metadata=body.metadata,
+            metadata=_with_preferred_language_metadata(body.metadata, body.preferred_language),
             estimated_effort=body.estimated_effort,
             blocker_reason=body.blocker_reason,
         )
@@ -651,6 +665,7 @@ async def assign_workspace_task_to_agent(
             task_id=task_id,
             actor_user_id=current_user.id,
             workspace_agent_id=body.workspace_agent_id,
+            metadata=_with_preferred_language_metadata(None, body.preferred_language),
         )
         await db.commit()
     except Exception as exc:

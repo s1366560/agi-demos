@@ -11,7 +11,7 @@ import inspect
 import json
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from src.application.services.workspace_task_service import (
@@ -32,6 +32,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,17 @@ def _workspace_structural_write_blocked_reason(
             "use workspace_report_progress/complete/blocked for the bound task instead"
         )
     return None
+
+
+def _preferred_language_from_runtime(runtime_context: Mapping[str, Any]) -> str | None:
+    value = runtime_context.get(PREFERRED_LANGUAGE)
+    return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
+
+
+def _preferred_language_metadata(preferred_language: str | None) -> dict[str, str]:
+    if preferred_language in {"en-US", "zh-CN"}:
+        return {PREFERRED_LANGUAGE: preferred_language}
+    return {}
 
 
 def _workspace_priority_from_task(priority: WorkspaceTaskPriority) -> str:
@@ -546,6 +558,7 @@ async def _workspace_todowrite_replace(
     root_goal_task_id: str,
     actor_user_id: str,
     todos: list[dict[str, Any]],
+    preferred_language: str | None = None,
 ) -> tuple[list[WorkspaceTask], list[WorkspaceTask], list[str]]:
     existing_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
     existing_by_key = {
@@ -615,6 +628,7 @@ async def _workspace_todowrite_replace(
                 "root_goal_task_id": root_goal_task_id,
                 "lineage_source": "agent",
                 "derived_from_internal_plan_step": todo.get("id"),
+                **_preferred_language_metadata(preferred_language),
             },
             priority=(
                 _todo_priority_to_workspace(todo.get("priority"))
@@ -667,6 +681,7 @@ async def _workspace_todowrite_add(
     root_goal_task_id: str,
     actor_user_id: str,
     todos: list[dict[str, Any]],
+    preferred_language: str | None = None,
 ) -> tuple[list[WorkspaceTask], list[str]]:
     """Create execution tasks under a root goal, de-duplicating by match-key.
 
@@ -700,6 +715,7 @@ async def _workspace_todowrite_add(
                 "root_goal_task_id": root_goal_task_id,
                 "lineage_source": "agent",
                 "derived_from_internal_plan_step": todo.get("id"),
+                **_preferred_language_metadata(preferred_language),
             },
             priority=(
                 _todo_priority_to_workspace(todo.get("priority"))
@@ -966,6 +982,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
             leader_agent_id = (
                 leader_agent_id_raw if isinstance(leader_agent_id_raw, str) else None
             )
+            preferred_language = _preferred_language_from_runtime(runtime_ctx)
             if action in {"replace", "add"}:
                 skipped_titles: list[str] = []
                 if action == "replace":
@@ -976,6 +993,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                         root_goal_task_id=root_goal_task_id,
                         actor_user_id=ctx.user_id,
                         todos=todos_list,
+                        preferred_language=preferred_language,
                     )
                     created_count = len(created_tasks)
                     updated_count = len(updated_tasks)
@@ -988,6 +1006,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                         root_goal_task_id=root_goal_task_id,
                         actor_user_id=ctx.user_id,
                         todos=todos_list,
+                        preferred_language=preferred_language,
                     )
                     created_count = len(created_tasks)
                     updated_count = 0

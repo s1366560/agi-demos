@@ -56,6 +56,7 @@ class WorkspaceAutonomyOrchestrator:
         *,
         leader_agent_id: str | None = None,
         user_query: str = "",
+        preferred_language: str | None = None,
     ) -> WorkspaceTask | None:
         """Forward to :func:`workspace_goal_runtime.maybe_materialize_workspace_goal_candidate`."""
         return await _runtime.maybe_materialize_workspace_goal_candidate(
@@ -64,6 +65,7 @@ class WorkspaceAutonomyOrchestrator:
             user_id,
             leader_agent_id=leader_agent_id,
             user_query=user_query,
+            preferred_language=preferred_language,
         )
 
     async def apply_worker_report(  # noqa: PLR0913

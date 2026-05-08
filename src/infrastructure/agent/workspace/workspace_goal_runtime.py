@@ -86,6 +86,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     LAST_LEADER_ADJUDICATION_STATUS,
     LAST_WORKER_REPORT_SUMMARY,
     PENDING_LEADER_ADJUDICATION,
+    PREFERRED_LANGUAGE,
     REMEDIATION_STATUS,
     REMEDIATION_SUMMARY,
     ROOT_GOAL_TASK_ID,
@@ -208,6 +209,7 @@ async def maybe_materialize_workspace_goal_candidate(
     *,
     leader_agent_id: str | None = None,
     user_query: str = "",
+    preferred_language: str | None = None,
 ) -> WorkspaceTask | None:
     """Materialize the top sensed workspace goal candidate when applicable.
 
@@ -285,6 +287,7 @@ async def maybe_materialize_workspace_goal_candidate(
                 workspace_id=workspace.id,
                 actor_user_id=user_id,
                 candidate=selected_candidate,
+                preferred_language=preferred_language,
             )
             if task is None:
                 return None
@@ -793,17 +796,33 @@ async def _launch_workspace_retry_attempt(
         conversation_scope=conversation_scope,
     )
     worker_binding_id: str | None = None
+    preferred_language: str | None = None
     try:
         async with async_session_factory() as db:
             task = await SqlWorkspaceTaskRepository(db).find_by_id(workspace_task_id)
             if task is not None:
                 worker_binding_id = task.get_workspace_agent_binding_id()
+                candidate_language = task.metadata.get(PREFERRED_LANGUAGE)
+                if isinstance(candidate_language, str) and candidate_language in {
+                    "en-US",
+                    "zh-CN",
+                }:
+                    preferred_language = candidate_language
                 if worker_binding_id is None and task.assignee_agent_id:
                     binding = await SqlWorkspaceAgentRepository(db).find_by_workspace_and_agent_id(
                         workspace_id=workspace_id,
                         agent_id=task.assignee_agent_id,
                     )
                     worker_binding_id = binding.id if binding is not None else None
+            if preferred_language is None:
+                root_task = await SqlWorkspaceTaskRepository(db).find_by_id(root_goal_task_id)
+                if root_task is not None:
+                    candidate_language = root_task.metadata.get(PREFERRED_LANGUAGE)
+                    if isinstance(candidate_language, str) and candidate_language in {
+                        "en-US",
+                        "zh-CN",
+                    }:
+                        preferred_language = candidate_language
     except Exception:
         logger.warning(
             "Workspace retry launch could not resolve worker binding id",
@@ -862,6 +881,11 @@ async def _launch_workspace_retry_attempt(
                         "conversation_scope": conversation_scope,
                         "retry_launch": True,
                         "created_at": datetime.now(UTC).isoformat(),
+                        **(
+                            {PREFERRED_LANGUAGE: preferred_language}
+                            if preferred_language is not None
+                            else {}
+                        ),
                     },
                     message_count=0,
                     created_at=datetime.now(UTC),
@@ -879,6 +903,7 @@ async def _launch_workspace_retry_attempt(
                 user_id=actor_user_id,
                 tenant_id=workspace.tenant_id,
                 agent_id=leader_agent_id,
+                preferred_language=preferred_language,
             ):
                 pass
     except Exception:

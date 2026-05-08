@@ -8,6 +8,13 @@ import {
   workspaceTopologyService,
 } from '@/services/workspaceService';
 
+vi.mock('@/i18n/config', () => ({
+  default: {
+    language: 'zh-CN',
+    resolvedLanguage: 'zh-CN',
+  },
+}));
+
 vi.mock('@/services/client/urlUtils', () => ({
   apiFetch: {
     get: vi.fn(),
@@ -132,8 +139,36 @@ describe('workspaceService', () => {
 
     expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/tasks/task-1/assign-agent', {
       workspace_agent_id: 'binding-1',
+      preferred_language: 'zh-CN',
     });
     expect(result.assignee_agent_id).toBe('agent-1');
+  });
+
+  it('creates workspace tasks with the selected UI language', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      headers: new Headers(),
+      json: async () => ({
+        id: 'task-2',
+        title: '撰写验收记录',
+        metadata: { preferred_language: 'zh-CN' },
+      }),
+    } as Response);
+
+    const result = await workspaceTaskService.create('ws-1', {
+      title: '撰写验收记录',
+      description: '补齐证据',
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/tasks', {
+      title: '撰写验收记录',
+      description: '补齐证据',
+      preferred_language: 'zh-CN',
+    });
+    expect(result.metadata?.preferred_language).toBe('zh-CN');
   });
 
   it('loads durable workspace plan snapshot via workspace scoped endpoint', async () => {
@@ -264,13 +299,10 @@ describe('workspaceService', () => {
       evidenceRefs: ['manual_review:ticket-1'],
     });
 
-    expect(apiFetch.post).toHaveBeenCalledWith(
-      '/workspaces/ws-1/plan/nodes/node-1/accept-review',
-      {
-        reason: 'reviewed evidence',
-        evidence_refs: ['manual_review:ticket-1'],
-      }
-    );
+    expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/plan/nodes/node-1/accept-review', {
+      reason: 'reviewed evidence',
+      evidence_refs: ['manual_review:ticket-1'],
+    });
     expect(result.node_id).toBe('node-1');
   });
 

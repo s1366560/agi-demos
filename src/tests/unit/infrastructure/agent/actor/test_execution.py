@@ -49,6 +49,7 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
         user_message="hello",
         user_id="user-1",
         conversation_context=[],
+        preferred_language="zh-CN",
     )
     abort_signal = asyncio.Event()
 
@@ -71,6 +72,7 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
     assert result.is_error is False
     assert agent.execute_chat_kwargs is not None
     assert agent.execute_chat_kwargs["abort_signal"] is abort_signal
+    assert agent.execute_chat_kwargs["preferred_language"] == "zh-CN"
 
 
 @pytest.mark.unit

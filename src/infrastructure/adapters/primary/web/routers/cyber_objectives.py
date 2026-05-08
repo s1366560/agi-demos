@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_cyber_schemas import (
@@ -35,8 +37,15 @@ from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
 logger = logging.getLogger(__name__)
+
+PreferredLanguage = Literal["en-US", "zh-CN"]
+
+
+class ProjectObjectiveToTaskRequest(BaseModel):
+    preferred_language: PreferredLanguage | None = None
 
 router = APIRouter(
     prefix=(
@@ -298,6 +307,7 @@ async def project_objective_to_task(
     objective_id: str,
     request: Request,
     response: Response,
+    body: ProjectObjectiveToTaskRequest | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
@@ -333,12 +343,15 @@ async def project_objective_to_task(
     command_service = _get_workspace_task_command_service(request, db)
     event_publisher = _get_workspace_task_event_publisher(request)
     try:
+        metadata = build_projected_objective_root_metadata(objective)
+        if body is not None and body.preferred_language is not None:
+            metadata[PREFERRED_LANGUAGE] = body.preferred_language
         task = await command_service.create_task(
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
             title=objective.title,
             description=objective.description,
-            metadata=build_projected_objective_root_metadata(objective),
+            metadata=metadata,
         )
         await db.commit()
     except Exception as exc:

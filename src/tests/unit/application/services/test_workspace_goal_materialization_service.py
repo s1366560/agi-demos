@@ -127,11 +127,15 @@ class TestWorkspaceGoalMaterializationService:
                 source_refs=["objective:obj-77"],
                 text="Objective root",
             ),
+            preferred_language="zh-CN",
         )
 
         assert result is not None
         assert result.id == "projected-task"
         task_command_service.create_task.assert_awaited_once()
+        assert task_command_service.create_task.await_args.kwargs["metadata"][
+            "preferred_language"
+        ] == "zh-CN"
 
     async def test_formalize_inferred_goal_creates_root_task(self) -> None:
         task_command_service = AsyncMock()
@@ -148,8 +152,12 @@ class TestWorkspaceGoalMaterializationService:
             workspace_id="ws-1",
             actor_user_id="user-1",
             candidate=_candidate(decision="formalize_new_goal"),
+            preferred_language="en-US",
         )
 
         assert result is not None
         assert result.id == "formalized-root"
         task_command_service.create_task.assert_awaited_once()
+        assert task_command_service.create_task.await_args.kwargs["metadata"][
+            "preferred_language"
+        ] == "en-US"

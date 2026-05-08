@@ -40,6 +40,7 @@ class WorkspaceGoalMaterializationService:
         workspace_id: str,
         actor_user_id: str,
         candidate: GoalCandidateRecordModel,
+        preferred_language: str | None = None,
     ) -> WorkspaceTask | None:
         if candidate.decision == "reject_as_non_goal":
             return None
@@ -49,6 +50,7 @@ class WorkspaceGoalMaterializationService:
                 workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 candidate=candidate,
+                preferred_language=preferred_language,
             )
 
         if candidate.decision == "formalize_new_goal":
@@ -56,7 +58,7 @@ class WorkspaceGoalMaterializationService:
                 workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 title=candidate.candidate_text,
-                metadata=build_inferred_goal_root_metadata(candidate),
+                metadata=build_inferred_goal_root_metadata(candidate, preferred_language),
                 actor_type="agent",
                 reason="workspace_goal_candidate.formalize",
             )
@@ -69,6 +71,7 @@ class WorkspaceGoalMaterializationService:
         workspace_id: str,
         actor_user_id: str,
         candidate: GoalCandidateRecordModel,
+        preferred_language: str | None = None,
     ) -> WorkspaceTask | None:
         for source_ref in candidate.source_refs:
             if source_ref.startswith("task:"):
@@ -94,7 +97,10 @@ class WorkspaceGoalMaterializationService:
                     actor_user_id=actor_user_id,
                     title=objective.title,
                     description=objective.description,
-                    metadata=build_projected_objective_root_metadata(objective),
+                    metadata=build_projected_objective_root_metadata(
+                        objective,
+                        preferred_language,
+                    ),
                     actor_type="agent",
                     reason="workspace_goal_candidate.project_objective",
                 )

@@ -82,6 +82,7 @@ class TestWorkerConversationLinkage:
             tenant_id = "tenant-1"
 
         task = _make_task(task_id="task-link-1", workspace_id="workspace-link-1")
+        task.metadata["preferred_language"] = "zh-CN"
 
         kwargs = wl._worker_conversation_kwargs(
             conversation_id="conversation-link-1",
@@ -100,6 +101,7 @@ class TestWorkerConversationLinkage:
         assert kwargs["linked_workspace_task_id"] == task.id
         assert kwargs["metadata"]["workspace_id"] == task.workspace_id
         assert kwargs["metadata"]["workspace_task_id"] == task.id
+        assert kwargs["metadata"]["preferred_language"] == "zh-CN"
 
     def test_worker_conversation_linkage_backfills_empty_existing_row(self) -> None:
         class _Conversation:
@@ -385,8 +387,10 @@ class TestBuildBrief:
             attempt_id="att-2",
             leader_agent_id="L",
             extra_instructions="Be brief.",
+            preferred_language="en-US",
         )
         assert system_context["workspace_binding"]["attempt_id"] == "att-2"
+        assert system_context["preferred_language"] == "en-US"
         assert system_context["additional_instructions"] == "Be brief."
         assert "native tool-call" in system_context["tool_protocol"]["instruction"]
         reporting = system_context["reporting"]

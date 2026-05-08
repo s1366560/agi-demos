@@ -890,6 +890,7 @@ class ProjectReActAgent:
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
         tenant_agent_config_data: dict[str, Any] | None = None,
+        preferred_language: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -966,6 +967,7 @@ class ProjectReActAgent:
                 model_override=model_override,
                 agent_id=agent_id,
                 tenant_agent_config_data=tenant_agent_config_data,
+                preferred_language=preferred_language,
                 attachment_content=(
                     [
                         {

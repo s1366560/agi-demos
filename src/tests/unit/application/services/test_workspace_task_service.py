@@ -239,10 +239,12 @@ class TestWorkspaceTaskService:
             task_id="wt-1",
             actor_user_id="editor-1",
             workspace_agent_id="wa-1",
+            metadata={"preferred_language": "zh-CN"},
         )
 
         assert saved.assignee_agent_id == "agent-1"
         assert saved.get_workspace_agent_binding_id() == "wa-1"
+        assert saved.metadata["preferred_language"] == "zh-CN"
 
     @pytest.mark.asyncio
     async def test_start_task_rejects_invalid_transition_from_done(

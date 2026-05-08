@@ -47,6 +47,9 @@ WORKSPACE_PLAN_ID: Final[str] = "workspace_plan_id"
 WORKSPACE_PLAN_NODE_ID: Final[str] = "workspace_plan_node_id"
 """Durable V2 ``PlanNode.id`` that authored this workspace task projection."""
 
+PREFERRED_LANGUAGE: Final[str] = "preferred_language"
+"""User-selected UI language to preserve for workspace task execution responses."""
+
 AUTONOMY_SCHEMA_VERSION_KEY: Final[str] = "autonomy_schema_version"
 """Schema version key for validator forward-compat; see ``autonomy_schema.py``."""
 
@@ -99,6 +102,7 @@ __all__ = [
     "LAST_WORKER_REPORT_SUMMARY",
     "LINEAGE_SOURCE",
     "PENDING_LEADER_ADJUDICATION",
+    "PREFERRED_LANGUAGE",
     "REMEDIATION_STATUS",
     "REMEDIATION_SUMMARY",
     "REPLAN_ATTEMPT_COUNT",

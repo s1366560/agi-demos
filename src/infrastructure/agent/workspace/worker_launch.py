@@ -46,6 +46,7 @@ from src.infrastructure.agent.workspace.code_context import (
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
+    PREFERRED_LANGUAGE,
     ROOT_GOAL_TASK_ID,
 )
 
@@ -131,6 +132,20 @@ def _worker_conversation_kwargs(
     active_status: object,
 ) -> dict[str, Any]:
     created_at = datetime.now(UTC)
+    preferred_language = _preferred_language_from_metadata(task.metadata)
+    metadata = {
+        "workspace_id": workspace_id,
+        "agent_id": worker_agent_id,
+        "workspace_agent_binding_id": worker_binding_id,
+        "workspace_task_id": task.id,
+        ROOT_GOAL_TASK_ID: root_goal_task_id,
+        "attempt_id": attempt_id,
+        "conversation_scope": _conversation_scope_for_task(task.id, attempt_id),
+        "source": "workspace_worker_launch",
+        "created_at": created_at.isoformat(),
+    }
+    if preferred_language:
+        metadata[PREFERRED_LANGUAGE] = preferred_language
     return {
         "id": conversation_id,
         "project_id": workspace.project_id,
@@ -139,17 +154,7 @@ def _worker_conversation_kwargs(
         "title": f"Workspace Worker - {task.title[:80]}",
         "status": active_status,
         "agent_config": {"selected_agent_id": worker_agent_id},
-        "metadata": {
-            "workspace_id": workspace_id,
-            "agent_id": worker_agent_id,
-            "workspace_agent_binding_id": worker_binding_id,
-            "workspace_task_id": task.id,
-            ROOT_GOAL_TASK_ID: root_goal_task_id,
-            "attempt_id": attempt_id,
-            "conversation_scope": _conversation_scope_for_task(task.id, attempt_id),
-            "source": "workspace_worker_launch",
-            "created_at": created_at.isoformat(),
-        },
+        "metadata": metadata,
         "message_count": 0,
         "created_at": created_at,
         "workspace_id": workspace_id,
@@ -212,6 +217,13 @@ def _non_empty_text(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _preferred_language_from_metadata(metadata: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(metadata, Mapping):
+        return None
+    value = metadata.get(PREFERRED_LANGUAGE)
+    return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
+
+
 def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]:
     return {
         "sandbox_code_root": code_context.sandbox_code_root,
@@ -261,6 +273,7 @@ def _build_worker_system_context(
     leader_agent_id: str | None,
     extra_instructions: str | None = None,
     code_context: WorkspaceCodeContext | None = None,
+    preferred_language: str | None = None,
 ) -> dict[str, Any]:
     """Build system-level workspace context for a launched worker session."""
     binding = _workspace_binding_metadata(
@@ -396,6 +409,8 @@ def _build_worker_system_context(
             ]
         },
     }
+    if preferred_language in {"en-US", "zh-CN"}:
+        context[PREFERRED_LANGUAGE] = preferred_language
     harness_context = _task_harness_context(task)
     if harness_context:
         context["harness"] = harness_context
@@ -753,6 +768,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     leader_agent_id: str | None = None,
     attempt_id: str | None = None,
     extra_instructions: str | None = None,
+    preferred_language: str | None = None,
 ) -> dict[str, Any]:
     """Open or reuse a worker conversation and stream the task brief.
 
@@ -840,6 +856,11 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
     if isinstance(candidate, str) and candidate:
         root_goal_task_id = candidate
+    resolved_preferred_language = (
+        preferred_language
+        if preferred_language in {"en-US", "zh-CN"}
+        else _preferred_language_from_metadata(task.metadata)
+    )
 
     try:
         async with async_session_factory() as db:
@@ -879,6 +900,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 else:
                     if root_task is not None and root_task.workspace_id == workspace_id:
                         root_metadata = dict(root_task.metadata or {})
+                        if resolved_preferred_language is None:
+                            resolved_preferred_language = _preferred_language_from_metadata(
+                                root_metadata
+                            )
             workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
             code_context_evaluation = evaluate_workspace_code_context(
                 root_metadata=root_metadata,
@@ -1249,6 +1274,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         leader_agent_id=leader_agent_id,
         extra_instructions=extra_instructions,
         code_context=code_context,
+        preferred_language=resolved_preferred_language,
     )
     final_content = ""
     accumulated_text = ""
@@ -1302,6 +1328,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 tenant_id=workspace.tenant_id,
                 agent_id=worker_agent_id,
                 app_model_context=app_model_context,
+                preferred_language=resolved_preferred_language,
             ):
                 event_type = event.get("type")
                 if event_type == "text_delta":
@@ -1576,6 +1603,7 @@ def schedule_worker_session(
     leader_agent_id: str | None = None,
     attempt_id: str | None = None,
     extra_instructions: str | None = None,
+    preferred_language: str | None = None,
 ) -> None:
     """Fire-and-forget scheduler for ``launch_worker_session``.
 
@@ -1597,6 +1625,7 @@ def schedule_worker_session(
                     leader_agent_id=leader_agent_id,
                     attempt_id=attempt_id,
                     extra_instructions=extra_instructions,
+                    preferred_language=preferred_language,
                 )
             )
         except Exception:
@@ -1620,6 +1649,7 @@ def schedule_worker_session(
             leader_agent_id=leader_agent_id,
             attempt_id=attempt_id,
             extra_instructions=extra_instructions,
+            preferred_language=preferred_language,
         )
     )
     _background_tasks.add(bg)

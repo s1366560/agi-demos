@@ -1,3 +1,5 @@
+import i18n from '@/i18n/config';
+
 import { apiFetch } from './client/urlUtils';
 
 import type {
@@ -19,6 +21,13 @@ import type {
   WorkspaceTaskExperienceSummary,
   WorkspaceUpdateRequest,
 } from '@/types/workspace';
+
+type PreferredLanguage = 'en-US' | 'zh-CN';
+
+function getPreferredLanguage(): PreferredLanguage {
+  const language = i18n.resolvedLanguage || i18n.language;
+  return language === 'zh-CN' || language === 'zh' ? 'zh-CN' : 'en-US';
+}
 
 type WorkspaceAgentUpdateRequest = Partial<
   Pick<
@@ -450,7 +459,10 @@ export const workspaceTaskService = {
     data: Pick<WorkspaceTask, 'title'> &
       Partial<Pick<WorkspaceTask, 'description' | 'assignee_user_id'>>
   ): Promise<WorkspaceTask> => {
-    const response = await apiFetch.post(taskBase(workspaceId), data);
+    const response = await apiFetch.post(taskBase(workspaceId), {
+      ...data,
+      preferred_language: getPreferredLanguage(),
+    });
     return response.json() as Promise<WorkspaceTask>;
   },
 
@@ -481,6 +493,7 @@ export const workspaceTaskService = {
   ): Promise<WorkspaceTask> => {
     const response = await apiFetch.post(`${taskBase(workspaceId)}/${taskId}/assign-agent`, {
       workspace_agent_id: workspaceAgentId,
+      preferred_language: getPreferredLanguage(),
     });
     return response.json() as Promise<WorkspaceTask>;
   },
@@ -755,7 +768,8 @@ export const workspaceObjectiveService = {
     objectiveId: string
   ): Promise<WorkspaceTask> => {
     const response = await apiFetch.post(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}/project-to-task`
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}/project-to-task`,
+      { preferred_language: getPreferredLanguage() }
     );
     return response.json() as Promise<WorkspaceTask>;
   },

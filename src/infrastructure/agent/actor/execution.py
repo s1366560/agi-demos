@@ -639,6 +639,7 @@ async def execute_project_chat(
             image_attachments=request.image_attachments,
             agent_id=request.agent_id,
             tenant_agent_config_data=request.tenant_agent_config,
+            preferred_language=request.preferred_language,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us

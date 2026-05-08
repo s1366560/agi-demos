@@ -340,6 +340,7 @@ class WorkspaceTaskService:
         task_id: str,
         actor_user_id: str,
         workspace_agent_id: str,
+        metadata: Mapping[str, object] | None = None,
         actor_type: str = "human",
         actor_agent_id: str | None = None,
         reason: str | None = None,
@@ -368,6 +369,8 @@ class WorkspaceTaskService:
 
         task.assignee_agent_id = relation.agent_id
         task.assignee_user_id = None
+        if metadata is not None:
+            task.metadata = merge_validated_metadata(task.metadata, metadata)
         self._set_workspace_agent_binding_id(task, workspace_agent_id)
         task.updated_at = datetime.now(UTC)
         record_task_actor(

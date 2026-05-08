@@ -25,6 +25,7 @@ GoalHealth = Literal["healthy", "at_risk", "blocked", "achieved"]
 RemediationStatus = Literal["none", "replan_required", "ready_for_completion"]
 ExecutionPhase = Literal["todo", "in_progress", "pending_adjudication", "blocked", "done"]
 WorkspaceType = Literal["general", "software_development", "research", "operations"]
+PreferredLanguage = Literal["en-US", "zh-CN"]
 ExecutionAction = Literal[
     "created",
     "reprioritized",
@@ -264,6 +265,7 @@ class RootGoalMetadataModel(ContractModel):
     root_goal_policy: RootGoalPolicyModel | None = None
     goal_evidence_bundle: GoalEvidenceBundleModel | None = None
     goal_progress_summary: str | None = None
+    preferred_language: PreferredLanguage | None = None
     last_progress_at: str | None = None
     active_child_task_ids: list[str] = Field(default_factory=list)
     blocked_child_task_ids: list[str] = Field(default_factory=list)
@@ -303,6 +305,7 @@ class ExecutionTaskMetadataModel(ContractModel):
     handoff_package: HandoffPackageMetadataModel | None = None
     write_set: list[str] = Field(default_factory=list)
     verification_commands: list[str] = Field(default_factory=list)
+    preferred_language: PreferredLanguage | None = None
     launch_state: str | None = None
     current_attempt_id: str | None = None
     last_attempt_id: str | None = None
