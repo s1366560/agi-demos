@@ -237,9 +237,7 @@ class WorkspaceAttemptRecoveryService:
 
         Returns the number of attempts recovered.
         """
-        threshold = datetime.now(UTC) - timedelta(
-            seconds=max(self._startup_grace_seconds, self._stale_seconds)
-        )
+        threshold = datetime.now(UTC) - timedelta(seconds=self._startup_grace_seconds)
         recovered = await self._recover_error_events()
         stale = await self._fetch_stale(threshold)
         recovered += await self._recover_all(stale, RECOVERY_SUMMARY_RESTART)

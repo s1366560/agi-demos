@@ -248,7 +248,7 @@ class TestStartupSweep:
         assert repo.find_stale_non_terminal.await_args.kwargs["limit"] == 3
 
     @pytest.mark.asyncio
-    async def test_startup_sweep_uses_stale_threshold_not_short_startup_grace(self) -> None:
+    async def test_startup_sweep_uses_short_startup_grace_not_stale_threshold(self) -> None:
         att = _make_attempt(attempt_id="att-grace", workspace_task_id="task-1")
         service, _apply_report, _schedule_tick = _make_service(stale_attempts=[att])
         for p in service._patches:  # type: ignore[attr-defined]
@@ -263,10 +263,10 @@ class TestStartupSweep:
 
         repo = service._repo_instance  # type: ignore[attr-defined]
         older_than = repo.find_stale_non_terminal.await_args.kwargs["older_than"]
-        min_age = (after - older_than).total_seconds()
-        max_age = (before - older_than).total_seconds()
-        assert min_age >= 60
-        assert max_age < 62
+        age_from_after = (after - older_than).total_seconds()
+        age_from_before = (before - older_than).total_seconds()
+        assert age_from_after >= 5
+        assert age_from_before < 10
 
     @pytest.mark.asyncio
     async def test_successful_recovery_enqueues_resume_job(self) -> None:
@@ -560,6 +560,27 @@ class TestStartupSweep:
 
 
 class TestPeriodicSweep:
+    @pytest.mark.asyncio
+    async def test_periodic_sweep_uses_stale_threshold_not_startup_grace(self) -> None:
+        att = _make_attempt(attempt_id="att-periodic", workspace_task_id="task-1")
+        service, _apply_report, _schedule_tick = _make_service(stale_attempts=[att])
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            before = datetime.now(UTC)
+            await service.periodic_sweep()
+            after = datetime.now(UTC)
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        repo = service._repo_instance  # type: ignore[attr-defined]
+        older_than = repo.find_stale_non_terminal.await_args.kwargs["older_than"]
+        age_from_after = (after - older_than).total_seconds()
+        age_from_before = (before - older_than).total_seconds()
+        assert age_from_after >= 60
+        assert age_from_before < 62
+
     @pytest.mark.asyncio
     async def test_skips_attempts_in_liveness_set(self) -> None:
         live = _make_attempt(attempt_id="live", workspace_task_id="task-1")
