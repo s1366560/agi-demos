@@ -60,6 +60,23 @@ class MockSandboxAdapter:
         }
 
 
+class OutputSandboxAdapter(MockSandboxAdapter):
+    """Mock sandbox adapter that returns a fixed successful output."""
+
+    def __init__(self, output: str) -> None:
+        super().__init__()
+        self.output = output
+
+    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
+        self.call_count += 1
+        self.last_kwargs = kwargs
+        self.last_call_options = kw
+        return {
+            "content": [{"text": self.output}],
+            "is_error": False,
+        }
+
+
 class TestSandboxMCPToolPermission:
     """Test create_sandbox_mcp_tool permission attribute."""
 
@@ -945,6 +962,87 @@ class TestSandboxMCPToolExecute:
         )
 
         assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+
+    async def test_workspace_worker_bash_rejects_main_checkout_report_output(self):
+        """Attempt-scoped test reports must not be written back to the main checkout."""
+        adapter = OutputSandboxAdapter(
+            "Reports saved: /workspace/my-evo/test-results/data-persistence/report.md"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cd /workspace/.memstack/worktrees/att-1 && node test-data-persistence.js",
+        )
+
+        assert result.is_error is True
+        assert "verification artifact path /workspace/my-evo/test-results" in result.output
+        assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
+            result.output
+        )
+        assert adapter.call_count == 1
+
+    async def test_workspace_worker_bash_allows_worktree_report_output(self):
+        """Test artifacts under the active worktree remain valid evidence."""
+        adapter = OutputSandboxAdapter(
+            "Reports saved: /workspace/.memstack/worktrees/att-1/test-results/report.md"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cd /workspace/.memstack/worktrees/att-1 && node test-data-persistence.js",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
 
     async def test_workspace_worker_write_rejects_absolute_path_outside_code_root(self):

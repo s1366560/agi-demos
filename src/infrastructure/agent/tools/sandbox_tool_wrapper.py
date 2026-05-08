@@ -75,6 +75,7 @@ _WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN = re.compile(
 )
 _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN = re.compile(r"(?:^|[\s;&|])(?:>|>>)\s*([^\s;&|]+)")
 _WORKSPACE_BASH_ALLOWED_REDIRECT_TARGETS = frozenset({"/dev/null"})
+_WORKSPACE_OUTPUT_ABSOLUTE_PATH_PATTERN = re.compile(r"/workspace(?:/[^\s'\"`<>{}\[\]|]+)?")
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -203,6 +204,10 @@ def _sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
     if override := _workspace_root_override_from_context(ctx):
         return override
 
+    return _declared_sandbox_code_root_from_context(ctx)
+
+
+def _declared_sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
     runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
     raw = runtime.get("sandbox_code_root")
     if not isinstance(raw, str) or not raw.strip():
@@ -315,6 +320,41 @@ def _workspace_absolute_redirect_targets(command: str) -> tuple[str, ...]:
             continue
         paths.append(path)
     return tuple(paths)
+
+
+def _workspace_output_absolute_paths(output: str) -> tuple[str, ...]:
+    paths: list[str] = []
+    for match in _WORKSPACE_OUTPUT_ABSOLUTE_PATH_PATTERN.finditer(output):
+        raw_path = match.group(0).rstrip(".,:;)")
+        if raw_path:
+            paths.append(posixpath.normpath(raw_path))
+    return tuple(dict.fromkeys(paths))
+
+
+def _workspace_output_artifact_escape_error(
+    output: str,
+    *,
+    root_override: str | None,
+    declared_code_root: str | None,
+) -> str | None:
+    if not root_override or not declared_code_root or not output:
+        return None
+    normalized_root = posixpath.normpath(root_override.rstrip("/"))
+    normalized_code_root = posixpath.normpath(declared_code_root.rstrip("/"))
+    for path in _workspace_output_absolute_paths(output):
+        if _path_is_inside_code_root(path, normalized_root):
+            continue
+        if not _path_is_inside_code_root(path, normalized_code_root):
+            continue
+        relative_path = _path_relative_to_code_root(path, normalized_code_root)
+        if not relative_path.startswith(_WORKSPACE_VERIFICATION_OUTPUT_PATH_PREFIXES):
+            continue
+        return (
+            f"bash.output references verification artifact path {path}, which is outside "
+            f"the active attempt worktree {normalized_root}. Configure reports, coverage, "
+            "screenshots, and test-results to stay inside the attempt worktree, then rerun."
+        )
+    return None
 
 
 def _command_path_tokens(command: str) -> tuple[str, ...]:
@@ -842,6 +882,7 @@ def create_sandbox_mcp_tool(
         try:
             normalized_kwargs = _normalize_workspace_harness_kwargs(tool_name, kwargs)
             root_override = _workspace_root_override_from_context(ctx)
+            declared_code_root = _declared_sandbox_code_root_from_context(ctx)
             code_root = _sandbox_code_root_from_context(ctx)
             if argument_error := _workspace_code_root_argument_error(
                 tool_name,
@@ -880,6 +921,12 @@ def create_sandbox_mcp_tool(
                 retry_config=cfg,
                 kwargs=normalized_kwargs,
             )
+            if artifact_error := _workspace_output_artifact_escape_error(
+                output,
+                root_override=root_override,
+                declared_code_root=declared_code_root,
+            ):
+                raise RuntimeError(artifact_error)
             metadata = raw_result if raw_result else {}
             return ToolResult(output=output, metadata=metadata)
         except RuntimeError as exc:
