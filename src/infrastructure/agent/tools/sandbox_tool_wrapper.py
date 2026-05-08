@@ -54,6 +54,7 @@ _WORKSPACE_CODE_ROOT_WRITE_TOOLS = frozenset(
     {"create_file", "write", "edit", "file_write", "file_edit"}
 )
 _PATH_ARGUMENT_KEYS = ("file_path", "path")
+_WORKDIR_ARGUMENT_KEYS = ("working_dir", "cwd", "_workspace_dir")
 _WORKSPACE_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
 _WORKSPACE_VERIFICATION_SCRIPT_NAME_PATTERN = re.compile(
     r"(^|/)([^/]*(test|spec|e2e|integration|audit|benchmark)[^/]*"
@@ -512,6 +513,25 @@ def _workspace_bash_escape_error(command: str, root_override: str | None) -> str
     return None
 
 
+def _workspace_workdir_argument_error(kwargs: dict[str, Any], root_override: str | None) -> str | None:
+    if not root_override:
+        return None
+    normalized_root = posixpath.normpath(root_override.rstrip("/"))
+    for key in _WORKDIR_ARGUMENT_KEYS:
+        value = kwargs.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        path = posixpath.normpath(value.strip())
+        if not path.startswith("/") or _path_is_inside_code_root(path, normalized_root):
+            continue
+        return (
+            f"bash.{key} targets {path}, which is outside the active attempt "
+            f"worktree {normalized_root}. Retry with {key} under {normalized_root} "
+            "or omit it so the workspace wrapper can scope the command."
+        )
+    return None
+
+
 def _workspace_verification_script_argument_error(
     tool_name: str,
     kwargs: dict[str, Any],
@@ -955,6 +975,12 @@ def create_sandbox_mcp_tool(
                 root_override=root_override,
             ):
                 return ToolResult(output=argument_error, is_error=True)
+            if tool_name == "bash":
+                if argument_error := _workspace_workdir_argument_error(
+                    normalized_kwargs,
+                    root_override,
+                ):
+                    raise RuntimeError(argument_error)
             output, raw_result = await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,

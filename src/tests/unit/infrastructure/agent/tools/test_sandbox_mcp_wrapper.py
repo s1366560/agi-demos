@@ -845,6 +845,50 @@ class TestSandboxMCPToolExecute:
         )
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_bash_rejects_working_dir_outside_worktree_override(
+        self,
+    ):
+        """Attempt-scoped workers must not escape via the bash working_dir argument."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "working_dir": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="ls -la test-data-persistence.js",
+            working_dir="/workspace/my-evo",
+        )
+
+        assert result.is_error is True
+        assert "bash.working_dir targets /workspace/my-evo" in result.output
+        assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
+            result.output
+        )
+        assert adapter.call_count == 0
+
     async def test_workspace_worker_bash_allows_absolute_path_inside_worktree_override(self):
         """Absolute worktree paths remain valid for short test commands."""
         adapter = MockSandboxAdapter()
