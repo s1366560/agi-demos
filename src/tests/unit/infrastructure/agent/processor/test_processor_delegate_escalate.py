@@ -852,3 +852,24 @@ class TestEvaluateNoToolResultDelegation:
         assert result == ProcessorResult.CONTINUE
         assert had_tool_calls is True
         assert proc._pending_completion_status is None
+
+    def test_denied_workspace_terminal_report_error_payload_does_not_complete_loop(self) -> None:
+        proc = self._build_processor_for_eval("Report denied.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_report_complete",
+                result=json.dumps(
+                    {
+                        "error": "completion denied: failed evidence",
+                        "failed_evidence": ["test_run:13 passed 1 failed"],
+                    }
+                ),
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.CONTINUE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status is None

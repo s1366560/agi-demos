@@ -1634,7 +1634,11 @@ class SessionProcessor:
         else:
             payload = result
 
-        if not isinstance(payload, dict) or payload.get("ok") is False:
+        if (
+            not isinstance(payload, dict)
+            or payload.get("ok") is not True
+            or payload.get("error")
+        ):
             return False
 
         applied_report = payload.get("applied_report")
