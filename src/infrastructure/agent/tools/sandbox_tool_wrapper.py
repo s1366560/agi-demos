@@ -290,10 +290,14 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
 
     paths: list[str] = []
     for token in tokens:
-        if "/workspace/" not in token:
+        cleaned = token.strip("'\"")
+        if cleaned == "/workspace" or cleaned.startswith("/workspace/"):
+            raw_path = cleaned
+        elif "/workspace/" in cleaned:
+            start = cleaned.find("/workspace/")
+            raw_path = cleaned[start:]
+        else:
             continue
-        start = token.find("/workspace/")
-        raw_path = token[start:].strip("'\"")
         raw_path = raw_path.rstrip(";,|&)")
         if raw_path:
             paths.append(posixpath.normpath(raw_path))

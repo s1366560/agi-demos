@@ -786,6 +786,48 @@ class TestSandboxMCPToolExecute:
         )
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_bash_rejects_workspace_root_scan_with_worktree_override(
+        self,
+    ):
+        """Attempt-scoped workers must not scan all of /workspace for reusable artifacts."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="find /workspace -name node_modules -maxdepth 4",
+        )
+
+        assert result.is_error is True
+        assert "references /workspace" in result.output
+        assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
+            result.output
+        )
+        assert adapter.call_count == 0
+
     async def test_workspace_worker_bash_allows_absolute_path_inside_worktree_override(self):
         """Absolute worktree paths remain valid for short test commands."""
         adapter = MockSandboxAdapter()
