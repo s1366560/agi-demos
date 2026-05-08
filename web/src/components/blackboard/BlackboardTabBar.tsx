@@ -177,11 +177,11 @@ export function BlackboardTabBar({
 
   const isVertical = orientation === 'vertical';
   const listClassName = isVertical
-    ? 'flex min-h-0 w-full flex-col gap-3 overflow-y-auto border-r border-border-light p-3 dark:border-border-dark'
-    : 'flex gap-1 overflow-x-auto border-b border-border-light px-3 py-2 dark:border-border-dark sm:px-4';
+    ? 'flex min-h-0 w-full flex-col gap-4 overflow-y-auto border-r border-border-light bg-surface-muted/45 p-3 dark:border-border-dark dark:bg-surface-dark-alt/45'
+    : 'flex snap-x gap-1 overflow-x-auto border-b border-border-light px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] dark:border-border-dark sm:px-4 [&::-webkit-scrollbar]:hidden';
   const buttonBase = isVertical
     ? 'min-h-10 w-full rounded-md px-2.5 py-2 text-left text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
-    : 'min-h-10 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
+    : 'min-h-11 shrink-0 snap-start whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
   const renderTabButton = (tab: (typeof tabs)[number]) => {
     const Icon = tab.icon;
@@ -210,14 +210,14 @@ export function BlackboardTabBar({
         className={`${buttonBase} ${
           activeTab === tab.key
             ? 'border border-border-light bg-surface-light font-medium text-text-primary shadow-sm dark:border-border-dark dark:bg-surface-elevated dark:text-text-inverse'
-            : 'border border-transparent text-text-secondary hover:bg-surface-muted hover:text-text-primary dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse'
+            : 'border border-transparent text-text-secondary hover:bg-surface-light hover:text-text-primary dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse'
         }`}
       >
         <span className="flex min-w-0 items-center gap-2">
           <Icon size={15} className="shrink-0" aria-hidden="true" />
           <span className="truncate">{tab.label}</span>
           {summary !== undefined && summary !== '' && (
-            <span className="ml-auto shrink-0 rounded border border-current/15 px-1.5 py-0.5 text-[10px] tabular-nums opacity-70">
+            <span className="ml-auto flex min-w-5 shrink-0 items-center justify-center rounded border border-current/15 px-1.5 py-0.5 text-[10px] tabular-nums opacity-70">
               {summary}
             </span>
           )}

@@ -301,6 +301,40 @@ describe('Blackboard', () => {
     );
   });
 
+  it('renders compact workspace summary metrics from live workspace data', async () => {
+    const workspaces = makeWorkspaces(1);
+    mockListByProject.mockResolvedValue(workspaces);
+
+    storeStateRef.current = {
+      ...storeStateRef.current,
+      currentWorkspace: workspaces[0],
+      tasks: [
+        { id: 'task-1', status: 'done' },
+        { id: 'task-2', status: 'todo' },
+      ],
+      posts: [
+        { id: 'post-1', status: 'open', is_pinned: false },
+        { id: 'post-2', status: 'closed', is_pinned: false },
+      ],
+      agents: [
+        { id: 'agent-1', is_active: true, status: 'idle' },
+        { id: 'agent-2', is_active: false, status: 'idle' },
+      ],
+    };
+    mockLoadWorkspaceSurface.mockResolvedValue(undefined);
+
+    renderBlackboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('blackboard.summary.completion')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.summary.tasks')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.summary.activeAgents')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.summary.openThreads')).toBeInTheDocument();
+  });
+
   // 6. Deep-links to a tab via ?tab= search param
   it('respects the ?tab= query parameter when deep-linking', async () => {
     const workspaces = makeWorkspaces(1);
@@ -513,14 +547,12 @@ describe('Blackboard', () => {
     mockListByProject.mockResolvedValue(workspaces);
 
     // Set up so store mirrors current workspace
-    mockLoadWorkspaceSurface.mockImplementation(
-      async (_t: string, _p: string, wsId: string) => {
-        storeStateRef.current = {
-          ...storeStateRef.current,
-          currentWorkspace: workspaces.find((w) => w.id === wsId) ?? null,
-        };
-      }
-    );
+    mockLoadWorkspaceSurface.mockImplementation(async (_t: string, _p: string, wsId: string) => {
+      storeStateRef.current = {
+        ...storeStateRef.current,
+        currentWorkspace: workspaces.find((w) => w.id === wsId) ?? null,
+      };
+    });
 
     renderBlackboard();
 
