@@ -394,6 +394,7 @@ class TestBuildBrief:
         assert system_context["workspace_binding"]["attempt_id"] == "att-2"
         assert system_context["preferred_language"] == "en-US"
         assert system_context["additional_instructions"] == "Be brief."
+        assert "workspace_root_override" not in system_context
         assert "native tool-call" in system_context["tool_protocol"]["instruction"]
         reporting = system_context["reporting"]
         assert reporting["completion_contract"]["required_verification_refs"] == [
@@ -561,6 +562,7 @@ class TestBuildBrief:
         assert "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2" in brief
         assert "${sandbox_code_root}" not in brief
         assert "use that path as the task root" in brief
+        assert "every absolute file_path must start with that worktree_path" in brief
         assert "Do not edit the main sandbox checkout" in brief
         system_context = wl._build_worker_system_context(
             workspace_id="w",
@@ -574,6 +576,13 @@ class TestBuildBrief:
         assert (
             system_context["additional_instructions"]
             == "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2"
+        )
+        assert "worktree_path overrides code_context.sandbox_code_root" in (
+            system_context["workspace_root_override"]["rule"]
+        )
+        assert "file_path arguments" in system_context["workspace_root_override"]["rule"]
+        assert "check additional_instructions for a worktree_path" in (
+            system_context["code_context"]["rule"]
         )
 
     def test_code_context_metadata_preserves_digest_and_agents_scope(self) -> None:

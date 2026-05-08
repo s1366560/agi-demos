@@ -68,6 +68,7 @@ WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
 )
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
+_WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
 _NATIVE_TOOL_PROTOCOL_GUARD = (
     "Use only the platform's native tool-call channel for tools. Do not print "
     "tool-call markup, JSON/function-call stubs, or shell command code blocks as "
@@ -323,6 +324,10 @@ def _render_workspace_binding_block(binding: Mapping[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _has_workspace_root_override(rendered_extra: str) -> bool:
+    return any(marker in rendered_extra for marker in _WORKSPACE_ROOT_OVERRIDE_MARKERS)
+
+
 def _build_worker_system_context(
     *,
     workspace_id: str,
@@ -497,13 +502,16 @@ def _build_worker_system_context(
             "required_tool_workdir": sandbox_code_root,
             "bootstrap_command": f"mkdir -p {sandbox_code_root} && cd {sandbox_code_root}",
             "rule": (
-                "Before the first file operation or shell command, ensure sandbox_code_root "
-                "exists and make it the working directory. Perform repository inspection, "
-                "file edits, terminal commands, git diff, and tests from sandbox_code_root. "
-                "Do not create project files directly under /workspace or another sibling "
-                "directory. Ignore unrelated files outside sandbox_code_root unless the task "
-                "explicitly asks for them. Read and follow the listed AGENTS.md files before "
-                "decomposing or executing the task."
+                "Before the first file operation or shell command, check additional_instructions "
+                "for a worktree_path. If present, it overrides sandbox_code_root: use that "
+                "worktree as the working directory and make every file tool file_path start with "
+                "that worktree_path. If no worktree_path is present, ensure sandbox_code_root "
+                "exists and make it the working directory. Perform repository inspection, file "
+                "edits, terminal commands, git diff, and tests from the selected root. Do not "
+                "create project files directly under /workspace or another sibling directory. "
+                "Ignore unrelated files outside the selected root unless the task explicitly "
+                "asks for them. Read and follow the listed AGENTS.md files before decomposing "
+                "or executing the task."
             ),
         }
         if code_context.agents_files:
@@ -523,6 +531,16 @@ def _build_worker_system_context(
         rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
         if rendered_extra:
             context["additional_instructions"] = rendered_extra
+            if _has_workspace_root_override(rendered_extra):
+                context["workspace_root_override"] = {
+                    "source": "additional_instructions",
+                    "rule": (
+                        "The rendered worktree_path overrides code_context.sandbox_code_root. "
+                        "All file tool file_path arguments, shell working directories, git "
+                        "operations, test outputs, and generated artifacts must stay under that "
+                        "worktree_path unless the task explicitly names another path."
+                    ),
+                }
 
     return context
 
@@ -652,7 +670,8 @@ def _build_worker_brief(
             "more specific attempt worktree_path. If a Workspace checkpoint/worktree section "
             "below lists a worktree_path, cd into that worktree and use it as the root for "
             "repository inspection, file edits, terminal commands, git status, commits, and "
-            "tests. Otherwise, before creating, reading, editing, or testing project files, "
+            "tests; every file tool file_path must also start with that worktree_path. "
+            "Otherwise, before creating, reading, editing, or testing project files, "
             f"run `mkdir -p {code_root} && cd {code_root}` or pass the same directory as the "
             "tool working directory. Do not place `package.json`, source files, tests, build "
             "output, or service code directly under `/workspace` or a sibling directory "
@@ -660,17 +679,16 @@ def _build_worker_brief(
         )
     if extra_instructions:
         rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
-        should_surface_workspace_root = any(
-            marker in rendered_extra
-            for marker in ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
-        )
+        should_surface_workspace_root = _has_workspace_root_override(rendered_extra)
         if rendered_extra and should_surface_workspace_root:
             sections.append(
                 "## Workspace checkpoint and worktree\n"
                 f"{rendered_extra}\n\n"
                 "If this section provides a worktree_path or [worktree-setup] worktree_path, "
                 "use that path as the task root before any project read, edit, test, git "
-                "status, or commit operation. Do not edit the main sandbox checkout for "
+                "status, or commit operation. For file tools, every absolute file_path must "
+                "start with that worktree_path; never pass a main-checkout path for "
+                "attempt-scoped files. Do not edit the main sandbox checkout for "
                 "attempt-scoped work."
             )
     sections.append(
