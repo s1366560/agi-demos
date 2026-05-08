@@ -418,6 +418,55 @@ async def test_workspace_sandbox_runner_blocks_commands_outside_harness_allowlis
 
 
 @pytest.mark.asyncio
+async def test_workspace_sandbox_runner_allows_attempt_worktree_command_rewrite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+    runner = _WorkspaceSandboxCommandRunner(
+        project_id="project-1",
+        allowed_commands={"cd /workspace/my-evo && npm test"},
+    )
+
+    class FakeAdapter:
+        async def call_tool(
+            self,
+            sandbox_id: str,
+            tool_name: str,
+            arguments: dict[str, object],
+            *,
+            timeout: float,
+        ) -> dict[str, object]:
+            calls.append(arguments)
+            return {"content": [{"type": "text", "text": "ok"}], "is_error": False}
+
+    async def fake_ensure_sandbox() -> tuple[str, FakeAdapter]:
+        return "sandbox-1", FakeAdapter()
+
+    monkeypatch.setattr(runner, "ensure_sandbox", fake_ensure_sandbox)
+
+    command = "cd /workspace/my-evo/../.memstack/worktrees/attempt-1 && npm test"
+    result = await runner.run_command(command)
+
+    assert result["exit_code"] == 0
+    assert result["stdout"] == "ok"
+    assert calls == [{"command": command, "timeout": 60}]
+
+
+@pytest.mark.asyncio
+async def test_workspace_sandbox_runner_rejects_same_body_outside_attempt_worktree() -> None:
+    runner = _WorkspaceSandboxCommandRunner(
+        project_id="project-1",
+        allowed_commands={"cd /workspace/my-evo && npm test"},
+    )
+
+    result = await runner.run_command("cd /tmp/not-a-worktree && npm test")
+
+    assert result["exit_code"] == 126
+    assert result["stdout"] == ""
+    assert "not allowed by workspace harness" in result["stderr"]
+
+
+@pytest.mark.asyncio
 async def test_worker_launch_handler_supplies_system_leader_when_payload_omits_leader(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

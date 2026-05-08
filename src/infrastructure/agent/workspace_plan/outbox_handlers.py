@@ -2770,7 +2770,48 @@ class _WorkspaceSandboxCommandRunner:
     def _command_allowed(self, command: str) -> bool:
         if self._allowed_commands is None:
             return True
-        return command in self._allowed_commands or _is_structural_sandbox_command(command)
+        return (
+            command in self._allowed_commands
+            or _is_structural_sandbox_command(command)
+            or _is_allowed_worktree_command_rewrite(command, self._allowed_commands)
+        )
+
+
+_LEADING_CD_COMMAND_RE = re.compile(
+    r"^cd\s+(?P<path>'[^']+'|\"[^\"]+\"|[^&;\s|]+)\s*&&\s*(?P<body>.+)\s*$",
+    re.DOTALL,
+)
+
+
+def _is_allowed_worktree_command_rewrite(command: str, allowed_commands: set[str]) -> bool:
+    split = _split_leading_cd_command(command)
+    if split is None:
+        return False
+    path, body = split
+    if "/.memstack/worktrees/" not in path:
+        return False
+    return body in {_allowlist_command_body(allowed) for allowed in allowed_commands}
+
+
+def _split_leading_cd_command(command: str) -> tuple[str, str] | None:
+    match = _LEADING_CD_COMMAND_RE.match(command.strip())
+    if match is None:
+        return None
+    path_token = match.group("path")
+    try:
+        path_parts = shlex.split(path_token)
+    except ValueError:
+        return None
+    if len(path_parts) != 1:
+        return None
+    return path_parts[0], match.group("body").strip()
+
+
+def _allowlist_command_body(command: str) -> str:
+    split = _split_leading_cd_command(command)
+    if split is not None:
+        return split[1]
+    return command.strip()
 
 
 async def _api_process_sandbox_adapter() -> MCPSandboxAdapter:
