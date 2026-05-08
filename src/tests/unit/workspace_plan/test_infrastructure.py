@@ -681,6 +681,8 @@ class TestVerifier:
         assert "shared worktrees" in commit_policy
         assert "another node's artifact" in commit_policy
         assert "recent_git_status" in commit_policy
+        assert "prior failure text" in commit_policy
+        assert "latest_verification_results" in commit_policy
         quality_policy = " ".join(payload["policy"]["quality_evidence"])
         assert "Tests must contain assertions or checks that can fail" in quality_policy
         assert "weaker or substituted assertions" in quality_policy
@@ -1259,6 +1261,64 @@ class TestVerifier:
 
         assert rep.passed
         assert any(result.message == "clean worktree after commit" for result in rep.results)
+
+    async def test_current_attempt_commit_ref_runs_clean_worktree_guard_without_write_set(
+        self,
+    ) -> None:
+        commands: list[str] = []
+
+        class CleanSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                commands.append(command)
+                return {"exit_code": 0, "stdout": "", "stderr": ""}
+
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="current attempt evidence is clean",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            metadata={"code_context": {"sandbox_code_root": "/workspace/my-evo"}},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Repair test environment",
+                test_commands=("npm test",),
+                worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-current",
+            ),
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                attempt_id="attempt-current",
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "candidate_verifications": [
+                        "preflight:git-status",
+                        "test_run:117 passed 0 failed",
+                        "commit_ref:abc123",
+                    ],
+                },
+                sandbox=CleanSandbox(),
+            )
+        )
+
+        assert rep.passed
+        assert commands == [
+            "git -C /workspace/my-evo/../.memstack/worktrees/attempt-current status --short"
+        ]
+        assert any(result.message == "clean worktree after commit" for result in rep.results)
+        assert len(judge.requests) == 1
+        assert judge.requests[0].recent_git_status == ""
+        assert any(
+            result["name"] == "clean_worktree_after_commit" and result["passed"] is True
+            for result in judge.requests[0].latest_verification_results
+        )
 
     @pytest.mark.parametrize(
         "stdout",

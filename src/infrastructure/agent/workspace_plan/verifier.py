@@ -1414,10 +1414,10 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
 ) -> CriterionResult | None:
     """When a checkpoint reports a commit, ensure no extra changes were left behind."""
 
-    if ctx.sandbox is None or not _required_change_refs(ctx):
+    if ctx.sandbox is None:
         return None
 
-    evidence_values = _artifact_text_values(
+    evidence_values = _attempt_scoped_artifact_text_values(
         ctx,
         "evidence_refs",
         "last_worker_report_artifacts",
@@ -1426,7 +1426,7 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
         "last_worker_report_verifications",
         "candidate_verifications",
     )
-    if not _first_prefixed(evidence_values, "commit_ref:"):
+    if not _should_check_clean_worktree(ctx, evidence_values):
         return None
 
     criterion = AcceptanceCriterion(
@@ -1480,6 +1480,17 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
         confidence=1.0,
         message="clean worktree after commit",
     )
+
+
+def _should_check_clean_worktree(ctx: VerificationContext, evidence_values: set[str]) -> bool:
+    if _required_change_refs(ctx):
+        return _first_prefixed(evidence_values, "commit_ref:") is not None
+    if not ctx.attempt_id:
+        return False
+    # Repair/test nodes may not declare a write_set, but a worker can still report
+    # a commit/checkpoint. In that case, provide current git-status evidence so the
+    # judge does not reason from stale repair descriptions.
+    return _first_prefixed(evidence_values, "commit_ref:") is not None
 
 
 async def _pipeline_gate_guard(ctx: VerificationContext) -> CriterionResult | None:

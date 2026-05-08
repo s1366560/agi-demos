@@ -293,6 +293,7 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "Reject commits whose diff includes another node's artifact or unrelated dirty files.",
                 "Prefer explicit changed-file evidence over broad git add/git commit summaries.",
                 "If recent_git_status or a guard failure reports dirty files, do not accept a worker's textual clean-worktree claim without stronger contrary evidence.",
+                "Do not treat prior failure text, repair descriptions, or task metadata as current dirty-worktree evidence unless recent_git_status or latest_verification_results also reports current dirty files.",
             ],
             "attempt_worktree_isolation": [
                 "The sandbox.worktree_path is the active execution root for worker attempts.",
