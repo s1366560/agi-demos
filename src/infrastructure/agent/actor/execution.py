@@ -25,6 +25,7 @@ from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus imp
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+    _sanitize_event_data_for_postgres,
     apply_conversation_event_projection_delta,
 )
 from src.infrastructure.agent.actor.state.running_state import (
@@ -201,6 +202,18 @@ class _PersistableEvent:
     event_data: dict[str, Any]
     event_time_us: int
     event_counter: int
+
+
+def _sanitize_persistable_event(event: _PersistableEvent | None) -> _PersistableEvent | None:
+    """Redact sensitive payload values before stream events leave actor memory."""
+    if event is None:
+        return None
+    return _PersistableEvent(
+        event_type=event.event_type,
+        event_data=dict(_sanitize_event_data_for_postgres(event.event_data)),
+        event_time_us=event.event_time_us,
+        event_counter=event.event_counter,
+    )
 
 
 def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
@@ -1189,7 +1202,7 @@ def _prepare_event_for_persistence(
                 )
 
     return (
-        persistable_event,
+        _sanitize_persistable_event(persistable_event),
         next_has_text_end_messages,
         next_has_complete_assistant_message,
     )
@@ -1293,7 +1306,9 @@ async def _publish_event_to_stream(
     event_type = normalized_event.get("type", "unknown")
     event_data = normalized_event.get("data", {})
 
-    event_data_with_meta = {**event_data, "message_id": message_id}
+    event_data_with_meta = dict(
+        _sanitize_event_data_for_postgres({**event_data, "message_id": message_id})
+    )
 
     stream_event_payload = {
         "type": event_type,

@@ -1,6 +1,7 @@
 """Unit tests for actor execution helpers."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -30,12 +31,69 @@ class _FailingAgent(_FakeAgent):
         raise RuntimeError("boom")
 
 
+def _jwt_like_token() -> str:
+    return (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+        "eyJ1c2VySWQiOiJ1c2VyLTEiLCJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20ifQ."
+        "abc123abc123abc123abc123abc123abc123"
+    )
+
+
 def _make_finalization_redis_client() -> MagicMock:
     redis_client = MagicMock()
     redis_client.set = AsyncMock(return_value=True)
     redis_client.get = AsyncMock(return_value=None)
     redis_client.delete = AsyncMock(return_value=1)
     return redis_client
+
+
+def test_prepare_event_for_persistence_redacts_sensitive_tool_output() -> None:
+    """Actor persistence path must match repository-level event redaction."""
+    jwt = _jwt_like_token()
+
+    persistable, _has_text_end, _has_complete = execution._prepare_event_for_persistence(
+        {
+            "type": "observe",
+            "event_time_us": 10,
+            "event_counter": 2,
+            "data": {
+                "observation": f'{{"passed":"{jwt}"}}',
+                "nested": [{"authorization": f"Bearer {jwt}"}],
+            },
+        },
+        has_text_end_messages=False,
+        has_complete_assistant_message=False,
+    )
+
+    assert persistable is not None
+    serialized = json.dumps(persistable.event_data)
+    assert jwt not in serialized
+    assert "[REDACTED_JWT]" in persistable.event_data["observation"]
+    assert persistable.event_data["nested"][0]["authorization"] == "Bearer [REDACTED_JWT]"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_publish_event_to_stream_redacts_sensitive_tool_output() -> None:
+    """Live Redis stream payloads should not expose credentials either."""
+    jwt = _jwt_like_token()
+    redis_client = MagicMock()
+    redis_client.xadd = AsyncMock()
+
+    await execution._publish_event_to_stream(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        event={"type": "observe", "data": {"observation": f'{{"token":"{jwt}"}}'}},
+        event_time_us=11,
+        event_counter=3,
+        redis_client=redis_client,
+    )
+
+    _stream_key, message = redis_client.xadd.await_args.args[:2]
+    payload = json.loads(message["data"])
+    serialized = json.dumps(payload)
+    assert jwt not in serialized
+    assert payload["data"]["observation"] == '{"token":"[REDACTED_JWT]"}'
 
 
 @pytest.mark.unit
