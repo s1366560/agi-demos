@@ -2197,9 +2197,19 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
 
 
 @pytest.mark.asyncio
-async def test_handoff_resume_handler_skips_running_current_attempt(
+@pytest.mark.parametrize(
+    ("force_schedule", "expected_launch_jobs", "expected_pending_launch_jobs"),
+    [
+        (False, 1, 0),
+        (True, 2, 1),
+    ],
+)
+async def test_handoff_resume_handler_running_current_attempt_respects_force_schedule(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
+    force_schedule: bool,
+    expected_launch_jobs: int,
+    expected_pending_launch_jobs: int,
 ) -> None:
     await _seed_workspace_only(db_session)
     orchestrator = build_sql_orchestrator(
@@ -2268,7 +2278,7 @@ async def test_handoff_resume_handler_skips_running_current_attempt(
             "previous_attempt_id": leaf.current_attempt_id,
             "root_goal_task_id": "root-task-1",
             "summary": "snapshot thought this was stale",
-            "force_schedule": True,
+            "force_schedule": force_schedule,
         },
     )
     await db_session.commit()
@@ -2292,7 +2302,11 @@ async def test_handoff_resume_handler_skips_running_current_attempt(
         .scalars()
         .all()
     )
-    assert len(launch_jobs) == 1
+    assert len(launch_jobs) == expected_launch_jobs
+    pending_launch_jobs = [job for job in launch_jobs if job.status == "pending"]
+    assert len(pending_launch_jobs) == expected_pending_launch_jobs
+    if force_schedule:
+        assert pending_launch_jobs[0].payload_json["attempt_id"] == leaf.current_attempt_id
     refreshed_plan = await SqlPlanRepository(db_session).get(plan.id)
     assert refreshed_plan is not None
     assert refreshed_plan.leaf_tasks()[0].current_attempt_id == leaf.current_attempt_id

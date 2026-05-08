@@ -1406,6 +1406,7 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:  # noqa: C901, 
         previous_attempt_id = _payload_string(payload, "previous_attempt_id")
         if (
             attempt is not None
+            and not should_schedule
             and previous_attempt_id == attempt.id
             and attempt.status is WorkspaceTaskSessionAttemptStatus.RUNNING
             and attempt.conversation_id
