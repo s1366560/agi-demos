@@ -460,6 +460,10 @@ async def get_or_create_tools(
     # 14. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
 
+    # 15. Add planner contract terminal tool. This must not depend on
+    # multi-agent orchestration being configured yet.
+    _add_workspace_planning_contract_tool(tools)
+
     # 16. Add Multi-Agent tools (behind feature flag)
     _add_agent_tools(tools, project_id)
 
@@ -784,6 +788,25 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
         logger.info(f"Agent Worker: Multi-agent tools configured for project {project_id}")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure agent tools: {e}")
+
+
+def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
+    """Register the builtin workspace planner terminal tool in every agent toolset."""
+    try:
+        from src.infrastructure.agent.tools.define import get_registered_tools
+        from src.infrastructure.agent.tools.workspace_planning_contract import (
+            WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
+            workspace_submit_planning_contract_tool,
+        )
+
+        _ = workspace_submit_planning_contract_tool
+        registry = get_registered_tools()
+        if WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME in registry:
+            tools[WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME] = registry[
+                WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME
+            ]
+    except Exception as e:
+        logger.warning("Agent Worker: Failed to add workspace planning contract tool: %s", e)
 
 
 def _add_model_awareness_tools(
