@@ -226,11 +226,11 @@ class LLMGoalPlanner(GoalPlannerPort):
         return plan
 
     async def replan(self, plan: Plan, trigger: ReplanTrigger) -> Plan:
-        """Minimal replan: mark the triggering node TODO and clear its attempt.
+        """Replan a failed node while preserving agent-judged next-action contracts.
 
-        Full structural replanning (regenerating a sub-DAG) is deferred to
-        :meth:`expand`; for ``verification_failed`` / ``blocked`` we simply
-        reset and let the supervisor redispatch.
+        Most failures are still a same-node retry. When the verifier agent explicitly
+        requests a separate repair node, insert that node before retrying the original
+        node so protected test/review nodes do not loop on work they cannot perform.
         """
         if trigger.node_id is None:
             return plan
@@ -238,9 +238,24 @@ class LLMGoalPlanner(GoalPlannerPort):
         node = plan.nodes.get(nid)
         if node is None:
             return plan
-        from dataclasses import replace
-
-        from src.domain.model.workspace_plan import TaskExecution, TaskIntent
+        repair_id = _ensure_repair_node_for_verification_failure(
+            plan,
+            node,
+            trigger,
+            default_capability_hint=self._default_cap,
+        )
+        metadata = dict(node.metadata)
+        if repair_id is not None:
+            metadata.update(
+                {
+                    "blocked_by_repair_node_id": repair_id.value,
+                    "replan_source": "verification_judge_create_repair_node",
+                    "replan_trigger": trigger.kind,
+                }
+            )
+            depends_on = frozenset({*node.depends_on, repair_id})
+        else:
+            depends_on = node.depends_on
 
         plan.replace_node(
             replace(
@@ -248,6 +263,8 @@ class LLMGoalPlanner(GoalPlannerPort):
                 intent=TaskIntent.TODO,
                 execution=TaskExecution.IDLE,
                 current_attempt_id=None,
+                depends_on=depends_on,
+                metadata=metadata,
             )
         )
         return plan
@@ -350,6 +367,100 @@ class LLMGoalPlanner(GoalPlannerPort):
             depth += 1
             current = plan.nodes.get(current.parent_id)
         return depth
+
+
+def _ensure_repair_node_for_verification_failure(
+    plan: Plan,
+    node: PlanNode,
+    trigger: ReplanTrigger,
+    *,
+    default_capability_hint: str,
+) -> PlanNodeId | None:
+    if trigger.kind != "verification_failed":
+        return None
+    if node.metadata.get("last_verification_judge_next_action_kind") != "create_repair_node":
+        return None
+    existing = _existing_pending_repair_node(plan, node)
+    if existing is not None:
+        return existing.node_id
+    repair_id = PlanNodeId(f"node-{uuid.uuid4().hex[:12]}")
+    description = _repair_description(node, trigger)
+    sequence = _next_repair_sequence(plan)
+    metadata = _planner_node_metadata(description, node_id=repair_id, sequence=sequence)
+    metadata.update(
+        {
+            "iteration_phase": "implement",
+            "scrum_artifact": _SCRUM_ARTIFACT_BY_PHASE["implement"],
+            "allow_verification_script_changes": True,
+            "generated_from_verification_failure": True,
+            "repair_for_node_id": node.id,
+            "repair_source": "verification_judge_create_repair_node",
+            "repair_trigger": trigger.kind,
+            "source_verification_attempt_id": node.metadata.get("last_verification_attempt_id"),
+            "source_verification_judge_verdict": node.metadata.get(
+                "last_verification_judge_verdict"
+            ),
+            "source_verification_judge_next_action_kind": node.metadata.get(
+                "last_verification_judge_next_action_kind"
+            ),
+        }
+    )
+    plan.add_node(
+        PlanNode(
+            id=repair_id.value,
+            plan_id=plan.id,
+            parent_id=node.parent_id,
+            kind=PlanNodeKind.TASK,
+            title=_repair_title(node),
+            description=description,
+            depends_on=node.depends_on,
+            acceptance_criteria=_default_acceptance_criteria(description, sequence=sequence),
+            feature_checkpoint=_feature_checkpoint_for_task(
+                node_id=repair_id,
+                title=_repair_title(node),
+                description=description,
+                sequence=sequence,
+            ),
+            recommended_capabilities=(Capability(name=default_capability_hint),),
+            priority=max(node.priority, 1),
+            metadata=metadata,
+        )
+    )
+    return repair_id
+
+
+def _existing_pending_repair_node(plan: Plan, node: PlanNode) -> PlanNode | None:
+    for candidate in plan.nodes.values():
+        if candidate.metadata.get("repair_for_node_id") != node.id:
+            continue
+        if candidate.intent is TaskIntent.DONE:
+            continue
+        return candidate
+    return None
+
+
+def _repair_title(node: PlanNode) -> str:
+    return f"Repair verification blockers for {node.title}"[:120]
+
+
+def _repair_description(node: PlanNode, trigger: ReplanTrigger) -> str:
+    next_action = str(node.metadata.get("last_verification_judge_required_next_action") or "")
+    parts = [
+        f"Repair the blockers that prevented verification of `{node.title}`.",
+        next_action.strip(),
+        "After the repair is complete, the original verification node will re-run.",
+    ]
+    if trigger.detail.strip():
+        parts.append(f"Verification failure summary:\n{trigger.detail.strip()}")
+    return "\n\n".join(part for part in parts if part)
+
+
+def _next_repair_sequence(plan: Plan) -> int:
+    current = 0
+    for node in plan.nodes.values():
+        if node.feature_checkpoint is not None:
+            current = max(current, node.feature_checkpoint.sequence)
+    return current + 1
 
 
 def _default_acceptance_criteria(

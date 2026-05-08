@@ -343,11 +343,17 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     )
                 else:
                     # Soft fail → ask the planner to replan this node.
+                    evidenced_node = _node_with_verification_evidence(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
+                    plan.replace_node(evidenced_node)
                     await self._planner.replan(
                         plan,
                         ReplanTrigger(
                             kind="verification_failed",
-                            node_id=node.id,
+                            node_id=evidenced_node.id,
                             detail=report.summary(),
                         ),
                     )
@@ -1390,6 +1396,7 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_ran_at",
         "last_verification_judge_confidence",
         "last_verification_judge_failed_criteria",
+        "last_verification_judge_next_action_kind",
         "last_verification_judge_rationale",
         "last_verification_judge_required_next_action",
         "last_verification_judge_verdict",
@@ -1721,6 +1728,9 @@ def _judge_result_metadata(report: VerificationReport) -> dict[str, Any]:
             "last_verification_judge_rationale": result.message,
             "last_verification_judge_confidence": result.confidence,
         }
+        next_action_kind = result.criterion.spec.get("next_action_kind")
+        if isinstance(next_action_kind, str) and next_action_kind.strip():
+            metadata["last_verification_judge_next_action_kind"] = next_action_kind
         failed_criteria = result.criterion.spec.get("failed_criteria")
         if isinstance(failed_criteria, list):
             metadata["last_verification_judge_failed_criteria"] = [

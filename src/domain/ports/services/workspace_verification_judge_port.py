@@ -16,6 +16,15 @@ class WorkspaceVerificationJudgeVerdict(str, Enum):
     RETRY_INFRASTRUCTURE = "retry_infrastructure"
 
 
+class WorkspaceVerificationNextActionKind(str, Enum):
+    """Structured next action requested by the verification judge."""
+
+    NONE = "none"
+    RETRY_SAME_NODE = "retry_same_node"
+    CREATE_REPAIR_NODE = "create_repair_node"
+    HUMAN_REQUIRED = "human_required"
+
+
 @dataclass(frozen=True)
 class WorkspaceVerificationJudgeRequest:
     """Bounded context passed to the verification judge agent."""
@@ -46,6 +55,9 @@ class WorkspaceVerificationJudgeResult:
     rationale: str
     failed_criteria: tuple[str, ...] = field(default_factory=tuple)
     required_next_action: str = ""
+    next_action_kind: WorkspaceVerificationNextActionKind = (
+        WorkspaceVerificationNextActionKind.RETRY_SAME_NODE
+    )
     confidence: float = 0.0
 
     def __post_init__(self) -> None:
@@ -67,4 +79,5 @@ __all__ = [
     "WorkspaceVerificationJudgeRequest",
     "WorkspaceVerificationJudgeResult",
     "WorkspaceVerificationJudgeVerdict",
+    "WorkspaceVerificationNextActionKind",
 ]

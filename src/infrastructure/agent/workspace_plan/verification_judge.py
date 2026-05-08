@@ -21,11 +21,13 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeRequest,
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
+    WorkspaceVerificationNextActionKind,
 )
 
 logger = logging.getLogger(__name__)
 
 _VALID_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
+_VALID_NEXT_ACTION_KINDS = {item.value for item in WorkspaceVerificationNextActionKind}
 
 
 class WorkspaceVerifierAgentTurnRunner(Protocol):
@@ -250,6 +252,18 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
         "task_metadata": request.task_metadata,
         "policy": {
             "verdicts": sorted(_VALID_VERDICTS),
+            "next_action_kinds": {
+                "none": "Use with accepted verdicts when no further work is required.",
+                "retry_same_node": (
+                    "Use only when the same node can fix the issue and retry within its "
+                    "allowed contract."
+                ),
+                "create_repair_node": (
+                    "Use when a needs_rework verdict requires a separate implementation "
+                    "or test-infra node before this node can be retried."
+                ),
+                "human_required": "Use only with human-only blockers.",
+            },
             "blocked_human_required_only_for": [
                 "credentials or private access",
                 "permissions or external authority",
@@ -329,14 +343,30 @@ def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudg
         return None
     rationale = str(args.get("rationale") or "").strip()
     next_action = str(args.get("required_next_action") or "").strip()
+    next_action_kind = _next_action_kind(args.get("next_action_kind"), raw_verdict)
     failed = _string_tuple(args.get("failed_criteria"), limit=12)
     return WorkspaceVerificationJudgeResult(
         verdict=WorkspaceVerificationJudgeVerdict(raw_verdict),
         rationale=rationale or raw_verdict,
         failed_criteria=failed,
         required_next_action=next_action,
+        next_action_kind=next_action_kind,
         confidence=_float_between(args.get("confidence"), default=0.0),
     )
+
+
+def _next_action_kind(
+    value: object,
+    verdict: str,
+) -> WorkspaceVerificationNextActionKind:
+    raw = str(value or "").strip()
+    if raw in _VALID_NEXT_ACTION_KINDS:
+        return WorkspaceVerificationNextActionKind(raw)
+    if verdict == WorkspaceVerificationJudgeVerdict.ACCEPTED.value:
+        return WorkspaceVerificationNextActionKind.NONE
+    if verdict == WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED.value:
+        return WorkspaceVerificationNextActionKind.HUMAN_REQUIRED
+    return WorkspaceVerificationNextActionKind.RETRY_SAME_NODE
 
 
 def _response_arguments(response: dict[str, Any]) -> dict[str, Any] | None:  # noqa: PLR0911

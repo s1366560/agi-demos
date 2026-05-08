@@ -55,6 +55,7 @@ async def test_verification_judgment_captures_structured_payload() -> None:
         rationale="A required test failed.",
         failed_criteria=["failed_test_evidence"],
         required_next_action="fix failing tests",
+        next_action_kind="create_repair_node",
         confidence=0.82,
     )
 
@@ -64,6 +65,7 @@ async def test_verification_judgment_captures_structured_payload() -> None:
         "rationale": "A required test failed.",
         "failed_criteria": ["failed_test_evidence"],
         "required_next_action": "fix failing tests",
+        "next_action_kind": "create_repair_node",
         "confidence": 0.82,
     }
 

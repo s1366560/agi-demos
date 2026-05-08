@@ -933,6 +933,7 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
     message_parts = [f"judge verdict={verdict.value}", result.rationale]
     if result.required_next_action:
         message_parts.append(f"next_action={result.required_next_action}")
+    message_parts.append(f"next_action_kind={result.next_action_kind.value}")
     if result.failed_criteria:
         message_parts.append("failed=" + ", ".join(result.failed_criteria[:8]))
     return CriterionResult(
@@ -943,6 +944,7 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
                 "judge_verdict": verdict.value,
                 "failed_criteria": list(result.failed_criteria),
                 "required_next_action": result.required_next_action,
+                "next_action_kind": result.next_action_kind.value,
             },
             required=True,
             description="Agent-First workspace verification judge verdict",

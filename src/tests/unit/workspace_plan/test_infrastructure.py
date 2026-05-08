@@ -310,6 +310,56 @@ class TestLLMGoalPlanner:
         assert reset.execution is TaskExecution.IDLE
         assert reset.current_attempt_id is None
 
+    async def test_replan_inserts_repair_node_when_judge_requests_one(self) -> None:
+        planner = LLMGoalPlanner(decomposer=None)
+        plan = await planner.plan(_goal("x"), _ctx())
+        leaf = plan.leaf_tasks()[0]
+        from dataclasses import replace
+
+        plan.replace_node(
+            replace(
+                leaf,
+                intent=TaskIntent.BLOCKED,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="att-1",
+                metadata={
+                    **leaf.metadata,
+                    "last_verification_attempt_id": "att-1",
+                    "last_verification_judge_verdict": "needs_rework",
+                    "last_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_judge_required_next_action": (
+                        "Make E2E report paths worktree-relative before retrying."
+                    ),
+                },
+            )
+        )
+        from src.domain.ports.services.goal_planner_port import ReplanTrigger
+
+        await planner.replan(
+            plan,
+            ReplanTrigger(
+                kind="verification_failed",
+                node_id=leaf.id,
+                detail="judge verdict=needs_rework",
+            ),
+        )
+
+        reset = plan.nodes[leaf.node_id]
+        repair_nodes = [
+            node for node in plan.nodes.values() if node.metadata.get("repair_for_node_id") == leaf.id
+        ]
+        assert len(repair_nodes) == 1
+        repair = repair_nodes[0]
+        assert repair.intent is TaskIntent.TODO
+        assert repair.metadata["allow_verification_script_changes"] is True
+        assert repair.metadata["iteration_phase"] == "implement"
+        assert repair.metadata["repair_source"] == "verification_judge_create_repair_node"
+        assert reset.intent is TaskIntent.TODO
+        assert reset.execution is TaskExecution.IDLE
+        assert reset.current_attempt_id is None
+        assert repair.node_id in reset.depends_on
+        assert reset.metadata["blocked_by_repair_node_id"] == repair.id
+
     async def test_structural_checks_and_write_set_are_inferred_from_task_text(self) -> None:
         sub = [
             _FakeSubTask(
@@ -579,6 +629,8 @@ class TestVerifier:
         assert "Attempt worktree isolation is an intentional execution contract" in prompt
         assert "Do not recommend running from the main checkout" in prompt
         assert "environment-configurable" in prompt
+        assert "next_action_kind=create_repair_node" in prompt
+        assert "next_action_kind=retry_same_node" in prompt
         assert "workspace_submit_verification_judgment" in prompt
 
     def test_iteration_reviewer_prompt_preserves_attempt_worktree_contract(self) -> None:
@@ -637,6 +689,10 @@ class TestVerifier:
         assert "not a transient retry_infrastructure condition" in isolation_policy
         assert "Do not recommend running from the main checkout" in isolation_policy
         assert "environment-configurable" in isolation_policy
+        assert payload["policy"]["next_action_kinds"]["create_repair_node"].startswith(
+            "Use when"
+        )
+        assert "same node can fix" in payload["policy"]["next_action_kinds"]["retry_same_node"]
 
     async def test_file_exists_passes_when_artifact_present(self, tmp_path: Any) -> None:
         target = tmp_path / "out.json"
@@ -1784,6 +1840,34 @@ class _VerificationJudgeRetryVerifier:
         )
 
 
+class _VerificationJudgeRepairVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "judge_verdict": "needs_rework",
+                            "failed_criteria": ["verification_script_mutation"],
+                            "required_next_action": (
+                                "Make E2E report paths worktree-relative before retrying."
+                            ),
+                            "next_action_kind": "create_repair_node",
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message="judge verdict=needs_rework; create repair node",
+                ),
+            ),
+        )
+
+
 class _MixedPipelineAndCustomFailureVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -2480,6 +2564,92 @@ class TestSupervisorTick:
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_verification_only"] is True
+
+    async def test_verification_judge_repair_action_dispatches_repair_node(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[PlanNode] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc, node: PlanNode) -> str:
+            dispatched.append(node)
+            return "attempt-repair"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerificationJudgeRepairVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.allocations_made == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        original = reloaded.nodes[PlanNodeId("a")]
+        repair_nodes = [
+            node
+            for node in reloaded.nodes.values()
+            if node.metadata.get("repair_for_node_id") == "a"
+        ]
+        assert len(repair_nodes) == 1
+        repair = repair_nodes[0]
+        assert [node.id for node in dispatched] == [repair.id]
+        assert original.intent is TaskIntent.TODO
+        assert original.execution is TaskExecution.IDLE
+        assert original.current_attempt_id is None
+        assert repair.node_id in original.depends_on
+        assert repair.intent is TaskIntent.IN_PROGRESS
+        assert repair.execution is TaskExecution.DISPATCHED
+        assert repair.current_attempt_id == "attempt-repair"
+        assert repair.metadata["allow_verification_script_changes"] is True
+        assert not any(event[0] == "verification_retry_scheduled" for event in events)
 
     async def test_pipeline_gate_does_not_hide_non_pipeline_verification_failures(self) -> None:
         repo = InMemoryPlanRepository()

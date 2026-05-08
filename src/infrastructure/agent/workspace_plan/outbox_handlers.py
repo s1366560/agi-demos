@@ -3026,6 +3026,7 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_ran_at",
         "last_verification_judge_confidence",
         "last_verification_judge_failed_criteria",
+        "last_verification_judge_next_action_kind",
         "last_verification_judge_rationale",
         "last_verification_judge_required_next_action",
         "last_verification_judge_verdict",

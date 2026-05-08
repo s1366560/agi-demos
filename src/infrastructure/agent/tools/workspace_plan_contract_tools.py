@@ -9,6 +9,7 @@ from src.domain.model.review.review_finding import ReviewSeverity
 from src.domain.ports.services.iteration_review_port import IterationReviewDecision
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeVerdict,
+    WorkspaceVerificationNextActionKind,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
@@ -27,6 +28,9 @@ WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME = "workspace_submit_verificatio
 WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME = "workspace_submit_iteration_review"
 
 _VALID_VERIFICATION_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
+_VALID_VERIFICATION_NEXT_ACTION_KINDS = {
+    item.value for item in WorkspaceVerificationNextActionKind
+}
 _VALID_REVIEW_VERDICTS = {"complete_goal", "continue_next_iteration", "needs_human_review"}
 _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
 _VALID_SEVERITIES = {item.value for item in ReviewSeverity}
@@ -42,6 +46,14 @@ WORKSPACE_VERIFICATION_JUDGMENT_TOOL_PARAMETERS: dict[str, Any] = {
             "maxItems": 12,
         },
         "required_next_action": {"type": "string"},
+        "next_action_kind": {
+            "type": "string",
+            "enum": sorted(_VALID_VERIFICATION_NEXT_ACTION_KINDS),
+            "description": (
+                "Structured next action: none, retry_same_node, create_repair_node, or "
+                "human_required."
+            ),
+        },
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
     "required": [
@@ -157,6 +169,7 @@ async def workspace_submit_verification_judgment_tool(
     failed_criteria: list[str],
     required_next_action: str,
     confidence: float,
+    next_action_kind: str = WorkspaceVerificationNextActionKind.RETRY_SAME_NODE.value,
 ) -> ToolResult:
     error = _require_builtin_agent(
         ctx,
@@ -167,11 +180,14 @@ async def workspace_submit_verification_judgment_tool(
         return _deny(error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None)
     if verdict not in _VALID_VERIFICATION_VERDICTS:
         return _deny(f"invalid verification verdict: {verdict}")
+    if next_action_kind not in _VALID_VERIFICATION_NEXT_ACTION_KINDS:
+        return _deny(f"invalid verification next_action_kind: {next_action_kind}")
     payload = {
         "verdict": verdict,
         "rationale": str(rationale or "").strip() or verdict,
         "failed_criteria": _string_list(failed_criteria, limit=12),
         "required_next_action": str(required_next_action or "").strip(),
+        "next_action_kind": next_action_kind,
         "confidence": _confidence(confidence),
     }
     return ToolResult(
