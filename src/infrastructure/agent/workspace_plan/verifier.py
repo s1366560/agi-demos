@@ -117,6 +117,7 @@ class CmdCriterionRunner(CriterionRunner):
         self, criterion: AcceptanceCriterion, ctx: VerificationContext
     ) -> CriterionResult:
         cmd = str(criterion.spec.get("cmd", ""))
+        run_cmd = _command_for_active_worktree(cmd, ctx)
         max_exit = int(criterion.spec.get("max_exit", 0))
         timeout = int(criterion.spec.get("timeout", self._default_timeout))
         sandbox = ctx.sandbox
@@ -128,7 +129,7 @@ class CmdCriterionRunner(CriterionRunner):
                 message="no sandbox available to run cmd",
             )
         try:
-            result = await sandbox.run_command(cmd, timeout=timeout)
+            result = await sandbox.run_command(run_cmd, timeout=timeout)
         except Exception as exc:
             logger.warning("CmdCriterionRunner sandbox error: %s", exc)
             return CriterionResult(
@@ -147,8 +148,24 @@ class CmdCriterionRunner(CriterionRunner):
             confidence=1.0,
             message=f"exit={exit_code}"
             + (f"; stderr={stderr[:120]}" if stderr and not passed else ""),
-            evidence=(EvidenceRef(kind="stdout", ref=stdout[:2000], note=cmd),) if stdout else (),
+            evidence=(EvidenceRef(kind="stdout", ref=stdout[:2000], note=run_cmd),)
+            if stdout
+            else (),
         )
+
+
+def _command_for_active_worktree(command: str, ctx: VerificationContext) -> str:
+    active_root = _clean_worktree_git_root(ctx)
+    code_root = _sandbox_code_root(ctx)
+    if not active_root or active_root == code_root:
+        return command
+
+    rewritten = command
+    if code_root and code_root in command and active_root not in command:
+        rewritten = command.replace(code_root, active_root)
+    if active_root in rewritten:
+        return rewritten
+    return f"cd {shlex.quote(active_root)} && {rewritten}"
 
 
 class FileExistsCriterionRunner(CriterionRunner):

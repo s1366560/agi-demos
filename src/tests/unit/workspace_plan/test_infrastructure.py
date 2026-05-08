@@ -69,6 +69,7 @@ from src.infrastructure.agent.workspace_plan.verification_judge import (
 from src.infrastructure.agent.workspace_plan.verifier import (
     AcceptanceCriterionVerifier,
     BrowserE2ECriterionRunner,
+    CmdCriterionRunner,
     FileExistsCriterionRunner,
     RegexCriterionRunner,
     SchemaCriterionRunner,
@@ -1605,6 +1606,74 @@ class TestVerifier:
         assert commands == [
             "git -C /workspace/my-evo/../.memstack/worktrees/attempt-1 status --short"
         ]
+
+    async def test_cmd_runner_rewrites_code_root_command_to_feature_worktree(self) -> None:
+        commands: list[str] = []
+
+        class CleanSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                commands.append(command)
+                return {"exit_code": 0, "stdout": "ok", "stderr": ""}
+
+        node = _leaf_node(
+            metadata={"code_context": {"sandbox_code_root": "/workspace/my-evo"}},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+                worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-1",
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            sandbox=CleanSandbox(),
+        )
+        criterion = AcceptanceCriterion(
+            kind=CriterionKind.CMD,
+            spec={"cmd": "cd /workspace/my-evo && npm test"},
+            required=True,
+        )
+
+        result = await CmdCriterionRunner().run(criterion, ctx)
+
+        assert result.passed
+        assert commands == ["cd /workspace/my-evo/../.memstack/worktrees/attempt-1 && npm test"]
+
+    async def test_cmd_runner_starts_relative_command_in_feature_worktree(self) -> None:
+        commands: list[str] = []
+
+        class CleanSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                commands.append(command)
+                return {"exit_code": 0, "stdout": "ok", "stderr": ""}
+
+        node = _leaf_node(
+            metadata={"code_context": {"sandbox_code_root": "/workspace/my-evo"}},
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Feature",
+                expected_artifacts=("src/app.py",),
+                worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-1",
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            sandbox=CleanSandbox(),
+        )
+        criterion = AcceptanceCriterion(
+            kind=CriterionKind.CMD,
+            spec={"cmd": "npm test"},
+            required=True,
+        )
+
+        result = await CmdCriterionRunner().run(criterion, ctx)
+
+        assert result.passed
+        assert commands == ["cd /workspace/my-evo/../.memstack/worktrees/attempt-1 && npm test"]
 
     async def test_verifier_does_not_hard_fail_when_clean_worktree_check_unavailable(
         self,
