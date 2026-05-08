@@ -327,6 +327,35 @@ def _workspace_verification_integrity_context(
     }
 
 
+def _render_visible_verification_integrity_gate(policy: Mapping[str, Any] | None) -> str | None:
+    if not policy:
+        return None
+    phase = _metadata_text(policy.get("iteration_phase")) or "test"
+    if policy.get("allow_verification_script_changes") is True:
+        return (
+            "## Test/review integrity gate\n"
+            f"This `{phase}` node has an explicit allow_verification_script_changes "
+            "contract, but you still must preserve assertion strength and explain why "
+            "each verification script change is necessary. Do not loosen checks, skip "
+            "failed cases, or report success with known failed tests."
+        )
+    return (
+        "## Test/review integrity gate\n"
+        f"This is a protected `{phase}` workspace node. Treat any failed, failing, or "
+        "non-zero test evidence as incomplete; do not call workspace_report_complete "
+        "until required tests report 0 failed, unless the plan explicitly allows failed "
+        "tests. Do not edit, replace, regenerate, or loosen test, spec, E2E, "
+        "integration, audit, or benchmark scripts to make this node pass; tool guards "
+        "will reject it and the verifier will reject the attempt. If a test appears "
+        "wrong, verify product behavior from source/runtime evidence, fix product code "
+        "when product behavior is wrong, or call workspace_report_blocked with the "
+        "failing command and the exact contract needed. When retrying after verifier "
+        "feedback about script mutation or a dirty worktree, first restore or isolate "
+        "those files, rerun from clean git status, and never summarize partial results "
+        "such as 13/14 or 85/86 as complete."
+    )
+
+
 def _launch_authority_actor_id(leader_agent_id: str | None) -> str:
     return leader_agent_id or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
@@ -693,6 +722,7 @@ def _build_worker_brief(
     leader_agent_id: str | None,
     extra_instructions: str | None = None,
     code_context: WorkspaceCodeContext | None = None,
+    plan_node_metadata: Mapping[str, Any] | None = None,
 ) -> str:
     """Compose the visible task brief for the worker agent.
 
@@ -774,6 +804,14 @@ def _build_worker_brief(
                 "reports, commits, or copied artifacts outside that worktree. Do not edit "
                 "the main sandbox checkout for attempt-scoped work."
             )
+    verification_integrity = _workspace_verification_integrity_context(
+        task.metadata,
+        plan_node_metadata,
+    )
+    if verification_integrity_section := _render_visible_verification_integrity_gate(
+        verification_integrity
+    ):
+        sections.append(verification_integrity_section)
     sections.append(
         "## Code quality gate\n"
         "Before editing, read the applicable AGENTS.md/project guidance and inspect nearby "
@@ -1496,6 +1534,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         leader_agent_id=leader_agent_id,
         extra_instructions=extra_instructions,
         code_context=code_context,
+        plan_node_metadata=plan_node_metadata,
     )
     app_model_context = _build_worker_system_context(
         workspace_id=workspace_id,

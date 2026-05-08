@@ -513,6 +513,24 @@ class TestBuildBrief:
         assert policy["protected_script_changes"] is False
         assert policy["allow_verification_script_changes"] is True
 
+    def test_brief_surfaces_protected_test_node_integrity_gate(self) -> None:
+        task = _make_task()
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={"iteration_phase": "test"},
+        )
+
+        assert "## Test/review integrity gate" in brief
+        assert "protected `test` workspace node" in brief
+        assert "do not call workspace_report_complete" in brief
+        assert "Do not edit, replace, regenerate, or loosen test" in brief
+        assert "workspace_report_blocked" in brief
+        assert "13/14 or 85/86 as complete" in brief
+
     def test_handles_missing_description(self) -> None:
         task = _make_task(description=None)
         brief = wl._build_worker_brief(
