@@ -44,6 +44,7 @@ class WorkerReportPatch:
 
     patch: dict[str, Any] = field(default_factory=dict)
     normalized_summary: str = ""
+    report_artifacts: list[str] = field(default_factory=list)
     merged_artifacts: list[str] = field(default_factory=list)
     merged_verifications: list[str] = field(default_factory=list)
     report_verifications: list[str] = field(default_factory=list)
@@ -89,13 +90,12 @@ def build_worker_report_patch(
     prior_verifications = _prior_list(task_metadata, "execution_verifications")
 
     inbound = [str(a) for a in artifacts if a]
-    pre_merge_artifacts = list(dict.fromkeys([*prior_artifacts, *inbound]))
-
-    normalized_summary, merged_artifacts, report_verifications = _parse_worker_report_payload(
+    normalized_summary, report_artifacts, report_verifications = _parse_worker_report_payload(
         report_type=report_type,
         summary=summary,
-        artifacts=pre_merge_artifacts,
+        artifacts=list(dict.fromkeys(inbound)),
     )
+    merged_artifacts = list(dict.fromkeys([*prior_artifacts, *report_artifacts]))
     fingerprint = _build_worker_report_fingerprint(
         report_type=report_type,
         summary=normalized_summary,
@@ -108,6 +108,7 @@ def build_worker_report_patch(
         return WorkerReportPatch(
             patch={},
             normalized_summary=normalized_summary,
+            report_artifacts=report_artifacts,
             merged_artifacts=merged_artifacts,
             merged_verifications=list(dict.fromkeys([*prior_verifications, *report_verifications])),
             report_verifications=report_verifications,
@@ -158,6 +159,7 @@ def build_worker_report_patch(
     return WorkerReportPatch(
         patch=patch,
         normalized_summary=normalized_summary,
+        report_artifacts=report_artifacts,
         merged_artifacts=merged_artifacts,
         merged_verifications=merged_verifications,
         report_verifications=report_verifications,

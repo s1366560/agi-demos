@@ -130,6 +130,7 @@ class TestPriorMetadataMerging:
             )
         )
         assert result.merged_artifacts == ["a", "b", "c"]
+        assert result.report_artifacts == ["b", "c"]
         assert result.patch["evidence_refs"] == ["a", "b", "c"]
         # prior verifications preserved in execution_verifications
         assert result.patch["execution_verifications"] == ["v1"]

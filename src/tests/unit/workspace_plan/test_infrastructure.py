@@ -375,6 +375,45 @@ class TestLLMGoalPlanner:
         ]
         assert any(crit.kind is CriterionKind.CMD for crit in leaf.acceptance_criteria)
 
+    async def test_deploy_start_commands_are_not_treated_as_test_commands(self) -> None:
+        sub = [
+            _FakeSubTask(id="s1", description="Audit remaining gaps."),
+            _FakeSubTask(id="s2", description="Plan the implementation."),
+            _FakeSubTask(id="s3", description="Implement frontend and backend changes."),
+            _FakeSubTask(
+                id="s4",
+                description="Run `npm test -- --runInBand` in /workspace/my-evo.",
+            ),
+            _FakeSubTask(
+                id="s5",
+                description=(
+                    "Run backend `npm run dev` on port 3001, frontend `npm run dev` "
+                    "on port 3002. Verify both services healthy via /health and browser."
+                ),
+            ),
+        ]
+        planner = LLMGoalPlanner(decomposer=_FakeDecomposer(sub))
+        plan = await planner.plan(_goal("ship multi-service app"), _ctx())
+        leaves = sorted(plan.leaf_tasks(), key=lambda node: node.priority)
+        test_leaf = leaves[3]
+        deploy_leaf = leaves[4]
+
+        assert test_leaf.metadata["iteration_phase"] == "test"
+        assert test_leaf.feature_checkpoint is not None
+        assert test_leaf.feature_checkpoint.test_commands == (
+            "cd /workspace/my-evo && npm test -- --runInBand",
+        )
+
+        assert deploy_leaf.metadata["iteration_phase"] == "deploy"
+        assert deploy_leaf.feature_checkpoint is not None
+        assert deploy_leaf.feature_checkpoint.test_commands == ()
+        assert "verification_commands" not in deploy_leaf.metadata
+        assert [check["check_id"] for check in deploy_leaf.metadata["preflight_checks"]] == [
+            "read-progress",
+            "git-status",
+        ]
+        assert not any(crit.kind is CriterionKind.CMD for crit in deploy_leaf.acceptance_criteria)
+
     async def test_read_only_reference_paths_are_not_inferred_as_write_sets(self) -> None:
         sub = [
             _FakeSubTask(

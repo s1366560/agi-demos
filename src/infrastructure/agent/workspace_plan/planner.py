@@ -162,7 +162,8 @@ class LLMGoalPlanner(GoalPlannerPort):
                     description=goal.description,
                     recommended_capabilities=(Capability(name=self._default_cap),),
                     acceptance_criteria=_default_acceptance_criteria(
-                        f"{goal.title}\n{goal.description}"
+                        f"{goal.title}\n{goal.description}",
+                        sequence=1,
                     ),
                     feature_checkpoint=_feature_checkpoint_for_task(
                         node_id=PlanNodeId(node_id),
@@ -204,7 +205,10 @@ class LLMGoalPlanner(GoalPlannerPort):
                     preferred_agent_id=st.target_subagent,
                     recommended_capabilities=caps,
                     priority=max(0, int(getattr(st, "priority", 0))),
-                    acceptance_criteria=_default_acceptance_criteria(st.description),
+                    acceptance_criteria=_default_acceptance_criteria(
+                        st.description,
+                        sequence=sequence,
+                    ),
                     feature_checkpoint=_feature_checkpoint_for_task(
                         node_id=nid,
                         title=st.description[:120] or f"Task {st.id}",
@@ -288,7 +292,10 @@ class LLMGoalPlanner(GoalPlannerPort):
                     preferred_agent_id=st.target_subagent,
                     recommended_capabilities=caps,
                     priority=max(0, int(getattr(st, "priority", 0))),
-                    acceptance_criteria=_default_acceptance_criteria(st.description),
+                    acceptance_criteria=_default_acceptance_criteria(
+                        st.description,
+                        sequence=sequence,
+                    ),
                     feature_checkpoint=_feature_checkpoint_for_task(
                         node_id=nid,
                         title=st.description[:120] or f"Task {st.id}",
@@ -345,11 +352,16 @@ class LLMGoalPlanner(GoalPlannerPort):
         return depth
 
 
-def _default_acceptance_criteria(description: str) -> tuple[AcceptanceCriterion, ...]:
+def _default_acceptance_criteria(
+    description: str,
+    *,
+    sequence: int | None = None,
+) -> tuple[AcceptanceCriterion, ...]:
     """Build conservative machine checks from structurally obvious task text."""
 
     criteria = [_default_llm_judge(description)]
-    commands = _extract_candidate_commands(description)
+    phase = _iteration_phase_for_sequence(sequence)
+    commands = _verification_commands_for_phase(description, phase=phase)
     for command in commands:
         criteria.append(
             AcceptanceCriterion(
@@ -436,7 +448,7 @@ def _planner_node_metadata(
     write_set = _infer_write_set(description)
     if write_set:
         metadata["write_set"] = list(write_set)
-    commands = _extract_candidate_commands(description)
+    commands = _verification_commands_for_phase(description, phase=phase)
     metadata["preflight_checks"] = build_harness_preflight_checks(test_commands=commands)
     if commands:
         metadata["verification_commands"] = commands
@@ -482,7 +494,12 @@ def _feature_checkpoint_for_task(
         feature_id=_feature_id(node_id=node_id, sequence=sequence),
         sequence=sequence,
         title=title,
-        test_commands=tuple(_extract_candidate_commands(description)),
+        test_commands=tuple(
+            _verification_commands_for_phase(
+                description,
+                phase=_iteration_phase_for_sequence(sequence),
+            )
+        ),
         expected_artifacts=_infer_write_set(description),
     )
 
@@ -526,6 +543,19 @@ def _extract_candidate_commands(description: str) -> list[str]:
             command = f"cd {sandbox_root} && {command}"
         normalized.append(command)
     return list(dict.fromkeys(normalized))
+
+
+def _verification_commands_for_phase(description: str, *, phase: str | None) -> list[str]:
+    """Return commands that should be treated as verification evidence.
+
+    Deploy nodes are validated by the sandbox-native pipeline and deployment
+    health gates. Backticked service start commands in deploy prose are
+    operational instructions, not root-level test commands.
+    """
+
+    if phase == "deploy":
+        return []
+    return _extract_candidate_commands(description)
 
 
 def _extract_sandbox_root(description: str) -> str | None:

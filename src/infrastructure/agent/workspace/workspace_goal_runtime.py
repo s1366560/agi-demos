@@ -1066,24 +1066,24 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
             evidence_refs = metadata.get("evidence_refs")
             if isinstance(evidence_refs, list):
                 prior_refs = [str(ref) for ref in evidence_refs if ref]
-                merged_artifacts = list(dict.fromkeys([*prior_refs, *artifacts]))
             else:
-                merged_artifacts = list(dict.fromkeys(artifacts))
+                prior_refs = []
             existing_verifications = metadata.get("execution_verifications")
             if isinstance(existing_verifications, list):
                 prior_verifications = [str(item) for item in existing_verifications if item]
             else:
                 prior_verifications = []
-            normalized_summary, merged_artifacts, report_verifications = (
+            normalized_summary, report_artifacts, parsed_report_verifications = (
                 _parse_worker_report_payload(
                     report_type=report_type,
                     summary=summary,
-                    artifacts=merged_artifacts,
+                    artifacts=list(dict.fromkeys(artifacts)),
                 )
             )
             report_verifications = list(
-                dict.fromkeys([*explicit_verifications, *report_verifications])
+                dict.fromkeys([*explicit_verifications, *parsed_report_verifications])
             )
+            merged_artifacts = list(dict.fromkeys([*prior_refs, *report_artifacts]))
             report_fingerprint = _build_worker_report_fingerprint(
                 report_type=report_type,
                 summary=normalized_summary,
@@ -1200,10 +1200,8 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
                 await attempt_service.record_candidate_output(
                     resolved_attempt.id,
                     summary=normalized_summary,
-                    artifacts=merged_artifacts,
-                    verifications=list(
-                        dict.fromkeys([*prior_verifications, *report_verifications])
-                    ),
+                    artifacts=report_artifacts,
+                    verifications=report_verifications,
                     conversation_id=conversation_id,
                 )
                 await _mark_workspace_plan_node_reported(

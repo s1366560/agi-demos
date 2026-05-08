@@ -598,6 +598,22 @@ class TestWorkspaceGoalRuntime:
             assert metadata["execution_state"]["phase"] == "in_progress"
             complete_mock.assert_not_awaited()
             attempt_service.record_candidate_output.assert_awaited_once()
+            assert attempt_service.record_candidate_output.await_args.kwargs["artifacts"] == [
+                "artifact:trace-1",
+                "artifact:screenshot-1",
+                "commit_ref:abc123",
+                "git_diff_summary:1 file changed",
+                "changed_file:src/ui.tsx",
+            ]
+            assert attempt_service.record_candidate_output.await_args.kwargs["verifications"] == [
+                "preflight:read-progress",
+                "preflight:git-status",
+                "browser_assert:landing_page",
+                "screenshot_captured",
+                "test_run:npm test",
+                "worker_verdict:pass",
+                "verification_grade:pass",
+            ]
             assert (
                 attempt_service.record_candidate_output.await_args.kwargs["conversation_id"]
                 == "conv-attempt-1"
