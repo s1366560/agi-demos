@@ -484,8 +484,15 @@ def _workspace_code_root_argument_error(
     tool_name: str,
     kwargs: dict[str, Any],
     code_root: str | None,
+    *,
+    enforce_all_path_tools: bool = False,
 ) -> str | None:
-    if not code_root or tool_name not in _WORKSPACE_CODE_ROOT_WRITE_TOOLS:
+    scoped_tools = (
+        _WORKSPACE_CODE_ROOT_DEFAULT_WORKDIR_TOOLS
+        if enforce_all_path_tools
+        else _WORKSPACE_CODE_ROOT_WRITE_TOOLS
+    )
+    if not code_root or tool_name not in scoped_tools:
         return None
     for key in _PATH_ARGUMENT_KEYS:
         value = kwargs.get(key)
@@ -811,7 +818,10 @@ def create_sandbox_mcp_tool(
             root_override = _workspace_root_override_from_context(ctx)
             code_root = _sandbox_code_root_from_context(ctx)
             if argument_error := _workspace_code_root_argument_error(
-                tool_name, normalized_kwargs, code_root
+                tool_name,
+                normalized_kwargs,
+                code_root,
+                enforce_all_path_tools=root_override is not None,
             ):
                 return ToolResult(output=argument_error, is_error=True)
             normalized_kwargs = _apply_workspace_code_root_defaults(

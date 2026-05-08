@@ -899,6 +899,86 @@ class TestSandboxMCPToolExecute:
         ) in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_read_rejects_main_checkout_with_worktree_override(self):
+        """Attempt-scoped worker reads must not inspect the mutable main checkout."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="read",
+            tool_schema={
+                "name": "read",
+                "description": "Read file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                    },
+                    "required": ["file_path"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            file_path="/workspace/my-evo/frontend/src/app/page.tsx",
+        )
+
+        assert result.is_error is True
+        assert (
+            "outside the configured workspace sandbox_code_root "
+            "/workspace/.memstack/worktrees/att-1"
+        ) in result.output
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_read_allows_relative_path_with_worktree_override(self):
+        """Relative worker reads should be scoped into the rendered attempt worktree."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="read",
+            tool_schema={
+                "name": "read",
+                "description": "Read file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                    },
+                    "required": ["file_path"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            file_path="frontend/src/app/page.tsx",
+        )
+
+        assert result.is_error is False
+        assert (
+            adapter.last_kwargs["file_path"]
+            == "/workspace/.memstack/worktrees/att-1/frontend/src/app/page.tsx"
+        )
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+
     async def test_workspace_verification_phase_rejects_test_script_edit(self):
         """Test/review nodes should not be able to rewrite their own evidence scripts."""
         adapter = MockSandboxAdapter()
