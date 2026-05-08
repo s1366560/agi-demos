@@ -1066,14 +1066,30 @@ async def _to_delivery_summary(
     for stage in stages:
         stage_map.setdefault(stage.run_id, []).append(stage)
     run_responses = [_to_pipeline_run_response(run, stage_map.get(run.id, [])) for run in runs]
-    contract_metadata = dict(contract.metadata_json or {}) if contract is not None else {}
+    workspace_contract_metadata = await _workspace_delivery_contract_metadata(
+        db,
+        workspace_id=plan.workspace_id,
+    )
+    contract_metadata = {
+        **workspace_contract_metadata,
+        **(dict(contract.metadata_json or {}) if contract is not None else {}),
+    }
     deployment_responses = _filter_current_delivery_deployments(
         contract_metadata,
         [_to_deployment_response(deployment) for deployment in deployments],
     )
     deployment_response = deployment_responses[0] if deployment_responses else None
     latest_run = run_responses[0] if run_responses else None
-    status = latest_run.status if latest_run is not None else "not_configured"
+    has_delivery_contract = bool(
+        _metadata_string(contract_metadata.get("code_root"))
+        or _contract_service_ids(contract_metadata)
+        or contract is not None
+    )
+    status = (
+        latest_run.status
+        if latest_run is not None
+        else ("not_deployed" if has_delivery_contract else "not_configured")
+    )
     required_deployments = [item for item in deployment_responses if item.required]
     if any(
         item.required and item.status in {"unhealthy", "failed"} for item in deployment_responses
@@ -1092,12 +1108,20 @@ async def _to_delivery_summary(
     return WorkspaceDeliverySummaryResponse(
         provider=latest_run.provider
         if latest_run is not None
-        else (contract.provider if contract is not None else "sandbox_native"),
+        else (
+            contract.provider
+            if contract is not None
+            else _metadata_string(contract_metadata.get("provider")) or "sandbox_native"
+        ),
         status=status,
         contract_source=_metadata_string(contract_metadata.get("contract_source")) or "metadata",
         contract_confidence=_metadata_float(contract_metadata.get("contract_confidence")),
         agent_managed=_metadata_bool(contract_metadata.get("agent_managed"), fallback=True),
-        code_root=contract.code_root if contract is not None else None,
+        code_root=(
+            contract.code_root
+            if contract is not None and contract.code_root
+            else _metadata_string(contract_metadata.get("code_root")) or None
+        ),
         latest_run=latest_run,
         recent_runs=run_responses,
         services=services,
@@ -1140,6 +1164,23 @@ async def _to_delivery_summary(
             ),
         },
     )
+
+
+async def _workspace_delivery_contract_metadata(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+) -> dict[str, Any]:
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceModel.metadata_json).where(WorkspaceModel.id == workspace_id)
+        )
+    )
+    metadata = result.scalar_one_or_none()
+    if not isinstance(metadata, Mapping):
+        return {}
+    delivery = metadata.get("delivery_cicd")
+    return dict(delivery) if isinstance(delivery, Mapping) else {}
 
 
 def _delivery_run_assessment_response(
@@ -2515,6 +2556,28 @@ async def _redis_runtime_live_attempt_ids(
     return live_attempt_ids
 
 
+def _recent_agent_event_live_attempt_ids(
+    *,
+    conversation_by_attempt: Mapping[str, str],
+    last_event_by_conversation: Mapping[str, datetime],
+    skip_attempt_ids: set[str],
+) -> set[str]:
+    now = datetime.now(UTC)
+    heartbeat_threshold = timedelta(seconds=_SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS)
+    live_attempt_ids: set[str] = set()
+    for attempt_id, conversation_id in conversation_by_attempt.items():
+        if attempt_id in skip_attempt_ids:
+            continue
+        last_event_at = last_event_by_conversation.get(conversation_id)
+        if last_event_at is None:
+            continue
+        if last_event_at.tzinfo is None:
+            last_event_at = last_event_at.replace(tzinfo=UTC)
+        if now - last_event_at <= heartbeat_threshold:
+            live_attempt_ids.add(attempt_id)
+    return live_attempt_ids
+
+
 async def _nodes_without_live_worker(
     *,
     session: AsyncSession,
@@ -2587,6 +2650,13 @@ async def _nodes_without_live_worker(
         conversation_id: last_event_at for conversation_id, last_event_at in event_result.all()
     }
     live_attempt_ids.update(
+        _recent_agent_event_live_attempt_ids(
+            conversation_by_attempt=conversation_by_attempt,
+            last_event_by_conversation=last_event_by_conversation,
+            skip_attempt_ids=live_attempt_ids,
+        )
+    )
+    live_attempt_ids.update(
         await _redis_runtime_live_attempt_ids(
             redis_client=redis_client,
             conversation_by_attempt=conversation_by_attempt,
@@ -2655,6 +2725,7 @@ async def _active_nodes_with_terminal_attempts(
                 TaskExecution.REPORTED,
                 TaskExecution.VERIFYING,
             }
+            or (node.intent is TaskIntent.IN_PROGRESS and node.execution is TaskExecution.IDLE)
             or (node.intent is TaskIntent.BLOCKED and node.execution is TaskExecution.IDLE)
         )
     ]

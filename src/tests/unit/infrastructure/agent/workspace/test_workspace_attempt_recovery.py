@@ -17,6 +17,7 @@ from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
     RECOVERY_SUMMARY_RESTART,
     RECOVERY_SUMMARY_STALE,
     WorkspaceAttemptRecoveryService,
+    _should_defer_error_event_recovery,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
@@ -59,6 +60,34 @@ class _SessionContext:
 
     async def __aexit__(self, *_a: object) -> None:
         return None
+
+
+def test_defers_recent_provider_rate_limit_error_recovery() -> None:
+    now = datetime.now(UTC)
+
+    assert _should_defer_error_event_recovery(
+        event_data={"message": "Rate limit exceeded. Please wait a moment and try again."},
+        event_created_at=now - timedelta(seconds=30),
+        now=now,
+        transient_error_grace_seconds=300,
+    )
+
+
+def test_does_not_defer_old_or_non_transient_error_recovery() -> None:
+    now = datetime.now(UTC)
+
+    assert not _should_defer_error_event_recovery(
+        event_data={"message": "Rate limit exceeded. Please wait a moment and try again."},
+        event_created_at=now - timedelta(seconds=301),
+        now=now,
+        transient_error_grace_seconds=300,
+    )
+    assert not _should_defer_error_event_recovery(
+        event_data={"message": "Executor shutdown has been called"},
+        event_created_at=now - timedelta(seconds=30),
+        now=now,
+        transient_error_grace_seconds=300,
+    )
 
 
 def _make_service(
@@ -151,6 +180,9 @@ def _make_service(
     service._fetch_error_terminated_attempts = AsyncMock(  # type: ignore[method-assign]
         return_value=[]
     )
+    service._filter_recently_active_attempts = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda attempts, _threshold: attempts
+    )
 
     patch_attempt_repo = patch(
         "src.infrastructure.agent.workspace.workspace_attempt_recovery.SqlWorkspaceTaskSessionAttemptRepository",
@@ -214,6 +246,27 @@ class TestStartupSweep:
         repo = service._repo_instance  # type: ignore[attr-defined]
         assert repo.find_stale_non_terminal.await_args.kwargs["workspace_id"] == "ws-target"
         assert repo.find_stale_non_terminal.await_args.kwargs["limit"] == 3
+
+    @pytest.mark.asyncio
+    async def test_startup_sweep_uses_stale_threshold_not_short_startup_grace(self) -> None:
+        att = _make_attempt(attempt_id="att-grace", workspace_task_id="task-1")
+        service, _apply_report, _schedule_tick = _make_service(stale_attempts=[att])
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            before = datetime.now(UTC)
+            await service.startup_sweep()
+            after = datetime.now(UTC)
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        repo = service._repo_instance  # type: ignore[attr-defined]
+        older_than = repo.find_stale_non_terminal.await_args.kwargs["older_than"]
+        min_age = (after - older_than).total_seconds()
+        max_age = (before - older_than).total_seconds()
+        assert min_age >= 60
+        assert max_age < 62
 
     @pytest.mark.asyncio
     async def test_successful_recovery_enqueues_resume_job(self) -> None:
@@ -529,6 +582,30 @@ class TestPeriodicSweep:
         only_kwargs = apply_report.await_args_list[0].kwargs
         assert only_kwargs["attempt_id"] == "dead"
         assert only_kwargs["summary"] == RECOVERY_SUMMARY_STALE
+        schedule_tick.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_attempts_with_recent_agent_events(self) -> None:
+        event_live = _make_attempt(attempt_id="event-live", workspace_task_id="task-1")
+        dead = _make_attempt(attempt_id="dead", workspace_task_id="task-1")
+
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[event_live, dead],
+        )
+        service._filter_recently_active_attempts = AsyncMock(  # type: ignore[method-assign]
+            return_value=[dead]
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.periodic_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        assert apply_report.await_count == 1
+        assert apply_report.await_args.kwargs["attempt_id"] == "dead"
         schedule_tick.assert_called_once()
 
     @pytest.mark.asyncio

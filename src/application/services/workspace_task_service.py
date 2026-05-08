@@ -39,6 +39,7 @@ from src.domain.ports.repositories.workspace.workspace_task_repository import (
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     EXECUTION_STATE,
+    LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
     PENDING_LEADER_ADJUDICATION,
     ROOT_GOAL_TASK_ID,
@@ -83,6 +84,7 @@ class WorkspaceTaskService:
             "last_worker_report_verifications",
             "last_worker_reported_at",
             "last_worker_report_fingerprint",
+            LAST_WORKER_REPORT_ATTEMPT_ID,
             "last_worker_report_id",
             PENDING_LEADER_ADJUDICATION,
             CURRENT_ATTEMPT_ID,

@@ -15,6 +15,7 @@ Tests for missing MCP protocol features:
 Reference: https://modelcontextprotocol.io/specification/2025-11-25
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -290,6 +291,63 @@ class TestToolCallTimeouts:
 
         assert 7 not in client._timed_out_request_ids
         assert "late MCP response" in caplog.text
+
+
+class TestWebSocketHeartbeatConfiguration:
+    """WebSocket heartbeat defaults must not override explicit disablement."""
+
+    def test_default_client_uses_security_heartbeat(self):
+        from src.infrastructure.mcp._security import DEFAULT_WS_HEARTBEAT_SECONDS
+        from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+        client = MCPWebSocketClient(url="ws://localhost:8765")
+
+        assert client.heartbeat_interval == DEFAULT_WS_HEARTBEAT_SECONDS
+
+    @pytest.mark.asyncio
+    async def test_connect_preserves_explicit_disabled_heartbeat(self):
+        from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+        class _FakeWebSocket:
+            closed = False
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                await asyncio.sleep(60)
+                raise StopAsyncIteration
+
+            async def close(self):
+                self.closed = True
+
+        fake_ws = _FakeWebSocket()
+        fake_session = MagicMock()
+        fake_session.closed = False
+        fake_session.ws_connect = AsyncMock(return_value=fake_ws)
+        fake_session.close = AsyncMock()
+
+        client = MCPWebSocketClient(
+            url="ws://localhost:8765",
+            heartbeat_interval=None,
+        )
+        with (
+            patch(
+                "src.infrastructure.mcp.clients.websocket_client.aiohttp.ClientSession",
+                return_value=fake_session,
+            ),
+            patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send,
+            patch.object(client, "list_tools", new_callable=AsyncMock) as mock_list_tools,
+        ):
+            mock_send.return_value = {"serverInfo": {"name": "test-server"}}
+            mock_list_tools.return_value = []
+
+            connected = await client.connect()
+
+            assert connected is True
+            assert fake_session.ws_connect.await_args.kwargs["heartbeat"] is None
+
+        await client.disconnect()
 
 
 # ============================================================================

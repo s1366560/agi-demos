@@ -96,6 +96,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
     DERIVED_FROM_INTERNAL_PLAN_STEP,
     EXECUTION_STATE,
+    LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
     LINEAGE_SOURCE,
     ROOT_GOAL_TASK_ID,
@@ -425,12 +426,27 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             TaskExecution.REPORTED,
             TaskExecution.VERIFYING,
         }
+        recoverable_in_progress_idle = (
+            node.intent is TaskIntent.IN_PROGRESS
+            and node.execution is TaskExecution.IDLE
+            and bool(node.current_attempt_id)
+        )
         recoverable_blocked = (
             node.intent is TaskIntent.BLOCKED
             and node.execution is TaskExecution.IDLE
             and bool(node.current_attempt_id)
         )
-        if not (recoverable_execution or recoverable_blocked):
+        recoverable_done_idle = (
+            node.intent is TaskIntent.DONE
+            and node.execution is TaskExecution.IDLE
+            and bool(node.current_attempt_id)
+        )
+        if not (
+            recoverable_execution
+            or recoverable_in_progress_idle
+            or recoverable_blocked
+            or recoverable_done_idle
+        ):
             continue
         if not node.current_attempt_id:
             continue
@@ -447,6 +463,12 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             continue
         status = _attempt_status_value(attempt)
         if status == "accepted":
+            if (
+                recoverable_done_idle
+                and node.metadata.get("terminal_attempt_status") == "accepted"
+                and node.metadata.get("last_verification_attempt_id") == attempt.id
+            ):
+                continue
             summary = str(
                 attempt.leader_feedback or attempt.candidate_summary or "accepted terminal attempt"
             )
@@ -1062,7 +1084,9 @@ def make_worker_launch_handler(
         task_id = _required_payload_string(payload, "task_id")
         worker_agent_id = _payload_string(payload, "worker_agent_id")
         actor_user_id = _required_payload_string(payload, "actor_user_id")
-        leader_agent_id = _payload_string(payload, "leader_agent_id")
+        leader_agent_id = (
+            _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        )
         attempt_id = _payload_string(payload, "attempt_id")
         extra_instructions = _payload_string(payload, "extra_instructions")
 
@@ -1254,10 +1278,13 @@ async def _mark_plan_node_running_after_launch_schedule(
     await SqlPlanRepository(session).save(plan)
 
 
-def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
+def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:  # noqa: C901, PLR0915
     """Build a handler that turns recovery/retry jobs into fresh worker launches."""
 
-    async def _handle(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
+    async def _handle(  # noqa: C901, PLR0912, PLR0915
+        item: WorkspacePlanOutboxModel,
+        session: AsyncSession,
+    ) -> None:
         payload = dict(item.payload_json or {})
         workspace_id = _payload_string(payload, "workspace_id") or item.workspace_id
         task_id = _required_payload_string(payload, "task_id")
@@ -1283,6 +1310,31 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
         if not root_task_id:
             raise ValueError(f"workspace task {task_id} has no root goal task")
 
+        plan_id = item.plan_id or _mapping_string(metadata, WORKSPACE_PLAN_ID)
+        node_id = _payload_string(payload, "node_id") or _mapping_string(
+            metadata, WORKSPACE_PLAN_NODE_ID
+        )
+        if plan_id and node_id:
+            missing_dependencies = await _defer_handoff_resume_for_unmet_dependencies(
+                session=session,
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                node_id=node_id,
+                event_type=item.event_type,
+            )
+            if missing_dependencies:
+                logger.info(
+                    "workspace_plan.handoff_resume.deferred_unmet_dependencies",
+                    extra={
+                        "event": "workspace_plan.handoff_resume.deferred_unmet_dependencies",
+                        "workspace_id": workspace_id,
+                        "plan_id": plan_id,
+                        "node_id": node_id,
+                        "missing_dependency_ids": missing_dependencies,
+                    },
+                )
+                return
+
         binding = await SqlWorkspaceAgentRepository(session).find_by_workspace_and_agent_id(
             workspace_id=workspace_id,
             agent_id=worker_agent_id,
@@ -1295,6 +1347,24 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
         )
         attempt = await attempt_service.get_active_attempt(task.id)
         should_schedule = _payload_bool(payload, "force_schedule")
+        previous_attempt_id = _payload_string(payload, "previous_attempt_id")
+        if (
+            attempt is not None
+            and previous_attempt_id == attempt.id
+            and attempt.status is WorkspaceTaskSessionAttemptStatus.RUNNING
+            and attempt.conversation_id
+        ):
+            logger.info(
+                "workspace_plan.handoff_resume.skip_running_current_attempt",
+                extra={
+                    "event": "workspace_plan.handoff_resume.skip_running_current_attempt",
+                    "workspace_id": workspace_id,
+                    "plan_id": plan_id,
+                    "node_id": node_id,
+                    "attempt_id": attempt.id,
+                },
+            )
+            return
         if attempt is None:
             attempt = await attempt_service.create_attempt(
                 workspace_task_id=task.id,
@@ -1311,10 +1381,6 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
         elif not attempt.conversation_id:
             should_schedule = True
 
-        plan_id = item.plan_id or _mapping_string(metadata, WORKSPACE_PLAN_ID)
-        node_id = _payload_string(payload, "node_id") or _mapping_string(
-            metadata, WORKSPACE_PLAN_NODE_ID
-        )
         handoff = _build_handoff_package(
             event_type=item.event_type,
             payload=payload,
@@ -1381,11 +1447,64 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:
             },
             metadata={
                 "source": f"workspace_plan.{item.event_type}",
-                "previous_attempt_id": _payload_string(payload, "previous_attempt_id"),
+                "previous_attempt_id": previous_attempt_id,
             },
         )
 
     return _handle
+
+
+async def _defer_handoff_resume_for_unmet_dependencies(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+    event_type: str,
+) -> list[str]:
+    """Do not resume a stale downstream attempt before its DAG deps are done."""
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return []
+    node = plan.nodes.get(PlanNodeId(node_id))
+    if node is None or not node.depends_on:
+        return []
+    done_ids = frozenset(
+        candidate.node_id
+        for candidate in plan.nodes.values()
+        if candidate.intent is TaskIntent.DONE
+    )
+    missing = sorted(dep.value for dep in node.depends_on if dep not in done_ids)
+    if not missing:
+        return []
+
+    now = datetime.now(UTC)
+    metadata = _clear_stale_attempt_metadata(node.metadata)
+    metadata.update(
+        {
+            "handoff_resume_deferred_at": now.isoformat().replace("+00:00", "Z"),
+            "handoff_resume_deferred_event_type": event_type,
+            "handoff_resume_deferred_missing_dependency_ids": missing,
+            "handoff_resume_deferred_previous_attempt_id": node.current_attempt_id,
+            "handoff_resume_deferred_previous_intent": node.intent.value,
+            "handoff_resume_deferred_previous_execution": node.execution.value,
+        }
+    )
+    plan.replace_node(
+        replace(
+            node,
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            current_attempt_id=None,
+            metadata=metadata,
+            updated_at=now,
+            completed_at=None,
+        )
+    )
+    await repo.save(plan)
+    return missing
 
 
 def make_attempt_retry_handler() -> WorkspacePlanOutboxHandler:
@@ -2499,7 +2618,10 @@ def _make_sql_attempt_context(session: AsyncSession) -> AttemptContextProvider:
         if node.workspace_task_id:
             task = await SqlWorkspaceTaskRepository(session).find_by_id(node.workspace_task_id)
             if task is not None:
-                stdout, artifacts = _extract_task_evidence(task)
+                stdout, artifacts = _extract_task_evidence(
+                    task,
+                    current_attempt_id=node.current_attempt_id,
+                )
 
         if node.current_attempt_id:
             attempt = await SqlWorkspaceTaskSessionAttemptRepository(session).find_by_id(
@@ -2733,9 +2855,21 @@ async def _find_task_for_plan_node(
     return SqlWorkspaceTaskRepository(session)._to_domain(row)
 
 
-def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
+def _extract_task_evidence(
+    task: WorkspaceTask,
+    *,
+    current_attempt_id: str | None = None,
+) -> tuple[str, dict[str, Any]]:
     metadata = dict(task.metadata or {})
-    summary = metadata.get(LAST_WORKER_REPORT_SUMMARY)
+    report_attempt_id = metadata.get(LAST_WORKER_REPORT_ATTEMPT_ID) or metadata.get(
+        "last_attempt_id"
+    )
+    report_belongs_to_current_attempt = (
+        not current_attempt_id
+        or not isinstance(report_attempt_id, str)
+        or report_attempt_id == current_attempt_id
+    )
+    summary = metadata.get(LAST_WORKER_REPORT_SUMMARY) if report_belongs_to_current_attempt else ""
     stdout = summary if isinstance(summary, str) else json.dumps(summary or "", ensure_ascii=False)
     artifacts: dict[str, Any] = {}
     for key in (
@@ -2746,6 +2880,13 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
         "preflight_checks",
         "pipeline_evidence_refs",
     ):
+        if not report_belongs_to_current_attempt and key in {
+            "evidence_refs",
+            "execution_verifications",
+            "last_worker_report_artifacts",
+            "last_worker_report_verifications",
+        }:
+            continue
         value = metadata.get(key)
         if isinstance(value, list):
             if key == "preflight_checks":
@@ -2756,6 +2897,9 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
                 artifacts[key] = [str(item) for item in value if item]
     for key in (
         "current_attempt_conversation_id",
+        CURRENT_ATTEMPT_ID,
+        "last_attempt_id",
+        LAST_WORKER_REPORT_ATTEMPT_ID,
         "last_attempt_status",
         "last_worker_report_summary",
         "last_worker_report_type",
@@ -2763,6 +2907,11 @@ def _extract_task_evidence(task: WorkspaceTask) -> tuple[str, dict[str, Any]]:
         "preview_url",
         "health_url",
     ):
+        if not report_belongs_to_current_attempt and key in {
+            "last_worker_report_summary",
+            "last_worker_report_type",
+        }:
+            continue
         value = metadata.get(key)
         if isinstance(value, str) and value:
             artifacts[key] = value

@@ -84,6 +84,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
     EXECUTION_STATE,
     LAST_LEADER_ADJUDICATION_STATUS,
+    LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
     PENDING_LEADER_ADJUDICATION,
     PREFERRED_LANGUAGE,
@@ -723,6 +724,23 @@ def _worker_report_structured_evidence(payload: Mapping[str, Any]) -> tuple[list
     return artifacts, verifications
 
 
+def _is_stale_terminal_worker_report(
+    *,
+    task_metadata: Mapping[str, Any],
+    attempt_id: str,
+    report_type: str,
+) -> bool:
+    """Return True when an old attempt reports after a newer attempt took over."""
+    if report_type not in _WORKER_TERMINAL_REPORT_TYPES:
+        return False
+    current_attempt_id = task_metadata.get(CURRENT_ATTEMPT_ID)
+    return (
+        isinstance(current_attempt_id, str)
+        and bool(current_attempt_id)
+        and current_attempt_id != attempt_id
+    )
+
+
 def _build_worker_report_fingerprint(
     *,
     report_type: str,
@@ -993,6 +1011,23 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
                     task=task,
                     leader_agent_id=leader_agent_id,
                 )
+            if _is_stale_terminal_worker_report(
+                task_metadata=task.metadata,
+                attempt_id=resolved_attempt.id,
+                report_type=report_type,
+            ):
+                logger.info(
+                    "workspace_goal_runtime.worker_report ignored stale terminal report",
+                    extra={
+                        "workspace_id": workspace_id,
+                        "task_id": task_id,
+                        "attempt_id": resolved_attempt.id,
+                        "current_attempt_id": task.metadata.get(CURRENT_ATTEMPT_ID),
+                        "report_type": report_type,
+                        "report_id": report_id,
+                    },
+                )
+                return task
             effective_worker_agent_id = worker_agent_id or resolved_attempt.worker_agent_id
             if not isinstance(effective_worker_agent_id, str) or not effective_worker_agent_id:
                 raise ValueError("Worker report requires an attempt-bound worker_agent_id")
@@ -1069,6 +1104,7 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
             metadata["last_worker_report_verifications"] = list(dict.fromkeys(report_verifications))
             metadata["last_worker_reported_at"] = reported_at
             metadata["last_worker_report_fingerprint"] = report_fingerprint
+            metadata[LAST_WORKER_REPORT_ATTEMPT_ID] = resolved_attempt.id
             metadata[PENDING_LEADER_ADJUDICATION] = (
                 report_type in _WORKER_TERMINAL_REPORT_TYPES and not v2_plan_linked
             )
@@ -1111,6 +1147,7 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
                     "last_worker_report_verifications",
                     "last_worker_reported_at",
                     "last_worker_report_fingerprint",
+                    LAST_WORKER_REPORT_ATTEMPT_ID,
                     "last_worker_report_id",
                     PENDING_LEADER_ADJUDICATION,
                     CURRENT_ATTEMPT_ID,

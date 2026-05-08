@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 SANDBOX_NATIVE_PROVIDER = "sandbox_native"
+SANDBOX_NATIVE_PROVIDER_ALIASES = frozenset({SANDBOX_NATIVE_PROVIDER, "memstack-sandbox"})
 PIPELINE_EVIDENCE_KEY = "pipeline_evidence_refs"
 DEFAULT_PIPELINE_TIMEOUT_SECONDS = 600
 DEFAULT_PREVIEW_PORT = 3000
@@ -151,7 +152,7 @@ def build_pipeline_contract_from_metadata(
 
     raw = workspace_metadata.get("delivery_cicd")
     config = dict(raw) if isinstance(raw, dict) else {}
-    provider = _string(config.get("provider")) or SANDBOX_NATIVE_PROVIDER
+    provider = _normalize_provider(_string(config.get("provider")) or SANDBOX_NATIVE_PROVIDER)
     code_root = _string(config.get("code_root")) or fallback_code_root
     timeout_seconds = _positive_int(
         config.get("timeout_seconds"),
@@ -548,8 +549,16 @@ def _preview_deploy_command(command: str, *, service: PipelineServiceSpec | None
     service_label = service.service_id if service is not None else "default"
     quoted = shlex.quote(command)
     log_path = f"/tmp/memstack-workspace-preview/{shlex.quote(service_label)}.log"
+    health_probe = ""
+    if service is not None:
+        health_url = shlex.quote(service.internal_health_url)
+        health_probe = (
+            f"curl -fsS {health_url} >/dev/null 2>&1 "
+            "&& { echo 'service already healthy'; exit 0; }; "
+        )
     return (
         "mkdir -p /tmp/memstack-workspace-preview && "
+        f"{health_probe}"
         f"nohup sh -lc {quoted} "
         f"> {log_path} 2>&1 & echo $!"
     )
@@ -628,6 +637,13 @@ def _has_stage(
 
 def _string(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _normalize_provider(provider: str) -> str:
+    normalized = provider.strip()
+    if normalized in SANDBOX_NATIVE_PROVIDER_ALIASES:
+        return SANDBOX_NATIVE_PROVIDER
+    return normalized
 
 
 def _normalize_path(value: str) -> str:

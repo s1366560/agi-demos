@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import src.application.services.task_execution_session_monitor as monitor_module
 from src.application.services.task_execution_session_monitor import (
     TaskExecutionIncident,
     TaskExecutionSessionMonitor,
@@ -65,6 +66,86 @@ def _attempt() -> WorkspaceTaskSessionAttempt:
 
 @pytest.mark.unit
 class TestTaskExecutionSessionMonitor:
+    def test_recommends_new_attempt_for_terminal_failed_attempt(self) -> None:
+        task = _task()
+        incident = TaskExecutionIncident(
+            type="stale_processing",
+            severity="warning",
+            summary="Task is still processing but execution activity is stale.",
+            opened_at=_NOW,
+        )
+
+        action = monitor_module._recommended_recovery_action(
+            task=task,
+            incidents=(incident,),
+            metadata=task.metadata,
+            attempt_status=WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+        )
+
+        assert action == "new_attempt"
+
+    async def test_retry_launch_on_terminal_failed_attempt_queues_fresh_attempt(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        task = _task()
+        attempt = _attempt()
+        attempt.status = WorkspaceTaskSessionAttemptStatus.REJECTED
+        before = TaskExecutionSessionState(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            task_status="in_progress",
+            health="warning",
+            session_status="degraded",
+            conversation_id="conv-session-monitor-1",
+            attempt_id=attempt.id,
+            attempt_status=WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+            execution_status=None,
+            last_event_at=_NOW,
+            last_assistant_event_at=_NOW,
+            last_error=None,
+            has_user_input=True,
+            has_assistant_output=True,
+            incidents=(
+                TaskExecutionIncident(
+                    type="stale_processing",
+                    severity="warning",
+                    summary="Task is still processing but execution activity is stale.",
+                    opened_at=_NOW,
+                ),
+            ),
+            recommended_recovery_action="new_attempt",
+            available_interventions=("new_attempt", "retry_launch"),
+        )
+        task_service = AsyncMock()
+        task_service.get_task.return_value = task
+        command_service = AsyncMock()
+        attempt_repo = AsyncMock()
+        attempt_repo.find_by_id.return_value = attempt
+        service = TaskExecutionSessionMonitor(
+            db=db_session,
+            task_service=task_service,
+            command_service=command_service,
+            attempt_repo=attempt_repo,
+        )
+        service.get_state = AsyncMock(return_value=before)  # type: ignore[method-assign]
+        service._enqueue_attempt_retry = AsyncMock(  # type: ignore[method-assign]
+            return_value="outbox-new-attempt"
+        )
+        service._enqueue_worker_launch = AsyncMock()  # type: ignore[method-assign]
+
+        result = await service.apply_recovery_action(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            actor_user_id="user-session-monitor-1",
+            action="retry_launch",
+        )
+
+        assert result.action == "new_attempt"
+        assert result.outbox_id == "outbox-new-attempt"
+        service._enqueue_attempt_retry.assert_awaited_once()
+        service._enqueue_worker_launch.assert_not_awaited()
+
     async def test_detects_current_silent_initialization_failure_from_execution_events(
         self,
         db_session: AsyncSession,

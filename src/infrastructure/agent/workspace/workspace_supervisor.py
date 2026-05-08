@@ -63,7 +63,7 @@ DEFAULT_BLOCK_MS = 5_000
 # How long an attempt may go without ANY inbound WTP traffic (progress /
 # heartbeat / terminal) before the watchdog flips it to blocked. Set to 0
 # to disable the watchdog entirely.
-DEFAULT_STALE_SECONDS = int(os.getenv("WORKSPACE_ATTEMPT_STALE_SECONDS", "180"))
+DEFAULT_STALE_SECONDS = int(os.getenv("WORKSPACE_ATTEMPT_STALE_SECONDS", "900"))
 # How often the watchdog wakes up to scan the in-memory liveness map.
 DEFAULT_WATCHDOG_INTERVAL_SECONDS = float(
     os.getenv("WORKSPACE_ATTEMPT_WATCHDOG_INTERVAL_SECONDS", "30")

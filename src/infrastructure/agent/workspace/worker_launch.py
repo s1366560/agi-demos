@@ -49,6 +49,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     PREFERRED_LANGUAGE,
     ROOT_GOAL_TASK_ID,
 )
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 WORKER_LAUNCH_COOLDOWN_SECONDS = 300
 WORKER_LAUNCH_HEARTBEAT_SECONDS = int(os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45"))
 WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
-WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 8_000
+WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 4_000
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
 WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
     "preflight:read-progress",
@@ -224,6 +225,10 @@ def _preferred_language_from_metadata(metadata: Mapping[str, Any] | None) -> str
     return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
 
 
+def _launch_authority_actor_id(leader_agent_id: str | None) -> str:
+    return leader_agent_id or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+
+
 def _code_context_metadata(code_context: WorkspaceCodeContext) -> dict[str, Any]:
     return {
         "sandbox_code_root": code_context.sandbox_code_root,
@@ -342,6 +347,11 @@ def _build_worker_system_context(
                     "in artifacts or verifications."
                 ),
                 (
+                    "If you include commit_ref:<sha>, first run git status --short and make "
+                    "sure it is empty. Stage every intended tracked and untracked file before "
+                    "committing; do not report completion with a dirty worktree."
+                ),
+                (
                     "For deploy/review work, include preview URL, health-check command/result, "
                     "and rollback or stop notes when available; final acceptance requires "
                     "harness-native pipeline/deployment evidence."
@@ -354,21 +364,27 @@ def _build_worker_system_context(
             "max_single_bash_command_chars": WORKER_MAX_SINGLE_BASH_COMMAND_CHARS,
             "instructions": [
                 (
-                    "Prefer one complete write call only for files under "
-                    f"{WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters."
+                    "Never create or replace a source file, page, generated fixture, or long "
+                    "document with one complete write call, bash heredoc, or inline Python "
+                    "script. This rule is mandatory even when the file appears short enough."
                 ),
                 (
-                    "For longer generated files, write the first chunk, then append or edit "
-                    f"sections in chunks under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters."
+                    "For new files, write a tiny skeleton first, then append focused sections "
+                    f"in chunks under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters."
                 ),
                 (
-                    "Do not use a giant heredoc or shell command with generated content "
-                    "larger than max_single_bash_command_chars; use write mode='append' "
-                    "instead of shell heredocs for file content."
+                    "For existing files, prefer edit calls that replace one bounded function, "
+                    "component, import block, or JSX section at a time. Do not pass the whole "
+                    "file as old_string or new_string."
+                ),
+                (
+                    "Do not write temp scripts whose embedded string is the target source "
+                    "file content; that is the same failure mode as a giant heredoc."
                 ),
                 (
                     "If a write/edit tool reports truncated arguments or incomplete JSON, "
-                    "retry with smaller chunks instead of reporting blocked immediately."
+                    "do not retry using bash, Python, or a full-file write. Switch immediately "
+                    "to smaller chunks via edit/append and record the failed attempt as evidence."
                 ),
                 "Split very large documentation into multiple focused files when appropriate.",
             ],
@@ -554,11 +570,14 @@ def _build_worker_brief(
         sections.append(f"## Task description\n{description}")
     sections.append(
         "## Artifact write discipline\n"
-        f"Keep ordinary write/edit payloads under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} "
-        f"characters; the hard write limit is {WORKER_MAX_SINGLE_WRITE_CHARS} "
-        f"characters and any bash command under {WORKER_MAX_SINGLE_BASH_COMMAND_CHARS} "
-        "characters. For longer docs or generated code, write the first chunk and append "
-        "small sections with write mode='append'; do not send one giant heredoc."
+        "Never use bash heredocs, inline Python scripts, or one-shot write calls to create "
+        "a full source file, page, fixture, or long document. First create a tiny skeleton, "
+        "then use edit or write mode='append' in small sections. Keep every write/edit "
+        f"payload under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters; the hard write "
+        f"limit is {WORKER_MAX_SINGLE_WRITE_CHARS} characters and any bash command under "
+        f"{WORKER_MAX_SINGLE_BASH_COMMAND_CHARS} characters. If a tool reports truncated "
+        "arguments, do not retry with the same shape; immediately switch to smaller "
+        "edit/append chunks."
     )
     sections.append(
         "## Shell execution discipline\n"
@@ -585,9 +604,11 @@ def _build_worker_brief(
         "Add the concrete test/build/browser evidence refs after them. If you changed "
         "files, also include commit_ref:<sha> or git_diff_summary:<changed files and "
         "verification state> in artifacts or verifications; otherwise the verifier will "
-        "reject the attempt. For software delivery phases, the harness will run the final "
-        "sandbox-native CI/CD gate after your report, so include preview, health, and "
-        "rollback details when they exist."
+        "reject the attempt. If you include commit_ref:<sha>, run `git status --short` "
+        "after the commit and do not call workspace_report_complete unless it is empty; "
+        "stage intended untracked files before committing. For software delivery phases, "
+        "the harness will run the final sandbox-native CI/CD gate after your report, so "
+        "include preview, health, and rollback details when they exist."
     )
 
     return "\n\n".join(sections)
@@ -1191,6 +1212,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             )
             command_service = WorkspaceTaskCommandService(task_service)
             try:
+                launch_actor_id = _launch_authority_actor_id(leader_agent_id)
                 metadata_patch: dict[str, Any] = {
                     CURRENT_ATTEMPT_ID: attempt.id,
                     "current_attempt_number": attempt.attempt_number,
@@ -1205,14 +1227,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     task_id=task.id,
                     actor_user_id=actor_user_id,
                     metadata=metadata_patch,
-                    actor_type="agent" if leader_agent_id else "human",
-                    actor_agent_id=leader_agent_id,
+                    actor_type="agent",
+                    actor_agent_id=launch_actor_id,
                     reason="workspace_worker_launch.bind_conversation",
-                    authority=(
-                        WorkspaceTaskAuthorityContext.leader(leader_agent_id)
-                        if leader_agent_id
-                        else None
-                    ),
+                    authority=WorkspaceTaskAuthorityContext.leader(launch_actor_id),
                 )
             except Exception:
                 logger.warning(
@@ -1507,19 +1525,16 @@ async def _patch_task_launch_state(
                 workspace_agent_repo=SqlWorkspaceAgentRepository(db),
                 workspace_task_repo=SqlWorkspaceTaskRepository(db),
             )
+            launch_actor_id = _launch_authority_actor_id(leader_agent_id)
             await WorkspaceTaskCommandService(task_service).update_task(
                 workspace_id=workspace_id,
                 task_id=task_id,
                 actor_user_id=actor_user_id,
                 metadata={"launch_state": launch_state},
-                actor_type="agent" if leader_agent_id else "human",
-                actor_agent_id=leader_agent_id,
+                actor_type="agent",
+                actor_agent_id=launch_actor_id,
                 reason=f"workspace_worker_launch.{launch_state}",
-                authority=(
-                    WorkspaceTaskAuthorityContext.leader(leader_agent_id)
-                    if leader_agent_id
-                    else None
-                ),
+                authority=WorkspaceTaskAuthorityContext.leader(launch_actor_id),
             )
             await db.commit()
     except Exception:

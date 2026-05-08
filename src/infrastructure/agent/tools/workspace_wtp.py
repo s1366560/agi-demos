@@ -299,9 +299,19 @@ async def _apply_terminal_report(
             report_type,
         )
         return {"applied": False, "error": str(exc)}
+    if task is None:
+        logger.warning(
+            "apply_workspace_worker_report returned no task (task=%s report_type=%s)",
+            task_id,
+            report_type,
+        )
+        return {
+            "applied": False,
+            "error": "apply_workspace_worker_report returned no task",
+        }
     return {
         "applied": True,
-        "task_status": getattr(task, "status", None) if task is not None else None,
+        "task_status": getattr(task, "status", None),
     }
 
 
@@ -332,6 +342,14 @@ def _build_terminal_tool_result(
             "and will be reconciled from durable attempt state."
         )
         return ToolResult(output=json.dumps(enriched, indent=2), is_error=False)
+
+    if apply_result.get("applied") is False:
+        enriched["ok"] = False
+        enriched["error"] = "terminal_report_apply_failed"
+        enriched["message"] = apply_result.get("error") or (
+            "Terminal workspace report was not written to durable task state."
+        )
+        return ToolResult(output=json.dumps(enriched, indent=2), is_error=True)
 
     return ToolResult(
         output=json.dumps(enriched, indent=2),

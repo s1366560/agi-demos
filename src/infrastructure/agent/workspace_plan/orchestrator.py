@@ -153,7 +153,7 @@ class WorkspaceOrchestrator:
         node = plan.nodes.get(nid)
         if node is None:
             return
-        if attempt_id and node.current_attempt_id and node.current_attempt_id != attempt_id:
+        if attempt_id and node.current_attempt_id != attempt_id:
             logger.info(
                 "workspace_plan.worker_report.stale_attempt_ignored",
                 extra={

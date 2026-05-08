@@ -71,6 +71,8 @@ from ..hitl.coordinator import HITLCoordinator, complete_hitl_request
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
 from ..workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_SESSION_ROLE_KEY,
     WORKSPACE_TOOL_MODE_KEY,
     WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
     WORKSPACE_TURN_TYPE_KEY,
@@ -347,6 +349,14 @@ class SessionProcessor:
     )
     _WORKSPACE_TODOREAD_SNAPSHOT_PREFIX = "[WORKSPACE TODOREAD SNAPSHOT]"
     _WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX = "[WORKSPACE DELEGATION RETRY]"
+    _WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT = (
+        "[WORKSPACE TERMINAL REPORT REQUIRED] This is a workspace worker session. "
+        "Do not finish with text only. Call workspace_report_complete when the task is done, "
+        "or workspace_report_blocked when the task cannot be completed."
+    )
+    _TERMINAL_WORKSPACE_REPORT_TOOLS: ClassVar[frozenset[str]] = frozenset(
+        {"workspace_report_complete", "workspace_report_blocked"}
+    )
 
     def __init__(
         self,
@@ -670,6 +680,19 @@ class SessionProcessor:
             if not item.startswith(self._WORKSPACE_DELEGATION_RETRY_ACTION_PREFIX)
         ]
 
+    def _queue_workspace_terminal_report_required_hint(self) -> None:
+        self._clear_workspace_terminal_report_required_hint()
+        self._response_instructions.append(self._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT)
+
+    def _clear_workspace_terminal_report_required_hint(self) -> None:
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT
+        ]
+
     def _reset_tool_usage_reminder_streak(self) -> None:
         """Reset reminder streak state after progress resumes or processing restarts."""
         self._tool_reminder_issued_for_streak = False
@@ -678,6 +701,15 @@ class SessionProcessor:
         self._clear_workspace_replan_tool_call_hint()
         self._clear_workspace_todoread_snapshot()
         self._clear_workspace_delegation_retry_action()
+        self._clear_workspace_terminal_report_required_hint()
+
+    def _is_workspace_worker_turn(self) -> bool:
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        return runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_WORKER
 
     def _is_workspace_task_ledger_only_turn(self) -> bool:
         """Return whether this processor turn is restricted to workspace task-ledger work."""
@@ -728,6 +760,33 @@ class SessionProcessor:
                         "Call todoread and then todowrite(add or replace)."
                     ),
                     code="GOAL_NOT_ACHIEVED",
+                )
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return events
+        self._last_process_result = ProcessorResult.CONTINUE
+        return events
+
+    def _evaluate_workspace_worker_no_tool_result(self) -> list[ProcessorEvent] | None:
+        """Require worker sessions to finish through terminal WTP tools."""
+        if not self._is_workspace_worker_turn():
+            return None
+
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_workspace_terminal_report_required_hint()
+        events: list[ProcessorEvent] = [
+            AgentStatusEvent(status="workspace_worker_requires_terminal_report_tool")
+        ]
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            events.append(
+                AgentErrorEvent(
+                    message=(
+                        "Workspace worker session ended without calling "
+                        "workspace_report_complete or workspace_report_blocked."
+                    ),
+                    code="WORKSPACE_TERMINAL_REPORT_REQUIRED",
                 )
             )
             self._state = ProcessorState.ERROR
@@ -1541,13 +1600,47 @@ class SessionProcessor:
         if event_type == AgentEventType.ACT.value:
             self._reset_tool_usage_reminder_streak()
             return current_result, True
+        if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_report(
+            event
+        ):
+            self._pending_completion_status = "goal_achieved:workspace_terminal_report"
+            return ProcessorResult.COMPLETE, True
         if event_type == AgentEventType.COMPACT_NEEDED.value:
             return ProcessorResult.COMPACT, had_tool_calls
         if event_type in {"task_list_updated", "task_updated"}:
             self._saw_task_events = True
         return current_result, had_tool_calls
 
-    async def _evaluate_no_tool_result(
+    def _is_terminal_workspace_report(self, event: ProcessorEvent) -> bool:
+        """Return True when a workspace terminal report was durably accepted."""
+        if isinstance(event, dict):
+            tool_name = event.get("tool_name")
+            error = event.get("error")
+            result = event.get("result")
+        else:
+            tool_name = getattr(event, "tool_name", None)
+            error = getattr(event, "error", None)
+            result = getattr(event, "result", None)
+
+        if tool_name not in self._TERMINAL_WORKSPACE_REPORT_TOOLS or error:
+            return False
+
+        payload: Any
+        if isinstance(result, str):
+            try:
+                payload = json.loads(result)
+            except json.JSONDecodeError:
+                return False
+        else:
+            payload = result
+
+        if not isinstance(payload, dict) or payload.get("ok") is False:
+            return False
+
+        applied_report = payload.get("applied_report")
+        return not (isinstance(applied_report, dict) and applied_report.get("applied") is False)
+
+    async def _evaluate_no_tool_result(  # noqa: PLR0911, PLR0912
         self, session_id: str, messages: list[dict[str, Any]]
     ) -> AsyncIterator[ProcessorEvent]:
         """Evaluate goal completion when no tools were called.
@@ -1557,6 +1650,12 @@ class SessionProcessor:
         replan_events = await self._evaluate_workspace_replan_no_tool_result(session_id)
         if replan_events is not None:
             for evt in replan_events:
+                yield evt
+            return
+
+        worker_events = self._evaluate_workspace_worker_no_tool_result()
+        if worker_events is not None:
+            for evt in worker_events:
                 yield evt
             return
 

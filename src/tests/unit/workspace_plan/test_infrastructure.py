@@ -39,6 +39,9 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    LAST_WORKER_REPORT_ATTEMPT_ID,
+)
 from src.infrastructure.agent.workspace_plan import factory as workspace_plan_factory
 from src.infrastructure.agent.workspace_plan.allocator import CapabilityAllocator
 from src.infrastructure.agent.workspace_plan.blackboard import InMemoryBlackboard
@@ -496,6 +499,42 @@ class TestCapabilityAllocator:
         assert len(out) == 1
         assert out[0].agent_id == "builder"
 
+    async def test_generic_worker_capability_prefers_general_execution_worker(self) -> None:
+        node = PlanNode(
+            id="generic-worker-node",
+            plan_id="plan-1",
+            parent_id=PlanNodeId("goal-1"),
+            kind=PlanNodeKind.TASK,
+            title="Implement frontend and backend changes",
+            recommended_capabilities=(Capability(name="agent:worker"),),
+        )
+        builder = WorkspaceAgent(
+            agent_id="builder",
+            display_name="Builder",
+            capabilities=frozenset(
+                {
+                    "agent:worker",
+                    "backend",
+                    "codegen",
+                    "file_edit",
+                    "frontend",
+                    "shell",
+                    "software_development",
+                    "testing",
+                }
+            ),
+        )
+        verifier = WorkspaceAgent(
+            agent_id="verifier",
+            display_name="Verifier",
+            capabilities=frozenset({"agent:worker", "browser_e2e", "evidence", "shell"}),
+        )
+
+        out = await CapabilityAllocator().allocate([node], [verifier, builder])
+
+        assert len(out) == 1
+        assert out[0].agent_id == "builder"
+
 
 # ---------------------------------------------------------------------------
 # M5 verifier
@@ -760,6 +799,39 @@ class TestVerifier:
         assert not rep.passed
         assert rep.hard_fail
         assert "missing completed worker report" in rep.summary()
+
+    async def test_verifier_rejects_worker_report_from_prior_attempt(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={
+                        "pattern": r"\S",
+                        "source": "stdout",
+                        "requires_terminal_worker_report": True,
+                    },
+                    description="worker report is present",
+                    required=True,
+                ),
+            )
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            attempt_id="attempt-current",
+            stdout="old report says complete",
+            artifacts={
+                "last_worker_report_type": "completed",
+                LAST_WORKER_REPORT_ATTEMPT_ID: "attempt-old",
+            },
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert rep.hard_fail
+        assert "not current attempt 'attempt-current'" in rep.summary()
 
     async def test_verifier_rejects_missing_preflight_evidence(self) -> None:
         verifier = AcceptanceCriterionVerifier()
@@ -1490,6 +1562,35 @@ class _RetryableInfrastructureVerifier:
         )
 
 
+class _MixedPipelineAndCustomFailureVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=1.0,
+                    message="missing harness-native CI pipeline evidence",
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={"name": "workspace_judge"},
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.95,
+                    message="judge verdict=needs_rework",
+                ),
+            ),
+        )
+
+
 class _StaticIterationReviewer:
     def __init__(self, verdict: IterationReviewVerdict) -> None:
         self.verdict = verdict
@@ -1740,6 +1841,146 @@ class TestSupervisorTick:
         assert len(dispatched) == 1
         assert events == [("dispatch_deferred_write_conflict", "b")]
 
+    async def test_tick_invalidates_active_downstream_node_when_dependency_regresses(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                b,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.RUNNING,
+                current_attempt_id="attempt-b",
+                assignee_agent_id="ag-code",
+                metadata={
+                    "last_verification_passed": True,
+                    "pipeline_status": "success",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            return None
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 0
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        invalidated = reloaded.nodes[PlanNodeId("b")]
+        assert invalidated.intent is TaskIntent.TODO
+        assert invalidated.execution is TaskExecution.IDLE
+        assert invalidated.current_attempt_id is None
+        assert invalidated.assignee_agent_id is None
+        assert invalidated.metadata["dependency_invalidated_missing_ids"] == ["a"]
+        assert invalidated.metadata["dependency_invalidated_previous_attempt_id"] == "attempt-b"
+        assert "last_verification_passed" not in invalidated.metadata
+        assert "pipeline_status" not in invalidated.metadata
+        assert events == [
+            (
+                "dependency_invalidated",
+                "b",
+                {
+                    "summary": "node reset because one or more dependencies are no longer done",
+                    "missing_dependency_ids": ["a"],
+                    "previous_attempt_id": "attempt-b",
+                    "previous_intent": "in_progress",
+                    "previous_execution": "running",
+                },
+            )
+        ]
+
+    async def test_mark_worker_reported_ignores_stale_attempt_after_node_was_invalidated(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                b,
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                current_attempt_id=None,
+                metadata={"dependency_invalidated_previous_attempt_id": "old-attempt"},
+            )
+        )
+        await repo.save(plan)
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            return None
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            heartbeat_seconds=0.05,
+        )
+        orch = WorkspaceOrchestrator(
+            planner=LLMGoalPlanner(decomposer=None),
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            supervisor=sup,
+            plan_repo=repo,
+        )
+
+        await orch.mark_worker_reported(
+            workspace_id="ws-1",
+            node_id="b",
+            attempt_id="old-attempt",
+        )
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        stale = reloaded.nodes[PlanNodeId("b")]
+        assert stale.intent is TaskIntent.TODO
+        assert stale.execution is TaskExecution.IDLE
+        assert stale.current_attempt_id is None
+
     async def test_tick_defers_ready_node_overlapping_active_write_set(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -1942,6 +2183,72 @@ class TestSupervisorTick:
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_count"] == 1
+
+    async def test_pipeline_gate_does_not_hide_non_pipeline_verification_failures(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={"pipeline_required": True},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("no node should dispatch while dependency verification failed")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_MixedPipelineAndCustomFailureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_blocked == 1
+        assert not any(event[0] == "pipeline_run_requested" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        blocked_node = reloaded.nodes[PlanNodeId("a")]
+        assert blocked_node.intent is TaskIntent.BLOCKED
+        assert blocked_node.execution is TaskExecution.IDLE
+        assert blocked_node.metadata["last_verification_summary"].endswith(
+            "judge verdict=needs_rework"
+        )
 
     async def test_sql_event_sink_schedules_delayed_retry_tick(
         self,

@@ -240,6 +240,12 @@ class TaskExecutionSessionMonitor:
             await self._attempt_repo.find_by_id(before.attempt_id) if before.attempt_id else None
         )
         action_reason = reason or _default_action_reason(before, action)
+        if action == "retry_launch" and _attempt_status_requires_fresh_attempt(
+            before.attempt_status
+        ):
+            action = "new_attempt"
+            if reason is None:
+                action_reason = _default_action_reason(before, action)
 
         if action == "mark_human_blocked":
             blocked_attempt = await self._ensure_attempt_for_human_block(
@@ -521,6 +527,9 @@ class TaskExecutionSessionMonitor:
                 task=task,
                 incidents=incidents,
                 metadata=metadata,
+                attempt_status=(
+                    attempt.status.value if attempt else _text(metadata.get("last_attempt_status"))
+                ),
             ),
             available_interventions=_available_interventions(task, incidents, conversation_id),
             recent_events=recent_events,
@@ -953,6 +962,7 @@ def _recommended_recovery_action(
     task: WorkspaceTask,
     incidents: Sequence[TaskExecutionIncident],
     metadata: Mapping[str, Any],
+    attempt_status: str | None,
 ) -> str:
     if task.status is not WorkspaceTaskStatus.IN_PROGRESS:
         return "suppress"
@@ -961,7 +971,7 @@ def _recommended_recovery_action(
         return "suppress"
     if _recovery_attempt_count(metadata) >= _MAX_AUTOMATIC_RECOVERY_ATTEMPTS:
         return "mark_human_blocked"
-    if incident_types.intersection(
+    if _attempt_status_requires_fresh_attempt(attempt_status) or incident_types.intersection(
         {
             "agent_initialization_failed",
             "missing_execution_status",
@@ -973,6 +983,14 @@ def _recommended_recovery_action(
     if "stale_processing" in incident_types:
         return "retry_launch"
     return "suppress"
+
+
+def _attempt_status_requires_fresh_attempt(attempt_status: str | None) -> bool:
+    return attempt_status in {
+        WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+        WorkspaceTaskSessionAttemptStatus.BLOCKED.value,
+        WorkspaceTaskSessionAttemptStatus.CANCELLED.value,
+    }
 
 
 def _recovery_attempt_count(metadata: Mapping[str, Any]) -> int:

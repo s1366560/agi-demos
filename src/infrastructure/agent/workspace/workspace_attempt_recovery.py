@@ -58,13 +58,15 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 
 logger = logging.getLogger(__name__)
 
-# Defaults chosen to stay well clear of normal in-flight latency but not so
-# long that a user sees a stalled workspace for many minutes after a restart.
-DEFAULT_STALE_SECONDS = 180
+# Defaults chosen to stay clear of normal long-running build/E2E commands and
+# LLM post-tool summarization latency. Faster recovery can still be opted into
+# with WORKSPACE_ATTEMPT_RECOVERY_STALE_SECONDS.
+DEFAULT_STALE_SECONDS = 900
 DEFAULT_STARTUP_GRACE_SECONDS = 15
 DEFAULT_CHECK_INTERVAL_SECONDS = 60
 DEFAULT_MAX_ATTEMPTS_PER_SWEEP = 3
 DEFAULT_ERROR_EVENT_GRACE_SECONDS = 5
+DEFAULT_TRANSIENT_PROVIDER_ERROR_GRACE_SECONDS = 300
 RECOVERY_SUMMARY_RESTART = "recovered_after_restart_no_heartbeat"
 RECOVERY_SUMMARY_STALE = "recovered_stale_no_heartbeat"
 RECOVERY_SUMMARY_AGENT_ERROR_EVENT = "recovered_agent_error_event"
@@ -76,6 +78,12 @@ TERMINAL_ATTEMPT_STATUSES = {
 }
 SUPPRESSED_PLAN_STATUSES = {"suspended", "completed", "abandoned"}
 SUPPRESSED_LOOP_STATUSES = {"paused", "suspended", "completed"}
+TRANSIENT_PROVIDER_ERROR_MARKERS = (
+    "Rate limit exceeded",
+    "Please wait a moment and try again",
+    "litellm.InternalServerError",
+    "litellm.APIConnectionError",
+)
 
 
 def _attempt_summary(summary: str | Mapping[str, str], attempt_id: str) -> str:
@@ -103,6 +111,39 @@ def _error_event_recovery_summary(event_data: object) -> str:
     return f"{RECOVERY_SUMMARY_AGENT_ERROR_EVENT}: {compact}"
 
 
+def _error_event_message(event_data: object) -> str:
+    if not isinstance(event_data, Mapping):
+        return ""
+    raw = (
+        event_data.get("message")
+        or event_data.get("error")
+        or event_data.get("reason")
+        or event_data.get("detail")
+    )
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _is_transient_provider_error_event(event_data: object) -> bool:
+    message = _error_event_message(event_data).casefold()
+    if not message:
+        return False
+    return any(marker.casefold() in message for marker in TRANSIENT_PROVIDER_ERROR_MARKERS)
+
+
+def _should_defer_error_event_recovery(
+    *,
+    event_data: object,
+    event_created_at: datetime,
+    now: datetime,
+    transient_error_grace_seconds: int,
+) -> bool:
+    if transient_error_grace_seconds <= 0:
+        return False
+    if not _is_transient_provider_error_event(event_data):
+        return False
+    return event_created_at > now - timedelta(seconds=transient_error_grace_seconds)
+
+
 ApplyReportCallable = Callable[..., Awaitable[object]]
 LivenessLookup = Callable[[], Iterable[str]]
 ScheduleTickCallable = Callable[[str, str], None]
@@ -125,6 +166,7 @@ class WorkspaceAttemptRecoveryService:
         check_interval_seconds: int = DEFAULT_CHECK_INTERVAL_SECONDS,
         max_attempts_per_sweep: int = DEFAULT_MAX_ATTEMPTS_PER_SWEEP,
         error_event_grace_seconds: int = DEFAULT_ERROR_EVENT_GRACE_SECONDS,
+        transient_error_grace_seconds: int = DEFAULT_TRANSIENT_PROVIDER_ERROR_GRACE_SECONDS,
     ) -> None:
         if stale_seconds <= 0:
             raise ValueError("stale_seconds must be > 0")
@@ -136,6 +178,8 @@ class WorkspaceAttemptRecoveryService:
             raise ValueError("max_attempts_per_sweep must be > 0")
         if error_event_grace_seconds < 0:
             raise ValueError("error_event_grace_seconds must be >= 0")
+        if transient_error_grace_seconds < 0:
+            raise ValueError("transient_error_grace_seconds must be >= 0")
         self._session_factory = session_factory
         self._apply_report = apply_report
         self._schedule_tick = schedule_tick
@@ -146,6 +190,7 @@ class WorkspaceAttemptRecoveryService:
         self._check_interval_seconds = check_interval_seconds
         self._max_attempts_per_sweep = max_attempts_per_sweep
         self._error_event_grace_seconds = error_event_grace_seconds
+        self._transient_error_grace_seconds = transient_error_grace_seconds
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
 
@@ -192,7 +237,9 @@ class WorkspaceAttemptRecoveryService:
 
         Returns the number of attempts recovered.
         """
-        threshold = datetime.now(UTC) - timedelta(seconds=self._startup_grace_seconds)
+        threshold = datetime.now(UTC) - timedelta(
+            seconds=max(self._startup_grace_seconds, self._stale_seconds)
+        )
         recovered = await self._recover_error_events()
         stale = await self._fetch_stale(threshold)
         recovered += await self._recover_all(stale, RECOVERY_SUMMARY_RESTART)
@@ -218,6 +265,7 @@ class WorkspaceAttemptRecoveryService:
             return recovered
         live_ids = set(self._liveness_lookup() or ())
         candidates = [a for a in stale if a.id not in live_ids]
+        candidates = await self._filter_recently_active_attempts(candidates, threshold)
         recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
         if recovered:
             logger.warning(
@@ -240,6 +288,7 @@ class WorkspaceAttemptRecoveryService:
             return recovered
         live_ids = set(self._liveness_lookup() or ())
         candidates = [attempt for attempt in stale if attempt.id not in live_ids]
+        candidates = await self._filter_recently_active_attempts(candidates, threshold)
         recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
         if recovered:
             logger.warning(
@@ -288,6 +337,39 @@ class WorkspaceAttemptRecoveryService:
                 workspace_id=workspace_id,
             )
 
+    async def _filter_recently_active_attempts(
+        self,
+        attempts: list[WorkspaceTaskSessionAttempt],
+        threshold: datetime,
+    ) -> list[WorkspaceTaskSessionAttempt]:
+        conversation_by_attempt = {
+            attempt.id: attempt.conversation_id
+            for attempt in attempts
+            if isinstance(attempt.conversation_id, str) and attempt.conversation_id
+        }
+        if not conversation_by_attempt:
+            return attempts
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(
+                    AgentExecutionEvent.conversation_id,
+                    AgentExecutionEvent.created_at,
+                )
+                .where(AgentExecutionEvent.conversation_id.in_(conversation_by_attempt.values()))
+                .where(AgentExecutionEvent.created_at >= threshold)
+                .order_by(AgentExecutionEvent.created_at.desc())
+            )
+            recently_active_conversations = {
+                conversation_id for conversation_id, _created_at in result.all()
+            }
+        if not recently_active_conversations:
+            return attempts
+        return [
+            attempt
+            for attempt in attempts
+            if conversation_by_attempt.get(attempt.id) not in recently_active_conversations
+        ]
+
     async def _recover_error_events(self, *, workspace_id: str | None = None) -> int:
         """Recover active attempts whose agent stream already emitted an error event.
 
@@ -324,10 +406,12 @@ class WorkspaceAttemptRecoveryService:
         ]
         async with self._session_factory() as session:
             repo = SqlWorkspaceTaskSessionAttemptRepository(session)
+            now = datetime.now(UTC)
             stmt = (
                 select(
                     WorkspaceTaskSessionAttemptModel,
                     AgentExecutionEvent.event_data,
+                    AgentExecutionEvent.created_at,
                 )
                 .join(
                     AgentExecutionEvent,
@@ -349,9 +433,29 @@ class WorkspaceAttemptRecoveryService:
             result = await session.execute(stmt)
             recovered: list[tuple[WorkspaceTaskSessionAttempt, str]] = []
             seen: set[str] = set()
-            for attempt_model, event_data in result.all():
+            for attempt_model, event_data, event_created_at in result.all():
                 attempt = repo._to_domain(attempt_model)
                 if attempt is None or attempt.id in seen:
+                    continue
+                if _should_defer_error_event_recovery(
+                    event_data=event_data,
+                    event_created_at=event_created_at,
+                    now=now,
+                    transient_error_grace_seconds=self._transient_error_grace_seconds,
+                ):
+                    logger.info(
+                        "workspace_attempt_recovery.defer_transient_error_event",
+                        extra={
+                            "event": "workspace_attempt_recovery.defer_transient_error_event",
+                            "attempt_id": attempt.id,
+                            "workspace_task_id": attempt.workspace_task_id,
+                            "workspace_id": attempt.workspace_id,
+                            "error_event_created_at": event_created_at.isoformat(),
+                            "transient_error_grace_seconds": (
+                                self._transient_error_grace_seconds
+                            ),
+                        },
+                    )
                     continue
                 seen.add(attempt.id)
                 recovered.append((attempt, _error_event_recovery_summary(event_data)))

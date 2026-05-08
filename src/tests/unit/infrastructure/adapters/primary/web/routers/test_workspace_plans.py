@@ -295,6 +295,65 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert task_node.actions["accept_with_human_review"].enabled is False
 
 
+@pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_uses_workspace_delivery_contract_metadata(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-delivery-metadata"
+    await _seed_workspace(db_session, workspace_id)
+    workspace = await db_session.get(WorkspaceModel, workspace_id)
+    assert workspace is not None
+    workspace.metadata_json = {
+        "delivery_cicd": {
+            "provider": "memstack-sandbox",
+            "code_root": "/workspace/my-evo",
+            "contract_source": "planner_agent_code_analysis",
+            "contract_confidence": 0.85,
+            "agent_managed": True,
+            "services": [
+                {
+                    "service_id": "frontend-web",
+                    "name": "Frontend Web",
+                    "start_command": "cd /workspace/my-evo/frontend && npm run dev",
+                    "internal_port": 3002,
+                    "health_path": "/api/health",
+                    "required": True,
+                    "auto_open": True,
+                }
+            ],
+        }
+    }
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.delivery is not None
+    assert response.delivery.status == "not_deployed"
+    assert response.delivery.provider == "memstack-sandbox"
+    assert response.delivery.code_root == "/workspace/my-evo"
+    assert response.delivery.contract_source == "planner_agent_code_analysis"
+    assert response.delivery.contract_confidence == 0.85
+    assert response.delivery.services[0].service_id == "frontend-web"
+    assert response.delivery.services[0].status == "not_deployed"
+
+
 def test_reopen_blocked_clears_terminal_retry_debt() -> None:
     plan = _make_plan("workspace-plan-api")
     node = plan.nodes[PlanNodeId("task-api")]
@@ -748,7 +807,7 @@ async def test_snapshot_recovery_treats_runtime_key_as_live_despite_stale_agent_
 
 
 @pytest.mark.asyncio
-async def test_snapshot_recovery_does_not_treat_agent_event_as_live_without_runtime_key(
+async def test_snapshot_recovery_treats_recent_agent_event_as_live_without_runtime_key(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -811,6 +870,97 @@ async def test_snapshot_recovery_does_not_treat_agent_event_as_live_without_runt
         - timedelta(seconds=workspace_plans._SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS + 1),
         workspace_task_id="workspace-task-api",
         current_attempt_id="attempt-event-only",
+    )
+    await db_session.flush()
+
+    class _Redis:
+        async def exists(self, key: str) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+        AsyncMock(return_value=_Redis()),
+    )
+
+    stale_nodes = workspace_plans._stale_running_nodes(plan)
+
+    assert [node.id for node in stale_nodes] == ["task-api"]
+    assert (
+        await workspace_plans._nodes_without_live_worker(
+            session=db_session,
+            nodes=stale_nodes,
+        )
+        == []
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_does_not_treat_stale_agent_event_as_live_without_runtime_key(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-stale-event-without-runtime"
+    await _seed_workspace(db_session, workspace_id)
+    stale_event_at = datetime.now(UTC) - timedelta(
+        seconds=workspace_plans._SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS + 1
+    )
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-api",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            Conversation(
+                id="conversation-stale-event-only",
+                project_id="plan-api-project",
+                tenant_id="plan-api-tenant",
+                user_id="plan-api-user",
+                title="Worker",
+                status="active",
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-stale-event-only",
+                workspace_task_id="workspace-task-api",
+                root_goal_task_id="root-api",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="running",
+                conversation_id="conversation-stale-event-only",
+            ),
+            AgentExecutionEvent(
+                id="event-stale-event-only",
+                conversation_id="conversation-stale-event-only",
+                event_type="context_status",
+                event_data={},
+                event_time_us=1,
+                event_counter=0,
+                created_at=stale_event_at,
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        updated_at=datetime.now(UTC)
+        - timedelta(seconds=workspace_plans._SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS + 1),
+        workspace_task_id="workspace-task-api",
+        current_attempt_id="attempt-stale-event-only",
     )
     await db_session.flush()
 
@@ -917,6 +1067,76 @@ async def test_snapshot_recovery_enqueues_tick_for_active_node_with_terminal_att
     )
 
     assert duplicate is False
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_enqueues_tick_for_in_progress_idle_node_with_rejected_attempt(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-idle-rejected-attempt"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-idle-rejected",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-idle-rejected",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-rejected-idle",
+                workspace_task_id="workspace-task-idle-rejected",
+                root_goal_task_id="root-api-idle-rejected",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="rejected",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-idle-rejected",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.IDLE,
+        workspace_task_id="workspace-task-idle-rejected",
+        current_attempt_id="attempt-rejected-idle",
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
+    assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
 
 
 @pytest.mark.asyncio

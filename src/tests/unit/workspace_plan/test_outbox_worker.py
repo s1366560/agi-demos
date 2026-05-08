@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -16,9 +17,11 @@ from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.domain.model.workspace_plan import (
     Capability,
     FeatureCheckpoint,
+    Plan,
     PlanNode,
     PlanNodeId,
     PlanNodeKind,
+    PlanStatus,
     TaskExecution,
     TaskIntent,
 )
@@ -53,6 +56,8 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
     EXECUTION_STATE,
+    LAST_WORKER_REPORT_ATTEMPT_ID,
+    LAST_WORKER_REPORT_SUMMARY,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
     WORKSPACE_PLAN_ID,
@@ -64,6 +69,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     HANDOFF_RESUME_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
+    _extract_task_evidence,
     _is_structural_sandbox_command,
     _node_allowed_sandbox_commands,
     _persisted_attempt_leader_agent_id,
@@ -226,6 +232,58 @@ def _with_stale_attempt_metadata(
     )
 
 
+def test_extract_task_evidence_omits_worker_report_from_prior_attempt() -> None:
+    task = SimpleNamespace(
+        metadata={
+            CURRENT_ATTEMPT_ID: "attempt-new",
+            "last_attempt_id": "attempt-old",
+            LAST_WORKER_REPORT_ATTEMPT_ID: "attempt-old",
+            LAST_WORKER_REPORT_SUMMARY: "old completion",
+            "last_worker_report_type": "completed",
+            "last_worker_report_artifacts": ["commit_ref:old"],
+            "last_worker_report_verifications": ["test_run:old"],
+            "evidence_refs": ["commit_ref:old"],
+            "execution_verifications": ["test_run:old"],
+            "preflight_checks": [{"name": "read", "passed": True}],
+            "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+        }
+    )
+
+    stdout, artifacts = _extract_task_evidence(task, current_attempt_id="attempt-new")
+
+    assert stdout == ""
+    assert "last_worker_report_type" not in artifacts
+    assert "last_worker_report_artifacts" not in artifacts
+    assert "evidence_refs" not in artifacts
+    assert artifacts[CURRENT_ATTEMPT_ID] == "attempt-new"
+    assert artifacts[LAST_WORKER_REPORT_ATTEMPT_ID] == "attempt-old"
+    assert artifacts["preflight_checks"] == [{"name": "read", "passed": True}]
+    assert artifacts["code_context"] == {"sandbox_code_root": "/workspace/my-evo"}
+
+
+def test_extract_task_evidence_keeps_worker_report_for_current_attempt() -> None:
+    task = SimpleNamespace(
+        metadata={
+            CURRENT_ATTEMPT_ID: "attempt-current",
+            "last_attempt_id": "attempt-current",
+            LAST_WORKER_REPORT_ATTEMPT_ID: "attempt-current",
+            LAST_WORKER_REPORT_SUMMARY: "current completion",
+            "last_worker_report_type": "completed",
+            "last_worker_report_artifacts": ["commit_ref:current"],
+            "last_worker_report_verifications": ["test_run:current"],
+            "evidence_refs": ["commit_ref:current"],
+            "execution_verifications": ["test_run:current"],
+        }
+    )
+
+    stdout, artifacts = _extract_task_evidence(task, current_attempt_id="attempt-current")
+
+    assert stdout == "current completion"
+    assert artifacts["last_worker_report_type"] == "completed"
+    assert artifacts["last_worker_report_artifacts"] == ["commit_ref:current"]
+    assert artifacts["evidence_refs"] == ["commit_ref:current"]
+
+
 @pytest.mark.asyncio
 async def test_worker_start_restarts_after_stop(db_session: AsyncSession) -> None:
     worker = WorkspacePlanOutboxWorker(
@@ -259,6 +317,77 @@ async def test_workspace_sandbox_runner_blocks_commands_outside_harness_allowlis
     assert result["exit_code"] == 126
     assert result["stdout"] == ""
     assert "not allowed by workspace harness" in result["stderr"]
+
+
+@pytest.mark.asyncio
+async def test_worker_launch_handler_supplies_system_leader_when_payload_omits_leader(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="task-no-leader-1",
+            workspace_id="workspace-1",
+            title="Recover launch without leader",
+            description="Retry a worker launch emitted by session recovery.",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+            },
+        )
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "task-no-leader-1",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+        },
+        metadata={"source": "task_execution_session.recovery"},
+    )
+    await db_session.commit()
+
+    launched: list[dict[str, object]] = []
+
+    def fake_schedule_worker_session(**kwargs: object) -> None:
+        launched.append(kwargs)
+
+    async def fake_worktree_preparer(
+        _session: AsyncSession,
+        _workspace_id: str,
+        _task: WorkspaceTask,
+        _extra_instructions: str | None,
+    ) -> str:
+        return "[worktree-setup]\nstatus=skipped\n[/worktree-setup]"
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        fake_schedule_worker_session,
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(
+                worktree_preparer=fake_worktree_preparer
+            ),
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+
+    assert launched
+    assert launched[0]["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 
 @pytest.mark.asyncio
@@ -873,6 +1002,181 @@ async def test_supervisor_tick_releases_node_when_current_attempt_is_missing(
     assert retried_leaf.execution is TaskExecution.DISPATCHED
     assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
     assert retried_leaf.metadata["terminal_attempt_retry_reason"] == "missing_attempt"
+    assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_releases_in_progress_idle_node_with_rejected_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="rejected-terminal-attempt",
+            workspace_task_id="workspace-task-rejected",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="rejected",
+            conversation_id="rejected-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="provider transport failure",
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="rejected-terminal-attempt",
+            workspace_task_id="workspace-task-rejected",
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    dispatched: list[str] = []
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return [WorkspaceAgent(agent_id="agent-1", display_name="Agent One")]
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        node: PlanNode,
+    ) -> str:
+        dispatched.append(node.id)
+        return f"retry-{node.id}"
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    retried_leaf = loaded.leaf_tasks()[0]
+    assert dispatched == [leaf.id]
+    assert retried_leaf.intent is TaskIntent.IN_PROGRESS
+    assert retried_leaf.execution is TaskExecution.DISPATCHED
+    assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
+    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == ("terminal_attempt_rejected")
+    assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_releases_done_node_with_rejected_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="done-rejected-terminal-attempt",
+            workspace_task_id="workspace-task-rejected",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="rejected",
+            conversation_id="done-rejected-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="judge verdict=needs_rework",
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="done-rejected-terminal-attempt",
+            workspace_task_id="workspace-task-rejected",
+            metadata={
+                **dict(leaf.metadata or {}),
+                "pipeline_status": "success",
+                "last_verification_passed": True,
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    dispatched: list[str] = []
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return [WorkspaceAgent(agent_id="agent-1", display_name="Agent One")]
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        node: PlanNode,
+    ) -> str:
+        dispatched.append(node.id)
+        return f"retry-{node.id}"
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    retried_leaf = loaded.leaf_tasks()[0]
+    assert dispatched == [leaf.id]
+    assert retried_leaf.intent is TaskIntent.IN_PROGRESS
+    assert retried_leaf.execution is TaskExecution.DISPATCHED
+    assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
+    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == (
+        "terminal_attempt_rejected"
+    )
     assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
 
 
@@ -1567,6 +1871,108 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
 
 
 @pytest.mark.asyncio
+async def test_handoff_resume_handler_skips_running_current_attempt(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a resumable durable plan",
+        start_supervisor=False,
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **_kwargs: None,
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
+        },
+        worker_id="worker-a",
+    )
+    assert await worker.run_once() == 1
+    assert await worker.run_once() == 1
+
+    db_session.expire_all()
+    dispatched = await SqlPlanRepository(db_session).get(plan.id)
+    assert dispatched is not None
+    leaf = dispatched.leaf_tasks()[0]
+    assert leaf.workspace_task_id is not None
+    assert leaf.current_attempt_id is not None
+    attempt_row = await db_session.get(WorkspaceTaskSessionAttemptModel, leaf.current_attempt_id)
+    assert attempt_row is not None
+    assert attempt_row.status == "running"
+    attempt_row.conversation_id = "conversation-running"
+    await db_session.flush()
+    assert attempt_row.conversation_id
+
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=HANDOFF_RESUME_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": leaf.workspace_task_id,
+            "node_id": leaf.id,
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "previous_attempt_id": leaf.current_attempt_id,
+            "root_goal_task_id": "root-task-1",
+            "summary": "snapshot thought this was stale",
+            "force_schedule": True,
+        },
+    )
+    await db_session.commit()
+
+    resume_worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={HANDOFF_RESUME_EVENT: make_handoff_resume_handler()},
+        worker_id="worker-b",
+    )
+    assert await resume_worker.run_once() == 1
+
+    db_session.expire_all()
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(launch_jobs) == 1
+    refreshed_plan = await SqlPlanRepository(db_session).get(plan.id)
+    assert refreshed_plan is not None
+    assert refreshed_plan.leaf_tasks()[0].current_attempt_id == leaf.current_attempt_id
+
+
+@pytest.mark.asyncio
 async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(  # noqa: PLR0915
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -1712,6 +2118,144 @@ async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(  
     assert len(launch_jobs) == 1
     assert "[handoff-package]" in str(launch_jobs[0].payload_json["extra_instructions"])
     assert "previous_attempt_id" in str(launch_jobs[0].payload_json["extra_instructions"])
+
+
+@pytest.mark.asyncio
+async def test_handoff_resume_handler_defers_downstream_node_with_unmet_dependencies(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    plan = Plan(
+        id="dependency-plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("goal-node-1"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="goal-node-1",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Root goal",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="implement-node",
+            plan_id=plan.id,
+            parent_id=PlanNodeId("goal-node-1"),
+            kind=PlanNodeKind.TASK,
+            title="Implement feature",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="test-node",
+            plan_id=plan.id,
+            parent_id=PlanNodeId("goal-node-1"),
+            kind=PlanNodeKind.TASK,
+            title="Run E2E",
+            depends_on=frozenset({PlanNodeId("implement-node")}),
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            current_attempt_id="previous-test-attempt",
+            workspace_task_id="test-task-1",
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="test-task-1",
+            workspace_id="workspace-1",
+            title="Run E2E",
+            description="Downstream verification task",
+            created_by="worker-user-1",
+            status="blocked",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: "test-node",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="previous-test-attempt",
+            workspace_task_id="test-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="blocked",
+            conversation_id="previous-test-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+        )
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=HANDOFF_RESUME_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "test-task-1",
+            "node_id": "test-node",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "previous_attempt_id": "previous-test-attempt",
+            "root_goal_task_id": "root-task-1",
+            "summary": "resume downstream after restart",
+            "force_schedule": True,
+        },
+    )
+    await db_session.commit()
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={HANDOFF_RESUME_EVENT: make_handoff_resume_handler()},
+        worker_id="worker-dependency",
+    )
+
+    assert await worker.run_once() == 1
+
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    test_node = loaded.nodes[PlanNodeId("test-node")]
+    assert test_node.intent is TaskIntent.TODO
+    assert test_node.execution is TaskExecution.IDLE
+    assert test_node.current_attempt_id is None
+    assert test_node.metadata["handoff_resume_deferred_missing_dependency_ids"] == [
+        "implement-node"
+    ]
+    attempts = list(
+        (
+            await db_session.execute(
+                select(WorkspaceTaskSessionAttemptModel).where(
+                    WorkspaceTaskSessionAttemptModel.workspace_task_id == "test-task-1"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [attempt.id for attempt in attempts] == ["previous-test-attempt"]
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert launch_jobs == []
 
 
 async def _noop_worktree(

@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentActEvent, AgentCompleteEvent, AgentStatusEvent
+from src.domain.events.agent_events import (
+    AgentActEvent,
+    AgentCompleteEvent,
+    AgentErrorEvent,
+    AgentObserveEvent,
+    AgentStatusEvent,
+)
 from src.infrastructure.agent.core.llm_stream import StreamEventType
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
@@ -177,6 +183,7 @@ class TestEvaluateNoToolResultDelegation:
 
         proc._no_progress_steps = 0
         proc._last_process_result = ProcessorResult.CONTINUE
+        proc._pending_completion_status = None
         proc._response_instructions = []
         proc._tool_reminder_issued_for_streak = False
         proc.tools = {"read": MagicMock()}
@@ -756,6 +763,39 @@ class TestEvaluateNoToolResultDelegation:
         assert proc._tool_reminder_issued_for_streak is True
         assert SessionProcessor._TOOL_USAGE_REMINDER in proc._response_instructions
 
+    @pytest.mark.asyncio
+    async def test_workspace_worker_text_only_turn_requires_terminal_report_tool(self) -> None:
+        proc = self._build_processor_for_eval("Task completed and reported.")
+        proc.config.runtime_context = {"workspace_session_role": "worker"}
+
+        events = [event async for event in proc._evaluate_no_tool_result("session-1", [])]
+
+        assert any(
+            isinstance(event, AgentStatusEvent)
+            and event.status == "workspace_worker_requires_terminal_report_tool"
+            for event in events
+        )
+        assert proc._last_process_result == ProcessorResult.CONTINUE
+        assert (
+            SessionProcessor._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT
+            in proc._response_instructions
+        )
+
+    @pytest.mark.asyncio
+    async def test_workspace_worker_text_only_turn_stops_after_retry_budget(self) -> None:
+        proc = self._build_processor_for_eval("Task completed and reported.")
+        proc.config.runtime_context = {"workspace_session_role": "worker"}
+        proc.config.max_no_progress_steps = 1
+
+        events = [event async for event in proc._evaluate_no_tool_result("session-1", [])]
+
+        assert any(
+            isinstance(event, AgentErrorEvent)
+            and event.code == "WORKSPACE_TERMINAL_REPORT_REQUIRED"
+            for event in events
+        )
+        assert proc._last_process_result == ProcessorResult.STOP
+
     def test_act_event_clears_tool_reminder_even_on_non_continue_result(self) -> None:
         proc = self._build_processor_for_eval("Need to inspect more state before finishing.")
         proc._response_instructions = [SessionProcessor._TOOL_USAGE_REMINDER, "keep me"]
@@ -770,3 +810,45 @@ class TestEvaluateNoToolResultDelegation:
         assert had_tool_calls is True
         assert SessionProcessor._TOOL_USAGE_REMINDER not in proc._response_instructions
         assert proc._response_instructions == ["keep me"]
+
+    def test_successful_workspace_terminal_report_completes_loop(self) -> None:
+        proc = self._build_processor_for_eval("Report done.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_report_complete",
+                result=json.dumps(
+                    {
+                        "ok": True,
+                        "applied_report": {"applied": True},
+                    }
+                ),
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.COMPLETE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status == "goal_achieved:workspace_terminal_report"
+
+    def test_failed_workspace_terminal_report_does_not_complete_loop(self) -> None:
+        proc = self._build_processor_for_eval("Report failed.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_report_complete",
+                result=json.dumps(
+                    {
+                        "ok": False,
+                        "applied_report": {"applied": False},
+                    }
+                ),
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.CONTINUE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status is None

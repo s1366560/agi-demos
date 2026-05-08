@@ -75,7 +75,7 @@ class MCPWebSocketClientConfig:
     url: str
     headers: dict[str, str] = field(default_factory=dict)
     timeout: float = DEFAULT_TIMEOUT
-    heartbeat_interval: float | None = None
+    heartbeat_interval: float | None = DEFAULT_WS_HEARTBEAT_SECONDS
     reconnect_attempts: int = 3
 
 
@@ -113,7 +113,7 @@ class MCPWebSocketClient:
         url: str,
         headers: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
-        heartbeat_interval: float | None = None,
+        heartbeat_interval: float | None = DEFAULT_WS_HEARTBEAT_SECONDS,
         reconnect_attempts: int = 3,
     ) -> None:
         """
@@ -124,9 +124,9 @@ class MCPWebSocketClient:
             headers: HTTP headers for connection upgrade
             timeout: Default timeout for operations in seconds
             heartbeat_interval: Ping interval in seconds for connection health.
-                None disables heartbeat (recommended for long-running tool calls).
-                aiohttp uses heartbeat/2 as PONG timeout, so heartbeat=30 means
-                connections are killed after 15s without PONG.
+                Pass None to disable aiohttp heartbeat for long-running tool
+                calls. aiohttp uses heartbeat/2 as PONG timeout, so
+                heartbeat=30 means connections are killed after 15s without PONG.
             reconnect_attempts: Max reconnection attempts on connection loss
         """
         if not url:
@@ -234,21 +234,18 @@ class MCPWebSocketClient:
                 ),
             )
 
-            # Heartbeat default 30s ensures dead peers are detected; explicit
-            # ssl flag forces certificate verification unless MCP_TLS_VERIFY
+            # Heartbeat defaults to 30s for dead-peer detection. Callers may
+            # pass heartbeat_interval=None for sandbox tools where long-running
+            # commands can keep the server from answering PING frames.
+            # Explicit ssl flag forces certificate verification unless MCP_TLS_VERIFY
             # has been opted out. max_msg_size caps frame size at 16 MiB —
             # MCP envelopes are JSON-RPC and should not exceed this; large
             # binary payloads belong on streaming/signed-URL channels.
-            heartbeat = (
-                self.heartbeat_interval
-                if self.heartbeat_interval is not None
-                else DEFAULT_WS_HEARTBEAT_SECONDS
-            )
             ssl_flag: bool = tls_verify_default() if self.url.startswith("wss://") else True
             self._ws = await self._session.ws_connect(
                 self.url,
                 headers=self.headers,
-                heartbeat=heartbeat,
+                heartbeat=self.heartbeat_interval,
                 max_msg_size=DEFAULT_WS_MAX_MSG_SIZE,
                 ssl=ssl_flag,
             )

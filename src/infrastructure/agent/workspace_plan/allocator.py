@@ -41,6 +41,7 @@ _DEFAULT_EXECUTION_CAPABILITIES = frozenset(
         "testing",
     }
 )
+_GENERIC_EXECUTION_CAPABILITIES = frozenset({"agent:worker"})
 
 
 class CapabilityAllocator(TaskAllocatorPort):
@@ -125,7 +126,11 @@ class CapabilityAllocator(TaskAllocatorPort):
         agent: WorkspaceAgent,
         load: dict[str, int],
     ) -> tuple[float, list[str]]:
-        cap_names = {c.name for c in node.recommended_capabilities}
+        cap_names = {
+            c.name
+            for c in node.recommended_capabilities
+            if c.name not in _GENERIC_EXECUTION_CAPABILITIES
+        }
         reasons: list[str] = []
 
         skill = _jaccard(cap_names, agent.capabilities)

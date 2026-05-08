@@ -902,9 +902,22 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
         description="terminal worker report must be completed before durable verification can pass",
     )
     report_type = _artifact_text(ctx, "last_worker_report_type")
+    report_attempt_id = _artifact_text(ctx, "last_worker_report_attempt_id") or _artifact_text(
+        ctx, "last_attempt_id"
+    )
     attempt_status = _artifact_text(ctx, "last_attempt_status")
     report_summary = _artifact_text(ctx, "last_worker_report_summary")
 
+    if ctx.attempt_id and report_attempt_id and report_attempt_id != ctx.attempt_id:
+        return CriterionResult(
+            criterion=criterion,
+            passed=False,
+            confidence=1.0,
+            message=(
+                "worker report belongs to attempt "
+                f"{report_attempt_id!r}, not current attempt {ctx.attempt_id!r}"
+            ),
+        )
     if report_type and report_type != "completed":
         return CriterionResult(
             criterion=criterion,

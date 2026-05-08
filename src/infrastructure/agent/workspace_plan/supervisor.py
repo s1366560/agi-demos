@@ -336,6 +336,31 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             except Exception as exc:
                 errors.append(f"verify({node.id}): {exc}")
 
+        invalidated_dependents = _invalidate_nodes_with_unmet_dependencies(plan)
+        for invalidated_node in invalidated_dependents:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                invalidated_node,
+                "dependency_invalidated",
+                {
+                    "summary": "node reset because one or more dependencies are no longer done",
+                    "missing_dependency_ids": invalidated_node.metadata.get(
+                        "dependency_invalidated_missing_ids",
+                        [],
+                    ),
+                    "previous_attempt_id": invalidated_node.metadata.get(
+                        "dependency_invalidated_previous_attempt_id"
+                    ),
+                    "previous_intent": invalidated_node.metadata.get(
+                        "dependency_invalidated_previous_intent"
+                    ),
+                    "previous_execution": invalidated_node.metadata.get(
+                        "dependency_invalidated_previous_execution"
+                    ),
+                },
+            )
+
         # --- 2. allocate ready nodes -----------------------------------
         repaired_phase_barriers = _repair_pending_iteration_phase_barriers(plan)
         if repaired_phase_barriers:
@@ -1270,6 +1295,57 @@ def _repair_pending_iteration_phase_barriers(plan: Plan) -> int:
     return repaired
 
 
+def _invalidate_nodes_with_unmet_dependencies(plan: Plan) -> list[PlanNode]:
+    """Reset already-active downstream nodes when a dependency regresses.
+
+    ``Plan.ready_nodes()`` prevents future dispatch before dependencies are done, but a
+    dependency can later regress when terminal attempt reconciliation rejects a previously
+    projected success. Any already-running or already-done downstream node is then stale
+    and must not keep accepting reports from its old attempt.
+    """
+
+    done_ids = frozenset(
+        node.node_id for node in plan.nodes.values() if node.intent is TaskIntent.DONE
+    )
+    now = datetime.now(UTC)
+    invalidated: list[PlanNode] = []
+    for node in list(plan.nodes.values()):
+        if node.kind not in {PlanNodeKind.TASK, PlanNodeKind.VERIFY} or not node.depends_on:
+            continue
+        missing = tuple(sorted(dep.value for dep in node.depends_on if dep not in done_ids))
+        if not missing:
+            continue
+        if (
+            node.intent is TaskIntent.TODO
+            and node.execution is TaskExecution.IDLE
+            and not node.current_attempt_id
+        ):
+            continue
+        metadata = _clear_stale_attempt_metadata(node.metadata)
+        metadata.update(
+            {
+                "dependency_invalidated_at": now.isoformat().replace("+00:00", "Z"),
+                "dependency_invalidated_missing_ids": list(missing),
+                "dependency_invalidated_previous_attempt_id": node.current_attempt_id,
+                "dependency_invalidated_previous_intent": node.intent.value,
+                "dependency_invalidated_previous_execution": node.execution.value,
+            }
+        )
+        updated = replace(
+            node,
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            assignee_agent_id=None,
+            current_attempt_id=None,
+            metadata=metadata,
+            updated_at=now,
+            completed_at=None,
+        )
+        plan.replace_node(updated)
+        invalidated.append(updated)
+    return invalidated
+
+
 def _feature_checkpoint_expected_artifacts(
     task: IterationNextTask,
     *,
@@ -1374,10 +1450,13 @@ def _should_request_pipeline_after_verification(
 def _should_request_pipeline_from_report(node: PlanNode, report: VerificationReport) -> bool:
     if _pipeline_gate_status(node) in {"requested", "running"}:
         return False
-    for result in report.failed_required:
-        if result.criterion.kind in _PIPELINE_CRITERION_KINDS:
-            return True
-    return _node_requires_pipeline_gate(node) and not report.hard_fail
+    failed_required = report.failed_required
+    if not failed_required:
+        return _node_requires_pipeline_gate(node)
+    pipeline_failures = [
+        result for result in failed_required if result.criterion.kind in _PIPELINE_CRITERION_KINDS
+    ]
+    return bool(pipeline_failures) and len(pipeline_failures) == len(failed_required)
 
 
 def _node_requires_pipeline_gate(node: PlanNode) -> bool:

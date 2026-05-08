@@ -357,6 +357,30 @@ def test_pipeline_contract_uses_workspace_delivery_metadata() -> None:
     assert [stage.stage for stage in contract.stages] == ["test", "build", "health"]
 
 
+def test_pipeline_contract_accepts_planner_memstack_sandbox_provider_alias() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "memstack-sandbox",
+                "contract_source": "planner_agent_code_analysis",
+                "services": [
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend",
+                        "start_command": "npm run dev -- --port 3002",
+                        "internal_port": 3002,
+                        "health_path": "/api/health",
+                    }
+                ],
+            }
+        },
+        fallback_code_root="/workspace/app",
+    )
+
+    assert contract.provider == "sandbox_native"
+    assert [service.service_id for service in contract.services] == ["frontend"]
+
+
 def test_default_npm_test_stage_skips_missing_test_script() -> None:
     contract = build_pipeline_contract_from_metadata(
         workspace_metadata={},
@@ -423,6 +447,31 @@ def test_pipeline_contract_supports_multiple_services() -> None:
         "frontend",
         "admin",
     ]
+
+
+def test_service_deploy_stage_reuses_already_healthy_preview_service() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "services": [
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend",
+                        "start_command": "pnpm dev --host 0.0.0.0 --port 3000",
+                        "internal_port": 3000,
+                        "health_path": "/api/health",
+                    }
+                ]
+            }
+        },
+        fallback_code_root="/workspace/app",
+    )
+
+    deploy_stage = next(stage for stage in contract.stages if stage.stage == "deploy")
+
+    assert "curl -fsS http://127.0.0.1:3000/api/health" in deploy_stage.command
+    assert deploy_stage.command.find("curl -fsS") < deploy_stage.command.find("nohup")
+    assert "service already healthy" in deploy_stage.command
 
 
 def test_agent_managed_auto_deploy_requires_planner_delivery_contract() -> None:

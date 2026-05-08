@@ -326,6 +326,7 @@ class ExecutionTaskMetadataModel(ContractModel):
     last_worker_report_verifications: list[str] = Field(default_factory=list)
     last_worker_reported_at: str | None = None
     last_worker_report_fingerprint: str | None = None
+    last_worker_report_attempt_id: str | None = None
     last_worker_report_id: str | None = None
     pending_leader_adjudication: bool | None = None
     durable_plan_verdict: str | None = None

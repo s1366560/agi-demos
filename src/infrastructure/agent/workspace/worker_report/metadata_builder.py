@@ -23,6 +23,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
     EXECUTION_STATE,
+    LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
     PENDING_LEADER_ADJUDICATION,
 )
@@ -132,6 +133,7 @@ def build_worker_report_patch(
         "last_worker_report_verifications": list(report_verifications),
         "last_worker_reported_at": reported_at,
         "last_worker_report_fingerprint": fingerprint,
+        LAST_WORKER_REPORT_ATTEMPT_ID: resolved_attempt_id,
         PENDING_LEADER_ADJUDICATION: is_terminal,
         CURRENT_ATTEMPT_ID: resolved_attempt_id,
         "last_attempt_id": resolved_attempt_id,

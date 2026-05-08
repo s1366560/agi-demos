@@ -357,6 +357,8 @@ class TestBuildBrief:
         assert "Do not assume `ss` exists" in brief
         assert "preflight:read-progress" in brief
         assert "preflight:git-status" in brief
+        assert "git status --short" in brief
+        assert "stage intended untracked files" in brief
 
     def test_omits_attempt_when_none(self) -> None:
         task = _make_task()
@@ -402,6 +404,8 @@ class TestBuildBrief:
         assert "workspace_report_complete" in reporting["completion_contract"]["example"]
         assert "preflight:read-progress" in " ".join(reporting["instructions"])
         assert "commit_ref" in " ".join(reporting["instructions"])
+        assert "git status --short" in " ".join(reporting["instructions"])
+        assert "untracked file" in " ".join(reporting["instructions"])
         assert (
             system_context["artifact_write_policy"]["max_single_write_chars"]
             == wl.WORKER_MAX_SINGLE_WRITE_CHARS

@@ -353,6 +353,33 @@ class TestComplete:
         mock_orchestrator.send_message.assert_not_awaited()
         assert mock_apply.await_args.kwargs["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
+    async def test_terminal_apply_failure_marks_tool_error(self, ctx, mock_orchestrator):
+        with (
+            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
+        ):
+            mock_apply.return_value = {
+                "applied": False,
+                "error": "apply_workspace_worker_report returned no task",
+            }
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="All done",
+                verifications=["test_run:unit"],
+            )
+
+        assert result.is_error is True
+        payload = json.loads(result.output)
+        assert payload["ok"] is False
+        assert payload["error"] == "terminal_report_apply_failed"
+        assert payload["applied_report"] == {
+            "applied": False,
+            "error": "apply_workspace_worker_report returned no task",
+        }
+
 
 class TestBlocked:
     async def test_sends_envelope_and_applies_report(self, ctx, mock_orchestrator):

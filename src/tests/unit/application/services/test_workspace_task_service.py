@@ -525,6 +525,7 @@ class TestWorkspaceTaskService:
                 "last_attempt_id": "attempt-1",
                 "current_attempt_number": 2,
                 "last_attempt_status": "awaiting_leader_adjudication",
+                "last_worker_report_attempt_id": "attempt-2",
                 "pending_leader_adjudication": True,
             },
             authority=WorkspaceTaskAuthorityContext.worker("worker-a"),
@@ -533,6 +534,7 @@ class TestWorkspaceTaskService:
         assert updated.metadata["current_attempt_id"] == "attempt-2"
         assert updated.metadata["current_attempt_number"] == 2
         assert updated.metadata["last_attempt_status"] == "awaiting_leader_adjudication"
+        assert updated.metadata["last_worker_report_attempt_id"] == "attempt-2"
 
     @pytest.mark.asyncio
     async def test_worker_cannot_block_child_truth_directly(

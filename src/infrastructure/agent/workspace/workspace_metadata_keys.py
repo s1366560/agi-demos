@@ -87,6 +87,9 @@ PENDING_LEADER_ADJUDICATION: Final[str] = "pending_leader_adjudication"
 LAST_WORKER_REPORT_SUMMARY: Final[str] = "last_worker_report_summary"
 """Most recent worker report payload (dict) used by the adjudicator."""
 
+LAST_WORKER_REPORT_ATTEMPT_ID: Final[str] = "last_worker_report_attempt_id"
+"""Attempt id that produced the most recent worker report."""
+
 LAST_LEADER_ADJUDICATION_STATUS: Final[str] = "last_leader_adjudication_status"
 """Most recent leader verdict value (``"completed"``/``"blocked"``/...)."""
 
@@ -99,6 +102,7 @@ __all__ = [
     "EXECUTION_STATE",
     "LAST_LEADER_ADJUDICATION_STATUS",
     "LAST_REPLAN_AT",
+    "LAST_WORKER_REPORT_ATTEMPT_ID",
     "LAST_WORKER_REPORT_SUMMARY",
     "LINEAGE_SOURCE",
     "PENDING_LEADER_ADJUDICATION",
