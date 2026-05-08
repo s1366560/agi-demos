@@ -17,6 +17,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import is_builtin_workspace
 from .react_agent_profile import (
     _WORKSPACE_LEADER_REPLAN_TOOL_NAMES,
     _WORKSPACE_WORKER_CODE_TOOL_NAMES,
+    _WORKSPACE_WORKER_DENIED_TOOL_NAMES,
     _WORKSPACE_WORKER_REPORT_TOOL_NAMES,
     AgentRuntimeProfile,
 )
@@ -73,8 +74,14 @@ def with_workspace_worker_tool_allowlist(
         runtime_profile.selected_agent.id
     ):
         return runtime_profile
+    denied = sorted(
+        {
+            *canonical_tool_policy_names(runtime_profile.deny_tools),
+            *_WORKSPACE_WORKER_DENIED_TOOL_NAMES,
+        }
+    )
     if not runtime_profile.allow_tools or "*" in runtime_profile.allow_tools:
-        return runtime_profile
+        return replace(runtime_profile, deny_tools=denied)
     required_tools = list(_WORKSPACE_WORKER_REPORT_TOOL_NAMES)
     if not runtime_profile.tenant_agent_config.enabled_tools:
         required_tools.extend(_WORKSPACE_WORKER_CODE_TOOL_NAMES)
@@ -84,7 +91,7 @@ def with_workspace_worker_tool_allowlist(
             *required_tools,
         }
     )
-    return replace(runtime_profile, allow_tools=expanded)
+    return replace(runtime_profile, allow_tools=expanded, deny_tools=denied)
 
 
 def with_workspace_leader_replan_tool_allowlist(

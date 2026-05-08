@@ -76,7 +76,9 @@ class TestReActAgentRuntimeProfile:
     def test_workspace_worker_extends_restricted_agent_tool_allowlist(self) -> None:
         agent = ReActAgent(model="test-model", tools={})
         tenant_config = TenantAgentConfig.create_default("tenant-1")
-        selected_agent = _make_agent(allowed_tools=["Read", "Grep", "WebSearch"])
+        selected_agent = _make_agent(
+            allowed_tools=["Read", "Grep", "WebSearch", "plugin_tool_exec"]
+        )
 
         profile = agent._build_runtime_profile(
             tenant_id="tenant-1",
@@ -93,6 +95,20 @@ class TestReActAgentRuntimeProfile:
             "workspace_report_blocked",
             "workspace_report_progress",
         }.issubset(workspace_profile.allow_tools)
+        assert "plugin_tool_exec" in workspace_profile.deny_tools
+
+        tools = [
+            ToolDefinition("read", "", {}, lambda **_: None),
+            ToolDefinition("bash", "", {}, lambda **_: None),
+            ToolDefinition("plugin_tool_exec", "", {}, lambda **_: None),
+        ]
+        filtered = agent._filter_tools_by_name_policy(
+            tools,
+            allow_tools=workspace_profile.allow_tools,
+            deny_tools=workspace_profile.deny_tools,
+        )
+
+        assert [tool.name for tool in filtered] == ["read", "bash"]
 
     def test_workspace_worker_preserves_tenant_enabled_tool_policy_for_code_tools(self) -> None:
         agent = ReActAgent(model="test-model", tools={})

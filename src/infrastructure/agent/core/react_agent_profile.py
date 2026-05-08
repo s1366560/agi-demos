@@ -50,6 +50,10 @@ _WORKSPACE_WORKER_REPORT_TOOL_NAMES: tuple[str, ...] = (
     "workspace_submit_planning_contract",
 )
 
+_WORKSPACE_WORKER_DENIED_TOOL_NAMES: tuple[str, ...] = (
+    "plugin_tool_exec",
+)
+
 _WORKSPACE_LEADER_REPLAN_TOOL_NAMES: tuple[str, ...] = (
     "todoread",
     "todowrite",
