@@ -17,10 +17,10 @@ from src.domain.model.workspace_plan import (
 )
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
+    _needs_agent_managed_pipeline_proposal,
     _node_has_required_deployment_health,
-    _parse_agent_managed_pipeline_probe,
     _pipeline_completion_node_state,
-    _propose_agent_managed_pipeline_contract,
+    _requires_preview_deployment,
     _workspace_proxy_service_id,
     _workspace_scoped_pipeline_contract,
 )
@@ -46,21 +46,6 @@ class _FakeSandboxRunner:
             "exit_code": 0,
             "stdout": f"stage output\n__MEMSTACK_PIPELINE_EXIT_CODE__={exit_code}\n",
             "stderr": "",
-        }
-
-
-class _FakeProbeRunner:
-    def __init__(self, *, exit_code: int, stdout: str = "") -> None:
-        self.exit_code = exit_code
-        self.stdout = stdout
-        self.commands: list[str] = []
-
-    async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
-        self.commands.append(command)
-        return {
-            "exit_code": self.exit_code,
-            "stdout": self.stdout,
-            "stderr": "" if self.exit_code == 0 else "probe failed",
         }
 
 
@@ -440,29 +425,20 @@ def test_pipeline_contract_supports_multiple_services() -> None:
     ]
 
 
-def test_agent_managed_pipeline_probe_maps_start_script_to_service() -> None:
-    proposal = _parse_agent_managed_pipeline_probe(
-        '{"service":{"service_id":"default","name":"tetris-game",'
-        '"start_command":"npm start","internal_port":3001,'
-        '"health_path":"/api/health"},"reason":"root package.json start script"}',
-        preview_port=3000,
+def test_agent_managed_auto_deploy_requires_planner_delivery_contract() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "agent_managed": True,
+                "auto_deploy": True,
+                "contract_source": "planner_agent_code_analysis",
+            }
+        },
+        fallback_code_root="/workspace/app",
     )
 
-    assert proposal is not None
-    assert proposal["contract_source"] == "agent_sandbox_scan"
-    assert proposal["contract_confidence"] >= 0.8
-    assert proposal["services"] == [
-        {
-            "service_id": "default",
-            "name": "tetris-game",
-            "start_command": "npm start",
-            "internal_port": 3001,
-            "path_prefix": "/",
-            "health_path": "/api/health",
-            "required": True,
-            "auto_open": True,
-        }
-    ]
+    assert _requires_preview_deployment(contract)
+    assert _needs_agent_managed_pipeline_proposal(contract)
 
 
 def test_workspace_proxy_service_id_is_stable_and_workspace_scoped() -> None:
@@ -548,28 +524,6 @@ def test_node_health_idempotency_requires_scoped_service_evidence() -> None:
     assert _node_has_required_deployment_health(node, contract=contract)
 
 
-@pytest.mark.asyncio
-async def test_agent_managed_pipeline_probe_runner_exit_zero_generates_proposal() -> None:
-    runner = _FakeProbeRunner(
-        exit_code=0,
-        stdout=(
-            '{"service":{"service_id":"default","name":"tetris-game",'
-            '"start_command":"npm start","internal_port":3001,'
-            '"health_path":"/api/health"},"reason":"root package.json start script"}'
-        ),
-    )
-
-    proposal = await _propose_agent_managed_pipeline_contract(
-        runner=runner,
-        code_root="/workspace/my-game",
-        preview_port=3000,
-    )
-
-    assert proposal is not None
-    assert proposal["services"][0]["internal_port"] == 3001
-    assert runner.commands
-
-
 def test_successful_deploy_pipeline_completes_node_without_worker_reverification() -> None:
     node = _node(metadata={"iteration_phase": "deploy", "pipeline_required": True})
 
@@ -586,31 +540,3 @@ def test_successful_implement_pipeline_still_waits_for_worker_context_without_at
 
     assert intent is TaskIntent.IN_PROGRESS
     assert execution is TaskExecution.REPORTED
-
-
-def test_agent_managed_pipeline_probe_adds_port_to_static_command() -> None:
-    proposal = _parse_agent_managed_pipeline_probe(
-        '{"service":{"service_id":"default","name":"Static Preview",'
-        '"start_command":"python3 -m http.server --bind 0.0.0.0",'
-        '"health_path":"/"},"reason":"public/index.html static fallback"}',
-        preview_port=4123,
-    )
-
-    assert proposal is not None
-    service = proposal["services"][0]
-    assert service["internal_port"] == 4123
-    assert service["start_command"] == "python3 -m http.server --bind 0.0.0.0 4123"
-
-
-def test_agent_managed_pipeline_probe_adds_vite_port_flag() -> None:
-    proposal = _parse_agent_managed_pipeline_probe(
-        '{"service":{"service_id":"default","name":"vite-app",'
-        '"start_command":"npm run dev -- --host 0.0.0.0",'
-        '"health_path":"/"},"reason":"root package.json dev script"}',
-        preview_port=5173,
-    )
-
-    assert proposal is not None
-    service = proposal["services"][0]
-    assert service["internal_port"] == 5173
-    assert service["start_command"] == "npm run dev -- --host 0.0.0.0 --port 5173"

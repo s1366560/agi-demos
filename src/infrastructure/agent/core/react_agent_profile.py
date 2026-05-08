@@ -47,6 +47,7 @@ _WORKSPACE_WORKER_REPORT_TOOL_NAMES: tuple[str, ...] = (
     "workspace_report_blocked",
     "workspace_request_clarification",
     "workspace_health_verdict",
+    "workspace_submit_planning_contract",
 )
 
 _WORKSPACE_LEADER_REPLAN_TOOL_NAMES: tuple[str, ...] = (

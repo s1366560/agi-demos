@@ -37,7 +37,10 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository 
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
-from src.infrastructure.agent.subagent.task_decomposer import TaskDecomposer
+from src.infrastructure.agent.workspace.planner_agent_decomposer import (
+    RuntimeWorkspacePlannerAgentTurnRunner,
+    WorkspacePlannerAgentDecomposer,
+)
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     ROOT_GOAL_TASK_ID,
     WORKSPACE_PLAN_ID,
@@ -47,10 +50,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import SUPERVISOR_T
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.workspace_plan.orchestrator import WorkspaceOrchestrator
-    from src.infrastructure.agent.workspace_plan.planner import (
-        DecompositionResultLike,
-        TaskDecomposerProtocol,
-    )
+    from src.infrastructure.agent.workspace_plan.planner import TaskDecomposerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -61,28 +61,6 @@ _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
 _DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS = 6
 _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 _SOFTWARE_ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
-
-
-class _WorkspacePlanTaskDecomposerAdapter:
-    """Adapter for planner's keyword-only decomposer protocol."""
-
-    def __init__(self, decomposer: TaskDecomposer, extra_context: str | None = None) -> None:
-        super().__init__()
-        self._decomposer = decomposer
-        self._extra_context = extra_context
-
-    async def decompose(
-        self,
-        *,
-        query: str,
-        conversation_context: str | None = None,
-    ) -> DecompositionResultLike:
-        context = _join_context(self._extra_context, conversation_context)
-        result = await self._decomposer.decompose(
-            query=query,
-            conversation_context=context,
-        )
-        return cast("DecompositionResultLike", result)
 
 
 def set_orchestrator_singleton_for_testing(orchestrator: WorkspaceOrchestrator | None) -> None:
@@ -230,7 +208,7 @@ async def _build_workspace_task_decomposer(
     root_task_id: str | None = None,
     extra_context: str | None = None,
 ) -> TaskDecomposerProtocol | None:
-    """Build the same LLM-backed decomposer V2 needs to produce a real DAG."""
+    """Build the builtin workspace planner decomposer V2 needs to produce a real DAG."""
     try:
         workspace = await SqlWorkspaceRepository(db).find_by_id(workspace_id)
         if workspace is None:
@@ -260,17 +238,30 @@ async def _build_workspace_task_decomposer(
                 workspace_type=workspace_type,
                 max_subtasks=max_subtasks,
             )
-        return _WorkspacePlanTaskDecomposerAdapter(
-            TaskDecomposer(
+        return cast(
+            "TaskDecomposerProtocol",
+            WorkspacePlannerAgentDecomposer(
                 llm_client=llm_client,
+                tenant_id=workspace.tenant_id,
+                project_id=workspace.project_id,
+                workspace_id=workspace_id,
+                root_task_id=root_task_id,
+                actor_user_id=getattr(workspace, "created_by", None),
+                workspace_metadata=workspace.metadata,
+                root_metadata=root_metadata,
                 max_subtasks=max_subtasks,
                 min_subtasks=_workspace_decomposer_min_subtasks(
                     root_metadata=root_metadata,
                     workspace_metadata=workspace.metadata,
                     max_subtasks=max_subtasks,
                 ),
+                extra_context=extra_context,
+                session=db,
+                turn_runner=_build_workspace_planner_agent_turn_runner(
+                    tenant_id=workspace.tenant_id,
+                    project_id=workspace.project_id,
+                ),
             ),
-            extra_context=extra_context,
         )
     except Exception:
         logger.warning(
@@ -279,6 +270,17 @@ async def _build_workspace_task_decomposer(
             exc_info=True,
         )
         return None
+
+
+def _build_workspace_planner_agent_turn_runner(
+    *,
+    tenant_id: str,
+    project_id: str,
+) -> RuntimeWorkspacePlannerAgentTurnRunner:
+    return RuntimeWorkspacePlannerAgentTurnRunner(
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
 
 
 async def _workspace_planning_contract_context(
@@ -365,17 +367,13 @@ def _workspace_iteration_decomposition_context(
         "not as extra tasks in this plan. Each subtask should be independently verifiable "
         "and should name concrete evidence or artifacts. For CI/CD and deploy phases, use "
         "the MemStack sandbox-native delivery harness: pipeline run, sandbox preview proxy, "
-        "health check, and preview evidence. Do not plan Vercel, Netlify, Railway, Render, "
+        "health check, and preview evidence. The planning-stage builtin workspace planner "
+        "must submit any discovered services via workspace_submit_planning_contract so "
+        "workspace.metadata.delivery_cicd is written before deployment. Do not plan Vercel, "
+        "Netlify, Railway, Render, "
         "GitHub Actions, Drone, Kubernetes, or other external production deployment work "
         "unless the user explicitly asks for external deployment credentials and approval."
     )
-
-
-def _join_context(*parts: str | None) -> str | None:
-    values = [part.strip() for part in parts if isinstance(part, str) and part.strip()]
-    if not values:
-        return None
-    return "\n\n".join(values)
 
 
 __all__ = [

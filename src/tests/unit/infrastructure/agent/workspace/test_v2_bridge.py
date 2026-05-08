@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -28,11 +29,15 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.agent.subagent.task_decomposer import DecompositionResult, SubTask
+from src.infrastructure.agent.tools import workspace_planning_contract as planning_contract_tools
 from src.infrastructure.agent.workspace.goal_runtime import v2_bridge
 from src.infrastructure.agent.workspace.goal_runtime.v2_bridge import (
     kickoff_v2_plan,
     reset_orchestrator_singleton_for_testing,
     set_orchestrator_singleton_for_testing,
+)
+from src.infrastructure.agent.workspace.planner_agent_decomposer import (
+    WorkspacePlannerAgentDecomposer,
 )
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
@@ -99,27 +104,31 @@ def test_workspace_decomposer_max_subtasks_bounds_invalid_env(
 
 
 @pytest.mark.asyncio
-async def test_workspace_plan_decomposer_adapter_adds_iteration_context() -> None:
-    captured: dict[str, str | None] = {}
+async def test_workspace_planner_agent_decomposer_adds_iteration_context() -> None:
+    captured: dict[str, Any] = {}
 
-    class _Recorder:
-        async def decompose(self, query: str, conversation_context: str | None = None) -> object:
-            captured["query"] = query
-            captured["context"] = conversation_context
-            return DecompositionResult(
-                subtasks=(SubTask(id="research", description="Research"),),
-                reasoning="recorded",
+    class _PlannerLLM:
+        async def generate(self, **kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return _planner_tool_response(
+                subtasks=[{"id": "research", "description": "Research"}],
+                services=[],
             )
 
-    adapter = v2_bridge._WorkspacePlanTaskDecomposerAdapter(
-        cast(Any, _Recorder()),
+    decomposer = WorkspacePlannerAgentDecomposer(
+        llm_client=cast(Any, _PlannerLLM()),
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="ws-1",
         extra_context="Software workspace planning contract",
     )
 
-    await adapter.decompose(query="Ship feature", conversation_context="Existing context")
+    await decomposer.decompose(query="Ship feature", conversation_context="Existing context")
 
-    assert captured["query"] == "Ship feature"
-    assert captured["context"] == "Software workspace planning contract\n\nExisting context"
+    prompt = captured["messages"][1]["content"]
+    assert "builtin workspace planner contract" in prompt
+    assert "Software workspace planning contract" in prompt
+    assert "Existing context" in prompt
 
 
 def test_workspace_decomposer_min_subtasks_defaults_to_one_for_general(
@@ -182,6 +191,23 @@ def test_workspace_decomposer_min_subtasks_uses_software_profile(
     )
 
 
+async def test_build_workspace_task_decomposer_uses_builtin_planner_agent(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace(db_session)
+    _patch_planner_llm(monkeypatch)
+
+    decomposer = await v2_bridge._build_workspace_task_decomposer(
+        db_session,
+        "ws-abc",
+        root_task_id="root-bridge-1",
+        extra_context="Software workspace planning contract",
+    )
+
+    assert isinstance(decomposer, WorkspacePlannerAgentDecomposer)
+
+
 async def _seed_workspace(db_session: AsyncSession) -> None:
     db_session.add_all(
         [
@@ -238,6 +264,100 @@ def _patch_session_factory(db_session: AsyncSession):
     return patch.object(v2_bridge, "async_session_factory", factory)
 
 
+def _planner_tool_response(
+    *,
+    subtasks: list[dict[str, Any]] | None = None,
+    services: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "task_graph": {
+            "subtasks": subtasks
+            or [
+                {"id": "api", "description": "Define API contract", "priority": 10},
+                {
+                    "id": "tests",
+                    "description": "Write tests for the API contract",
+                    "depends_on": ["api"],
+                    "priority": 5,
+                },
+            ]
+        },
+        "delivery_cicd": {
+            "auto_deploy": True,
+            "services": services
+            if services is not None
+            else [
+                {
+                    "service_id": "frontend",
+                    "name": "Frontend",
+                    "start_command": "npm run dev -- --host 0.0.0.0 --port 5173",
+                    "internal_port": 5173,
+                    "health_path": "/",
+                    "required": True,
+                    "auto_open": True,
+                },
+                {
+                    "service_id": "backend",
+                    "name": "Backend API",
+                    "start_command": "uv run uvicorn app:app --host 0.0.0.0 --port 8000",
+                    "internal_port": 8000,
+                    "health_path": "/health",
+                    "required": True,
+                    "auto_open": False,
+                },
+            ],
+        },
+        "reasoning": "Planner read package and backend health route evidence.",
+        "evidence_refs": ["read:package.json", "grep:backend health route"],
+        "confidence": 0.91,
+    }
+    return {
+        "tool_calls": [
+            {
+                "function": {
+                    "name": "workspace_submit_planning_contract",
+                    "arguments": json.dumps(payload),
+                }
+            }
+        ]
+    }
+
+
+def _patch_planner_llm(monkeypatch: pytest.MonkeyPatch, *, response: dict[str, Any] | None = None):
+    from src.infrastructure.llm import provider_factory
+
+    class _FakePlannerLLM:
+        async def generate(self, **_kwargs: Any) -> dict[str, Any]:
+            return response or _planner_tool_response()
+
+    class _FakePlannerTurnRunner:
+        async def run_planning_turn(self, **_kwargs: Any) -> dict[str, Any]:
+            raw_response = response or _planner_tool_response()
+            arguments = json.loads(raw_response["tool_calls"][0]["function"]["arguments"])
+            return planning_contract_tools.normalize_workspace_planning_contract(
+                task_graph=arguments["task_graph"],
+                delivery_cicd=arguments["delivery_cicd"],
+                reasoning=arguments["reasoning"],
+                evidence_refs=arguments["evidence_refs"],
+                confidence=arguments["confidence"],
+                actor_user_id="bridge-user-1",
+            )
+
+    class _FakeAIServiceFactory:
+        async def resolve_provider(self, *_args: Any, **_kwargs: Any) -> object:
+            return object()
+
+        def create_unified_llm_client(self, *_args: Any, **_kwargs: Any) -> _FakePlannerLLM:
+            return _FakePlannerLLM()
+
+    monkeypatch.setattr(provider_factory, "AIServiceFactory", _FakeAIServiceFactory)
+    monkeypatch.setattr(
+        v2_bridge,
+        "_build_workspace_planner_agent_turn_runner",
+        lambda **_kwargs: _FakePlannerTurnRunner(),
+    )
+
+
 class _WorkspaceServiceStub:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
@@ -289,8 +409,11 @@ async def test_kickoff_creates_plan_with_injected_orchestrator() -> None:
 
 async def test_kickoff_creates_durable_plan_and_outbox(
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     await _seed_workspace(db_session)
+    _patch_planner_llm(monkeypatch)
+    monkeypatch.setattr(planning_contract_tools, "_publish_workspace_updated_event", AsyncMock())
 
     with _patch_session_factory(db_session):
         started = await kickoff_v2_plan(
@@ -321,6 +444,14 @@ async def test_kickoff_creates_durable_plan_and_outbox(
         "leader_agent_id": None,
     }
     assert outbox_items[0].metadata_json == {"source": "v2_bridge"}
+    workspace = await db_session.get(WorkspaceModel, "ws-abc")
+    assert workspace is not None
+    delivery = dict((workspace.metadata_json or {}).get("delivery_cicd") or {})
+    assert delivery["contract_source"] == "planner_agent_code_analysis"
+    assert [service["service_id"] for service in delivery["services"]] == [
+        "frontend",
+        "backend",
+    ]
 
 
 async def test_kickoff_passes_software_context_to_planner_for_pipeline_gate(
@@ -387,8 +518,11 @@ async def test_kickoff_passes_software_context_to_planner_for_pipeline_gate(
 
 async def test_kickoff_skips_duplicate_plan_for_completed_root(
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     await _seed_workspace(db_session)
+    _patch_planner_llm(monkeypatch)
+    monkeypatch.setattr(planning_contract_tools, "_publish_workspace_updated_event", AsyncMock())
 
     with _patch_session_factory(db_session):
         started = await kickoff_v2_plan(
@@ -488,6 +622,8 @@ async def test_kickoff_worker_and_snapshot_api_flow_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     await _seed_workspace(db_session)
+    _patch_planner_llm(monkeypatch)
+    monkeypatch.setattr(planning_contract_tools, "_publish_workspace_updated_event", AsyncMock())
 
     with _patch_session_factory(db_session):
         await kickoff_v2_plan(

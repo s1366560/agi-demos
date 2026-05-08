@@ -1,8 +1,8 @@
-"""M2 — LLM-backed :class:`GoalPlannerPort` adapter.
+"""M2 — :class:`GoalPlannerPort` adapter.
 
-Wraps the existing :class:`~src.infrastructure.agent.subagent.task_decomposer.TaskDecomposer`
-and promotes its :class:`SubTask` output into a full :class:`Plan` DAG while
-preserving ``target_subagent / dependencies / priority``.
+Wraps a TaskDecomposerProtocol implementation and promotes its ``SubTask``
+output into a full :class:`Plan` DAG while preserving
+``target_subagent / dependencies / priority``.
 
 Falls back to a single-task plan if no LLM client is configured — useful for
 tests and for bootstrapping without hitting an LLM quota.

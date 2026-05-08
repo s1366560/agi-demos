@@ -60,7 +60,6 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgePort,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
-    WorkspaceModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
@@ -1450,37 +1449,23 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             root_metadata=root_metadata,
         )
         if _needs_agent_managed_pipeline_proposal(contract):
-            proposal = await _propose_agent_managed_pipeline_contract(
-                runner=runner,
-                code_root=contract.code_root,
-                preview_port=contract.preview_port,
-            )
-            if proposal is None:
-                await _suspend_plan_for_pipeline(
-                    session=session,
-                    plan=plan,
-                    node=node,
-                    reason="agent-managed delivery contract could not infer a preview service",
-                )
-                return
-            workspace_metadata = await _persist_agent_managed_pipeline_proposal(
+            await _suspend_plan_for_pipeline(
                 session=session,
-                workspace_id=workspace_id,
-                workspace_metadata=workspace_metadata,
-                proposal=proposal,
+                plan=plan,
+                node=node,
+                reason="planner agent did not submit delivery contract",
             )
-            contract = _pipeline_contract_for_workspace(
-                project_id=workspace.project_id,
-                workspace_id=workspace_id,
-                workspace_metadata=workspace_metadata,
-                root_metadata=root_metadata,
-            )
+            return
         if _requires_preview_deployment(contract) and not contract.services:
             await _suspend_plan_for_pipeline(
                 session=session,
                 plan=plan,
                 node=node,
-                reason="delivery contract requires preview deployment but has no services",
+                reason=(
+                    "planner agent did not submit delivery contract"
+                    if contract.agent_managed
+                    else "delivery contract requires preview deployment but has no services"
+                ),
             )
             return
         if contract.provider != SANDBOX_NATIVE_PROVIDER:
@@ -1827,235 +1812,6 @@ def _workspace_proxy_service_id(*, workspace_id: str, service_id: str) -> str:
 def _workspace_proxy_service_prefix(workspace_id: str) -> str:
     fragment = re.sub(r"[^a-z0-9]+", "", workspace_id.lower())[:8]
     return f"ws-{fragment or 'workspace'}"
-
-
-async def _propose_agent_managed_pipeline_contract(
-    *,
-    runner: _WorkspaceSandboxCommandRunner,
-    code_root: str | None,
-    preview_port: int | None,
-) -> dict[str, Any] | None:
-    if not code_root:
-        return None
-    raw = await runner.run_command(
-        _agent_managed_pipeline_probe_command(code_root=code_root),
-        timeout=30,
-    )
-    raw_exit_code = raw.get("exit_code")
-    exit_code = int(raw_exit_code) if raw_exit_code is not None else 1
-    if exit_code != 0:
-        logger.info(
-            "workspace_plan.pipeline_contract_probe_failed",
-            extra={
-                "event": "workspace_plan.pipeline_contract_probe_failed",
-                "code_root": code_root,
-                "stderr": str(raw.get("stderr") or "")[:500],
-            },
-        )
-        return None
-    return _parse_agent_managed_pipeline_probe(
-        str(raw.get("stdout") or ""),
-        preview_port=preview_port,
-    )
-
-
-def _agent_managed_pipeline_probe_command(*, code_root: str) -> str:
-    script = r'''
-import json
-import re
-from pathlib import Path
-
-root = Path.cwd()
-
-def load_json(rel):
-    path = root / rel
-    if not path.exists():
-        return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-def read_text(rel):
-    path = root / rel
-    if not path.exists():
-        return ""
-    try:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
-        return ""
-
-root_pkg = load_json("package.json")
-backend_pkg = load_json("backend/package.json")
-root_scripts = root_pkg.get("scripts") if isinstance(root_pkg.get("scripts"), dict) else {}
-backend_scripts = backend_pkg.get("scripts") if isinstance(backend_pkg.get("scripts"), dict) else {}
-server_text = "\n".join(
-    read_text(rel)
-    for rel in (
-        "server.js",
-        "app.js",
-        "index.js",
-        "backend/server.js",
-        "backend/app.js",
-        "src/server.js",
-        "src/app.js",
-    )
-)
-port_match = re.search(r"process\.env\.PORT\s*\|\|\s*([0-9]{2,5})", server_text)
-declared_port = int(port_match.group(1)) if port_match else None
-health_path = "/api/health" if re.search(r"""['"]\/api\/health['"]""", server_text) else "/"
-
-service = None
-reason = ""
-if root_scripts.get("start"):
-    service = {
-        "service_id": "default",
-        "name": root_pkg.get("name") or "Preview",
-        "start_command": "npm start",
-        "internal_port": declared_port,
-        "health_path": health_path,
-    }
-    reason = "root package.json start script"
-elif root_scripts.get("preview"):
-    service = {
-        "service_id": "default",
-        "name": root_pkg.get("name") or "Preview",
-        "start_command": "npm run preview -- --host 0.0.0.0",
-        "internal_port": declared_port,
-        "health_path": health_path,
-    }
-    reason = "root package.json preview script"
-elif root_scripts.get("dev"):
-    service = {
-        "service_id": "default",
-        "name": root_pkg.get("name") or "Preview",
-        "start_command": "npm run dev -- --host 0.0.0.0",
-        "internal_port": declared_port,
-        "health_path": health_path,
-    }
-    reason = "root package.json dev script"
-elif backend_scripts.get("start"):
-    service = {
-        "service_id": "default",
-        "name": backend_pkg.get("name") or "Backend Preview",
-        "start_command": "npm --prefix backend start",
-        "internal_port": declared_port,
-        "health_path": health_path,
-    }
-    reason = "backend package.json start script"
-elif (root / "public" / "index.html").exists():
-    service = {
-        "service_id": "default",
-        "name": "Static Preview",
-        "start_command": "python3 -m http.server --bind 0.0.0.0",
-        "internal_port": declared_port,
-        "health_path": "/",
-    }
-    reason = "public/index.html static fallback"
-
-print(json.dumps({"service": service, "reason": reason}, ensure_ascii=False))
-'''.strip()
-    return f"cd {shlex.quote(code_root)} && python3 - <<'PY'\n{script}\nPY"
-
-
-def _parse_agent_managed_pipeline_probe(
-    stdout: str,
-    *,
-    preview_port: int | None,
-) -> dict[str, Any] | None:
-    payload: dict[str, Any] | None = None
-    for line in reversed(stdout.splitlines()):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            parsed = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(parsed, dict):
-            payload = parsed
-            break
-    if payload is None:
-        return None
-    service = payload.get("service")
-    if not isinstance(service, dict):
-        return None
-    port = _positive_port(service.get("internal_port")) or preview_port or 3000
-    start_command = _metadata_string(service.get("start_command"))
-    if not start_command:
-        return None
-    if " --port " not in start_command and (
-        "npm run preview" in start_command or "npm run dev" in start_command
-    ):
-        start_command = f"{start_command} --port {port}"
-    elif "python3 -m http.server" in start_command:
-        start_command = f"{start_command} {port}"
-    service_id = _metadata_string(service.get("service_id")) or "default"
-    proposed_service = {
-        "service_id": service_id,
-        "name": _metadata_string(service.get("name")) or service_id,
-        "start_command": start_command,
-        "internal_port": port,
-        "path_prefix": "/",
-        "health_path": _metadata_string(service.get("health_path")) or "/",
-        "required": True,
-        "auto_open": True,
-    }
-    return {
-        "agent_managed": True,
-        "contract_source": "agent_sandbox_scan",
-        "contract_confidence": 0.82,
-        "proposal_reason": _metadata_string(payload.get("reason")) or "sandbox project script scan",
-        "services": [proposed_service],
-    }
-
-
-async def _persist_agent_managed_pipeline_proposal(
-    *,
-    session: AsyncSession,
-    workspace_id: str,
-    workspace_metadata: dict[str, Any],
-    proposal: dict[str, Any],
-) -> dict[str, Any]:
-    metadata = dict(workspace_metadata)
-    delivery = dict(metadata.get("delivery_cicd") or {})
-    delivery.update(
-        {
-            "agent_managed": True,
-            "contract_source": proposal.get("contract_source") or "agent_sandbox_scan",
-            "contract_confidence": proposal.get("contract_confidence") or 0.0,
-            "services": list(proposal.get("services") or []),
-            "agent_proposal": {
-                "source": proposal.get("contract_source") or "agent_sandbox_scan",
-                "confidence": proposal.get("contract_confidence") or 0.0,
-                "reason": proposal.get("proposal_reason") or "",
-                "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            },
-        }
-    )
-    first_service = next(iter(delivery.get("services") or []), None)
-    if isinstance(first_service, dict):
-        port = _positive_port(first_service.get("internal_port"))
-        if port:
-            delivery["preview_port"] = port
-    metadata["delivery_cicd"] = delivery
-    workspace_model = await session.get(WorkspaceModel, workspace_id)
-    if workspace_model is not None:
-        workspace_model.metadata_json = metadata
-        workspace_model.updated_at = datetime.now(UTC)
-        await session.flush()
-    return metadata
-
-
-def _positive_port(value: object) -> int | None:
-    if isinstance(value, int) and 0 < value <= 65535:
-        return value
-    if isinstance(value, str) and value.isdigit():
-        parsed = int(value)
-        if 0 < parsed <= 65535:
-            return parsed
-    return None
 
 
 def _metadata_string(value: object) -> str | None:
