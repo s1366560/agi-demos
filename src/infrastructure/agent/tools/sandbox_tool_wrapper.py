@@ -221,6 +221,58 @@ def _path_is_inside_code_root(path: str, code_root: str) -> bool:
     return path == code_root or path.startswith(f"{code_root}/")
 
 
+def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+
+    paths: list[str] = []
+    for token in tokens:
+        if "/workspace/" not in token:
+            continue
+        start = token.find("/workspace/")
+        raw_path = token[start:].strip("'\"")
+        raw_path = raw_path.rstrip(";,|&)")
+        if raw_path:
+            paths.append(posixpath.normpath(raw_path))
+    return tuple(paths)
+
+
+def _workspace_bash_escape_error(command: str, root_override: str | None) -> str | None:
+    if not root_override:
+        return None
+    normalized_root = posixpath.normpath(root_override.rstrip("/"))
+    for path in _workspace_absolute_paths(command):
+        if _path_is_inside_code_root(path, normalized_root):
+            continue
+        return (
+            f"bash.command references {path}, which is outside the active attempt "
+            f"worktree {normalized_root}. Retry from inside {normalized_root}; install or link "
+            "dependencies there instead of cd'ing to the main checkout."
+        )
+    return None
+
+
+def _workspace_bash_harness_argument_error(
+    command: str,
+    root_override: str | None,
+) -> str | None:
+    if len(command) > WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS:
+        return (
+            "bash.command exceeds the workspace harness hard limit "
+            f"({len(command)} > {WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS} characters). "
+            "Retry with a short command; do not embed large heredocs."
+        )
+    if root_override and "<<" in command:
+        return (
+            "bash.command uses a heredoc while an attempt worktree override is active. "
+            f"Retry with write/edit/append tools under {root_override}, or run a short "
+            "bash command that executes an existing script in that worktree."
+        )
+    return _workspace_bash_escape_error(command, root_override)
+
+
 def _path_scoped_to_code_root(path: str, code_root: str) -> str:
     return posixpath.normpath(f"{code_root.rstrip('/')}/{path}")
 
@@ -321,18 +373,8 @@ def _workspace_harness_argument_error(
             )
     if tool_name == "bash":
         command = kwargs.get("command")
-        if isinstance(command, str) and len(command) > WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS:
-            return (
-                "bash.command exceeds the workspace harness hard limit "
-                f"({len(command)} > {WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS} characters). "
-                "Retry with a short command; do not embed large heredocs."
-            )
-        if root_override and isinstance(command, str) and "<<" in command:
-            return (
-                "bash.command uses a heredoc while an attempt worktree override is active. "
-                f"Retry with write/edit/append tools under {root_override}, or run a short "
-                "bash command that executes an existing script in that worktree."
-            )
+        if isinstance(command, str):
+            return _workspace_bash_harness_argument_error(command, root_override)
     if tool_name == "edit":
         old_string = kwargs.get("old_string")
         if (

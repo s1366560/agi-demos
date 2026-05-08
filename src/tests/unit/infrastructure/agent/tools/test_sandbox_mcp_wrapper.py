@@ -745,6 +745,83 @@ class TestSandboxMCPToolExecute:
         assert "uses a heredoc while an attempt worktree override is active" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_bash_rejects_main_checkout_when_worktree_override_active(
+        self,
+    ):
+        """Attempt-scoped workers must not cd back to the mutable main checkout."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cd /workspace/my-evo && node test-data-persistence.js",
+        )
+
+        assert result.is_error is True
+        assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
+            result.output
+        )
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_bash_allows_absolute_path_inside_worktree_override(self):
+        """Absolute worktree paths remain valid for short test commands."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cd /workspace/.memstack/worktrees/att-1 && node test-data-persistence.js",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+
     async def test_workspace_worker_write_rejects_absolute_path_outside_code_root(self):
         """Worker writes should not silently create project files outside sandbox_code_root."""
         adapter = MockSandboxAdapter()
