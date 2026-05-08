@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from src.domain.events.agent_events import AgentMessageSentEvent
@@ -58,6 +59,22 @@ from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_
 logger = logging.getLogger(__name__)
 
 _orchestrator: AgentOrchestrator | None = None
+_FAILED_TEST_COUNT_RE = re.compile(
+    r"\b([1-9]\d*)\s+(?:failed|failing|failure|failures)\b",
+    re.IGNORECASE,
+)
+_NONZERO_EXIT_RE = re.compile(r"\bexit\s+code:\s*([1-9]\d*)\b", re.IGNORECASE)
+_PARTIAL_TEST_COUNT_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\b")
+_TEST_EVIDENCE_HINTS = (
+    "test",
+    "suite",
+    "verification",
+    "pass",
+    "passed",
+    "failed",
+    "failing",
+    "failure",
+)
 
 
 def _supervisor_only_terminal_path() -> bool:
@@ -96,6 +113,123 @@ def _deny(error: str, **extra: Any) -> ToolResult:
     payload: dict[str, Any] = {"error": error}
     payload.update(extra)
     return ToolResult(output=json.dumps(payload), is_error=True)
+
+
+def _protected_verification_policy(ctx: ToolContext) -> dict[str, Any] | None:
+    policy = ctx.runtime_context.get("workspace_verification_integrity")
+    if not isinstance(policy, dict):
+        return None
+    phase = str(policy.get("iteration_phase") or "").strip().lower()
+    if phase not in {"test", "review"}:
+        return None
+    if policy.get("allow_failed_tests") is True:
+        return None
+    return policy
+
+
+def _failed_completion_evidence(texts: list[str]) -> list[str]:
+    failed: list[str] = []
+    for text in texts:
+        value = text.strip()
+        if not value:
+            continue
+        lower = value.lower()
+        has_test_context = any(hint in lower for hint in _TEST_EVIDENCE_HINTS)
+        if _FAILED_TEST_COUNT_RE.search(value) or (has_test_context and _NONZERO_EXIT_RE.search(value)):
+            failed.append(value)
+            continue
+        if has_test_context:
+            for partial in _PARTIAL_TEST_COUNT_RE.finditer(value):
+                passed = int(partial.group(1))
+                total = int(partial.group(2))
+                if total > 0 and passed < total:
+                    failed.append(value)
+                    break
+    return list(dict.fromkeys(failed))
+
+
+def _normalize_completion_report_fields(
+    *,
+    artifacts: list[str] | None,
+    verifications: list[str] | None,
+    commit_ref: str | None,
+    git_diff_summary: str | None,
+    changed_files: list[str] | None,
+) -> dict[str, Any]:
+    normalized_artifacts = [a for a in (artifacts or []) if isinstance(a, str) and a]
+    normalized_verifications = [
+        item for item in (verifications or []) if isinstance(item, str) and item
+    ]
+    normalized_commit_ref = commit_ref.strip() if isinstance(commit_ref, str) else ""
+    normalized_git_diff_summary = (
+        git_diff_summary.strip() if isinstance(git_diff_summary, str) else ""
+    )
+    normalized_changed_files = [
+        item.strip() for item in (changed_files or []) if isinstance(item, str) and item.strip()
+    ]
+    if normalized_commit_ref:
+        normalized_artifacts.append(f"commit_ref:{normalized_commit_ref}")
+    if normalized_git_diff_summary:
+        normalized_artifacts.append(f"git_diff_summary:{normalized_git_diff_summary}")
+    normalized_artifacts.extend(f"changed_file:{item}" for item in normalized_changed_files)
+    return {
+        "artifacts": list(dict.fromkeys(normalized_artifacts)),
+        "verifications": normalized_verifications,
+        "commit_ref": normalized_commit_ref,
+        "git_diff_summary": normalized_git_diff_summary,
+        "changed_files": normalized_changed_files,
+    }
+
+
+def _completion_denial_for_failed_test_evidence(
+    ctx: ToolContext,
+    *,
+    summary: str,
+    fields: dict[str, Any],
+) -> ToolResult | None:
+    if not _protected_verification_policy(ctx):
+        return None
+    failed_evidence = _failed_completion_evidence(
+        [
+            summary,
+            fields["git_diff_summary"],
+            *fields["artifacts"],
+            *fields["verifications"],
+        ]
+    )
+    if not failed_evidence:
+        return None
+    return _deny(
+        "completion denied: protected test/review node includes failed, "
+        "failing, non-zero, or partial test evidence. Rerun to 0 failed or "
+        "call workspace_report_blocked with the failing command and exact evidence.",
+        failed_evidence=failed_evidence[:5],
+    )
+
+
+def _completion_payload(
+    *,
+    summary: str,
+    task_id: str,
+    attempt_id: str,
+    fields: dict[str, Any],
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "summary": summary,
+        "task_id": task_id,
+        "attempt_id": attempt_id,
+    }
+    if fields["artifacts"]:
+        payload["artifacts"] = fields["artifacts"]
+    if fields["verifications"]:
+        payload["verifications"] = fields["verifications"]
+    if fields["commit_ref"]:
+        payload["commit_ref"] = fields["commit_ref"]
+    if fields["git_diff_summary"]:
+        payload["git_diff_summary"] = fields["git_diff_summary"]
+    if fields["changed_files"]:
+        payload["changed_files"] = fields["changed_files"]
+    return payload
 
 
 def _enrich_envelope_for_supervisor(
@@ -517,38 +651,25 @@ async def workspace_report_complete_tool(
     workspace_id = _runtime_string(ctx, "workspace_id")
     root_goal_task_id = _runtime_string(ctx, "root_goal_task_id") or None
 
-    normalized_artifacts = [a for a in (artifacts or []) if isinstance(a, str) and a]
-    normalized_verifications = [
-        item for item in (verifications or []) if isinstance(item, str) and item
-    ]
-    normalized_commit_ref = commit_ref.strip() if isinstance(commit_ref, str) else ""
-    normalized_git_diff_summary = (
-        git_diff_summary.strip() if isinstance(git_diff_summary, str) else ""
+    fields = _normalize_completion_report_fields(
+        artifacts=artifacts,
+        verifications=verifications,
+        commit_ref=commit_ref,
+        git_diff_summary=git_diff_summary,
+        changed_files=changed_files,
     )
-    normalized_changed_files = [
-        item.strip() for item in (changed_files or []) if isinstance(item, str) and item.strip()
-    ]
-    if normalized_commit_ref:
-        normalized_artifacts.append(f"commit_ref:{normalized_commit_ref}")
-    if normalized_git_diff_summary:
-        normalized_artifacts.append(f"git_diff_summary:{normalized_git_diff_summary}")
-    normalized_artifacts.extend(f"changed_file:{item}" for item in normalized_changed_files)
-    normalized_artifacts = list(dict.fromkeys(normalized_artifacts))
-    payload: dict[str, Any] = {
-        "summary": summary,
-        "task_id": task_id,
-        "attempt_id": attempt_id,
-    }
-    if normalized_artifacts:
-        payload["artifacts"] = normalized_artifacts
-    if normalized_verifications:
-        payload["verifications"] = normalized_verifications
-    if normalized_commit_ref:
-        payload["commit_ref"] = normalized_commit_ref
-    if normalized_git_diff_summary:
-        payload["git_diff_summary"] = normalized_git_diff_summary
-    if normalized_changed_files:
-        payload["changed_files"] = normalized_changed_files
+    if denial := _completion_denial_for_failed_test_evidence(
+        ctx,
+        summary=summary,
+        fields=fields,
+    ):
+        return denial
+    payload = _completion_payload(
+        summary=summary,
+        task_id=task_id,
+        attempt_id=attempt_id,
+        fields=fields,
+    )
 
     try:
         envelope = WtpEnvelope(
@@ -576,8 +697,8 @@ async def workspace_report_complete_tool(
             leader_agent_id=leader_agent_id,
             report_type="completed",
             summary=summary,
-            artifacts=normalized_artifacts or None,
-            verifications=normalized_verifications or None,
+            artifacts=fields["artifacts"] or None,
+            verifications=fields["verifications"] or None,
         )
     return _build_terminal_tool_result(send_result, apply_result)
 

@@ -531,6 +531,32 @@ class TestBuildBrief:
         assert "workspace_report_blocked" in brief
         assert "13/14 or 85/86 as complete" in brief
 
+    def test_brief_marks_handoff_failed_tests_as_historical_for_protected_nodes(self) -> None:
+        task = _make_task()
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={"iteration_phase": "test"},
+            extra_instructions=(
+                "[feature-checkpoint]\n"
+                "worktree_path=/workspace/.memstack/worktrees/att-2\n"
+                "[/feature-checkpoint]\n\n"
+                "[handoff-package]\n"
+                "completed_step=last_report=completed\n"
+                "test_command=13 passed 1 failed node test-data-persistence.js\n"
+                "[/handoff-package]"
+            ),
+        )
+
+        assert "## Handoff package interpretation" in brief
+        assert "historical context from previous attempts" in brief
+        assert "last_report=completed" in brief
+        assert "fresh 0-failed evidence" in brief
+        assert "workspace_report_blocked" in brief
+
     def test_handles_missing_description(self) -> None:
         task = _make_task(description=None)
         brief = wl._build_worker_brief(

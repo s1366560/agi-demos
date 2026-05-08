@@ -353,6 +353,67 @@ class TestComplete:
         mock_orchestrator.send_message.assert_not_awaited()
         assert mock_apply.await_args.kwargs["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
+    async def test_protected_test_node_rejects_failed_completion_evidence(
+        self, ctx, mock_orchestrator
+    ):
+        ctx.runtime_context["workspace_verification_integrity"] = {
+            "iteration_phase": "test",
+            "protected_script_changes": True,
+        }
+
+        with patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply:
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id="leader-agent-id",
+                summary="Full suite finished with 85/86 passing",
+                verifications=[
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "test_run:test-data-persistence.js 13 passed 1 failed",
+                ],
+            )
+
+        assert result.is_error is True
+        payload = json.loads(result.output)
+        assert "completion denied" in payload["error"]
+        assert payload["failed_evidence"] == [
+            "Full suite finished with 85/86 passing",
+            "test_run:test-data-persistence.js 13 passed 1 failed",
+        ]
+        mock_orchestrator.send_message.assert_not_awaited()
+        mock_apply.assert_not_awaited()
+
+    async def test_protected_test_node_allows_zero_failed_completion_evidence(
+        self, ctx, mock_orchestrator
+    ):
+        ctx.runtime_context["workspace_verification_integrity"] = {
+            "iteration_phase": "test",
+            "protected_script_changes": True,
+        }
+
+        with (
+            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
+        ):
+            mock_apply.return_value = {"applied": True, "task_status": "in_review"}
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="Full suite finished with 86/86 passing and 0 failed",
+                verifications=[
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "test_run:all 86 passed 0 failed",
+                ],
+            )
+
+        assert result.is_error is False
+        mock_apply.assert_awaited_once()
+
     async def test_terminal_apply_failure_marks_tool_error(self, ctx, mock_orchestrator):
         with (
             patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),

@@ -356,6 +356,27 @@ def _render_visible_verification_integrity_gate(policy: Mapping[str, Any] | None
     )
 
 
+def _render_visible_handoff_interpretation_gate(
+    *,
+    rendered_extra: str,
+    verification_integrity: Mapping[str, Any] | None,
+) -> str | None:
+    if not verification_integrity or "[handoff-package]" not in rendered_extra:
+        return None
+    return (
+        "## Handoff package interpretation\n"
+        "The handoff package is historical context from previous attempts, not current "
+        "acceptance evidence. Do not inherit `completed_step`, `last_report=completed`, "
+        "candidate summaries, old commit_ref values, or phrases such as known test design "
+        "limitation as proof that this attempt is complete. For protected test/review "
+        "nodes, any handoff `test_command` or `verification_notes` containing failed, "
+        "failing, non-zero, or partial results remains unresolved until this attempt "
+        "produces fresh 0-failed evidence. If the current run still has a failing test, "
+        "call workspace_report_blocked with the failing command and exact evidence instead "
+        "of workspace_report_complete."
+    )
+
+
 def _launch_authority_actor_id(leader_agent_id: str | None) -> str:
     return leader_agent_id or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
@@ -789,6 +810,10 @@ def _build_worker_brief(
             "output, or service code directly under `/workspace` or a sibling directory "
             "unless the task explicitly says to do so."
         )
+    verification_integrity = _workspace_verification_integrity_context(
+        task.metadata,
+        plan_node_metadata,
+    )
     if extra_instructions:
         rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
         should_surface_workspace_root = _has_workspace_root_override(rendered_extra)
@@ -804,10 +829,11 @@ def _build_worker_brief(
                 "reports, commits, or copied artifacts outside that worktree. Do not edit "
                 "the main sandbox checkout for attempt-scoped work."
             )
-    verification_integrity = _workspace_verification_integrity_context(
-        task.metadata,
-        plan_node_metadata,
-    )
+            if handoff_gate := _render_visible_handoff_interpretation_gate(
+                rendered_extra=rendered_extra,
+                verification_integrity=verification_integrity,
+            ):
+                sections.append(handoff_gate)
     if verification_integrity_section := _render_visible_verification_integrity_gate(
         verification_integrity
     ):
