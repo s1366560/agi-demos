@@ -280,6 +280,12 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "Prefer explicit changed-file evidence over broad git add/git commit summaries.",
                 "If recent_git_status or a guard failure reports dirty files, do not accept a worker's textual clean-worktree claim without stronger contrary evidence.",
             ],
+            "attempt_worktree_isolation": [
+                "The sandbox.worktree_path is the active execution root for worker attempts.",
+                "A tool denial caused by writing verification artifacts outside sandbox.worktree_path is an intentional policy failure, not a transient retry_infrastructure condition.",
+                "Do not recommend running from the main checkout, symlinking into the main checkout, copying artifacts outside the attempt worktree, or bypassing the worktree root.",
+                "If protected test or review scripts hardcode main-checkout artifact paths, use needs_rework and require bounded follow-up work to make those scripts worktree-relative or environment-configurable.",
+            ],
             "quality_evidence": [
                 "Tests must contain assertions or checks that can fail for the claimed behavior.",
                 "If a test/review node changed test, E2E, audit, or benchmark code, compare the diff against the node contract and reject weaker or substituted assertions.",

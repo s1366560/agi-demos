@@ -84,6 +84,12 @@ Verification rules:
   allows verification script changes and the rationale is evidence-backed.
 - Do not accept tests, audits, or benchmarks that cannot fail or synthetic evidence presented as real browser, accessibility, security, performance, or E2E proof.
 - Use needs_rework for missing evidence, incomplete output, quality gaps, dirty worktree evidence, project-guidance noncompliance, or cross-task commit contamination that an agent can fix.
+- Attempt worktree isolation is an intentional execution contract, not a transient infrastructure
+  failure. Do not recommend running from the main checkout, symlinking/copying artifacts into
+  the main checkout, or otherwise bypassing the active attempt worktree.
+- If repository scripts hardcode main-checkout artifact paths and a protected test/review node
+  cannot change them, use needs_rework and require a proper implementation or test-infra node
+  to make artifact paths worktree-relative or environment-configurable.
 - Use retry_infrastructure for sandbox, model, tool, rate-limit, provider, or other transient platform failures.
 - Use blocked_human_required only for human-only credentials, permissions, irreversible external deployment or spend, legal/compliance/product approval, or unsafe destructive action.
 """
@@ -107,6 +113,9 @@ Review rules:
 - Do not produce aggregate tasks such as "fix all gaps" or "complete the frontend/backend".
 - Missing evidence is normally next-sprint work, not human review.
 - Use sandbox-native delivery, preview proxy, health check, and preview evidence for deploy/release gaps unless the user explicitly approved external production deployment.
+- Treat attempt worktree isolation as an intentional execution contract. Do not propose main-checkout
+  execution, symlinks, or artifact copying to bypass it; if hardcoded artifact paths block verification,
+  create bounded follow-up work to make the scripts worktree-relative or environment-configurable.
 - Choose needs_human_review only for credentials, private access, irreversible external deployment/spend, legal/compliance/product approval, unsafe destructive action, or no concrete next sprint tasks.
 - Findings must be evidence-backed and may include file, line, category, severity, confidence, description, suggestion, and concrete_evidence.
 """

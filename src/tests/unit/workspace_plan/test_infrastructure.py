@@ -576,7 +576,20 @@ class TestVerifier:
         assert "synthetic evidence" in prompt
         assert "failed or failing tests" in prompt
         assert "weaken, replace, delete, or bypass" in prompt
+        assert "Attempt worktree isolation is an intentional execution contract" in prompt
+        assert "Do not recommend running from the main checkout" in prompt
+        assert "environment-configurable" in prompt
         assert "workspace_submit_verification_judgment" in prompt
+
+    def test_iteration_reviewer_prompt_preserves_attempt_worktree_contract(self) -> None:
+        prompt = build_builtin_workspace_iteration_reviewer_agent(
+            tenant_id="tenant-1",
+            project_id="project-1",
+        ).system_prompt
+
+        assert "attempt worktree isolation as an intentional execution contract" in prompt
+        assert "Do not propose main-checkout" in prompt
+        assert "environment-configurable" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
         payload = json.loads(
@@ -619,6 +632,11 @@ class TestVerifier:
         assert "every branch records success" in rework_policy
         assert "synthetic benchmarks" in rework_policy
         assert "non-zero failed or failing test count" in rework_policy
+        isolation_policy = " ".join(payload["policy"]["attempt_worktree_isolation"])
+        assert "sandbox.worktree_path is the active execution root" in isolation_policy
+        assert "not a transient retry_infrastructure condition" in isolation_policy
+        assert "Do not recommend running from the main checkout" in isolation_policy
+        assert "environment-configurable" in isolation_policy
 
     async def test_file_exists_passes_when_artifact_present(self, tmp_path: Any) -> None:
         target = tmp_path / "out.json"
