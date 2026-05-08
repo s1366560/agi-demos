@@ -74,6 +74,59 @@ _NATIVE_TOOL_PROTOCOL_GUARD = (
     "a substitute for a tool call. In particular, never emit [TOOL_CALL], "
     "[/TOOL_CALL], {tool => ...}, <minimax:tool_call>, or <invoke name=...> text."
 )
+_WORKER_CODE_QUALITY_INSTRUCTIONS = (
+    "Before implementation, read the applicable AGENTS.md/project guidance and inspect "
+    "nearby code patterns. Keep the task plan bounded to the assigned workspace task; "
+    "do not broaden scope just because a related feature exists.",
+    (
+        "Treat explicit repository guidance as hard acceptance criteria for the diff. "
+        "Extract concrete style, safety, testing, migration, artifact, and prohibited-pattern "
+        "requirements before editing; if the guidance forbids a pattern or content form, do "
+        "not introduce it in code, docs, tests, generated assets, or reports."
+    ),
+    (
+        "Prefer existing architecture, shared modules, shared types, and repository "
+        "utilities. Do not duplicate business logic across frontend/backend, duplicate "
+        "schema/type definitions, or create temporary parallel implementations when a "
+        "shared contract should own the behavior."
+    ),
+    (
+        "For database schema changes, commit a reproducible migration or documented "
+        "rollback path; do not rely on local db push/dev database mutation as the only "
+        "state change."
+    ),
+    (
+        "For dependency changes, update the matching lockfile and verify imports/builds "
+        "against the changed dependency graph."
+    ),
+    (
+        "For authentication, authorization, API keys, tokens, secrets, or credentials, "
+        "store only safe representations such as hashes or prefixes when possible, avoid "
+        "logging sensitive values, and include focused security verification."
+    ),
+    (
+        "For frontend/backend contract changes, update both sides deliberately and add "
+        "contract or integration evidence proving they agree on request shape, response "
+        "shape, error states, and shared calculations."
+    ),
+    (
+        "In shared workspace worktrees, isolate commits to this task's intended files. "
+        "Inspect git status and git diff before staging, use explicit git add <path> for "
+        "only the files you own, and never use broad staging such as git add -A, git add ., "
+        "or git commit -a when unrelated dirty files exist. Leave unrelated changes "
+        "unstaged and mention them as external workspace activity."
+    ),
+    (
+        "Do not silently show mock or fake data in production paths. If real data is "
+        "unavailable, implement an explicit empty/loading/error state or label demo data "
+        "as demo data."
+    ),
+    (
+        "Before workspace_report_complete, review git diff for accidental breadth, run "
+        "targeted tests/build/type checks, include project_guidance:checked evidence when "
+        "AGENTS.md/project guidance exists, and report unresolved risks honestly."
+    ),
+)
 
 
 class _WorkspaceProjection(Protocol):
@@ -359,6 +412,10 @@ def _build_worker_system_context(
                 "Call workspace_report_blocked if a hard blocker cannot be recovered.",
             ],
         },
+        "code_quality_policy": {
+            "source": "workspace_generic_quality_gate",
+            "instructions": list(_WORKER_CODE_QUALITY_INSTRUCTIONS),
+        },
         "artifact_write_policy": {
             "max_single_write_chars": WORKER_MAX_SINGLE_WRITE_CHARS,
             "max_single_bash_command_chars": WORKER_MAX_SINGLE_BASH_COMMAND_CHARS,
@@ -596,6 +653,25 @@ def _build_worker_brief(
             "`package.json`, source files, tests, build output, or service code directly under "
             "`/workspace` or a sibling directory unless the task explicitly says to do so."
         )
+    sections.append(
+        "## Code quality gate\n"
+        "Before editing, read the applicable AGENTS.md/project guidance and inspect nearby "
+        "patterns. Keep changes scoped to this task and prefer existing architecture, shared "
+        "modules, shared types, and repository utilities. Do not duplicate frontend/backend "
+        "business logic or schema/type definitions. Schema changes need reproducible "
+        "migrations or rollback notes; dependency changes need matching lockfile updates. "
+        "For auth, API keys, tokens, or secrets, avoid plaintext storage/logging and include "
+        "focused security verification. For frontend/backend contracts, verify request, "
+        "response, error state, and shared-calculation agreement. Do not silently show mock "
+        "or fake data in production paths; use a real data source, explicit empty/error "
+        "state, or clearly labeled demo data. Treat explicit repository guidance as hard "
+        "acceptance criteria for code, docs, tests, generated artifacts, and reports; if "
+        "guidance forbids a pattern or content form, do not introduce it. When guidance "
+        "exists, include project_guidance:checked:<path-or-summary> in completion evidence. "
+        "Because other workspace nodes may run in the same worktree, never sweep unrelated "
+        "dirty files into your commit; use explicit git add <path> for owned files only and "
+        "do not use git add -A, git add ., or git commit -a when unrelated changes exist."
+    )
     sections.append(
         "## Completion gate\n"
         "Before calling workspace_report_complete, include these exact verification refs in "

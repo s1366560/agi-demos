@@ -115,6 +115,10 @@ def test_workspace_decomposer_max_subtasks_bounds_invalid_env(
 
 def test_builtin_workspace_planner_worker_profile_keeps_read_only_contract_tools() -> None:
     planner = build_builtin_workspace_planner_agent(tenant_id="tenant-1", project_id="project-1")
+    assert "AGENTS.md" in planner.system_prompt
+    assert "acceptance criteria" in planner.system_prompt
+    assert "database schema or migrations" in planner.system_prompt
+    assert "silently falls back to fake or mock data" in planner.system_prompt
     profile = AgentRuntimeProfile(
         selected_agent=planner,
         tenant_agent_config=TenantAgentConfig.create_default("tenant-1"),

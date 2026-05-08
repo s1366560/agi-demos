@@ -406,6 +406,16 @@ class TestBuildBrief:
         assert "commit_ref" in " ".join(reporting["instructions"])
         assert "git status --short" in " ".join(reporting["instructions"])
         assert "untracked file" in " ".join(reporting["instructions"])
+        quality_policy = system_context["code_quality_policy"]
+        assert quality_policy["source"] == "workspace_generic_quality_gate"
+        quality_instructions = " ".join(quality_policy["instructions"])
+        assert "frontend/backend" in quality_instructions
+        assert "hard acceptance criteria" in quality_instructions
+        assert "hashes or prefixes" in quality_instructions
+        assert "git diff" in quality_instructions
+        assert "project_guidance:checked" in quality_instructions
+        assert "git add -A" in quality_instructions
+        assert "unrelated changes" in quality_instructions
         assert (
             system_context["artifact_write_policy"]["max_single_write_chars"]
             == wl.WORKER_MAX_SINGLE_WRITE_CHARS
@@ -497,6 +507,14 @@ class TestBuildBrief:
         assert "Do not place `package.json`" in brief
         assert "Artifact write discipline" in brief
         assert "git_diff_summary" in brief
+        assert "## Code quality gate" in brief
+        assert "AGENTS.md/project guidance" in brief
+        assert "Schema changes need reproducible migrations" in brief
+        assert "Do not silently show mock" in brief
+        assert "hard acceptance criteria" in brief
+        assert "project_guidance:checked" in brief
+        assert "git add -A" in brief
+        assert "owned files only" in brief
 
         system_context = wl._build_worker_system_context(
             workspace_id="w",
@@ -517,6 +535,15 @@ class TestBuildBrief:
         assert (
             "Do not create project files directly under /workspace" in code_context_payload["rule"]
         )
+        quality_policy = system_context["code_quality_policy"]
+        assert quality_policy["source"] == "workspace_generic_quality_gate"
+        quality_instructions = " ".join(quality_policy["instructions"])
+        assert "AGENTS.md/project guidance" in quality_instructions
+        assert "do not rely on local db push" in quality_instructions
+        assert "matching lockfile" in quality_instructions
+        assert "mock or fake data" in quality_instructions
+        assert "project_guidance:checked" in quality_instructions
+        assert "explicit git add <path>" in quality_instructions
 
     def test_renders_code_root_placeholder_in_extra_instructions(self) -> None:
         task = _make_task()

@@ -57,6 +57,10 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
     WorkspaceSupervisor,
     _node_with_verification_evidence,
 )
+from src.infrastructure.agent.workspace_plan.verification_judge import (
+    _request_payload,
+    _system_prompt,
+)
 from src.infrastructure.agent.workspace_plan.verifier import (
     AcceptanceCriterionVerifier,
     BrowserE2ECriterionRunner,
@@ -581,6 +585,43 @@ class TestCapabilityAllocator:
 
 
 class TestVerifier:
+    def test_verification_judge_prompt_enforces_repository_guidance(self) -> None:
+        prompt = _system_prompt()
+
+        assert "loaded AGENTS.md files" in prompt
+        assert "repository guidance as acceptance context" in prompt
+        assert "repository-guidance noncompliance" in prompt
+        assert "cross-task commit contamination" in prompt
+
+    def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
+        payload = json.loads(
+            _request_payload(
+                WorkspaceVerificationJudgeRequest(
+                    workspace_id="ws",
+                    node_id="node-1",
+                    attempt_id="att-1",
+                    node_title="Implement software feature",
+                    node_description="Change code and docs.",
+                    task_metadata={
+                        "code_context": {
+                            "loaded_agents_files": ["/workspace/app/AGENTS.md"],
+                            "agents_excerpt": "No generated docs without evidence.",
+                        }
+                    },
+                )
+            )
+        )
+
+        assert payload["task_metadata"]["code_context"]["loaded_agents_files"] == [
+            "/workspace/app/AGENTS.md"
+        ]
+        guidance_policy = " ".join(payload["policy"]["repository_guidance"])
+        assert "project_guidance:checked" in guidance_policy
+        assert "agents_excerpt" in guidance_policy
+        commit_policy = " ".join(payload["policy"]["commit_isolation"])
+        assert "shared worktrees" in commit_policy
+        assert "another node's artifact" in commit_policy
+
     async def test_file_exists_passes_when_artifact_present(self, tmp_path: Any) -> None:
         target = tmp_path / "out.json"
         target.write_text("{}", encoding="utf-8")

@@ -88,4 +88,12 @@ async def test_workspace_runtime_plugin_exposes_task_harness_skill() -> None:
     assert "workspace_report_complete" in skill["tools"]
     assert "collaboration_tracking" in skill["metadata"]["capabilities"]
     assert "workspace_report_complete" in skill["full_content"]
+    assert "AGENTS.md" in skill["full_content"]
+    assert "duplicate business logic" in skill["full_content"]
+    assert "dependency changes" in skill["full_content"]
+    assert "mock-data fallbacks" in skill["full_content"]
+    assert "hard acceptance criteria" in skill["full_content"]
+    assert "project_guidance:checked" in skill["full_content"]
+    assert "git add -A" in skill["full_content"]
+    assert "unrelated dirty files" in skill["full_content"]
     assert any(d.code == "plugin_skills_loaded" for d in diagnostics)

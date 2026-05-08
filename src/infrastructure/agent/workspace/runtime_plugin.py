@@ -47,8 +47,19 @@ collaboration tracking, or verification evidence.
 2. Decompose the request into feature-sized checklist items with explicit acceptance criteria.
 3. Execute each item with real tools, durable progress reports, and workspace chat updates when
    coordination matters.
-4. Persist artifacts, changed files, test commands, verification evidence, and remaining risk.
-5. Finish by calling `workspace_report_complete`, or `workspace_report_blocked` with a concrete
+4. Before editing, read the applicable AGENTS.md or project guidance, inspect existing patterns,
+   and keep the implementation plan local to the bound task.
+5. Apply a code-quality gate before reporting completion: preserve existing architecture,
+   avoid duplicate business logic or duplicate type/schema definitions, commit migrations with
+   schema changes, keep dependency lockfiles in sync, protect secrets and tokens, avoid silent
+   mock-data fallbacks in production paths, and verify frontend/backend contracts when both sides
+   change. Treat explicit AGENTS.md/project guidance as hard acceptance criteria for code, docs,
+   tests, generated artifacts, and reports; include project_guidance:checked evidence when such
+   guidance exists. In shared worktrees, isolate commits to this task's intended files: inspect
+   git status/diff, stage explicit owned paths only, and do not use broad staging such as
+   git add -A, git add ., or git commit -a when unrelated dirty files exist.
+6. Persist artifacts, changed files, test commands, verification evidence, and remaining risk.
+7. Finish by calling `workspace_report_complete`, or `workspace_report_blocked` with a concrete
    blocker and next recovery action.
 
 ## Evidence Standard
@@ -56,6 +67,9 @@ collaboration tracking, or verification evidence.
 - Every code change needs a diff summary and at least one targeted verification command.
 - Every handoff needs completed steps, next steps, changed files, test results, and known gaps.
 - Every collaboration blocker needs the blocked task, owner, missing input, and recommended action.
+- Quality-sensitive changes need focused evidence: migration or rollback proof for schema changes,
+  lockfile evidence for dependency changes, contract tests for API/UI boundary changes, and security
+  notes for authentication, authorization, secrets, or token handling.
 """
 
 

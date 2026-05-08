@@ -121,14 +121,23 @@ def _system_prompt() -> str:
         "authority, or should retry because infrastructure failed. Deterministic guards are "
         "evidence, not the final semantic verdict. Use accepted only when the worker report, "
         "artifacts, verification evidence, and acceptance criteria together show the node goal "
-        "is satisfied. Do not accept if the completed worker report is missing. Use needs_rework "
-        "for missing evidence, failed tests, dirty worktree evidence, incomplete output, or "
-        "quality gaps that an agent can fix. Use retry_infrastructure for sandbox, model, tool, "
-        "rate-limit, or transient platform failures. Use blocked_human_required only for missing "
-        "credentials, private access, permission, irreversible external deployment/spend, legal "
-        "or product approval, unsafe destructive action, or another authority boundary that an "
-        "agent cannot resolve. Do not choose blocked_human_required for ordinary verification "
-        "failure, missing evidence, clean-worktree sentinel output, or low quality."
+        "is satisfied. When task_metadata includes code_context, loaded AGENTS.md files, or "
+        "agents_excerpt, treat that repository guidance as acceptance context. Do not accept "
+        "software changes that violate explicit guidance requirements visible in the request, "
+        "such as required migrations, dependency lockfile discipline, commit/report style, "
+        "secret handling, artifact rules, prohibited patterns/content forms, or commit "
+        "isolation in a shared worktree. Reject evidence that suggests a worker swept "
+        "unrelated dirty files, another node's artifact, or files outside the assigned task "
+        "into its commit. Do not accept if the completed worker report is missing. Use "
+        "needs_rework for missing evidence, failed tests, dirty worktree evidence, incomplete "
+        "output, repository-guidance noncompliance, cross-task commit contamination, or "
+        "quality gaps that an agent can fix. Use retry_infrastructure for sandbox, model, "
+        "tool, rate-limit, or transient platform failures. Use "
+        "blocked_human_required only for missing credentials, private access, permission, "
+        "irreversible external deployment/spend, legal or product approval, unsafe destructive "
+        "action, or another authority boundary that an agent cannot resolve. Do not choose "
+        "blocked_human_required for ordinary verification failure, missing evidence, "
+        "clean-worktree sentinel output, or low quality."
     )
 
 
@@ -179,6 +188,18 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "failed tests or failed quality checks",
                 "dirty or ambiguous git worktree evidence",
                 "incomplete worker output",
+                "explicit repository guidance or AGENTS.md noncompliance",
+                "cross-task commit contamination or unrelated files in the reported diff",
+            ],
+            "repository_guidance": [
+                "If task_metadata.code_context.agents_excerpt is present, use it as acceptance context.",
+                "Require a project_guidance:checked evidence ref when project guidance exists and the node edits software artifacts.",
+                "Reject visible violations of explicit guidance in code, docs, tests, generated artifacts, reports, or commit evidence.",
+            ],
+            "commit_isolation": [
+                "In shared worktrees, a node must only commit files owned by its task.",
+                "Reject commits whose diff includes another node's artifact or unrelated dirty files.",
+                "Prefer explicit changed-file evidence over broad git add/git commit summaries.",
             ],
         },
     }
