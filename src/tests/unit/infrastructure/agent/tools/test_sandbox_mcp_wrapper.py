@@ -1097,6 +1097,46 @@ class TestSandboxMCPToolExecute:
         assert "npm ci" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_verification_phase_rejects_deps_install(self):
+        """Dedicated dependency tools should not bypass protected verification policy."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="deps_install",
+            tool_schema={
+                "name": "deps_install",
+                "description": "Install dependencies",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "packages": {"type": "string"},
+                        "package_type": {"type": "string"},
+                    },
+                    "required": ["packages"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            packages="jest, @playwright/test",
+            package_type="npm",
+        )
+
+        assert result.is_error is True
+        assert "deps_install cannot install npm packages" in result.output
+        assert "environment blocker" in result.output
+        assert adapter.call_count == 0
+
     async def test_workspace_verification_phase_allows_npm_ci(self):
         """Immutable dependency setup remains available for attempt worktrees."""
         adapter = MockSandboxAdapter()

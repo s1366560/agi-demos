@@ -332,10 +332,21 @@ def _command_tail_until_separator(tokens: tuple[str, ...], start: int) -> tuple[
 
 
 def _workspace_verification_dependency_install_error(
+    tool_name: str,
     kwargs: dict[str, Any],
     policy: Mapping[str, Any] | None,
 ) -> str | None:
     if policy is None:
+        return None
+    if tool_name == "deps_install":
+        package_type = kwargs.get("package_type")
+        package_label = f" {package_type}" if isinstance(package_type, str) and package_type else ""
+        return (
+            f"deps_install cannot install{package_label} packages in a protected workspace "
+            "test/review node. Use repository-declared immutable setup such as 'npm ci' from "
+            "the attempt worktree, or report the missing dependency as an environment blocker."
+        )
+    if tool_name != "bash":
         return None
     command = kwargs.get("command")
     if not isinstance(command, str) or not command.strip():
@@ -814,11 +825,10 @@ def create_sandbox_mcp_tool(
                 verification_policy,
             ):
                 return ToolResult(output=argument_error, is_error=True)
-            if tool_name == "bash" and (
-                argument_error := _workspace_verification_dependency_install_error(
-                    normalized_kwargs,
-                    verification_policy,
-                )
+            if argument_error := _workspace_verification_dependency_install_error(
+                tool_name,
+                normalized_kwargs,
+                verification_policy,
             ):
                 return ToolResult(output=argument_error, is_error=True)
             if argument_error := _workspace_harness_argument_error(
