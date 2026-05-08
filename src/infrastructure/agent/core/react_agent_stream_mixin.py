@@ -75,6 +75,18 @@ def _preferred_language_from_payload(payload: Mapping[str, Any] | None) -> str |
     return _normalize_preferred_language(payload.get(PREFERRED_LANGUAGE))
 
 
+def _workspace_runtime_forwarded_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Forward non-identity workspace runtime fields needed by tools."""
+    forwarded: dict[str, Any] = {}
+    additional_instructions = payload.get("additional_instructions")
+    if isinstance(additional_instructions, str) and additional_instructions.strip():
+        forwarded["additional_instructions"] = additional_instructions
+    root_override = payload.get("workspace_root_override")
+    if isinstance(root_override, Mapping):
+        forwarded["workspace_root_override"] = dict(root_override)
+    return forwarded
+
+
 class _StreamAgent(Protocol):
     """Subset of ``ReActAgent`` state used by :class:`StreamMixin`."""
 
@@ -1682,6 +1694,9 @@ class StreamMixin:
                     sandbox_code_root = code_context.get("sandbox_code_root")
                     if isinstance(sandbox_code_root, str) and sandbox_code_root.strip():
                         workspace_runtime_context["sandbox_code_root"] = sandbox_code_root.strip()
+                workspace_runtime_context.update(
+                    _workspace_runtime_forwarded_fields(workspace_runtime_payload)
+                )
             if workspace_binding is not None:
                 for key in ("workspace_task_id", "attempt_id", "leader_agent_id"):
                     value = workspace_binding.get(key)
