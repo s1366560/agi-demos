@@ -415,6 +415,7 @@ class TestBuildBrief:
         assert "hashes or prefixes" in quality_instructions
         assert "git diff" in quality_instructions
         assert "project_guidance:checked" in quality_instructions
+        assert "preserve assertion strength" in quality_instructions
         assert "git add -A" in quality_instructions
         assert "unrelated changes" in quality_instructions
         assert (
@@ -514,6 +515,7 @@ class TestBuildBrief:
         assert "Do not silently show mock" in brief
         assert "hard acceptance criteria" in brief
         assert "project_guidance:checked" in brief
+        assert "never weaken or replace the verification script" in brief
         assert "git add -A" in brief
         assert "owned files only" in brief
 
@@ -545,6 +547,7 @@ class TestBuildBrief:
         assert "matching lockfile" in quality_instructions
         assert "mock or fake data" in quality_instructions
         assert "project_guidance:checked" in quality_instructions
+        assert "preserve assertion strength" in quality_instructions
         assert "explicit git add <path>" in quality_instructions
 
     def test_renders_code_root_placeholder_in_extra_instructions(self) -> None:

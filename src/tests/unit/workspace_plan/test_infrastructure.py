@@ -575,6 +575,7 @@ class TestVerifier:
         assert "cannot fail" in prompt
         assert "synthetic evidence" in prompt
         assert "failed or failing tests" in prompt
+        assert "weaken, replace, delete, or bypass" in prompt
         assert "workspace_submit_verification_judgment" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
@@ -608,6 +609,11 @@ class TestVerifier:
         assert "recent_git_status" in commit_policy
         quality_policy = " ".join(payload["policy"]["quality_evidence"])
         assert "Tests must contain assertions or checks that can fail" in quality_policy
+        assert "weaker or substituted assertions" in quality_policy
+        assert any(
+            "allow_verification_script_changes" in item
+            for item in payload["policy"]["needs_rework_for"]
+        )
         assert "Performance evidence must distinguish HTTP response timing" in quality_policy
         rework_policy = " ".join(payload["policy"]["needs_rework_for"])
         assert "every branch records success" in rework_policy
@@ -1334,6 +1340,68 @@ class TestVerifier:
             "test evidence reports failing tests" in item
             for item in judge.requests[0].guard_failures
         )
+
+    async def test_verification_judge_cannot_accept_test_node_that_changes_test_scripts(
+        self,
+    ) -> None:
+        commands: list[str] = []
+
+        class ScriptChangeSandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                commands.append(command)
+                assert timeout == 15
+                return {
+                    "exit_code": 0,
+                    "stdout": " M test-data-persistence.js\n?? fix_persistence_test.py\n",
+                    "stderr": "",
+                }
+
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="all reported tests are green",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Re-run full E2E journey tests",
+            metadata={
+                "iteration_phase": "test",
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Test verification",
+                expected_artifacts=("test-results/",),
+            ),
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:test-data-persistence.js 14 passed 0 failed",
+                        "git_diff_summary:test-data-persistence.js updated",
+                    ],
+                },
+                sandbox=ScriptChangeSandbox(),
+            )
+        )
+
+        assert not rep.passed
+        assert "verification_script_mutation" in rep.summary()
+        assert any(
+            "verification/review node changed test or audit scripts" in item
+            for item in judge.requests[0].guard_failures
+        )
+        assert commands == ["git -C /workspace/my-evo status --short"]
 
     @pytest.mark.parametrize(
         ("verdict", "passed", "hard_fail", "retryable"),

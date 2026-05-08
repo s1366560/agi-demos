@@ -79,6 +79,9 @@ Verification rules:
 - Treat AGENTS.md and project guidance from the payload as acceptance context.
 - Do not accept visible violations of required migrations, dependency lockfile discipline, commit/report style, secret handling, prohibited content, or commit isolation.
 - Do not accept failed or failing tests unless the node contract explicitly allows known failures.
+- For test or review nodes, do not accept changed test, E2E, audit, or benchmark scripts that
+  weaken, replace, delete, or bypass the original acceptance assertion unless the plan explicitly
+  allows verification script changes and the rationale is evidence-backed.
 - Do not accept tests, audits, or benchmarks that cannot fail or synthetic evidence presented as real browser, accessibility, security, performance, or E2E proof.
 - Use needs_rework for missing evidence, incomplete output, quality gaps, dirty worktree evidence, project-guidance noncompliance, or cross-task commit contamination that an agent can fix.
 - Use retry_infrastructure for sandbox, model, tool, rate-limit, provider, or other transient platform failures.

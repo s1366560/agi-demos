@@ -264,6 +264,7 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "incomplete worker output",
                 "explicit repository guidance or AGENTS.md noncompliance",
                 "cross-task commit contamination or unrelated files in the reported diff",
+                "verification, E2E, audit, or benchmark scripts changed to make a test/review node pass without an explicit allow_verification_script_changes contract",
                 "tests or audits that cannot fail because every branch records success",
                 "unconditional success counters or catch blocks that convert failures into passes",
                 "synthetic benchmarks or shallow scans reported as real browser, rendering, accessibility, security, or end-to-end proof",
@@ -281,6 +282,7 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
             ],
             "quality_evidence": [
                 "Tests must contain assertions or checks that can fail for the claimed behavior.",
+                "If a test/review node changed test, E2E, audit, or benchmark code, compare the diff against the node contract and reject weaker or substituted assertions.",
                 "Accessibility and security audits must verify the claimed property, not only count generic page structure.",
                 "Performance evidence must distinguish HTTP response timing, browser page-load timing, and synthetic simulations.",
             ],

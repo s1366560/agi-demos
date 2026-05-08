@@ -123,6 +123,11 @@ _WORKER_CODE_QUALITY_INSTRUCTIONS = (
         "as demo data."
     ),
     (
+        "For test, review, audit, benchmark, and E2E nodes, do not weaken, replace, "
+        "delete, or bypass verification scripts just to make evidence pass. Fix product "
+        "behavior, preserve assertion strength, or report remaining failures honestly."
+    ),
+    (
         "Before workspace_report_complete, review git diff for accidental breadth, run "
         "targeted tests/build/type checks, include project_guidance:checked evidence when "
         "AGENTS.md/project guidance exists, and report unresolved risks honestly."
@@ -712,6 +717,9 @@ def _build_worker_brief(
         "acceptance criteria for code, docs, tests, generated artifacts, and reports; if "
         "guidance forbids a pattern or content form, do not introduce it. When guidance "
         "exists, include project_guidance:checked:<path-or-summary> in completion evidence. "
+        "For test, review, audit, benchmark, and E2E nodes, never weaken or replace the "
+        "verification script just to make evidence pass; fix the product behavior, preserve "
+        "the original assertion strength, or report the remaining failure honestly. "
         "Because other workspace nodes may run in the same worktree, never sweep unrelated "
         "dirty files into your commit; use explicit git add <path> for owned files only and "
         "do not use git add -A, git add ., or git commit -a when unrelated changes exist."

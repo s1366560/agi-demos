@@ -74,6 +74,21 @@ _FAILED_TEST_EVIDENCE_PATTERNS = (
     re.compile(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
     re.compile(r"\b(?:failed|failing|failure|failures)\s*[:=]\s*[1-9]\d*\b", re.I),
 )
+_VERIFICATION_INTEGRITY_PHASES = {"test", "review"}
+_VERIFICATION_SCRIPT_NAME_PATTERN = re.compile(
+    r"(^|/)([^/]*(test|spec|e2e|integration|audit|benchmark)[^/]*"
+    r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh)|"
+    r"(tests?|spec|e2e|integration|audit|benchmarks?)/.+"
+    r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh))$",
+    re.I,
+)
+_VERIFICATION_OUTPUT_PATH_PREFIXES = (
+    "coverage/",
+    "playwright-report/",
+    "reports/",
+    "screenshots/",
+    "test-results/",
+)
 
 
 # --- Sandbox shim -----------------------------------------------------
@@ -599,6 +614,9 @@ class AcceptanceCriterionVerifier(VerifierPort):
         failed_test_guard = _failed_test_evidence_guard(ctx)
         if failed_test_guard is not None:
             results.append(failed_test_guard)
+        verification_script_guard = await _verification_script_mutation_guard(ctx)
+        if verification_script_guard is not None:
+            results.append(verification_script_guard)
         clean_worktree_guard = await _clean_worktree_after_commit_guard(ctx)
         if clean_worktree_guard is not None:
             results.append(clean_worktree_guard)
@@ -840,6 +858,24 @@ def _coerce_judge_result_for_required_context(
             ),
             failed_criteria=("failed_test_evidence", *result.failed_criteria),
             required_next_action="fix or explicitly disposition failing tests before acceptance",
+            confidence=max(result.confidence, 0.8),
+        )
+    if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
+        results,
+        "verification_script_mutation",
+    ):
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "This verification/review node changed test, E2E, audit, or benchmark scripts. "
+                "That can weaken acceptance evidence, so the node cannot be accepted unless the "
+                f"plan explicitly allows verification script changes. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=("verification_script_mutation", *result.failed_criteria),
+            required_next_action=(
+                "restore the verification contract and fix product code, or add an explicit "
+                "allow_verification_script_changes contract with rationale"
+            ),
             confidence=max(result.confidence, 0.8),
         )
     return result
@@ -1144,6 +1180,164 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         message=f"test evidence reports failing tests: {_bounded_text(failed_value, limit=360)}",
         evidence=(EvidenceRef(kind="verification", ref=_bounded_text(failed_value, limit=500)),),
     )
+
+
+async def _verification_script_mutation_guard(ctx: VerificationContext) -> CriterionResult | None:
+    """Protect verification/review nodes from passing by weakening the evidence contract."""
+
+    if ctx.node.metadata.get("allow_verification_script_changes") is True:
+        return None
+    if _node_iteration_phase(ctx) not in _VERIFICATION_INTEGRITY_PHASES:
+        return None
+    git_root = _clean_worktree_git_root(ctx)
+    if ctx.sandbox is None or not git_root:
+        return None
+
+    changed_paths = await _changed_paths_for_verification_guard(ctx, git_root)
+    script_paths = sorted(path for path in changed_paths if _is_verification_script_path(path))
+    if not script_paths:
+        return None
+
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "verification_script_mutation"},
+        required=True,
+        description="verification/review nodes must not weaken their own evidence scripts",
+    )
+    preview = "; ".join(script_paths[:8])
+    if len(script_paths) > 8:
+        preview += f"; +{len(script_paths) - 8} more"
+    return CriterionResult(
+        criterion=criterion,
+        passed=False,
+        confidence=0.9,
+        message=(
+            "verification/review node changed test or audit scripts without an explicit "
+            f"allow_verification_script_changes contract: {preview}"
+        ),
+        evidence=tuple(EvidenceRef(kind="changed_file", ref=path) for path in script_paths[:8]),
+    )
+
+
+async def _changed_paths_for_verification_guard(
+    ctx: VerificationContext,
+    git_root: str,
+) -> set[str]:
+    paths: set[str] = set()
+    paths.update(await _git_status_changed_paths(ctx, git_root))
+    for commit_ref in _reported_commit_refs(ctx):
+        paths.update(await _git_commit_changed_paths(ctx, git_root, commit_ref))
+    paths.update(_reported_changed_paths(ctx))
+    return paths
+
+
+async def _git_status_changed_paths(ctx: VerificationContext, git_root: str) -> set[str]:
+    command = f"git -C {shlex.quote(git_root)} status --short"
+    try:
+        result = await ctx.sandbox.run_command(command, timeout=15) if ctx.sandbox else {}
+    except Exception:
+        return set()
+    if int(result.get("exit_code", 1)) != 0:
+        return set()
+    return _parse_git_status_paths(str(result.get("stdout", "")))
+
+
+async def _git_commit_changed_paths(
+    ctx: VerificationContext,
+    git_root: str,
+    commit_ref: str,
+) -> set[str]:
+    command = (
+        f"git -C {shlex.quote(git_root)} diff-tree --no-commit-id "
+        f"--name-status -r --root {shlex.quote(commit_ref)}"
+    )
+    try:
+        result = await ctx.sandbox.run_command(command, timeout=20) if ctx.sandbox else {}
+    except Exception:
+        return set()
+    if int(result.get("exit_code", 1)) != 0:
+        return set()
+    return _parse_name_status_paths(str(result.get("stdout", "")))
+
+
+def _reported_commit_refs(ctx: VerificationContext) -> list[str]:
+    values = _artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "last_worker_report_artifacts",
+        "candidate_artifacts",
+        "execution_verifications",
+        "last_worker_report_verifications",
+        "candidate_verifications",
+    )
+    refs: list[str] = []
+    for value in sorted(values):
+        if not value.startswith("commit_ref:"):
+            continue
+        ref = value.removeprefix("commit_ref:").strip().split(maxsplit=1)[0]
+        if ref:
+            refs.append(ref)
+    return list(dict.fromkeys(refs))[:4]
+
+
+def _reported_changed_paths(ctx: VerificationContext) -> set[str]:
+    values = _artifact_text_values(
+        ctx,
+        "git_diff_summary",
+        "evidence_refs",
+        "last_worker_report_artifacts",
+        "candidate_artifacts",
+        "execution_verifications",
+        "last_worker_report_verifications",
+        "candidate_verifications",
+    )
+    paths: set[str] = set()
+    for value in values:
+        paths.update(_extract_path_like_tokens(value))
+    return paths
+
+
+def _parse_git_status_paths(stdout: str) -> set[str]:
+    paths: set[str] = set()
+    for raw_line in stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        payload = line[2:].strip() if len(line) > 2 else line
+        if " -> " in payload:
+            payload = payload.rsplit(" -> ", 1)[1].strip()
+        if payload:
+            paths.add(payload)
+    return paths
+
+
+def _parse_name_status_paths(stdout: str) -> set[str]:
+    paths: set[str] = set()
+    for raw_line in stdout.splitlines():
+        parts = raw_line.strip().split("\t")
+        if len(parts) >= 2:
+            paths.add(parts[-1])
+    return paths
+
+
+def _extract_path_like_tokens(value: str) -> set[str]:
+    paths: set[str] = set()
+    for token in re.split(r"[\s,;]+", value):
+        cleaned = token.strip("`'\"()[]{}:")
+        if "/" not in cleaned and "." not in cleaned:
+            continue
+        if _is_verification_script_path(cleaned):
+            paths.add(cleaned)
+    return paths
+
+
+def _is_verification_script_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("./")
+    if not normalized:
+        return False
+    if normalized.startswith(_VERIFICATION_OUTPUT_PATH_PREFIXES):
+        return False
+    return bool(_VERIFICATION_SCRIPT_NAME_PATTERN.search(normalized))
 
 
 async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
