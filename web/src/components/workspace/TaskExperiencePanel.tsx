@@ -41,6 +41,8 @@ interface TaskExperiencePanelProps {
   error: string | null;
   onRecoveryAction: (action: TaskRecoveryAction) => void;
   onClose: () => void;
+  embedded?: boolean;
+  className?: string;
 }
 
 type PanelTab = 'overview' | 'contract' | 'execution' | 'evidence' | 'diagnostics' | 'activity';
@@ -84,6 +86,8 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
   error,
   onRecoveryAction,
   onClose,
+  embedded = false,
+  className,
 }) => {
   const { t } = useTranslation();
   const assignedAgent = useMemo(() => resolveAgentLabel(task, agents), [agents, task]);
@@ -130,13 +134,25 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
         <ActivityTab activity={activity} />
       ),
   }));
+  const panelClassName = [
+    embedded
+      ? 'min-h-0 bg-transparent'
+      : 'min-h-[360px] rounded-lg border border-border-light bg-surface-light shadow-sm dark:border-border-dark dark:bg-surface-dark',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const headerClassName = [
+    'flex items-start gap-3 border-b border-border-light dark:border-border-dark',
+    embedded ? 'px-4 py-4' : 'px-4 py-3',
+  ].join(' ');
 
   return (
     <aside
-      className="min-h-[360px] rounded-lg border border-border-light bg-surface-light shadow-sm dark:border-border-dark dark:bg-surface-dark"
+      className={panelClassName}
       aria-label={t('workspaceDetail.taskExperience.title', 'Task experience')}
     >
-      <div className="flex items-start gap-3 border-b border-border-light px-4 py-3 dark:border-border-dark">
+      <div className={headerClassName}>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="rounded-full border border-border-light bg-surface-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-muted">
@@ -193,6 +209,7 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
 
       <Tabs
         size="small"
+        tabBarGutter={8}
         className="task-experience-tabs px-4 pb-4"
         items={items}
         destroyOnHidden={false}

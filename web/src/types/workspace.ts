@@ -503,6 +503,43 @@ export interface WorkspacePlanIterationSummary {
   actions: Record<string, WorkspacePlanActionCapability>;
 }
 
+export interface WorkspacePlanIterationRunSnapshot {
+  iteration_index: number;
+  status: string;
+  sprint_goal: string;
+  review_summary: string;
+  next_sprint_goal: string;
+  time_range: Record<string, string>;
+  task_counts: Record<string, number>;
+  attempt_counts: Record<string, number>;
+  interaction_counts: Record<string, number>;
+  deliverables: Record<string, string[]>;
+  verification_summary: Record<string, number>;
+  repair_turns: Array<Record<string, unknown>>;
+  carryover_node_ids: string[];
+  node_ids: string[];
+}
+
+export interface WorkspacePlanRunHealth {
+  final_status: string;
+  attempt_success_rate: number;
+  attempts: Record<string, number>;
+  interactions: Record<string, number>;
+  top_failure_reasons: Array<Record<string, unknown>>;
+  recovery_events: number;
+  provider_error_events: number;
+  repair_turns: Record<string, number>;
+  stale_evidence_events: number;
+  dirty_worktree_events: number;
+  missing_report_events: number;
+}
+
+export interface WorkspacePlanArtifactIndex {
+  verified_outputs: Array<Record<string, unknown>>;
+  claimed_outputs: Array<Record<string, unknown>>;
+  final_deliverables: Array<Record<string, unknown>>;
+}
+
 export interface WorkspacePipelineStageRun {
   id: string;
   run_id: string;
@@ -609,6 +646,9 @@ export interface WorkspacePlanSnapshot {
   blackboard: WorkspacePlanBlackboardEntry[];
   outbox: WorkspacePlanOutboxItem[];
   events: WorkspacePlanEvent[];
+  iteration_runs?: WorkspacePlanIterationRunSnapshot[] | undefined;
+  run_health?: WorkspacePlanRunHealth | null | undefined;
+  artifact_index?: WorkspacePlanArtifactIndex | null | undefined;
 }
 
 export interface WorkspacePlanRootGoal {

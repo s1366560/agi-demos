@@ -760,6 +760,7 @@ export function PlanRunSnapshotSection({
   const { t } = useTranslation();
   const taskList = useMemo(() => tasks ?? [], [tasks]);
   const isMountedRef = useRef(true);
+  const taskInspectorRef = useRef<HTMLDivElement | null>(null);
   const lastRefreshTokenRef = useRef(refreshToken ?? 0);
   const [snapshot, setSnapshot] = useState<WorkspacePlanSnapshot | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -1040,6 +1041,13 @@ export function PlanRunSnapshotSection({
   }, [selectedTask, selectedTaskId]);
 
   useEffect(() => {
+    if (!selectedTask) {
+      return;
+    }
+    taskInspectorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selectedTask]);
+
+  useEffect(() => {
     if (!selectedTaskId || !selectedTask) {
       return;
     }
@@ -1262,6 +1270,13 @@ export function PlanRunSnapshotSection({
     } finally {
       setIsTaskRecoveryPending(false);
     }
+  };
+
+  const closeSelectedTask = () => {
+    setSelectedTaskId(null);
+    setSelectedTaskExperience(null);
+    setSelectedTaskSession(null);
+    setTaskExperienceError(null);
   };
 
   const runDeliveryPipeline = async () => {
@@ -1508,13 +1523,45 @@ export function PlanRunSnapshotSection({
             selectedNodeId={selectedNode?.id ?? null}
             onSelectIteration={(index) => {
               setSelectedIterationIndex(index);
+              closeSelectedTask();
             }}
             onSelectNode={(nodeId) => {
               setSelectedNodeId(nodeId);
+              closeSelectedTask();
             }}
-            onOpenTask={(taskId) => {
+            onOpenTask={(taskId, nodeId) => {
+              if (nodeId) {
+                setSelectedNodeId(nodeId);
+              }
+              setSelectedTaskExperience(null);
+              setSelectedTaskSession(null);
+              setTaskExperienceError(null);
               setSelectedTaskId(taskId);
             }}
+            taskInspector={
+              selectedTask ? (
+                <div
+                  ref={taskInspectorRef}
+                  className="scroll-mt-24 overflow-hidden rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark"
+                >
+                  <TaskExperiencePanel
+                    task={selectedTask}
+                    agents={agents}
+                    experience={selectedTaskExperience}
+                    executionSession={selectedTaskSession}
+                    loading={isTaskExperienceLoading}
+                    recoveryActionLoading={isTaskRecoveryPending}
+                    error={taskExperienceError}
+                    onRecoveryAction={(action) => {
+                      void runTaskRecoveryAction(action);
+                    }}
+                    onClose={closeSelectedTask}
+                    embedded
+                    className="max-h-[calc(100vh-160px)] overflow-y-auto"
+                  />
+                </div>
+              ) : null
+            }
           />
           <DeliveryPanel
             delivery={delivery}
@@ -2034,46 +2081,6 @@ export function PlanRunSnapshotSection({
               )}
             </aside>
           </div>
-          {selectedTask && (
-            <div
-              className="fixed inset-0 z-50"
-              role="dialog"
-              aria-modal="true"
-              aria-label={t('blackboard.iterationTaskDrawerLabel', 'Iteration task details')}
-            >
-              <button
-                type="button"
-                className="absolute inset-0 cursor-default bg-background-dark/35"
-                aria-label={t('blackboard.iterationTaskDrawerClose', 'Close task details')}
-                onClick={() => {
-                  setSelectedTaskId(null);
-                  setSelectedTaskExperience(null);
-                  setSelectedTaskSession(null);
-                  setTaskExperienceError(null);
-                }}
-              />
-              <div className="absolute inset-y-0 right-0 flex w-full max-w-[560px] flex-col overflow-y-auto border-l border-border-light bg-background-light p-3 shadow-2xl dark:border-border-dark dark:bg-background-dark sm:p-4">
-                <TaskExperiencePanel
-                  task={selectedTask}
-                  agents={agents}
-                  experience={selectedTaskExperience}
-                  executionSession={selectedTaskSession}
-                  loading={isTaskExperienceLoading}
-                  recoveryActionLoading={isTaskRecoveryPending}
-                  error={taskExperienceError}
-                  onRecoveryAction={(action) => {
-                    void runTaskRecoveryAction(action);
-                  }}
-                  onClose={() => {
-                    setSelectedTaskId(null);
-                    setSelectedTaskExperience(null);
-                    setSelectedTaskSession(null);
-                    setTaskExperienceError(null);
-                  }}
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
     </section>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -73,8 +74,21 @@ logger = logging.getLogger(__name__)
 _SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS = 180
 _SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS = 300
 _SNAPSHOT_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS = 300
+_SNAPSHOT_LEDGER_RECORD_LIMIT = 2500
 _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS = 8
 _OPERATOR_NEXT_ITERATION_LIMIT_EXTENSION = 4
+_PROVIDER_ERROR_CODES = {"provider_error", "infra_provider_error", "litellm_provider_error"}
+_PROVIDER_ERROR_TEXT_MARKERS = (
+    "litellm",
+    "provider error",
+    "anthropicexception",
+    "internalservererror",
+    "rate limit",
+    "status code: 400",
+    "http 400",
+    " 400,",
+    "expected http/",
+)
 
 
 class _RedisExistsClient(Protocol):
@@ -428,6 +442,43 @@ class WorkspacePlanEventResponse(BaseModel):
     created_at: datetime
 
 
+class WorkspacePlanIterationRunResponse(BaseModel):
+    iteration_index: int
+    status: str
+    sprint_goal: str = ""
+    review_summary: str = ""
+    next_sprint_goal: str = ""
+    time_range: dict[str, str] = Field(default_factory=dict)
+    task_counts: dict[str, int] = Field(default_factory=dict)
+    attempt_counts: dict[str, int] = Field(default_factory=dict)
+    interaction_counts: dict[str, int] = Field(default_factory=dict)
+    deliverables: dict[str, list[str]] = Field(default_factory=dict)
+    verification_summary: dict[str, int] = Field(default_factory=dict)
+    repair_turns: list[dict[str, Any]] = Field(default_factory=list)
+    carryover_node_ids: list[str] = Field(default_factory=list)
+    node_ids: list[str] = Field(default_factory=list)
+
+
+class WorkspacePlanRunHealthResponse(BaseModel):
+    final_status: str = "unknown"
+    attempt_success_rate: float = 0.0
+    attempts: dict[str, int] = Field(default_factory=dict)
+    interactions: dict[str, int] = Field(default_factory=dict)
+    top_failure_reasons: list[dict[str, Any]] = Field(default_factory=list)
+    recovery_events: int = 0
+    provider_error_events: int = 0
+    repair_turns: dict[str, int] = Field(default_factory=dict)
+    stale_evidence_events: int = 0
+    dirty_worktree_events: int = 0
+    missing_report_events: int = 0
+
+
+class WorkspacePlanArtifactIndexResponse(BaseModel):
+    verified_outputs: list[dict[str, Any]] = Field(default_factory=list)
+    claimed_outputs: list[dict[str, Any]] = Field(default_factory=list)
+    final_deliverables: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class WorkspacePlanRootGoalResponse(BaseModel):
     id: str
     title: str
@@ -451,6 +502,9 @@ class WorkspacePlanSnapshotResponse(BaseModel):
     blackboard: list[WorkspacePlanBlackboardEntryResponse] = Field(default_factory=list)
     outbox: list[WorkspacePlanOutboxItemResponse] = Field(default_factory=list)
     events: list[WorkspacePlanEventResponse] = Field(default_factory=list)
+    iteration_runs: list[WorkspacePlanIterationRunResponse] = Field(default_factory=list)
+    run_health: WorkspacePlanRunHealthResponse | None = None
+    artifact_index: WorkspacePlanArtifactIndexResponse | None = None
 
 
 class WorkspacePlanActionRequest(BaseModel):
@@ -1564,6 +1618,8 @@ def _metadata_int_list(value: object) -> list[int]:
 def _iteration_history(
     loop: dict[str, Any],
     event_items: list[WorkspacePlanEventModel],
+    *,
+    limit: int | None = 8,
 ) -> list[WorkspacePlanIterationHistoryResponse]:
     rows: list[WorkspacePlanIterationHistoryResponse] = []
     raw_history = loop.get("history")
@@ -1587,7 +1643,8 @@ def _iteration_history(
     deduped: dict[tuple[int, str, str], WorkspacePlanIterationHistoryResponse] = {}
     for row in rows:
         deduped[(row.iteration_index, row.verdict, row.summary)] = row
-    return list(deduped.values())[-8:]
+    values = list(deduped.values())
+    return values if limit is None else values[-limit:]
 
 
 def _history_response_from_payload(
@@ -1921,6 +1978,592 @@ def _iteration_feedback_items(
             if isinstance(summary, str) and summary:
                 feedback.append(summary)
     return list(dict.fromkeys(feedback))[:5]
+
+
+def _node_verified(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        node.intent is TaskIntent.DONE
+        or metadata.get("last_verification_passed") is True
+        or metadata.get("pipeline_status") == "success"
+    )
+
+
+def _attempt_counts(
+    attempts: list[WorkspaceTaskSessionAttemptModel],
+) -> dict[str, int]:
+    counter = Counter(str(attempt.status or "unknown").lower() for attempt in attempts)
+    return {
+        "total": len(attempts),
+        "accepted": counter.get("accepted", 0),
+        "rejected": counter.get("rejected", 0),
+        "blocked": counter.get("blocked", 0),
+        "running": counter.get("running", 0),
+        "pending": counter.get("pending", 0),
+        "awaiting_report": counter.get(_AWAITING_REPORTED_ATTEMPT_STATUS, 0),
+    }
+
+
+def _event_interaction_bucket(event: WorkspacePlanEventModel) -> str:
+    source = str(event.source or "")
+    event_type = str(event.event_type or "")
+    if "worker" in source or event_type in {"worker_report_terminal", "worker_launch"}:
+        return "worker"
+    if "verifier" in source or event_type == "verification_completed":
+        return "verifier"
+    if "supervisor" in source or event_type == SUPERVISOR_TICK_EVENT:
+        return "supervisor"
+    if "operator" in source or event_type.startswith("operator_"):
+        return "operator"
+    if "recovery" in event_type or event_type.startswith("auto_"):
+        return "recovery"
+    return "other"
+
+
+def _outbox_interaction_bucket(item: WorkspacePlanOutboxModel) -> str:
+    if item.event_type == WORKER_LAUNCH_EVENT:
+        return "worker"
+    if item.event_type == SUPERVISOR_TICK_EVENT:
+        return "supervisor"
+    if item.event_type in {HANDOFF_RESUME_EVENT, "attempt_retry"}:
+        return "recovery"
+    return "other"
+
+
+def _interaction_counts(
+    events: list[WorkspacePlanEventModel],
+    outbox_items: list[WorkspacePlanOutboxModel],
+) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for event in events:
+        counts[_event_interaction_bucket(event)] += 1
+    for item in outbox_items:
+        counts[_outbox_interaction_bucket(item)] += 1
+        if item.attempt_count > 1:
+            counts["retries"] += item.attempt_count - 1
+        if item.status in {"failed", "dead_letter"}:
+            counts["failed"] += 1
+    total = sum(counts[key] for key in ("worker", "verifier", "supervisor", "operator", "recovery", "other"))
+    return {
+        "total": total,
+        "worker": counts["worker"],
+        "verifier": counts["verifier"],
+        "supervisor": counts["supervisor"],
+        "operator": counts["operator"],
+        "recovery": counts["recovery"],
+        "other": counts["other"],
+        "retries": counts["retries"],
+        "failed": counts["failed"],
+    }
+
+
+def _structured_failure_code(payload: Mapping[str, Any]) -> str:
+    for key in ("failure_type", "failure_category", "reason_code", "category", "error_type"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _failure_text_from_payload(payload: Mapping[str, Any]) -> str:
+    parts: list[str] = []
+    for key in (
+        "reason",
+        "message",
+        "error",
+        "error_message",
+        "summary",
+        "adjudication_reason",
+        "result",
+    ):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+    return "\n".join(parts)
+
+
+def _failure_code_from_text(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = value.lower()
+    if any(marker in normalized for marker in _PROVIDER_ERROR_TEXT_MARKERS):
+        return "provider_error"
+    return ""
+
+
+def _failure_code(payload: Mapping[str, Any]) -> str:
+    return _structured_failure_code(payload) or _failure_code_from_text(
+        _failure_text_from_payload(payload)
+    )
+
+
+def _verification_summary(events: list[WorkspacePlanEventModel]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for event in events:
+        if event.event_type != "verification_completed":
+            continue
+        payload = dict(event.payload_json or {})
+        if payload.get("passed") is True:
+            counts["accepted"] += 1
+        else:
+            counts["rejected"] += 1
+        failure_code = _failure_code(payload)
+        if failure_code in _PROVIDER_ERROR_CODES:
+            counts["infra_error"] += 1
+        if failure_code in {"missing_evidence", "missing_commit_ref", "stale_evidence"}:
+            counts["missing_evidence"] += 1
+        if failure_code in {"dirty_worktree", "unclean_worktree"}:
+            counts["dirty_worktree"] += 1
+        if failure_code in {"policy_failure", "policy_violation"}:
+            counts["policy_failure"] += 1
+    return {
+        "accepted": counts["accepted"],
+        "rejected": counts["rejected"],
+        "infra_error": counts["infra_error"],
+        "missing_evidence": counts["missing_evidence"],
+        "dirty_worktree": counts["dirty_worktree"],
+        "policy_failure": counts["policy_failure"],
+    }
+
+
+def _repair_turns(events: list[WorkspacePlanEventModel]) -> list[dict[str, Any]]:
+    turns: list[dict[str, Any]] = []
+    for event in events:
+        if event.event_type not in {
+            "worker_repair_turn_dispatched",
+            "worker_repair_turn_completed",
+            "worker_repair_turn_ineligible",
+        }:
+            continue
+        payload = dict(event.payload_json or {})
+        repair_turn = payload.get("repair_turn")
+        if isinstance(repair_turn, Mapping):
+            payload = {**dict(repair_turn), **payload}
+        turns.append(
+            {
+                "event_type": event.event_type,
+                "node_id": event.node_id,
+                "attempt_id": event.attempt_id or _metadata_string(payload.get("attempt_id")),
+                "parent_attempt_id": _metadata_string(
+                    payload.get("repair_turn_parent_attempt_id")
+                    or payload.get("previous_attempt_id")
+                ),
+                "repair_turn_index": _metadata_int(payload.get("repair_turn_index"), fallback=1),
+                "result": _metadata_string(payload.get("result"))
+                or _metadata_string(payload.get("reason"))
+                or event.event_type,
+                "created_at": event.created_at.isoformat() if event.created_at else "",
+            }
+        )
+    return turns
+
+
+def _iteration_time_range(
+    *,
+    nodes: list[PlanNode],
+    attempts: list[WorkspaceTaskSessionAttemptModel],
+    events: list[WorkspacePlanEventModel],
+    outbox_items: list[WorkspacePlanOutboxModel],
+) -> dict[str, str]:
+    starts = [
+        item
+        for item in [
+            *(node.created_at for node in nodes),
+            *(attempt.created_at for attempt in attempts),
+            *(event.created_at for event in events),
+            *(item.created_at for item in outbox_items),
+        ]
+    ]
+    ends = [
+        item
+        for item in [
+            *(node.completed_at or node.updated_at or node.created_at for node in nodes),
+            *(attempt.completed_at or attempt.updated_at or attempt.created_at for attempt in attempts),
+            *(event.created_at for event in events),
+            *(item.processed_at or item.updated_at or item.created_at for item in outbox_items),
+        ]
+    ]
+    completed_values = [node.completed_at for node in nodes if node.completed_at is not None]
+    return {
+        "started_at": min(starts).isoformat() if starts else "",
+        "updated_at": max(ends).isoformat() if ends else "",
+        "completed_at": max(completed_values).isoformat() if completed_values else "",
+    }
+
+
+def _iteration_status_for_run(
+    *,
+    index: int,
+    nodes: list[PlanNode],
+    loop: Mapping[str, Any],
+    plan: Plan,
+) -> str:
+    current_iteration = _metadata_int(loop.get("current_iteration"), fallback=_current_iteration(nodes))
+    completed_iterations = set(_metadata_int_list(loop.get("completed_iterations")))
+    loop_status = _iteration_loop_status(plan, dict(loop))
+    if index in completed_iterations or (nodes and all(node.intent is TaskIntent.DONE for node in nodes)):
+        return "completed"
+    if loop_status == "completed" and index == current_iteration:
+        return "completed"
+    if any(node.intent is TaskIntent.BLOCKED for node in nodes):
+        return "blocked"
+    if index == current_iteration and loop_status not in {"completed", "suspended"}:
+        return "running"
+    return "planned"
+
+
+def _node_outputs(
+    node: PlanNode,
+    *,
+    blackboard_entries: list[BlackboardEntry],
+    delivery: WorkspaceDeliverySummaryResponse | None,
+) -> dict[str, list[str]]:
+    metadata = _node_response_metadata(node)
+    bundle = _node_evidence_bundle_response(node, metadata)
+    commit_refs = []
+    for key in ("commit_ref", "commit_sha", "merge_commit_ref"):
+        value = _metadata_string(metadata.get(key))
+        if value:
+            commit_refs.append(value)
+    for value in metadata.get("commit_refs") or []:
+        if isinstance(value, str) and value.strip():
+            commit_refs.append(value.strip())
+    pipeline_refs = list(bundle.pipeline_refs)
+    if delivery and delivery.latest_run and delivery.latest_run.node_id == node.id:
+        if delivery.latest_run.commit_ref:
+            commit_refs.append(delivery.latest_run.commit_ref)
+        pipeline_refs.append(f"pipeline_run:{delivery.latest_run.status}:{delivery.latest_run.id}")
+    blackboard_keys = [
+        entry.key
+        for entry in blackboard_entries
+        if entry.key.startswith("artifact.")
+        and (
+            not isinstance(entry.metadata, Mapping)
+            or not entry.metadata.get("node_id")
+            or entry.metadata.get("node_id") == node.id
+        )
+    ]
+    return {
+        "artifacts": list(dict.fromkeys(bundle.artifacts)),
+        "evidence_refs": list(dict.fromkeys(bundle.evidence_refs)),
+        "changed_files": list(dict.fromkeys(bundle.changed_files)),
+        "pipeline_refs": list(dict.fromkeys(pipeline_refs)),
+        "commit_refs": list(dict.fromkeys(commit_refs)),
+        "blackboard_keys": list(dict.fromkeys(blackboard_keys)),
+    }
+
+
+def _merge_output_lists(output_sets: list[dict[str, list[str]]]) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {
+        "artifacts": [],
+        "evidence_refs": [],
+        "changed_files": [],
+        "pipeline_refs": [],
+        "commit_refs": [],
+        "blackboard_keys": [],
+    }
+    for output in output_sets:
+        for key in merged:
+            merged[key].extend(output.get(key, []))
+    return {key: list(dict.fromkeys(values))[:50] for key, values in merged.items()}
+
+
+def _artifact_rows_for_node(
+    node: PlanNode,
+    *,
+    outputs: dict[str, list[str]],
+    verified: bool,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for key, values in outputs.items():
+        kind = key.removesuffix("s")
+        for value in values:
+            rows.append(
+                {
+                    "kind": kind,
+                    "value": value,
+                    "node_id": node.id,
+                    "attempt_id": node.current_attempt_id,
+                    "iteration_index": _node_iteration_index(node),
+                    "verdict": "verified" if verified else "claimed",
+                }
+            )
+    return rows
+
+
+def _artifact_index(
+    *,
+    plan: Plan,
+    blackboard_entries: list[BlackboardEntry],
+    delivery: WorkspaceDeliverySummaryResponse | None,
+) -> WorkspacePlanArtifactIndexResponse:
+    verified_outputs: list[dict[str, Any]] = []
+    claimed_outputs: list[dict[str, Any]] = []
+    for node in plan.nodes.values():
+        if node.kind.value not in {"task", "verify"}:
+            continue
+        outputs = _node_outputs(node, blackboard_entries=blackboard_entries, delivery=delivery)
+        if not any(outputs.values()):
+            continue
+        rows = _artifact_rows_for_node(node, outputs=outputs, verified=_node_verified(node))
+        if _node_verified(node):
+            verified_outputs.extend(rows)
+        else:
+            claimed_outputs.extend(rows)
+    loop = _goal_iteration_loop_metadata(plan)
+    final_deliverables = verified_outputs if _iteration_loop_status(plan, loop) == "completed" else []
+    return WorkspacePlanArtifactIndexResponse(
+        verified_outputs=verified_outputs[:200],
+        claimed_outputs=claimed_outputs[:200],
+        final_deliverables=final_deliverables[:200],
+    )
+
+
+def _event_belongs_to_iteration(
+    event: WorkspacePlanEventModel,
+    *,
+    node_ids: set[str],
+    attempt_ids: set[str],
+) -> bool:
+    return bool(
+        (event.node_id and event.node_id in node_ids)
+        or (event.attempt_id and event.attempt_id in attempt_ids)
+    )
+
+
+def _outbox_belongs_to_iteration(
+    item: WorkspacePlanOutboxModel,
+    *,
+    node_ids: set[str],
+) -> bool:
+    payload = dict(item.payload_json or {})
+    node_id = payload.get("node_id")
+    return isinstance(node_id, str) and node_id in node_ids
+
+
+def _iteration_runs(
+    *,
+    plan: Plan,
+    attempts: list[WorkspaceTaskSessionAttemptModel],
+    event_items: list[WorkspacePlanEventModel],
+    outbox_items: list[WorkspacePlanOutboxModel],
+    blackboard_entries: list[BlackboardEntry],
+    delivery: WorkspaceDeliverySummaryResponse | None,
+    ) -> list[WorkspacePlanIterationRunResponse]:
+    runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
+    loop = _goal_iteration_loop_metadata(plan)
+    history = {item.iteration_index: item for item in _iteration_history(loop, event_items, limit=None)}
+    indexes = {
+        _metadata_int(loop.get("current_iteration"), fallback=_current_iteration(runnable_nodes)),
+        *_metadata_int_list(loop.get("completed_iterations")),
+        *(item.iteration_index for item in history.values()),
+        *(_node_iteration_index(node) for node in runnable_nodes),
+    }
+    attempts_by_task_id: dict[str, list[WorkspaceTaskSessionAttemptModel]] = {}
+    for attempt in attempts:
+        attempts_by_task_id.setdefault(attempt.workspace_task_id, []).append(attempt)
+    rows: list[WorkspacePlanIterationRunResponse] = []
+    for index in sorted(item for item in indexes if item > 0):
+        nodes = [node for node in runnable_nodes if _node_iteration_index(node) == index]
+        node_ids = {node.id for node in nodes}
+        node_attempts = [
+            attempt
+            for node in nodes
+            for attempt in attempts_by_task_id.get(node.workspace_task_id or "", [])
+        ]
+        attempt_ids = {attempt.id for attempt in node_attempts}
+        events = [
+            event
+            for event in event_items
+            if _event_belongs_to_iteration(event, node_ids=node_ids, attempt_ids=attempt_ids)
+        ]
+        outbox = [item for item in outbox_items if _outbox_belongs_to_iteration(item, node_ids=node_ids)]
+        output_sets = [
+            _node_outputs(node, blackboard_entries=blackboard_entries, delivery=delivery)
+            for node in nodes
+        ]
+        current_history = history.get(index)
+        is_current = index == _metadata_int(
+            loop.get("current_iteration"),
+            fallback=_current_iteration(runnable_nodes),
+        )
+        rows.append(
+            WorkspacePlanIterationRunResponse(
+                iteration_index=index,
+                status=_iteration_status_for_run(index=index, nodes=nodes, loop=loop, plan=plan),
+                sprint_goal=(
+                    _metadata_string(loop.get("current_sprint_goal"))
+                    if is_current
+                    else current_history.next_sprint_goal if current_history else ""
+                )
+                or (current_history.summary if current_history else "")
+                or plan.goal_node.title,
+                review_summary=(
+                    _metadata_string(loop.get("last_review_summary"))
+                    if is_current
+                    else current_history.summary if current_history else ""
+                ),
+                next_sprint_goal=current_history.next_sprint_goal if current_history else "",
+                time_range=_iteration_time_range(
+                    nodes=nodes,
+                    attempts=node_attempts,
+                    events=events,
+                    outbox_items=outbox,
+                ),
+                task_counts={
+                    "total": len(nodes),
+                    "done": sum(1 for node in nodes if node.intent is TaskIntent.DONE),
+                    "running": sum(
+                        1
+                        for node in nodes
+                        if node.execution in {TaskExecution.RUNNING, TaskExecution.DISPATCHED}
+                    ),
+                    "blocked": sum(1 for node in nodes if node.intent is TaskIntent.BLOCKED),
+                    "verifying": sum(
+                        1
+                        for node in nodes
+                        if node.execution in {TaskExecution.REPORTED, TaskExecution.VERIFYING}
+                    ),
+                    "carried_over": sum(1 for node in nodes if node.intent is not TaskIntent.DONE),
+                },
+                attempt_counts=_attempt_counts(node_attempts),
+                interaction_counts=_interaction_counts(events, outbox),
+                deliverables=_merge_output_lists(output_sets),
+                verification_summary=_verification_summary(events),
+                repair_turns=_repair_turns(events),
+                carryover_node_ids=[node.id for node in nodes if node.intent is not TaskIntent.DONE],
+                node_ids=[node.id for node in nodes],
+            )
+        )
+    return rows
+
+
+def _failure_reason_counts(
+    *,
+    attempts: list[WorkspaceTaskSessionAttemptModel],
+    outbox_items: list[WorkspacePlanOutboxModel],
+    event_items: list[WorkspacePlanEventModel],
+) -> list[dict[str, Any]]:
+    counter: Counter[str] = Counter()
+    for attempt in attempts:
+        if str(attempt.status or "").lower() in {"accepted", "running", "pending"}:
+            continue
+        reason = (attempt.adjudication_reason or attempt.leader_feedback or "").strip()
+        if reason:
+            counter[reason] += 1
+    for item in outbox_items:
+        if item.status not in {"failed", "dead_letter"} or not item.last_error:
+            continue
+        counter[item.last_error.strip()] += 1
+    for event in event_items:
+        payload = dict(event.payload_json or {})
+        reason = _metadata_string(payload.get("reason") or payload.get("reason_code"))
+        if reason and event.event_type in {"verification_completed", "worker_repair_turn_ineligible"}:
+            counter[reason] += 1
+    return [
+        {"reason": reason, "count": count}
+        for reason, count in counter.most_common(8)
+    ]
+
+
+def _count_structured_failure(
+    event_items: list[WorkspacePlanEventModel],
+    codes: set[str],
+) -> int:
+    total = 0
+    for event in event_items:
+        payload = dict(event.payload_json or {})
+        if _failure_code(payload) in codes:
+            total += 1
+    return total
+
+
+def _count_attempt_failure(
+    attempts: list[WorkspaceTaskSessionAttemptModel],
+    codes: set[str],
+) -> int:
+    total = 0
+    for attempt in attempts:
+        if str(attempt.status or "").lower() in {"accepted", "running", "pending"}:
+            continue
+        reason = attempt.adjudication_reason or attempt.leader_feedback
+        if _failure_code_from_text(reason) in codes:
+            total += 1
+    return total
+
+
+def _count_outbox_failure(
+    outbox_items: list[WorkspacePlanOutboxModel],
+    codes: set[str],
+) -> int:
+    total = 0
+    for item in outbox_items:
+        payload = dict(item.payload_json or {})
+        reason = "\n".join(
+            part
+            for part in (
+                item.last_error,
+                _metadata_string(payload.get("reason")),
+                _metadata_string(payload.get("error")),
+            )
+            if part
+        )
+        if _failure_code(payload) in codes or _failure_code_from_text(reason) in codes:
+            total += 1
+    return total
+
+
+def _run_health(
+    *,
+    plan: Plan,
+    attempts: list[WorkspaceTaskSessionAttemptModel],
+    event_items: list[WorkspacePlanEventModel],
+    outbox_items: list[WorkspacePlanOutboxModel],
+) -> WorkspacePlanRunHealthResponse:
+    attempt_counts = _attempt_counts(attempts)
+    accepted = attempt_counts.get("accepted", 0)
+    total = attempt_counts.get("total", 0)
+    event_type_counts = Counter(event.event_type for event in event_items)
+    repair_counts = {
+        "dispatched": event_type_counts.get("worker_repair_turn_dispatched", 0),
+        "completed": event_type_counts.get("worker_repair_turn_completed", 0),
+        "ineligible": event_type_counts.get("worker_repair_turn_ineligible", 0),
+    }
+    loop = _goal_iteration_loop_metadata(plan)
+    return WorkspacePlanRunHealthResponse(
+        final_status=_iteration_loop_status(plan, loop),
+        attempt_success_rate=round(accepted / total, 4) if total else 0.0,
+        attempts=attempt_counts,
+        interactions=_interaction_counts(event_items, outbox_items),
+        top_failure_reasons=_failure_reason_counts(
+            attempts=attempts,
+            outbox_items=outbox_items,
+            event_items=event_items,
+        ),
+        recovery_events=sum(
+            count
+            for event_type, count in event_type_counts.items()
+            if "recovery" in event_type or event_type.startswith("auto_")
+        ),
+        provider_error_events=(
+            _count_structured_failure(event_items, _PROVIDER_ERROR_CODES)
+            + _count_attempt_failure(attempts, _PROVIDER_ERROR_CODES)
+            + _count_outbox_failure(outbox_items, _PROVIDER_ERROR_CODES)
+        ),
+        repair_turns=repair_counts,
+        stale_evidence_events=_count_structured_failure(
+            event_items,
+            {"stale_evidence", "stale_report", "old_evidence"},
+        ),
+        dirty_worktree_events=_count_structured_failure(
+            event_items,
+            {"dirty_worktree", "unclean_worktree"},
+        ),
+        missing_report_events=_count_structured_failure(
+            event_items,
+            {"missing_terminal_report", "no_terminal_report"},
+        ),
+    )
 
 
 def _to_blackboard_response(entry: BlackboardEntry) -> WorkspacePlanBlackboardEntryResponse:
@@ -2786,6 +3429,20 @@ async def _has_pending_node_recovery_job(
             .limit(1)
         )
     )
+    if result.scalar_one_or_none() is not None:
+        return True
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanEventModel.id)
+            .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .where(WorkspacePlanEventModel.event_type == "auto_stale_node_recovery_queued")
+            .where(WorkspacePlanEventModel.created_at >= recent_cutoff)
+            .where(WorkspacePlanEventModel.node_id == node_id)
+            .where(WorkspacePlanEventModel.attempt_id == previous_attempt_id)
+            .limit(1)
+        )
+    )
     return result.scalar_one_or_none() is not None
 
 
@@ -3192,6 +3849,69 @@ async def _recover_stale_attempts_for_snapshot(
         return False
 
 
+async def _load_plan_attempts_for_snapshot(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan: Plan,
+) -> list[WorkspaceTaskSessionAttemptModel]:
+    workspace_task_ids = [
+        node.workspace_task_id
+        for node in plan.nodes.values()
+        if node.workspace_task_id and node.kind.value in {"task", "verify"}
+    ]
+    if not workspace_task_ids:
+        return []
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspaceTaskSessionAttemptModel)
+            .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+            .where(WorkspaceTaskSessionAttemptModel.workspace_task_id.in_(workspace_task_ids))
+            .order_by(WorkspaceTaskSessionAttemptModel.created_at.asc())
+            .limit(_SNAPSHOT_LEDGER_RECORD_LIMIT)
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def _load_plan_events_for_snapshot(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+) -> list[WorkspacePlanEventModel]:
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanEventModel)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .order_by(
+                WorkspacePlanEventModel.created_at.asc(),
+                WorkspacePlanEventModel.id.asc(),
+            )
+            .limit(_SNAPSHOT_LEDGER_RECORD_LIMIT)
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def _load_plan_outbox_for_snapshot(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+) -> list[WorkspacePlanOutboxModel]:
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanOutboxModel)
+            .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+            .order_by(
+                WorkspacePlanOutboxModel.created_at.asc(),
+                WorkspacePlanOutboxModel.id.asc(),
+            )
+            .limit(_SNAPSHOT_LEDGER_RECORD_LIMIT)
+        )
+    )
+    return list(result.scalars().all())
+
+
 @router.get("", response_model=WorkspacePlanSnapshotResponse)
 async def get_workspace_plan_snapshot(
     workspace_id: str,
@@ -3248,6 +3968,13 @@ async def get_workspace_plan_snapshot(
         event_items = list(event_result.scalars().all())
         root_goal = await _load_root_goal_response(db, workspace_id=workspace_id, plan=plan)
         delivery = await _to_delivery_summary(db, plan=plan)
+        ledger_attempts = await _load_plan_attempts_for_snapshot(
+            session=db,
+            workspace_id=workspace_id,
+            plan=plan,
+        )
+        ledger_events = await _load_plan_events_for_snapshot(session=db, plan_id=plan.id)
+        ledger_outbox = await _load_plan_outbox_for_snapshot(session=db, plan_id=plan.id)
         return WorkspacePlanSnapshotResponse(
             workspace_id=workspace_id,
             plan=_to_plan_response(plan),
@@ -3263,6 +3990,25 @@ async def get_workspace_plan_snapshot(
             blackboard=[_to_blackboard_response(entry) for entry in blackboard_entries],
             outbox=[_to_outbox_response(item) for item in outbox_items],
             events=[_to_event_response(item) for item in event_items],
+            iteration_runs=_iteration_runs(
+                plan=plan,
+                attempts=ledger_attempts,
+                event_items=ledger_events,
+                outbox_items=ledger_outbox,
+                blackboard_entries=blackboard_entries,
+                delivery=delivery,
+            ),
+            run_health=_run_health(
+                plan=plan,
+                attempts=ledger_attempts,
+                event_items=ledger_events,
+                outbox_items=ledger_outbox,
+            ),
+            artifact_index=_artifact_index(
+                plan=plan,
+                blackboard_entries=blackboard_entries,
+                delivery=delivery,
+            ),
         )
     except Exception as exc:
         raise _map_error(exc) from exc

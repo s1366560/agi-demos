@@ -224,4 +224,81 @@ describe('planRunSnapshotModel iteration ledger', () => {
       failed: 1,
     });
   });
+
+  it('prefers backend iteration run ledgers when present', () => {
+    const planNode = node({
+      id: 'node-ledger',
+      intent: 'done',
+      execution: 'idle',
+      workspace_task_id: 'task-ledger',
+      metadata: { iteration_index: 3 },
+    });
+    const snapshot: WorkspacePlanSnapshot = {
+      workspace_id: 'ws-1',
+      plan: {
+        id: 'plan-1',
+        workspace_id: 'ws-1',
+        goal_id: 'goal-1',
+        status: 'completed',
+        created_at: '2026-05-01T00:00:00Z',
+        nodes: [planNode],
+        counts: {},
+      },
+      blackboard: [],
+      outbox: [],
+      events: [],
+      iteration_runs: [
+        {
+          iteration_index: 3,
+          status: 'completed',
+          sprint_goal: 'Consolidate evidence',
+          review_summary: 'Accepted with fresh evidence.',
+          next_sprint_goal: '',
+          time_range: {
+            started_at: '2026-05-01T00:00:00Z',
+            updated_at: '2026-05-01T00:30:00Z',
+            completed_at: '2026-05-01T00:30:00Z',
+          },
+          task_counts: { total: 1, done: 1, running: 0, blocked: 0, verifying: 0 },
+          attempt_counts: { total: 2, accepted: 1, rejected: 1 },
+          interaction_counts: { total: 5, worker: 2, verifier: 2, recovery: 1, retries: 1 },
+          deliverables: {
+            commit_refs: ['abc1234'],
+            changed_files: ['web/src/ledger.tsx'],
+            artifacts: ['artifact.ledger'],
+            evidence_refs: ['pytest:ledger'],
+            pipeline_refs: [],
+            blackboard_keys: [],
+          },
+          verification_summary: { accepted: 1, missing_evidence: 1 },
+          repair_turns: [{ attempt_id: 'attempt-2', repair_turn_index: 1 }],
+          carryover_node_ids: [],
+          node_ids: ['node-ledger'],
+        },
+      ],
+    };
+
+    const runs = buildIterationRuns(snapshot, [
+      {
+        id: 'task-ledger',
+        workspace_id: 'ws-1',
+        title: 'Ledger task',
+        status: 'done',
+        metadata: {},
+        created_at: '2026-05-01T00:00:00Z',
+      },
+    ]);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      index: 3,
+      status: 'completed',
+      sprintGoal: 'Consolidate evidence',
+      attempts: { total: 2, accepted: 1, rejected: 1 },
+      verification: { accepted: 1, missing_evidence: 1 },
+    });
+    expect(runs[0].outputs.commitRefs).toEqual(['abc1234']);
+    expect(runs[0].repairTurns).toHaveLength(1);
+    expect(runs[0].linkedTasks.map((task) => task.id)).toEqual(['task-ledger']);
+  });
 });

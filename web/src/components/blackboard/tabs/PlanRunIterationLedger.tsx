@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { useTranslation } from 'react-i18next';
 
 import { Activity, GitCommit, ListChecks, PackageCheck, Repeat2 } from 'lucide-react';
@@ -22,7 +24,8 @@ interface PlanRunIterationLedgerProps {
   selectedNodeId: string | null;
   onSelectIteration: (index: number) => void;
   onSelectNode: (nodeId: string) => void;
-  onOpenTask: (taskId: string) => void;
+  onOpenTask: (taskId: string, nodeId?: string) => void;
+  taskInspector?: ReactNode;
 }
 
 export function PlanRunIterationLedger({
@@ -32,6 +35,7 @@ export function PlanRunIterationLedger({
   onSelectIteration,
   onSelectNode,
   onOpenTask,
+  taskInspector,
 }: PlanRunIterationLedgerProps) {
   const { t } = useTranslation();
   if (runs.length === 0) {
@@ -113,8 +117,8 @@ export function PlanRunIterationLedger({
                   value={String(run.outputs.total)}
                 />
                 <Metric
-                  label={t('blackboard.iterationMetricActivity', 'Activity')}
-                  value={String(run.interactions.total)}
+                  label={t('blackboard.iterationMetricAttempts', 'Attempts')}
+                  value={`${String(run.attempts.accepted ?? 0)}/${String(run.attempts.total ?? 0)}`}
                 />
                 <Metric
                   label={t('blackboard.iterationMetricCarryover', 'Carry')}
@@ -126,7 +130,7 @@ export function PlanRunIterationLedger({
         })}
       </div>
 
-      <div className="mt-4 grid gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.55fr)]">
+      <div className="mt-4 grid gap-4 2xl:grid-cols-[minmax(0,0.9fr)_minmax(400px,0.65fr)]">
         <div className="min-w-0 space-y-4">
           <IterationOverview run={selectedRun} />
           <IterationTaskTable
@@ -137,6 +141,8 @@ export function PlanRunIterationLedger({
           />
         </div>
         <div className="min-w-0 space-y-4">
+          {taskInspector}
+          <IterationRunHealth run={selectedRun} />
           <IterationOutputList run={selectedRun} />
           <IterationActivityTimeline run={selectedRun} />
         </div>
@@ -160,7 +166,7 @@ function IterationOverview({ run }: { run: WorkspacePlanIterationRun }) {
   const { t } = useTranslation();
   return (
     <div className="rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -191,7 +197,7 @@ function IterationOverview({ run }: { run: WorkspacePlanIterationRun }) {
             </p>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:min-w-[320px]">
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
           <DenseStat
             label={t('blackboard.iterationMetricDone', 'Done')}
             value={String(run.counts.done)}
@@ -207,6 +213,22 @@ function IterationOverview({ run }: { run: WorkspacePlanIterationRun }) {
           <DenseStat
             label={t('blackboard.iterationMetricVerify', 'Verify')}
             value={String(run.counts.verifying)}
+          />
+          <DenseStat
+            label={t('blackboard.iterationMetricAttempts', 'Attempts')}
+            value={String(run.attempts.total ?? 0)}
+          />
+          <DenseStat
+            label={t('blackboard.iterationMetricRejected', 'Rejected')}
+            value={String((run.attempts.rejected ?? 0) + (run.attempts.blocked ?? 0))}
+          />
+          <DenseStat
+            label={t('blackboard.iterationMetricRepair', 'Repair')}
+            value={String(run.repairTurns.length)}
+          />
+          <DenseStat
+            label={t('blackboard.iterationMetricActivity', 'Activity')}
+            value={String(run.interactions.total)}
           />
         </div>
       </div>
@@ -234,7 +256,7 @@ function IterationTaskTable({
   run: WorkspacePlanIterationRun;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
-  onOpenTask: (taskId: string) => void;
+  onOpenTask: (taskId: string, nodeId?: string) => void;
 }) {
   const { t } = useTranslation();
   if (run.nodes.length === 0) {
@@ -314,7 +336,7 @@ function IterationTaskTable({
                       <button
                         type="button"
                         onClick={() => {
-                          onOpenTask(node.workspace_task_id as string);
+                          onOpenTask(node.workspace_task_id as string, node.id);
                         }}
                         className="mt-1 text-[11px] font-medium text-status-text-info hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
@@ -359,6 +381,70 @@ function IterationTaskTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function IterationRunHealth({ run }: { run: WorkspacePlanIterationRun }) {
+  const { t } = useTranslation();
+  const totalAttempts = run.attempts.total ?? 0;
+  const acceptedAttempts = run.attempts.accepted ?? 0;
+  const successRate = totalAttempts > 0 ? Math.round((acceptedAttempts / totalAttempts) * 100) : 0;
+  const rejectedAttempts = (run.attempts.rejected ?? 0) + (run.attempts.blocked ?? 0);
+  const verificationFailures =
+    (run.verification.rejected ?? 0) +
+    (run.verification.infra_error ?? 0) +
+    (run.verification.missing_evidence ?? 0) +
+    (run.verification.dirty_worktree ?? 0);
+
+  return (
+    <div className="rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+          <Activity className="h-4 w-4" aria-hidden />
+          {t('blackboard.iterationRunHealthTitle', 'Run health')}
+        </div>
+        <span className="font-mono text-[11px] text-text-muted">
+          {t('blackboard.iterationRunHealthSuccess', '{{value}}% accepted', {
+            value: successRate,
+          })}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <DenseCounter
+          label={t('blackboard.iterationMetricAttempts', 'Attempts')}
+          value={totalAttempts}
+        />
+        <DenseCounter
+          label={t('blackboard.iterationMetricRejected', 'Rejected')}
+          value={rejectedAttempts}
+        />
+        <DenseCounter
+          label={t('blackboard.iterationMetricRepair', 'Repair')}
+          value={run.repairTurns.length}
+        />
+        <DenseCounter
+          label={t('blackboard.iterationMetricVerifyFail', 'Verify fail')}
+          value={verificationFailures}
+        />
+      </div>
+      {run.repairTurns.length > 0 && (
+        <div className="mt-3 space-y-1 border-t border-border-separator pt-2 text-[11px] dark:border-border-dark">
+          {run.repairTurns.slice(-3).map((turn, index) => (
+            <div
+              key={`${String(turn.attempt_id ?? turn.event_type ?? 'repair')}-${index}`}
+              className="flex min-w-0 items-center justify-between gap-2"
+            >
+              <span className="truncate text-text-secondary dark:text-text-muted">
+                {String(turn.event_type ?? 'repair_turn')}
+              </span>
+              <span className="shrink-0 font-mono text-text-muted">
+                {shortId(String(turn.attempt_id ?? '')) || String(turn.repair_turn_index ?? '')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

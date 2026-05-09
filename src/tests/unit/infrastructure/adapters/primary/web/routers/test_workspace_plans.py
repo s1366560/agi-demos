@@ -296,6 +296,176 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
 
 
 @pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_includes_iteration_runs_and_artifact_index(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-ledger"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-task-ledger",
+                workspace_id=workspace_id,
+                title="Root task",
+                created_by="plan-api-user",
+                status="done",
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-ledger",
+                workspace_id=workspace_id,
+                title="Implement ledger",
+                created_by="plan-api-user",
+                status="done",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal = plan.nodes[PlanNodeId("goal-api")]
+    task = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            goal,
+            workspace_task_id="root-task-ledger",
+            metadata={
+                **goal.metadata,
+                "iteration_loop": {
+                    "loop_status": "completed",
+                    "current_iteration": 1,
+                    "max_iterations": 2,
+                    "completed_iterations": [1],
+                    "last_review_summary": "Ledger complete.",
+                },
+            },
+        )
+    )
+    plan.replace_node(
+        replace(
+            task,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            workspace_task_id="workspace-task-ledger",
+            current_attempt_id="attempt-ledger-2",
+            completed_at=datetime.now(UTC),
+            metadata={
+                **task.metadata,
+                "commit_ref": "abc1234",
+                "evidence_refs": ["pytest:ledger"],
+                "verification_evidence_refs": ["clean_worktree_after_commit"],
+                "changed_files": ["web/src/ledger.tsx"],
+                "last_verification_passed": True,
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    db_session.add_all(
+        [
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-ledger-1",
+                workspace_task_id="workspace-task-ledger",
+                root_goal_task_id="root-task-ledger",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="rejected",
+                adjudication_reason="missing_evidence",
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-ledger-2",
+                workspace_task_id="workspace-task-ledger",
+                root_goal_task_id="root-task-ledger",
+                workspace_id=workspace_id,
+                attempt_number=2,
+                status="accepted",
+                candidate_artifacts_json=["artifact.ledger"],
+                candidate_verifications_json=["pytest:ledger"],
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-ledger-3",
+                workspace_task_id="workspace-task-ledger",
+                root_goal_task_id="root-task-ledger",
+                workspace_id=workspace_id,
+                attempt_number=3,
+                status="blocked",
+                adjudication_reason=(
+                    "litellm.InternalServerError: AnthropicException - 400, "
+                    "Expected HTTP/ from provider"
+                ),
+            ),
+        ]
+    )
+    await SqlWorkspacePlanEventRepository(db_session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id="task-api",
+        attempt_id="attempt-ledger-1",
+        event_type="verification_completed",
+        source="workspace_plan_verifier",
+        payload={"passed": False, "failure_type": "missing_evidence", "reason": "missing"},
+    )
+    await SqlWorkspacePlanEventRepository(db_session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id="task-api",
+        attempt_id="attempt-ledger-2",
+        event_type="worker_repair_turn_dispatched",
+        source="workspace_plan.repair_turn",
+        payload={"repair_turn_index": 1, "repair_turn_parent_attempt_id": "attempt-ledger-1"},
+    )
+    await SqlWorkspacePlanEventRepository(db_session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id="task-api",
+        attempt_id="attempt-ledger-2",
+        event_type="worker_repair_turn_completed",
+        source="workspace_plan_supervisor",
+        payload={"repair_turn": {"repair_turn_index": 1, "attempt_id": "attempt-ledger-2"}},
+    )
+    await SqlWorkspacePlanEventRepository(db_session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id="task-api",
+        attempt_id="attempt-ledger-2",
+        event_type="verification_completed",
+        source="workspace_plan_verifier",
+        payload={"passed": True, "summary": "accepted"},
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: _WorkspaceServiceStub(),
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.iteration_runs
+    run = response.iteration_runs[0]
+    assert run.status == "completed"
+    assert run.attempt_counts["total"] == 3
+    assert run.attempt_counts["accepted"] == 1
+    assert run.attempt_counts["rejected"] == 1
+    assert run.attempt_counts["blocked"] == 1
+    assert run.verification_summary["accepted"] == 1
+    assert run.verification_summary["missing_evidence"] == 1
+    assert len(run.repair_turns) == 2
+    assert run.deliverables["commit_refs"] == ["abc1234"]
+    assert response.run_health is not None
+    assert response.run_health.attempt_success_rate == 0.3333
+    assert response.run_health.provider_error_events == 1
+    assert response.run_health.repair_turns["completed"] == 1
+    assert response.artifact_index is not None
+    assert any(item["value"] == "abc1234" for item in response.artifact_index.verified_outputs)
+
+
+@pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_uses_workspace_delivery_contract_metadata(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -529,6 +699,46 @@ async def test_stale_plan_node_recovery_throttles_recent_completed_handoff_resum
         "attempt-next",
         "attempt-stale",
     ]
+
+
+@pytest.mark.asyncio
+async def test_stale_plan_node_recovery_throttles_recent_recovery_event(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-stale-event-dedupe"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    stale_node = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        workspace_task_id="workspace-task-api",
+        assignee_agent_id="agent-api",
+        current_attempt_id="attempt-stale",
+    )
+    plan.nodes[task_node_id] = stale_node
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanEventRepository(db_session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id="task-api",
+        attempt_id="attempt-stale",
+        event_type="auto_stale_node_recovery_queued",
+        source="workspace_plan_snapshot",
+        payload={"reason": "recent_recovery_already_queued"},
+    )
+    await db_session.commit()
+
+    assert (
+        await workspace_plans._enqueue_stale_plan_node_recovery(
+            session=db_session,
+            workspace_id=workspace_id,
+            plan=plan,
+            nodes=[stale_node],
+            actor_id="plan-api-user",
+        )
+        == 0
+    )
 
 
 def test_stale_plan_node_snapshot_recovery_uses_live_worker_grace() -> None:

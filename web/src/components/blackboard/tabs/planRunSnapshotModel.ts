@@ -49,6 +49,9 @@ export interface WorkspacePlanIterationRun {
   outbox: WorkspacePlanOutboxItem[];
   outputs: IterationOutputSummary;
   interactions: IterationInteractionStats;
+  attempts: Record<string, number>;
+  verification: Record<string, number>;
+  repairTurns: Array<Record<string, unknown>>;
   carryoverNodeIds: string[];
   counts: {
     total: number;
@@ -56,6 +59,7 @@ export interface WorkspacePlanIterationRun {
     running: number;
     blocked: number;
     verifying: number;
+    carriedOver?: number;
   };
 }
 
@@ -367,12 +371,96 @@ function iterationDates(nodes: WorkspacePlanNode[]) {
   };
 }
 
+function numberFromRecord(record: Record<string, number> | undefined, key: string): number {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function listFromRecord(record: Record<string, string[]> | undefined, key: string): string[] {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+}
+
+function normalizeBackendIterationRuns(
+  snapshot: WorkspacePlanSnapshot,
+  tasks: WorkspaceTask[]
+): WorkspacePlanIterationRun[] {
+  const backendRuns = snapshot.iteration_runs ?? [];
+  if (backendRuns.length === 0 || !snapshot.plan) {
+    return [];
+  }
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  const nodesById = new Map(snapshot.plan.nodes.map((node) => [node.id, node]));
+  return backendRuns.map((run) => {
+    const nodeIds = new Set(run.node_ids ?? []);
+    const nodes = snapshot.plan?.nodes.filter((node) => nodeIds.has(node.id)) ?? [];
+    const taskIds = uniqueStrings(nodes.map((node) => node.workspace_task_id));
+    const outputs: IterationOutputSummary = {
+      artifacts: listFromRecord(run.deliverables, 'artifacts'),
+      evidenceRefs: listFromRecord(run.deliverables, 'evidence_refs'),
+      changedFiles: listFromRecord(run.deliverables, 'changed_files'),
+      pipelineRefs: listFromRecord(run.deliverables, 'pipeline_refs'),
+      commitRefs: listFromRecord(run.deliverables, 'commit_refs'),
+      blackboardKeys: listFromRecord(run.deliverables, 'blackboard_keys'),
+      total: new Set(Object.values(run.deliverables ?? {}).flat()).size,
+    };
+    const interactions: IterationInteractionStats = {
+      total: numberFromRecord(run.interaction_counts, 'total'),
+      worker: numberFromRecord(run.interaction_counts, 'worker'),
+      verifier: numberFromRecord(run.interaction_counts, 'verifier'),
+      supervisor: numberFromRecord(run.interaction_counts, 'supervisor'),
+      operator: numberFromRecord(run.interaction_counts, 'operator'),
+      other:
+        numberFromRecord(run.interaction_counts, 'other') +
+        numberFromRecord(run.interaction_counts, 'recovery'),
+      retries: numberFromRecord(run.interaction_counts, 'retries'),
+      failed: numberFromRecord(run.interaction_counts, 'failed'),
+    };
+    return {
+      index: run.iteration_index,
+      status: (['active', 'completed', 'blocked', 'planned'].includes(run.status)
+        ? run.status
+        : run.status === 'running'
+          ? 'active'
+          : 'planned') as IterationStatus,
+      sprintGoal: run.sprint_goal,
+      reviewSummary: run.review_summary,
+      nextSprintGoal: run.next_sprint_goal,
+      startedAt: run.time_range?.started_at ?? '',
+      updatedAt: run.time_range?.updated_at ?? '',
+      completedAt: run.time_range?.completed_at ?? '',
+      nodes: nodes.length > 0 ? nodes : Array.from(nodeIds).flatMap((id) => nodesById.get(id) ?? []),
+      linkedTasks: taskIds.map((taskId) => tasksById.get(taskId)).filter(Boolean) as WorkspaceTask[],
+      events: snapshot.events.filter((event) => eventBelongsToNodes(event, nodes)),
+      outbox: snapshot.outbox.filter((item) => outboxBelongsToNodes(item, nodes)),
+      outputs,
+      interactions,
+      attempts: run.attempt_counts ?? {},
+      verification: run.verification_summary ?? {},
+      repairTurns: run.repair_turns ?? [],
+      carryoverNodeIds: run.carryover_node_ids ?? [],
+      counts: {
+        total: numberFromRecord(run.task_counts, 'total'),
+        done: numberFromRecord(run.task_counts, 'done'),
+        running: numberFromRecord(run.task_counts, 'running'),
+        blocked: numberFromRecord(run.task_counts, 'blocked'),
+        verifying: numberFromRecord(run.task_counts, 'verifying'),
+        carriedOver: numberFromRecord(run.task_counts, 'carried_over'),
+      },
+    };
+  });
+}
+
 export function buildIterationRuns(
   snapshot: WorkspacePlanSnapshot | null,
   tasks: WorkspaceTask[] = []
 ): WorkspacePlanIterationRun[] {
   if (!snapshot?.plan) {
     return [];
+  }
+  const backendRuns = normalizeBackendIterationRuns(snapshot, tasks);
+  if (backendRuns.length > 0) {
+    return backendRuns;
   }
   const runnableNodes = snapshot.plan.nodes.filter(
     (node) => node.kind === 'task' || node.kind === 'verify'
@@ -413,6 +501,9 @@ export function buildIterationRuns(
         outbox,
         outputs: iterationOutputs(nodes, snapshot.blackboard, snapshot.delivery),
         interactions: iterationInteractionStats(snapshot.events, snapshot.outbox, nodes),
+        attempts: {},
+        verification: {},
+        repairTurns: [],
         carryoverNodeIds: iterationCarryover(nodes),
         counts: {
           total: nodes.length,
