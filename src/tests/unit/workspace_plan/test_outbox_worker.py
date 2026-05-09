@@ -1696,6 +1696,141 @@ async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch
 
 
 @pytest.mark.asyncio
+async def test_supervisor_tick_uses_accepted_attempt_when_current_attempt_was_parent_done(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="parent-done-task",
+            workspace_id="workspace-1",
+            title="Accepted projection",
+            description="",
+            created_by="worker-user-1",
+            status="done",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "accepted-before-parent-done",
+            },
+        )
+    )
+    db_session.add_all(
+        [
+            WorkspaceTaskSessionAttemptModel(
+                id="accepted-before-parent-done",
+                workspace_task_id="parent-done-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=2,
+                status="accepted",
+                conversation_id="accepted-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                leader_feedback="accepted before recovery sweep",
+                candidate_artifacts_json=["docs/GOAL-COMPLETION.md"],
+                candidate_verifications_json=["test_run:pytest final"],
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="cancelled-after-parent-done",
+                workspace_task_id="parent-done-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=3,
+                status="cancelled",
+                conversation_id="cancelled-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                leader_feedback="recovery:parent_done",
+                adjudication_reason="recovery:parent_done",
+            ),
+        ]
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            current_attempt_id="cancelled-after-parent-done",
+            workspace_task_id="parent-done-task",
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    dispatched: list[str] = []
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return [WorkspaceAgent(agent_id="agent-1", display_name="Agent One")]
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        node: PlanNode,
+    ) -> str:
+        dispatched.append(node.id)
+        return f"retry-{node.id}"
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.leaf_tasks()[0]
+    assert dispatched == []
+    assert reconciled_leaf.intent is TaskIntent.DONE
+    assert reconciled_leaf.execution is TaskExecution.IDLE
+    assert reconciled_leaf.current_attempt_id == "accepted-before-parent-done"
+    assert reconciled_leaf.metadata["terminal_attempt_status"] == "accepted"
+    assert reconciled_leaf.metadata["terminal_attempt_superseded_attempt_id"] == (
+        "cancelled-after-parent-done"
+    )
+    assert reconciled_leaf.metadata["terminal_attempt_superseded_status"] == "cancelled"
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == (
+        "accepted-before-parent-done"
+    )
+    assert reconciled_leaf.metadata["candidate_artifacts"] == ["docs/GOAL-COMPLETION.md"]
+    assert reconciled_leaf.metadata["candidate_verifications"] == ["test_run:pytest final"]
+    task = await db_session.get(WorkspaceTaskModel, "parent-done-task")
+    assert task is not None
+    assert task.status == "done"
+    assert task.metadata_json[CURRENT_ATTEMPT_ID] == "accepted-before-parent-done"
+    assert task.metadata_json["last_attempt_status"] == "accepted"
+    assert task.metadata_json["durable_plan_verdict"] == "accepted"
+
+
+@pytest.mark.asyncio
 async def test_supervisor_tick_releases_blocked_node_with_terminal_attempt(
     db_session: AsyncSession,
 ) -> None:

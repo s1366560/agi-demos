@@ -496,6 +496,58 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             changed = True
             continue
         if status in _TERMINAL_ATTEMPT_STATUS_VALUES:
+            accepted_attempt = await _load_reconciling_accepted_attempt_for_task(
+                session=session,
+                workspace_id=workspace_id,
+                terminal_attempt=attempt,
+            )
+            if accepted_attempt is not None:
+                summary = str(
+                    accepted_attempt.leader_feedback
+                    or accepted_attempt.candidate_summary
+                    or "accepted terminal attempt"
+                )
+                await _project_accepted_terminal_attempt_to_task(
+                    session=session,
+                    workspace_id=workspace_id,
+                    node=node,
+                    attempt=accepted_attempt,
+                    summary=summary,
+                    now=now,
+                )
+                plan.replace_node(
+                    replace(
+                        node,
+                        intent=TaskIntent.DONE,
+                        execution=TaskExecution.IDLE,
+                        current_attempt_id=accepted_attempt.id,
+                        metadata={
+                            **dict(node.metadata or {}),
+                            "terminal_attempt_status": "accepted",
+                            "terminal_attempt_reconciled_at": now.isoformat().replace(
+                                "+00:00",
+                                "Z",
+                            ),
+                            "terminal_attempt_superseded_attempt_id": attempt.id,
+                            "terminal_attempt_superseded_status": status,
+                            "terminal_attempt_superseded_reason": (
+                                attempt.adjudication_reason or attempt.leader_feedback
+                            ),
+                            "last_verification_summary": summary,
+                            "last_verification_passed": True,
+                            "last_verification_hard_fail": False,
+                            "last_verification_attempt_id": accepted_attempt.id,
+                            "last_verification_ran_at": now.isoformat().replace(
+                                "+00:00",
+                                "Z",
+                            ),
+                            **_accepted_attempt_evidence_metadata(accepted_attempt),
+                        },
+                        updated_at=now,
+                    )
+                )
+                changed = True
+                continue
             plan.replace_node(
                 _plan_node_released_for_retry(
                     node,
@@ -624,6 +676,45 @@ async def _load_plan_attempt(
     attempt_id: str,
 ) -> WorkspaceTaskSessionAttemptModel | None:
     return await session.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+
+
+async def _load_reconciling_accepted_attempt_for_task(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    terminal_attempt: WorkspaceTaskSessionAttemptModel,
+) -> WorkspaceTaskSessionAttemptModel | None:
+    workspace_task_id = terminal_attempt.workspace_task_id
+    if not workspace_task_id:
+        return None
+    result = await session.execute(
+        select(WorkspaceTaskSessionAttemptModel)
+        .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+        .where(WorkspaceTaskSessionAttemptModel.workspace_task_id == workspace_task_id)
+        .where(WorkspaceTaskSessionAttemptModel.status == "accepted")
+        .order_by(WorkspaceTaskSessionAttemptModel.attempt_number.desc())
+        .limit(1)
+    )
+    accepted_attempt = result.scalar_one_or_none()
+    if accepted_attempt is None:
+        return None
+    if accepted_attempt.id == terminal_attempt.id:
+        return None
+    if accepted_attempt.attempt_number > terminal_attempt.attempt_number:
+        return accepted_attempt
+    if _attempt_cancelled_because_parent_done(terminal_attempt):
+        return accepted_attempt
+    return None
+
+
+def _attempt_cancelled_because_parent_done(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    if _attempt_status_value(attempt) != "cancelled":
+        return False
+    reason = str(getattr(attempt, "adjudication_reason", None) or "")
+    feedback = str(getattr(attempt, "leader_feedback", None) or "")
+    return "recovery:parent_done" in {reason, feedback}
 
 
 def _plan_node_released_for_retry(
