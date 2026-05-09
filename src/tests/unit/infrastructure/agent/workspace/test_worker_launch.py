@@ -442,6 +442,8 @@ class TestBuildBrief:
         assert "## Completion gate" in brief
         assert "## Shell execution discipline" in brief
         assert "nohup" in brief
+        assert "bare background commands" in brief
+        assert "logs/backend.pid" in brief
         assert "Do not assume `ss` exists" in brief
         assert "preflight:read-progress" in brief
         assert "preflight:git-status" in brief
@@ -518,6 +520,9 @@ class TestBuildBrief:
         assert "giant heredoc" in " ".join(system_context["artifact_write_policy"]["instructions"])
         shell_instructions = " ".join(system_context["shell_execution_policy"]["instructions"])
         assert "nohup" in shell_instructions
+        assert "bare background command" in shell_instructions
+        assert "stdin from /dev/null" in shell_instructions
+        assert "worktree-local pid file" in shell_instructions
         assert "playwright install --with-deps" in shell_instructions
         assert "port is already in use" in shell_instructions
         assert "stop the stale PID" in shell_instructions

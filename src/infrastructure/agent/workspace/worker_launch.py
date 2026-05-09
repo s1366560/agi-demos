@@ -567,9 +567,16 @@ def _build_worker_system_context(
                     "in the foreground inside bash tool calls."
                 ),
                 (
-                    "For service verification, start the process with nohup, redirect logs "
-                    "to /tmp or the project logs directory, write the PID to a file, then "
-                    "run a separate short curl/health-check command."
+                    "For service verification, never use a bare background command such as "
+                    "`npm run dev &` or `cd backend && npm run dev &`; the sandbox harness "
+                    "may keep waiting for inherited streams or kill the process on timeout."
+                ),
+                (
+                    "Start services with a supervised one-shot command: create a worktree-local "
+                    "logs directory, run `nohup sh -c '<cd service dir && start command>'`, "
+                    "redirect stdout/stderr to that log, redirect stdin from /dev/null, write "
+                    "the PID to a worktree-local pid file, and let the bash call return "
+                    "immediately. Then run a separate short curl/health-check command."
                 ),
                 (
                     "For Playwright/browser E2E, first try the existing browser cache or "
@@ -853,9 +860,13 @@ def _build_worker_brief(
     sections.append(
         "## Shell execution discipline\n"
         "Do not run dev servers, watch commands, or other long-lived processes in the "
-        "foreground. Start services with nohup plus log redirection and a PID file, then "
-        "verify with a separate short health-check command. If a port is already in use, "
-        "probe the existing service before starting another one. Do not assume `ss` exists."
+        "foreground. Do not use bare background commands such as `npm run dev &` or "
+        "`cd backend && npm run dev &`; the sandbox harness may wait on inherited streams "
+        "or kill the process on timeout. Start services with a supervised one-shot command, "
+        "for example: `mkdir -p logs && nohup sh -c 'cd backend && npm run dev' > "
+        "logs/backend.log 2>&1 < /dev/null & echo $! > logs/backend.pid`, then verify "
+        "with a separate short health-check command. If a port is already in use, probe "
+        "the existing service before starting another one. Do not assume `ss` exists."
     )
     if code_context is not None and code_context.sandbox_code_root:
         code_root = code_context.sandbox_code_root

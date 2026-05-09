@@ -74,6 +74,22 @@ _WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN = re.compile(
     r"\b(?:sed\s+-i|perl\s+-pi|python\s+-c|node\s+-e|rm\s+|mv\s+|cp\s+|git\s+add\s+)",
     re.I,
 )
+_WORKSPACE_BARE_BACKGROUND_SERVICE_PATTERN = re.compile(
+    r"(?:^|[;&|]\s*)"
+    r"(?P<segment>[^;&|]*\b(?:"
+    r"npm\s+run\s+dev|npm\s+start|"
+    r"pnpm\s+(?:run\s+)?dev|"
+    r"yarn\s+(?:run\s+)?dev|"
+    r"bun\s+(?:run\s+)?dev|"
+    r"next\s+dev|vite(?:\s|$)|uvicorn|gunicorn|tsx\b|"
+    r"node\s+[^;&|]*\b(?:server|dev)\b"
+    r")[^;&|]*?)\s&(?=\s|$|[;&|])",
+    re.I,
+)
+_WORKSPACE_BACKGROUND_SERVICE_SUPERVISOR_PATTERN = re.compile(
+    r"\b(?:nohup|setsid|daemonize|supervisord|pm2)\b",
+    re.I,
+)
 _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN = re.compile(r"(?:^|[\s;&|])(?:>|>>)\s*([^\s;&|]+)")
 _WORKSPACE_BASH_ALLOWED_REDIRECT_TARGETS = frozenset({"/dev/null"})
 _WORKSPACE_OUTPUT_ABSOLUTE_PATH_PATTERN = re.compile(r"/workspace(?:/[^\s'\"`<>{}\[\]|]+)?")
@@ -169,9 +185,11 @@ def _apply_workspace_harness_limits(
             (
                 "HARD LIMIT: at most 6000 characters per command. "
                 "Do not embed large heredocs; use short append/edit steps instead. "
-                "Do not run dev servers or watch commands in the foreground. For "
-                "long-running processes, use nohup with log redirection and write "
-                "the PID, then verify with a separate short health-check command."
+                "Do not run dev servers or watch commands in the foreground, and "
+                "do not start them with bare `cmd &`. For long-running processes, "
+                "use nohup or setsid with log redirection, stdin from /dev/null, "
+                "and a PID file, then verify with a separate short health-check "
+                "command."
             ),
         )
         properties["command"] = command_schema
@@ -508,8 +526,10 @@ def _workspace_verification_dependency_install_error(
                 "rewrite lockfiles."
             )
             break
-        if token == "yarn" and next_token in {"", "install", "add"} and not (
-            "--immutable" in tail or "--frozen-lockfile" in tail
+        if (
+            token == "yarn"
+            and next_token in {"", "install", "add"}
+            and not ("--immutable" in tail or "--frozen-lockfile" in tail)
         ):
             error = (
                 "bash.command uses mutable dependency install 'yarn install' in a protected "
@@ -552,7 +572,29 @@ def _workspace_bash_escape_error(command: str, root_override: str | None) -> str
     return None
 
 
-def _workspace_workdir_argument_error(kwargs: dict[str, Any], root_override: str | None) -> str | None:
+def _workspace_bare_background_service_error(command: str, root_override: str | None) -> str | None:
+    if not root_override:
+        return None
+    normalized_root = posixpath.normpath(root_override.rstrip("/"))
+    for match in _WORKSPACE_BARE_BACKGROUND_SERVICE_PATTERN.finditer(command):
+        segment = match.group("segment").strip()
+        if _WORKSPACE_BACKGROUND_SERVICE_SUPERVISOR_PATTERN.search(segment):
+            continue
+        return (
+            "bash.command starts a dev/watch/server process with bare background `&` "
+            f"inside attempt worktree {normalized_root}. The workspace harness wraps bash "
+            "with a timeout; bare background commands can keep the tool blocked or kill "
+            "the process. Use a supervised one-shot command such as "
+            "`mkdir -p logs && nohup sh -c 'cd backend && npm run dev' > "
+            "logs/backend.log 2>&1 < /dev/null & echo $! > logs/backend.pid`, then run "
+            "a separate short health-check command."
+        )
+    return None
+
+
+def _workspace_workdir_argument_error(
+    kwargs: dict[str, Any], root_override: str | None
+) -> str | None:
     if not root_override:
         return None
     normalized_root = posixpath.normpath(root_override.rstrip("/"))
@@ -639,6 +681,8 @@ def _workspace_bash_harness_argument_error(
             f"Retry with write/edit/append tools under {root_override}, or run a short "
             "bash command that executes an existing script in that worktree."
         )
+    if error := _workspace_bare_background_service_error(command, root_override):
+        return error
     return _workspace_bash_escape_error(command, root_override)
 
 

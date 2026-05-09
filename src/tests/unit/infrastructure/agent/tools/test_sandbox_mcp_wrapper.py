@@ -365,6 +365,8 @@ class TestSandboxMCPToolParameters:
         assert command_schema["maxLength"] == WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS
         assert "heredocs" in command_schema["description"]
         assert "nohup" in command_schema["description"]
+        assert "bare `cmd &`" in command_schema["description"]
+        assert "PID file" in command_schema["description"]
 
     def test_edit_tool_schema_encourages_small_exact_old_strings(self):
         """Edit tool schema should steer workers toward robust focused replacements."""
@@ -779,6 +781,45 @@ class TestSandboxMCPToolExecute:
         assert "uses a heredoc while an attempt worktree override is active" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_bash_rejects_bare_background_dev_server(self):
+        """Attempt-scoped workers should supervise long-running service launches."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command=('pkill -f "tsx" 2>/dev/null; sleep 2; cd backend && npm run dev &'),
+        )
+
+        assert result.is_error is True
+        assert "bare background `&`" in result.output
+        assert "nohup sh -c" in result.output
+        assert "logs/backend.pid" in result.output
+        assert adapter.call_count == 0
+
     async def test_workspace_worker_bash_rejects_main_checkout_when_worktree_override_active(
         self,
     ):
@@ -1019,7 +1060,9 @@ class TestSandboxMCPToolExecute:
             ),
             command=(
                 "cd /workspace/.memstack/worktrees/att-1 && "
-                "nohup npm run dev > logs/frontend.log 2>&1 & "
+                "mkdir -p logs && "
+                "nohup sh -c 'npm run dev' > logs/frontend.log 2>&1 < /dev/null & "
+                "echo $! > logs/frontend.pid && "
                 "curl -s http://127.0.0.1:3002/ >/dev/null"
             ),
         )
@@ -1223,7 +1266,7 @@ class TestSandboxMCPToolExecute:
                 }
             ),
             command=(
-                "grep -n \"Reports saved\" "
+                'grep -n "Reports saved" '
                 "/workspace/.memstack/worktrees/att-1/test-data-persistence.js"
             ),
         )
