@@ -74,16 +74,15 @@ _WORKSPACE_BASH_SCRIPT_MUTATION_PATTERN = re.compile(
     r"\b(?:sed\s+-i|perl\s+-pi|python\s+-c|node\s+-e|rm\s+|mv\s+|cp\s+|git\s+add\s+)",
     re.I,
 )
-_WORKSPACE_BARE_BACKGROUND_SERVICE_PATTERN = re.compile(
-    r"(?:^|[;&|]\s*)"
-    r"(?P<segment>[^;&|]*\b(?:"
+_WORKSPACE_SERVICE_START_PATTERN = re.compile(
+    r"\b(?:"
     r"npm\s+run\s+dev|npm\s+start|"
     r"pnpm\s+(?:run\s+)?dev|"
     r"yarn\s+(?:run\s+)?dev|"
     r"bun\s+(?:run\s+)?dev|"
     r"next\s+dev|vite(?:\s|$)|uvicorn|gunicorn|tsx\b|"
     r"node\s+[^;&|]*\b(?:server|dev)\b"
-    r")[^;&|]*?)\s&(?=\s|$|[;&|])",
+    r")",
     re.I,
 )
 _WORKSPACE_BACKGROUND_SERVICE_SUPERVISOR_PATTERN = re.compile(
@@ -572,12 +571,81 @@ def _workspace_bash_escape_error(command: str, root_override: str | None) -> str
     return None
 
 
+def _workspace_is_fd_redirect_ampersand(command: str, index: int) -> bool:
+    prev_char = command[index - 1] if index > 0 else ""
+    next_char = command[index + 1] if index + 1 < len(command) else ""
+    return prev_char == ">" and next_char.isdigit()
+
+
+def _workspace_top_level_separator(command: str, index: int) -> tuple[str, int] | None:
+    char = command[index]
+    next_char = command[index + 1] if index + 1 < len(command) else ""
+    prev_char = command[index - 1] if index > 0 else ""
+    result: tuple[str, int] | None = None
+    if char == "&":
+        if next_char == "&":
+            result = ("separator", 2)
+        elif prev_char == "&":
+            result = ("skip", 1)
+        elif not _workspace_is_fd_redirect_ampersand(command, index):
+            result = ("background", 1)
+    elif char == ";":
+        result = ("separator", 1)
+    elif char == "|":
+        result = ("separator", 2 if next_char == "|" else 1)
+    return result
+
+
+def _workspace_background_command_segments(command: str) -> list[str]:
+    segments: list[str] = []
+    segment_start = 0
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\":
+            escaped = True
+            index += 1
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            continue
+        separator = _workspace_top_level_separator(command, index)
+        if separator is None:
+            index += 1
+            continue
+        kind, width = separator
+        if kind == "background":
+            segment = command[segment_start:index].strip(" \t\r\n()")
+            if segment:
+                segments.append(segment)
+            segment_start = index + 1
+            index += width
+            continue
+        if kind == "separator":
+            segment_start = index + width
+        index += width
+    return segments
+
+
 def _workspace_bare_background_service_error(command: str, root_override: str | None) -> str | None:
     if not root_override:
         return None
     normalized_root = posixpath.normpath(root_override.rstrip("/"))
-    for match in _WORKSPACE_BARE_BACKGROUND_SERVICE_PATTERN.finditer(command):
-        segment = match.group("segment").strip()
+    for segment in _workspace_background_command_segments(command):
+        if not _WORKSPACE_SERVICE_START_PATTERN.search(segment):
+            continue
         if _WORKSPACE_BACKGROUND_SERVICE_SUPERVISOR_PATTERN.search(segment):
             continue
         return (
@@ -585,9 +653,10 @@ def _workspace_bare_background_service_error(command: str, root_override: str | 
             f"inside attempt worktree {normalized_root}. The workspace harness wraps bash "
             "with a timeout; bare background commands can keep the tool blocked or kill "
             "the process. Use a supervised one-shot command such as "
-            "`mkdir -p logs && nohup sh -c 'cd backend && npm run dev' > "
-            "logs/backend.log 2>&1 < /dev/null & echo $! > logs/backend.pid`, then run "
-            "a separate short health-check command."
+            "`mkdir -p logs && (setsid sh -lc 'cd backend && exec npm run dev' > "
+            "logs/backend.log 2>&1 < /dev/null & echo $! > logs/backend.pid)`, then run "
+            "a separate short health-check command. If setsid is unavailable, use the same "
+            "subshell shape with `nohup sh -lc`."
         )
     return None
 

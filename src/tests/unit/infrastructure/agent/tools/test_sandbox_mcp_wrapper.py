@@ -816,8 +816,50 @@ class TestSandboxMCPToolExecute:
 
         assert result.is_error is True
         assert "bare background `&`" in result.output
-        assert "nohup sh -c" in result.output
+        assert "setsid sh -lc" in result.output
         assert "logs/backend.pid" in result.output
+        assert adapter.call_count == 0
+
+    async def test_workspace_worker_bash_rejects_subshell_background_dev_server(self):
+        """Attempt-scoped workers must not hide bare dev servers in subshells."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command=(
+                "cd /workspace/.memstack/worktrees/att-1 && "
+                "(cd backend && npm run dev > /dev/null 2>&1 &) && "
+                "sleep 8 && curl -fsS http://localhost:3001/health"
+            ),
+        )
+
+        assert result.is_error is True
+        assert "bare background `&`" in result.output
+        assert "setsid sh -lc" in result.output
         assert adapter.call_count == 0
 
     async def test_workspace_worker_bash_rejects_main_checkout_when_worktree_override_active(
