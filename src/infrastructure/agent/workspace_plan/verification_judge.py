@@ -85,7 +85,9 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
         )
 
         turn_id = uuid.uuid4().hex
-        conversation_id = f"workspace-verifier:{workspace_id}:{node_id}:{attempt_id or 'none'}:{turn_id}"
+        conversation_id = (
+            f"workspace-verifier:{workspace_id}:{node_id}:{attempt_id or 'none'}:{turn_id}"
+        )
         diagnostics: dict[str, Any] = {
             "conversation_id": conversation_id,
             "event_count": 0,
@@ -274,6 +276,7 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "missing evidence",
                 "failed tests or failed quality checks",
                 "test_run evidence that reports a non-zero failed or failing test count",
+                "partial test totals such as 202/203 or 85/86 unless fresh current-attempt evidence includes an explicit contract_disposition, failed_test_disposition, or known_failure_disposition ref",
                 "dirty or ambiguous git worktree evidence",
                 "incomplete worker output",
                 "explicit repository guidance or AGENTS.md noncompliance",

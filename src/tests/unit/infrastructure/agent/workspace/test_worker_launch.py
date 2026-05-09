@@ -570,7 +570,10 @@ class TestBuildBrief:
         assert "preflight:<check_id>" in " ".join(harness["instructions"])
 
     def test_system_context_protects_verification_scripts_from_plan_node_phase(self) -> None:
-        task = _make_task()
+        task = _make_task(
+            title="Update report with comprehensive test summary (202/203)",
+            description="Document the known deferred responsive-layout check.",
+        )
 
         system_context = wl._build_worker_system_context(
             workspace_id="w",
@@ -584,8 +587,31 @@ class TestBuildBrief:
         assert policy["source"] == "workspace_plan_node_metadata"
         assert policy["iteration_phase"] == "test"
         assert policy["protected_script_changes"] is True
+        assert policy["allow_failed_tests"] is False
         assert policy["allow_verification_script_changes"] is False
+        assert "202/203" in policy["test_contract_hints"][0]
         assert "allow_verification_script_changes=true" in policy["rule"]
+
+    def test_system_context_honors_explicit_failed_tests_contract(self) -> None:
+        task = _make_task(
+            metadata={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-1",
+                "iteration_phase": "review",
+                "allow_failed_tests": True,
+            }
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert policy["iteration_phase"] == "review"
+        assert policy["allow_failed_tests"] is True
 
     def test_system_context_honors_explicit_verification_script_change_contract(self) -> None:
         task = _make_task()
@@ -623,6 +649,7 @@ class TestBuildBrief:
         assert "Do not edit, replace, regenerate, or loosen test" in brief
         assert "workspace_report_blocked" in brief
         assert "13/14 or 85/86 as complete" in brief
+        assert "contract_disposition:<reason>" in brief
 
     def test_brief_marks_handoff_failed_tests_as_historical_for_protected_nodes(self) -> None:
         task = _make_task()

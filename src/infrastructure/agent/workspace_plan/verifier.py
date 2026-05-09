@@ -74,6 +74,16 @@ _FAILED_TEST_EVIDENCE_PATTERNS = (
     re.compile(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
     re.compile(r"\b(?:failed|failing|failure|failures)\s*[:=]\s*[1-9]\d*\b", re.I),
 )
+_PARTIAL_TEST_SUMMARY_PATTERN = re.compile(r"\b([1-9]\d*)\s*/\s*([1-9]\d*)\b")
+_PARTIAL_TEST_SUMMARY_CUE_PATTERN = re.compile(
+    r"\b(comprehensive|e2e|pass(?:ed|ing)?|results?|summary|suite)\b",
+    re.I,
+)
+_FAILED_TEST_DISPOSITION_PREFIXES = (
+    "contract_disposition:",
+    "failed_test_disposition:",
+    "known_failure_disposition:",
+)
 _CURRENT_TEST_FAILURE_CUE_PATTERN = re.compile(
     r"\b("
     r"results?|final\s+state|test\s+results?|test_run|"
@@ -1175,10 +1185,13 @@ def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionRes
 def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
     if ctx.node.metadata.get("allow_failed_tests") is True:
         return None
+    has_contract_disposition = _has_failed_test_contract_disposition(ctx)
     values = _attempt_scoped_artifact_text_values(
         ctx,
         "evidence_refs",
+        "last_worker_report_artifacts",
         "last_worker_report_verifications",
+        "candidate_artifacts",
         "candidate_verifications",
         "execution_verifications",
     )
@@ -1193,6 +1206,8 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
     if failed_value is None:
         failed_value = _failed_test_summary_value(_artifact_text(ctx, "last_worker_report_summary"))
     if failed_value is None:
+        failed_value = _partial_test_summary_value_from_context(ctx)
+    if failed_value is None or has_contract_disposition:
         return None
     criterion = AcceptanceCriterion(
         kind=CriterionKind.CUSTOM,
@@ -1206,6 +1221,55 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         confidence=1.0,
         message=f"test evidence reports failing tests: {_bounded_text(failed_value, limit=360)}",
         evidence=(EvidenceRef(kind="verification", ref=_bounded_text(failed_value, limit=500)),),
+    )
+
+
+def _partial_test_summary_value_from_context(ctx: VerificationContext) -> str | None:
+    values = _attempt_scoped_artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "candidate_artifacts",
+        "candidate_verifications",
+        "execution_verifications",
+    )
+    values.add(_artifact_text(ctx, "last_worker_report_summary"))
+    values.add(ctx.node.title)
+    values.add(ctx.node.description)
+    for value in sorted(item for item in values if item):
+        partial = _partial_test_summary_value(value)
+        if partial:
+            return partial
+    return None
+
+
+def _partial_test_summary_value(text: str) -> str | None:
+    if not text:
+        return None
+    for line in text.splitlines():
+        value = line.strip()
+        if not value or not _PARTIAL_TEST_SUMMARY_CUE_PATTERN.search(value):
+            continue
+        for match in _PARTIAL_TEST_SUMMARY_PATTERN.finditer(value):
+            passed = int(match.group(1))
+            total = int(match.group(2))
+            if total > 0 and passed < total:
+                return value
+    return None
+
+
+def _has_failed_test_contract_disposition(ctx: VerificationContext) -> bool:
+    values = _attempt_scoped_artifact_text_values(
+        ctx,
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "candidate_artifacts",
+        "candidate_verifications",
+        "execution_verifications",
+    )
+    return any(
+        value.strip().casefold().startswith(_FAILED_TEST_DISPOSITION_PREFIXES) for value in values
     )
 
 
@@ -1227,7 +1291,11 @@ def _summary_line_reports_current_failed_tests(value: str) -> bool:
     if not _CURRENT_TEST_FAILURE_CUE_PATTERN.search(value):
         return False
     failed_match = next(
-        (pattern.search(value) for pattern in _FAILED_TEST_EVIDENCE_PATTERNS if pattern.search(value)),
+        (
+            pattern.search(value)
+            for pattern in _FAILED_TEST_EVIDENCE_PATTERNS
+            if pattern.search(value)
+        ),
         None,
     )
     if failed_match is None:

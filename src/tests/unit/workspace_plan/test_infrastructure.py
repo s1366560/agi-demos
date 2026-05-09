@@ -347,7 +347,9 @@ class TestLLMGoalPlanner:
 
         reset = plan.nodes[leaf.node_id]
         repair_nodes = [
-            node for node in plan.nodes.values() if node.metadata.get("repair_for_node_id") == leaf.id
+            node
+            for node in plan.nodes.values()
+            if node.metadata.get("repair_for_node_id") == leaf.id
         ]
         assert len(repair_nodes) == 1
         repair = repair_nodes[0]
@@ -703,9 +705,7 @@ class TestVerifier:
         assert "reported commit_refs" in isolation_policy
         assert "active attempt worktree branch" in isolation_policy
         assert "environment-configurable" in isolation_policy
-        assert payload["policy"]["next_action_kinds"]["create_repair_node"].startswith(
-            "Use when"
-        )
+        assert payload["policy"]["next_action_kinds"]["create_repair_node"].startswith("Use when")
         assert "same node can fix" in payload["policy"]["next_action_kinds"]["retry_same_node"]
         repair_policy = " ".join(payload["policy"]["repair_brief_contract"])
         assert "compact repair_brief object" in repair_policy
@@ -1489,6 +1489,89 @@ class TestVerifier:
             "test evidence reports failing tests" in item
             for item in judge.requests[0].guard_failures
         )
+
+    async def test_verification_judge_requires_disposition_for_partial_test_contract(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="document looks acceptable",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Update PRE-PROD report with comprehensive test summary (202/203)",
+            description="Document iteration 7 E2E 23/23 and comprehensive test summary 202/203.",
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": "Updated release report and committed it.",
+                    "candidate_artifacts": [
+                        "docs/PRE-PROD-RELEASE-REPORT.md",
+                        "commit_ref:9e5a5d2f",
+                    ],
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "commit_ref:9e5a5d2f",
+                    ],
+                },
+            )
+        )
+
+        assert not rep.passed
+        assert "failed_test_evidence" in rep.summary()
+        assert len(judge.requests) == 1
+        assert any("202/203" in item for item in judge.requests[0].guard_failures)
+
+    async def test_partial_test_contract_accepts_structured_disposition_ref(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="explicit disposition is in current evidence",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Update PRE-PROD report with comprehensive test summary (202/203)",
+            description="Document iteration 7 E2E 23/23 and comprehensive test summary 202/203.",
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": "Updated release report and committed it.",
+                    "candidate_artifacts": [
+                        "docs/PRE-PROD-RELEASE-REPORT.md",
+                        "commit_ref:9e5a5d2f",
+                    ],
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "contract_disposition:202/203 accepted by node contract; one known responsive-layout check is deferred",
+                        "commit_ref:9e5a5d2f",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert "failed_test_evidence" not in rep.summary()
+        assert len(judge.requests) == 1
+        assert not judge.requests[0].guard_failures
 
     async def test_failed_test_guard_allows_historical_failure_explanation_when_current_run_is_green(
         self,

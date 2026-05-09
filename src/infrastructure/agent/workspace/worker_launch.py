@@ -307,6 +307,9 @@ def _metadata_text(value: object) -> str | None:
 def _workspace_verification_integrity_context(
     task_metadata: Mapping[str, Any] | None,
     plan_node_metadata: Mapping[str, Any] | None = None,
+    *,
+    task_title: str | None = None,
+    task_description: str | None = None,
 ) -> dict[str, Any] | None:
     task_meta = task_metadata if isinstance(task_metadata, Mapping) else {}
     node_meta = plan_node_metadata if isinstance(plan_node_metadata, Mapping) else {}
@@ -319,16 +322,29 @@ def _workspace_verification_integrity_context(
         task_meta.get("allow_verification_script_changes") is True
         or node_meta.get("allow_verification_script_changes") is True
     )
+    allow_failed_tests = (
+        task_meta.get("allow_failed_tests") is True or node_meta.get("allow_failed_tests") is True
+    )
     source = (
         "workspace_task_metadata"
         if _metadata_text(task_meta.get("iteration_phase"))
         else "workspace_plan_node_metadata"
     )
+    contract_hints = [
+        text[:1200]
+        for text in (
+            _metadata_text(task_title),
+            _metadata_text(task_description),
+        )
+        if text
+    ]
     return {
         "source": source,
         "iteration_phase": phase.lower(),
+        "allow_failed_tests": allow_failed_tests,
         "allow_verification_script_changes": allow_script_changes,
         "protected_script_changes": not allow_script_changes,
+        "test_contract_hints": contract_hints,
         "rule": (
             "For test/review workspace nodes, sandbox write tools must not modify "
             "test, spec, E2E, integration, audit, or benchmark scripts unless the "
@@ -362,7 +378,10 @@ def _render_visible_verification_integrity_gate(policy: Mapping[str, Any] | None
         "failing command and the exact contract needed. When retrying after verifier "
         "feedback about script mutation or a dirty worktree, first restore or isolate "
         "those files, rerun from clean git status, and never summarize partial results "
-        "such as 13/14 or 85/86 as complete."
+        "such as 13/14 or 85/86 as complete. If the node contract itself explicitly "
+        "requires a partial result such as 202/203, include a structured "
+        "contract_disposition:<reason> verification ref in workspace_report_complete so "
+        "the verifier can judge that exception from fresh current-attempt evidence."
     )
 
 
@@ -610,6 +629,8 @@ def _build_worker_system_context(
     verification_integrity = _workspace_verification_integrity_context(
         task.metadata,
         plan_node_metadata,
+        task_title=task.title,
+        task_description=task.description,
     )
     if verification_integrity is not None:
         context["workspace_verification_integrity"] = verification_integrity
@@ -891,6 +912,8 @@ def _build_worker_brief(
     verification_integrity = _workspace_verification_integrity_context(
         task.metadata,
         plan_node_metadata,
+        task_title=task.title,
+        task_description=task.description,
     )
     if extra_instructions:
         rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
@@ -1709,6 +1732,8 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 verification_integrity = _workspace_verification_integrity_context(
                     task.metadata,
                     plan_node_metadata,
+                    task_title=task.title,
+                    task_description=task.description,
                 )
                 if verification_integrity is not None:
                     metadata_patch["workspace_verification_integrity"] = verification_integrity

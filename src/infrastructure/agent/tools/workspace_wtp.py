@@ -65,6 +65,11 @@ _FAILED_TEST_COUNT_RE = re.compile(
 )
 _NONZERO_EXIT_RE = re.compile(r"\bexit\s+code:\s*([1-9]\d*)\b", re.IGNORECASE)
 _PARTIAL_TEST_COUNT_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\b")
+_FAILED_TEST_DISPOSITION_PREFIXES = (
+    "contract_disposition:",
+    "failed_test_disposition:",
+    "known_failure_disposition:",
+)
 _TEST_EVIDENCE_HINTS = (
     "test",
     "suite",
@@ -75,6 +80,14 @@ _TEST_EVIDENCE_HINTS = (
     "failing",
     "failure",
 )
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    if isinstance(value, list | tuple | set):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
 
 
 def _supervisor_only_terminal_path() -> bool:
@@ -135,7 +148,9 @@ def _failed_completion_evidence(texts: list[str]) -> list[str]:
             continue
         lower = value.lower()
         has_test_context = any(hint in lower for hint in _TEST_EVIDENCE_HINTS)
-        if _FAILED_TEST_COUNT_RE.search(value) or (has_test_context and _NONZERO_EXIT_RE.search(value)):
+        if _FAILED_TEST_COUNT_RE.search(value) or (
+            has_test_context and _NONZERO_EXIT_RE.search(value)
+        ):
             failed.append(value)
             continue
         if has_test_context:
@@ -146,6 +161,12 @@ def _failed_completion_evidence(texts: list[str]) -> list[str]:
                     failed.append(value)
                     break
     return list(dict.fromkeys(failed))
+
+
+def _has_failed_test_contract_disposition(texts: list[str]) -> bool:
+    return any(
+        value.strip().casefold().startswith(_FAILED_TEST_DISPOSITION_PREFIXES) for value in texts
+    )
 
 
 def _normalize_completion_report_fields(
@@ -187,21 +208,31 @@ def _completion_denial_for_failed_test_evidence(
     summary: str,
     fields: dict[str, Any],
 ) -> ToolResult | None:
-    if not _protected_verification_policy(ctx):
+    policy = _protected_verification_policy(ctx)
+    if not policy:
         return None
-    failed_evidence = _failed_completion_evidence(
-        [
-            summary,
-            fields["git_diff_summary"],
-            *fields["artifacts"],
-            *fields["verifications"],
-        ]
-    )
+    report_texts = [
+        summary,
+        fields["git_diff_summary"],
+        *fields["artifacts"],
+        *fields["verifications"],
+    ]
+    disposition_texts = [*fields["artifacts"], *fields["verifications"]]
+    has_contract_disposition = _has_failed_test_contract_disposition(disposition_texts)
+    failed_evidence = _failed_completion_evidence(report_texts)
+    if has_contract_disposition:
+        failed_evidence = []
+    if not failed_evidence:
+        contract_hints = _string_list(policy.get("test_contract_hints"))
+        if contract_hints and not has_contract_disposition:
+            failed_evidence = _failed_completion_evidence(contract_hints)
     if not failed_evidence:
         return None
     return _deny(
         "completion denied: protected test/review node includes failed, "
-        "failing, non-zero, or partial test evidence. Rerun to 0 failed or "
+        "failing, non-zero, or partial test evidence without an explicit "
+        "contract_disposition/failed_test_disposition/known_failure_disposition "
+        "verification ref. Rerun to 0 failed, provide the explicit disposition ref, or "
         "call workspace_report_blocked with the failing command and exact evidence.",
         failed_evidence=failed_evidence[:5],
     )

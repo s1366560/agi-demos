@@ -328,9 +328,7 @@ class TestComplete:
         assert payload["notification_status"] == "failed"
         assert payload["applied_report"] == {"applied": True, "task_status": "in_review"}
 
-    async def test_system_actor_completion_applies_report_without_a2a(
-        self, ctx, mock_orchestrator
-    ):
+    async def test_system_actor_completion_applies_report_without_a2a(self, ctx, mock_orchestrator):
         with (
             patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
             patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
@@ -384,6 +382,73 @@ class TestComplete:
         ]
         mock_orchestrator.send_message.assert_not_awaited()
         mock_apply.assert_not_awaited()
+
+    async def test_protected_test_node_rejects_hidden_partial_contract_without_disposition(
+        self, ctx, mock_orchestrator
+    ):
+        ctx.runtime_context["workspace_verification_integrity"] = {
+            "iteration_phase": "review",
+            "protected_script_changes": True,
+            "test_contract_hints": [
+                "Update PRE-PROD report with comprehensive test summary (202/203)",
+            ],
+        }
+
+        with patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply:
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id="leader-agent-id",
+                summary="Updated PRE-PROD report and committed it.",
+                verifications=[
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "commit_ref:9e5a5d2f",
+                ],
+            )
+
+        assert result.is_error is True
+        payload = json.loads(result.output)
+        assert "completion denied" in payload["error"]
+        assert payload["failed_evidence"] == [
+            "Update PRE-PROD report with comprehensive test summary (202/203)",
+        ]
+        mock_orchestrator.send_message.assert_not_awaited()
+        mock_apply.assert_not_awaited()
+
+    async def test_protected_test_node_allows_partial_contract_with_disposition_ref(
+        self, ctx, mock_orchestrator
+    ):
+        ctx.runtime_context["workspace_verification_integrity"] = {
+            "iteration_phase": "review",
+            "protected_script_changes": True,
+            "test_contract_hints": [
+                "Update PRE-PROD report with comprehensive test summary (202/203)",
+            ],
+        }
+
+        with (
+            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
+        ):
+            mock_apply.return_value = {"applied": True, "task_status": "in_review"}
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="Updated PRE-PROD report and committed it.",
+                verifications=[
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "contract_disposition:202/203 accepted by node contract; one check deferred",
+                    "commit_ref:9e5a5d2f",
+                ],
+            )
+
+        assert result.is_error is False
+        mock_apply.assert_awaited_once()
 
     async def test_protected_test_node_allows_zero_failed_completion_evidence(
         self, ctx, mock_orchestrator
