@@ -116,6 +116,52 @@ _WORKSPACE_OUTPUT_ARTIFACT_COMMAND_TOKENS = frozenset(
         "yarn",
     }
 )
+_WORKSPACE_SCRIPT_EXECUTOR_TOKENS = frozenset(
+    {
+        "bash",
+        "node",
+        "perl",
+        "python",
+        "python3",
+        "ruby",
+        "sh",
+        "tsx",
+    }
+)
+_WORKSPACE_SCRIPT_INLINE_FLAGS = frozenset(
+    {
+        "-c",
+        "-e",
+        "-m",
+        "-p",
+        "--eval",
+        "--execute",
+        "--print",
+    }
+)
+_WORKSPACE_SCRIPT_FILE_SUFFIXES = (
+    ".bash",
+    ".cjs",
+    ".js",
+    ".mjs",
+    ".pl",
+    ".py",
+    ".rb",
+    ".sh",
+    ".ts",
+    ".tsx",
+)
+_WORKSPACE_SCRIPT_OUTSIDE_WRITE_HINT_PATTERN = re.compile(
+    r"\b(?:"
+    r"write_text|write_bytes|"
+    r"open\s*\([^)]*,\s*['\"][wax]|"
+    r"shutil\.(?:copy|copyfile|move)|"
+    r"fs\.(?:writeFile|writeFileSync|createWriteStream|copyFile|rename|renameSync)|"
+    r"os\.(?:makedirs|mkdir|rename|replace)|"
+    r"subprocess\.[^(]+\([^)]*\b(?:cat|cp|mv|tee)\b"
+    r")",
+    re.I | re.S,
+)
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -351,6 +397,12 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
+def _workspace_absolute_paths_in_text(text: str) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys((*_workspace_absolute_paths(text), *_workspace_output_absolute_paths(text)))
+    )
+
+
 def _workspace_absolute_redirect_targets(command: str) -> tuple[str, ...]:
     paths: list[str] = []
     for match in _WORKSPACE_BASH_REDIRECT_TARGET_PATTERN.finditer(command):
@@ -474,6 +526,83 @@ def _command_tokens(command: str) -> tuple[str, ...]:
         return tuple(shlex.split(command, posix=True))
     except ValueError:
         return tuple(command.split())
+
+
+def _looks_like_workspace_script_path(token: str) -> bool:
+    cleaned = token.strip("'\"")
+    if not cleaned or cleaned in {"&&", ";", "||", "|"}:
+        return False
+    return posixpath.basename(cleaned).lower().endswith(_WORKSPACE_SCRIPT_FILE_SUFFIXES)
+
+
+def _workspace_script_path_candidates(command: str, root_override: str) -> tuple[str, ...]:
+    tokens = _command_tokens(command)
+    normalized_root = posixpath.normpath(root_override.rstrip("/"))
+    candidates: list[str] = []
+    for index, token in enumerate(tokens):
+        basename = posixpath.basename(token).lower()
+        if basename not in _WORKSPACE_SCRIPT_EXECUTOR_TOKENS:
+            continue
+        for candidate in tokens[index + 1 :]:
+            if candidate in {"&&", ";", "||", "|"}:
+                break
+            if candidate in _WORKSPACE_SCRIPT_INLINE_FLAGS:
+                break
+            if candidate.startswith("-"):
+                continue
+            if not _looks_like_workspace_script_path(candidate):
+                break
+            path = candidate.strip("'\"")
+            scoped_path = (
+                posixpath.normpath(path)
+                if path.startswith("/")
+                else _path_scoped_to_code_root(path, normalized_root)
+            )
+            if _path_is_inside_code_root(scoped_path, normalized_root):
+                candidates.append(scoped_path)
+            break
+    return tuple(dict.fromkeys(candidates))
+
+
+async def _workspace_bash_script_content_escape_error(
+    *,
+    sandbox_id: str,
+    sandbox_port: SandboxPort,
+    command: str,
+    root_override: str | None,
+) -> str | None:
+    if not root_override:
+        return None
+    normalized_root = posixpath.normpath(root_override.rstrip("/"))
+    for script_path in _workspace_script_path_candidates(command, normalized_root):
+        try:
+            result = await sandbox_port.call_tool(
+                sandbox_id,
+                "read",
+                {"file_path": script_path, "_workspace_dir": normalized_root},
+            )
+        except Exception as exc:  # pragma: no cover - defensive adapter boundary
+            return (
+                f"bash.command executes script {script_path}, but the workspace harness "
+                f"could not inspect it before execution: {exc}. Retry with commands and "
+                f"scripts whose file reads are available under {normalized_root}."
+            )
+        if result.get("is_error") or result.get("isError"):
+            continue
+        content = _extract_ok_output(result)
+        if not _WORKSPACE_SCRIPT_OUTSIDE_WRITE_HINT_PATTERN.search(content):
+            continue
+        for path in _workspace_absolute_paths_in_text(content):
+            if _path_is_inside_code_root(path, normalized_root):
+                continue
+            return (
+                f"bash.command executes script {script_path}, whose content references "
+                f"{path}, outside the active attempt worktree {normalized_root}. Keep "
+                "all file reads, writes, copies, reports, and temporary artifacts inside "
+                "the attempt worktree; do not use helper scripts to reach the main "
+                "checkout."
+            )
+    return None
 
 
 def _command_tail_until_separator(tokens: tuple[str, ...], start: int) -> tuple[str, ...]:
@@ -888,6 +1017,35 @@ def _workspace_harness_argument_error(
     return None
 
 
+async def _workspace_execution_preflight_error(
+    *,
+    sandbox_id: str,
+    sandbox_port: SandboxPort,
+    tool_name: str,
+    kwargs: dict[str, Any],
+    root_override: str | None,
+) -> str | None:
+    if error := _workspace_harness_argument_error(
+        tool_name,
+        kwargs,
+        root_override=root_override,
+    ):
+        return error
+    if tool_name != "bash":
+        return None
+    if error := _workspace_workdir_argument_error(kwargs, root_override):
+        return error
+    command = kwargs.get("command")
+    if not isinstance(command, str):
+        return None
+    return await _workspace_bash_script_content_escape_error(
+        sandbox_id=sandbox_id,
+        sandbox_port=sandbox_port,
+        command=command,
+        root_override=root_override,
+    )
+
+
 def _extract_error_msg(result: dict[str, Any]) -> str:
     """Extract error message from an MCP error result.
 
@@ -1124,18 +1282,14 @@ def create_sandbox_mcp_tool(
                 verification_policy,
             ):
                 return ToolResult(output=argument_error, is_error=True)
-            if argument_error := _workspace_harness_argument_error(
-                tool_name,
-                normalized_kwargs,
+            if argument_error := await _workspace_execution_preflight_error(
+                sandbox_id=sandbox_id,
+                sandbox_port=sandbox_port,
+                tool_name=tool_name,
+                kwargs=normalized_kwargs,
                 root_override=root_override,
             ):
                 return ToolResult(output=argument_error, is_error=True)
-            if tool_name == "bash":
-                if argument_error := _workspace_workdir_argument_error(
-                    normalized_kwargs,
-                    root_override,
-                ):
-                    raise RuntimeError(argument_error)
             output, raw_result = await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,

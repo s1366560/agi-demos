@@ -94,6 +94,30 @@ class ErrorOutputSandboxAdapter(MockSandboxAdapter):
         }
 
 
+class ScriptInspectSandboxAdapter(MockSandboxAdapter):
+    """Mock sandbox adapter that returns script contents for pre-exec reads."""
+
+    def __init__(self, script_content: str) -> None:
+        super().__init__()
+        self.script_content = script_content
+        self.calls: list[tuple[str, dict]] = []
+
+    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
+        self.call_count += 1
+        self.last_kwargs = kwargs
+        self.last_call_options = kw
+        self.calls.append((tool_name, kwargs))
+        if tool_name == "read":
+            return {
+                "content": [{"text": self.script_content}],
+                "is_error": False,
+            }
+        return {
+            "content": [{"text": f"Mock result from {tool_name}"}],
+            "is_error": False,
+        }
+
+
 class TestSandboxMCPToolPermission:
     """Test create_sandbox_mcp_tool permission attribute."""
 
@@ -905,6 +929,95 @@ class TestSandboxMCPToolExecute:
         assert "environment blocker" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_bash_rejects_script_referencing_main_checkout(
+        self,
+    ):
+        """Attempt-scoped workers must not hide main-checkout writes in helper scripts."""
+        adapter = ScriptInspectSandboxAdapter(
+            'from pathlib import Path\n'
+            'Path("/workspace/my-evo/docs/GOAL-COMPLETION.md").write_text("done")\n'
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="python3 _copy_to_main.py",
+        )
+
+        assert result.is_error is True
+        assert "executes script /workspace/.memstack/worktrees/att-1/_copy_to_main.py" in (
+            result.output
+        )
+        assert "references /workspace/my-evo/docs/GOAL-COMPLETION.md" in result.output
+        assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
+            result.output
+        )
+        assert [call[0] for call in adapter.calls] == ["read"]
+
+    async def test_workspace_worker_bash_allows_script_referencing_attempt_worktree(
+        self,
+    ):
+        """Script preflight permits paths scoped to the active attempt worktree."""
+        adapter = ScriptInspectSandboxAdapter(
+            'from pathlib import Path\n'
+            'Path("/workspace/.memstack/worktrees/att-1/docs/GOAL-COMPLETION.md").write_text("done")\n'
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="python3 _copy_to_worktree.py",
+        )
+
+        assert result.is_error is False
+        assert [call[0] for call in adapter.calls] == ["read", "bash"]
+
     async def test_workspace_worker_bash_rejects_workspace_root_scan_with_worktree_override(
         self,
     ):
@@ -1152,7 +1265,7 @@ class TestSandboxMCPToolExecute:
         assert "outside the active attempt worktree /workspace/.memstack/worktrees/att-1" in (
             result.output
         )
-        assert adapter.call_count == 1
+        assert adapter.call_count == 2
 
     async def test_workspace_worker_bash_rejects_main_checkout_report_output_on_failed_command(
         self,
@@ -1196,7 +1309,7 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is True
         assert "verification artifact path /workspace/my-evo/test-results" in result.output
         assert "remaining failing command evidence" in result.output
-        assert adapter.call_count == 1
+        assert adapter.call_count == 2
 
     async def test_workspace_worker_bash_allows_worktree_report_output(self):
         """Test artifacts under the active worktree remain valid evidence."""
@@ -1234,7 +1347,7 @@ class TestSandboxMCPToolExecute:
         )
 
         assert result.is_error is False
-        assert adapter.call_count == 1
+        assert adapter.call_count == 2
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
 
     async def test_workspace_worker_bash_allows_reading_source_path_constants(self):
