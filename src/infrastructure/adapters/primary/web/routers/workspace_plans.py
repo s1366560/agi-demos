@@ -1513,13 +1513,16 @@ def _to_iteration_summary(
     event_items: list[WorkspacePlanEventModel],
 ) -> WorkspacePlanIterationSummaryResponse:
     runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
-    current_iteration = _current_iteration(runnable_nodes)
+    loop = _goal_iteration_loop_metadata(plan)
+    current_iteration = _metadata_int(
+        loop.get("current_iteration"),
+        fallback=_current_iteration(runnable_nodes),
+    )
     iteration_nodes = [
         node for node in runnable_nodes if _node_iteration_index(node) == current_iteration
     ]
     phases = [_phase_response(phase_id, iteration_nodes) for phase_id in _ITERATION_PHASE_ORDER]
     active_phase = _active_iteration_phase(iteration_nodes)
-    loop = _goal_iteration_loop_metadata(plan)
     loop_status = _iteration_loop_status(plan, loop)
     review_summary = _metadata_string(loop.get("last_review_summary"))
     stop_reason = _metadata_string(loop.get("stop_reason"))

@@ -261,6 +261,58 @@ def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> 
     assert task_response.metadata["pipeline_run_id"] == "pipeline-run-1"
 
 
+def test_iteration_summary_prefers_loop_current_iteration_over_old_active_nodes() -> None:
+    plan = _make_plan("workspace-plan-api")
+    goal = plan.nodes[PlanNodeId("goal-api")]
+    old_task = plan.nodes[PlanNodeId("task-api")]
+    next_task_id = PlanNodeId("task-iteration-2")
+    plan.replace_node(
+        replace(
+            goal,
+            metadata={
+                **goal.metadata,
+                "iteration_loop": {
+                    **goal.metadata["iteration_loop"],
+                    "current_iteration": 2,
+                    "completed_iterations": [1],
+                    "current_sprint_goal": "Second sprint evidence pass.",
+                },
+            },
+        )
+    )
+    plan.replace_node(
+        replace(
+            old_task,
+            intent=TaskIntent.IN_PROGRESS,
+            metadata={**old_task.metadata, "iteration_index": 1},
+        )
+    )
+    plan.nodes[next_task_id] = PlanNode(
+        id=next_task_id.value,
+        plan_id=plan.id,
+        parent_id=PlanNodeId("goal-api"),
+        kind=PlanNodeKind.TASK,
+        title="Collect second sprint evidence",
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.DISPATCHED,
+        metadata={"iteration_index": 2, "iteration_phase": "test"},
+    )
+
+    summary = workspace_plans._to_iteration_summary(
+        plan=plan,
+        root_goal=None,
+        blackboard_entries=[],
+        outbox_items=[],
+        event_items=[],
+    )
+
+    assert summary.current_iteration == 2
+    assert summary.completed_iterations == [1]
+    assert summary.current_sprint_goal == "Second sprint evidence pass."
+    assert summary.active_phase == "test"
+    assert summary.task_count == 1
+
+
 @pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     db_session: AsyncSession,
