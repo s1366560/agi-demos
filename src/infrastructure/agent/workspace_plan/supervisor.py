@@ -281,6 +281,19 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                             TaskIntent.DONE,
                         )
                     )
+                    repair_turn = accepted_node.metadata.get("current_repair_turn")
+                    if isinstance(repair_turn, Mapping):
+                        await self._emit_event(
+                            errors,
+                            workspace_id,
+                            accepted_node,
+                            "worker_repair_turn_completed",
+                            {
+                                "attempt_id": report.attempt_id,
+                                "repair_turn": dict(repair_turn),
+                                "summary": report.summary(),
+                            },
+                        )
                     nodes_done += 1
                 elif _should_request_pipeline_from_report(node, report):
                     pipeline_node = _node_with_pipeline_request(node, report)
@@ -1398,8 +1411,10 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_judge_failed_criteria",
         "last_verification_judge_next_action_kind",
         "last_verification_judge_rationale",
+        "last_verification_judge_repair_brief",
         "last_verification_judge_required_next_action",
         "last_verification_judge_verdict",
+        "current_repair_turn",
         "verification_evidence_refs",
         "verified_commit_ref",
         "verified_git_diff_summary",
@@ -1430,6 +1445,12 @@ def _node_dispatched_with_fresh_attempt(
     attempt_id: str,
 ) -> PlanNode:
     metadata = _clear_stale_attempt_metadata(node.metadata)
+    repair_turn = node.metadata.get("current_repair_turn")
+    if isinstance(repair_turn, Mapping) and repair_turn.get("attempt_id") == attempt_id:
+        metadata["current_repair_turn"] = dict(repair_turn)
+        repair_count = node.metadata.get("same_conversation_repair_turn_count")
+        if isinstance(repair_count, int) and repair_count > 0:
+            metadata["same_conversation_repair_turn_count"] = repair_count
     return replace(
         node,
         intent=TaskIntent.IN_PROGRESS,
@@ -1739,6 +1760,9 @@ def _judge_result_metadata(report: VerificationReport) -> dict[str, Any]:
         required_next_action = result.criterion.spec.get("required_next_action")
         if isinstance(required_next_action, str) and required_next_action.strip():
             metadata["last_verification_judge_required_next_action"] = required_next_action
+        repair_brief = result.criterion.spec.get("repair_brief")
+        if isinstance(repair_brief, Mapping) and repair_brief:
+            metadata["last_verification_judge_repair_brief"] = dict(repair_brief)
         return metadata
     return {}
 

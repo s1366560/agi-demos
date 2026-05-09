@@ -1005,6 +1005,14 @@ def _decode_redis_text(value: object) -> str | None:
     return str(value)
 
 
+def _append_worker_instruction_note(existing: str | None, note: str | None) -> str | None:
+    if not note:
+        return existing
+    if not existing:
+        return note.strip()
+    return f"{existing.rstrip()}\n\n{note.strip()}"
+
+
 async def _agent_finished_message_id(
     redis_client: object | None,
     conversation_id: str | None,
@@ -1045,6 +1053,31 @@ async def _agent_running_exists(
             exc_info=True,
         )
         return False
+
+
+async def _clear_reused_worker_session_markers(
+    redis_client: object | None,
+    conversation_id: str | None,
+) -> None:
+    """Remove per-run Redis sentinels before appending a new repair turn."""
+
+    if redis_client is None or not conversation_id:
+        return
+    try:
+        redis = cast(Any, redis_client)
+        await redis.delete(
+            f"agent:finished:{conversation_id}",
+            f"workspace:worker_launch:cooldown:{conversation_id}",
+        )
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.reuse_marker_clear_failed",
+            extra={
+                "event": "workspace_worker_launch.reuse_marker_clear_failed",
+                "conversation_id": conversation_id,
+            },
+            exc_info=True,
+        )
 
 
 def _stream_message_id_from_event(event: Mapping[str, Any]) -> str | None:
@@ -1210,6 +1243,8 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     leader_agent_id: str | None = None,
     attempt_id: str | None = None,
     extra_instructions: str | None = None,
+    reuse_conversation_id: str | None = None,
+    repair_brief_prompt: str | None = None,
     preferred_language: str | None = None,
 ) -> dict[str, Any]:
     """Open or reuse a worker conversation and stream the task brief.
@@ -1509,12 +1544,37 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             )
             resolved_attempt_id = attempt.id
 
-            resolved_conversation_id = _conversation_id_for_worker(
+            resolved_conversation_id = reuse_conversation_id or _conversation_id_for_worker(
                 workspace_id=workspace_id,
                 worker_agent_id=worker_agent_id,
                 task_id=task.id,
                 attempt_id=attempt.id,
             )
+            if reuse_conversation_id:
+                if await _agent_running_exists(redis_client, resolved_conversation_id):
+                    await _report_pre_stream_launch_failure(
+                        workspace_id=workspace_id,
+                        root_goal_task_id=root_goal_task_id,
+                        task_id=task.id,
+                        attempt_id=resolved_attempt_id,
+                        conversation_id=resolved_conversation_id,
+                        actor_user_id=actor_user_id,
+                        worker_agent_id=worker_agent_id,
+                        leader_agent_id=leader_agent_id,
+                        launch_state="repair_conversation_running",
+                        summary=(
+                            "worker_launch.repair_conversation_running: reused worker "
+                            "conversation still has an active agent:running marker"
+                        ),
+                        apply_fn=apply_workspace_worker_report,
+                    )
+                    return {
+                        "launched": False,
+                        "conversation_id": resolved_conversation_id,
+                        "attempt_id": resolved_attempt_id,
+                        "reason": "repair_conversation_running",
+                    }
+                await _clear_reused_worker_session_markers(redis_client, resolved_conversation_id)
 
             if await _is_on_cooldown(resolved_conversation_id):
                 logger.info(
@@ -1716,7 +1776,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         task=task,
         attempt_id=resolved_attempt_id,
         leader_agent_id=leader_agent_id,
-        extra_instructions=extra_instructions,
+        extra_instructions=_append_worker_instruction_note(
+            repair_brief_prompt,
+            extra_instructions,
+        ),
         code_context=code_context,
         plan_node_metadata=plan_node_metadata,
     )
@@ -2245,6 +2308,8 @@ def schedule_worker_session(
     leader_agent_id: str | None = None,
     attempt_id: str | None = None,
     extra_instructions: str | None = None,
+    reuse_conversation_id: str | None = None,
+    repair_brief_prompt: str | None = None,
     preferred_language: str | None = None,
 ) -> None:
     """Fire-and-forget scheduler for ``launch_worker_session``.
@@ -2267,6 +2332,8 @@ def schedule_worker_session(
                     leader_agent_id=leader_agent_id,
                     attempt_id=attempt_id,
                     extra_instructions=extra_instructions,
+                    reuse_conversation_id=reuse_conversation_id,
+                    repair_brief_prompt=repair_brief_prompt,
                     preferred_language=preferred_language,
                 )
             )
@@ -2291,6 +2358,8 @@ def schedule_worker_session(
             leader_agent_id=leader_agent_id,
             attempt_id=attempt_id,
             extra_instructions=extra_instructions,
+            reuse_conversation_id=reuse_conversation_id,
+            repair_brief_prompt=repair_brief_prompt,
             preferred_language=preferred_language,
         )
     )

@@ -77,6 +77,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repo
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_pipeline import (
     SqlWorkspacePipelineRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
+    SqlWorkspacePlanEventRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
@@ -154,11 +157,15 @@ logger = logging.getLogger(__name__)
 _WORKER_LAUNCH_MAX_ACTIVE_ENV = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE"
 _WORKER_LAUNCH_DEFER_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS"
 _PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES"
+_REPAIR_TURN_REUSE_ENABLED_ENV = "WORKSPACE_REPAIR_TURN_REUSE_ENABLED"
+_REPAIR_TURN_REUSE_MAX_ENV = "WORKSPACE_REPAIR_TURN_REUSE_MAX"
 _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
 _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 _DEFAULT_WORKER_LAUNCH_MAX_ACTIVE = 4
 _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS = 20
 _DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES = 3
+_DEFAULT_REPAIR_TURN_REUSE_MAX = 2
+_REPAIR_TURN_METADATA_KEY = "current_repair_turn"
 _TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
     {
         "accepted",
@@ -992,14 +999,22 @@ def _make_sql_dispatcher(
             SqlWorkspaceTaskSessionAttemptRepository(session)
         )
         attempt = await attempt_service.get_active_attempt(existing_task.id)
+        repair_context: dict[str, Any] | None = None
         should_schedule = False
         if attempt is None:
+            repair_context = await _same_conversation_repair_context(
+                session=session,
+                task=existing_task,
+                node=node,
+                leader_agent_id=leader_agent_id,
+            )
             attempt = await attempt_service.create_attempt(
                 workspace_task_id=existing_task.id,
                 root_goal_task_id=root_task_id,
                 workspace_id=workspace_id,
                 worker_agent_id=existing_task.assignee_agent_id,
                 leader_agent_id=_persisted_attempt_leader_agent_id(leader_agent_id),
+                conversation_id=_mapping_string(repair_context or {}, "conversation_id"),
             )
             attempt = await attempt_service.mark_running(attempt.id)
             should_schedule = True
@@ -1007,7 +1022,25 @@ def _make_sql_dispatcher(
             attempt = await attempt_service.mark_running(attempt.id)
             should_schedule = True
 
-        _apply_attempt_worktree_checkpoint(node, attempt.id)
+        if repair_context is not None:
+            repair_context["attempt_id"] = attempt.id
+            repair_context["repair_turn_index"] = _repair_turn_index(repair_context)
+            node.metadata = {
+                **dict(node.metadata or {}),
+                _REPAIR_TURN_METADATA_KEY: repair_context,
+                "same_conversation_repair_turn_count": repair_context["repair_turn_index"],
+            }
+            await _append_plan_audit_event(
+                session=session,
+                plan_id=plan_id,
+                workspace_id=workspace_id,
+                node_id=node.id,
+                attempt_id=attempt.id,
+                event_type="worker_repair_turn_dispatched",
+                payload=repair_context,
+            )
+        else:
+            _apply_attempt_worktree_checkpoint(node, attempt.id)
         await _ensure_root_started_for_dispatch(
             task_service=task_service,
             command_service=command_service,
@@ -1025,7 +1058,14 @@ def _make_sql_dispatcher(
             worker_agent_id=binding.agent_id,
             worker_binding_id=binding.id,
             leader_agent_id=leader_agent_id,
-            plan_metadata=_execution_task_metadata_from_node(node),
+            plan_metadata={
+                **_execution_task_metadata_from_node(node),
+                **(
+                    {_REPAIR_TURN_METADATA_KEY: repair_context}
+                    if repair_context is not None
+                    else {}
+                ),
+            },
         )
 
         node.workspace_task_id = existing_task.id
@@ -1037,6 +1077,8 @@ def _make_sql_dispatcher(
 
         await session.flush()
         if should_schedule and existing_task.assignee_agent_id:
+            node_brief = _node_worker_brief(node)
+            repair_brief_prompt = _repair_turn_prompt(repair_context) if repair_context else None
             _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
                 plan_id=plan_id,
                 workspace_id=workspace_id,
@@ -1049,9 +1091,19 @@ def _make_sql_dispatcher(
                     "actor_user_id": actor_user_id,
                     "leader_agent_id": leader_agent_id,
                     "attempt_id": attempt.id,
-                    "extra_instructions": _node_worker_brief(node),
+                    "extra_instructions": node_brief,
+                    "reuse_conversation_id": _mapping_string(
+                        repair_context or {}, "conversation_id"
+                    ),
+                    "repair_brief_prompt": repair_brief_prompt,
                 },
-                metadata={"source": "workspace_plan.dispatch.worker_launch"},
+                metadata={
+                    "source": (
+                        "workspace_plan.dispatch.worker_repair_turn"
+                        if repair_context is not None
+                        else "workspace_plan.dispatch.worker_launch"
+                    )
+                },
             )
 
         return attempt.id
@@ -1076,6 +1128,8 @@ def make_worker_launch_handler(
         )
         attempt_id = _payload_string(payload, "attempt_id")
         extra_instructions = _payload_string(payload, "extra_instructions")
+        reuse_conversation_id = _payload_string(payload, "reuse_conversation_id")
+        repair_brief_prompt = _payload_string(payload, "repair_brief_prompt")
 
         task = await SqlWorkspaceTaskRepository(session).find_by_id(task_id)
         if task is None or task.workspace_id != workspace_id:
@@ -1140,6 +1194,8 @@ def make_worker_launch_handler(
             leader_agent_id=leader_agent_id,
             attempt_id=attempt_id,
             extra_instructions=extra_instructions,
+            reuse_conversation_id=reuse_conversation_id,
+            repair_brief_prompt=repair_brief_prompt,
         )
         await _mark_plan_node_running_after_launch_schedule(
             session=session,
@@ -1291,6 +1347,17 @@ def _plan_terminal_attempt_max_retries() -> int:
     )
 
 
+def _repair_turn_reuse_enabled() -> bool:
+    raw = os.getenv(_REPAIR_TURN_REUSE_ENABLED_ENV)
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _repair_turn_reuse_max() -> int:
+    return _positive_int_env(_REPAIR_TURN_REUSE_MAX_ENV, _DEFAULT_REPAIR_TURN_REUSE_MAX)
+
+
 def _positive_int_env(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -1300,6 +1367,316 @@ def _positive_int_env(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if value >= 0 else default
+
+
+async def _same_conversation_repair_context(  # noqa: PLR0911
+    *,
+    session: AsyncSession,
+    task: WorkspaceTask,
+    node: PlanNode,
+    leader_agent_id: str,
+) -> dict[str, Any] | None:
+    metadata = dict(node.metadata or {})
+    next_action_kind = _mapping_string(metadata, "last_verification_judge_next_action_kind")
+    if next_action_kind != "retry_same_node":
+        return None
+    previous_attempt_id = _mapping_string(metadata, "last_verification_attempt_id")
+    if not previous_attempt_id:
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="missing_previous_attempt_id",
+        )
+    if not _repair_turn_reuse_enabled():
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="reuse_disabled",
+            previous_attempt_id=previous_attempt_id,
+        )
+    repair_turn_count = _nonnegative_int(metadata.get("same_conversation_repair_turn_count"))
+    if repair_turn_count >= _repair_turn_reuse_max():
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="max_repair_turns_reached",
+            previous_attempt_id=previous_attempt_id,
+        )
+    previous_attempt = await session.get(WorkspaceTaskSessionAttemptModel, previous_attempt_id)
+    if previous_attempt is None:
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="previous_attempt_missing",
+            previous_attempt_id=previous_attempt_id,
+        )
+    if previous_attempt.workspace_task_id != task.id:
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="previous_attempt_task_mismatch",
+            previous_attempt_id=previous_attempt_id,
+        )
+    previous_status = _attempt_status_value(previous_attempt)
+    if previous_status != WorkspaceTaskSessionAttemptStatus.REJECTED.value:
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason=f"previous_attempt_status_{previous_status or 'unknown'}",
+            previous_attempt_id=previous_attempt_id,
+        )
+    previous_reason = str(
+        previous_attempt.adjudication_reason or previous_attempt.leader_feedback or ""
+    ).casefold()
+    if any(
+        marker in previous_reason
+        for marker in (
+            "recovery:",
+            "orphan",
+            "provider",
+            "retryable_infrastructure",
+            "no_terminal_report",
+        )
+    ):
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="previous_attempt_infrastructure_or_recovery_failure",
+            previous_attempt_id=previous_attempt_id,
+        )
+    conversation_id = _mapping_string(
+        {"conversation_id": previous_attempt.conversation_id}, "conversation_id"
+    )
+    if not conversation_id:
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="missing_conversation",
+            previous_attempt_id=previous_attempt_id,
+        )
+    if not _node_has_reusable_worktree(node):
+        return await _repair_turn_ineligible(
+            session=session,
+            task=task,
+            node=node,
+            leader_agent_id=leader_agent_id,
+            reason="missing_reusable_worktree",
+            previous_attempt_id=previous_attempt_id,
+        )
+
+    repair_turn_index = repair_turn_count + 1
+    return {
+        "node_id": node.id,
+        "workspace_task_id": task.id,
+        "previous_attempt_id": previous_attempt_id,
+        "previous_attempt_status": previous_status,
+        "conversation_id": conversation_id,
+        "reuse_conversation": True,
+        "reuse_worktree": True,
+        "repair_turn_index": repair_turn_index,
+        "repair_turn_parent_attempt_id": previous_attempt_id,
+        "repair_brief": _repair_brief_from_node(node, previous_attempt_id=previous_attempt_id),
+    }
+
+
+async def _repair_turn_ineligible(
+    *,
+    session: AsyncSession,
+    task: WorkspaceTask,
+    node: PlanNode,
+    leader_agent_id: str,
+    reason: str,
+    previous_attempt_id: str | None = None,
+) -> None:
+    plan_id = node.plan_id
+    payload = {
+        "reason": reason,
+        "node_id": node.id,
+        "workspace_task_id": task.id,
+        "previous_attempt_id": previous_attempt_id,
+        "next_action_kind": node.metadata.get("last_verification_judge_next_action_kind"),
+    }
+    await _append_plan_audit_event(
+        session=session,
+        plan_id=plan_id,
+        workspace_id=task.workspace_id,
+        node_id=node.id,
+        attempt_id=previous_attempt_id,
+        event_type="worker_repair_turn_ineligible",
+        payload=payload,
+        actor_id=leader_agent_id,
+    )
+    logger.info(
+        "workspace_plan.worker_repair_turn.ineligible",
+        extra={
+            "event": "workspace_plan.worker_repair_turn.ineligible",
+            "workspace_id": task.workspace_id,
+            "plan_id": plan_id,
+            "node_id": node.id,
+            "task_id": task.id,
+            "attempt_id": previous_attempt_id,
+            "reason": reason,
+        },
+    )
+    return None
+
+
+async def _append_plan_audit_event(
+    *,
+    session: AsyncSession,
+    plan_id: str | None,
+    workspace_id: str,
+    node_id: str | None,
+    attempt_id: str | None,
+    event_type: str,
+    payload: Mapping[str, Any],
+    actor_id: str | None = None,
+) -> None:
+    if not plan_id:
+        return
+    await SqlWorkspacePlanEventRepository(session).append(
+        plan_id=plan_id,
+        workspace_id=workspace_id,
+        node_id=node_id,
+        attempt_id=attempt_id,
+        event_type=event_type,
+        actor_id=actor_id,
+        source="workspace_plan.repair_turn",
+        payload=dict(payload),
+    )
+
+
+def _node_has_reusable_worktree(node: PlanNode) -> bool:
+    feature = node.feature_checkpoint
+    return bool(feature and feature.worktree_path and feature.branch_name)
+
+
+def _repair_turn_index(context: Mapping[str, Any]) -> int:
+    value = context.get("repair_turn_index")
+    if isinstance(value, int) and value > 0:
+        return value
+    return _nonnegative_int(context.get("repair_turn_index")) or 1
+
+
+def _repair_brief_from_node(node: PlanNode, *, previous_attempt_id: str) -> dict[str, Any]:
+    metadata = dict(node.metadata or {})
+    provided = metadata.get("last_verification_judge_repair_brief")
+    base: dict[str, Any] = {
+        "node": {
+            "id": node.id,
+            "title": node.title,
+            "description": node.description,
+        },
+        "attempt": {
+            "previous_attempt_id": previous_attempt_id,
+            "current_attempt_id": None,
+        },
+        "failed_items": list(
+            _iter_config_strings(metadata.get("last_verification_judge_failed_criteria"))
+        ),
+        "evidence": list(_iter_config_strings(metadata.get("verification_evidence_refs"))),
+        "required_next_action": metadata.get("last_verification_judge_required_next_action"),
+        "allowed_write_scope": _repair_allowed_write_scope(node),
+        "forbidden_actions": [
+            "Do not weaken or rewrite tests only to make them pass.",
+            (
+                "Do not reuse prior worker reports, screenshots, commit refs, or "
+                "stale dirty-tree text as current evidence."
+            ),
+            "Do not change unrelated files outside the repair brief scope.",
+            (
+                "Do not report completion without fresh git status, commit_ref, "
+                "diff summary, and verification output."
+            ),
+        ],
+        "minimum_verifications": _repair_minimum_verifications(node),
+        "fresh_evidence_requirements": [
+            "Run verification commands in the active attempt worktree.",
+            "Commit any code changes and report the new commit_ref.",
+            "Include git_diff_summary and git status --short after the commit.",
+            "Report only evidence produced during this repair turn.",
+        ],
+    }
+    if isinstance(provided, Mapping):
+        base.update(dict(provided))
+    return base
+
+
+def _repair_allowed_write_scope(node: PlanNode) -> list[str]:
+    metadata = dict(node.metadata or {})
+    write_set = list(_iter_config_strings(metadata.get("write_set")))
+    if write_set:
+        return write_set
+    feature = node.feature_checkpoint
+    if feature is not None and feature.expected_artifacts:
+        return list(feature.expected_artifacts)
+    return []
+
+
+def _repair_minimum_verifications(node: PlanNode) -> list[str]:
+    metadata = dict(node.metadata or {})
+    commands = list(_iter_config_strings(metadata.get("verification_commands")))
+    feature = node.feature_checkpoint
+    if feature is not None:
+        commands.extend(feature.test_commands)
+    commands.append("git status --short")
+    return list(dict.fromkeys(command for command in commands if command))
+
+
+def _repair_turn_prompt(context: Mapping[str, Any] | None) -> str | None:
+    if not context:
+        return None
+    raw_brief = context.get("repair_brief")
+    brief = dict(raw_brief) if isinstance(raw_brief, Mapping) else {}
+    attempt = brief.get("attempt")
+    if isinstance(attempt, Mapping):
+        brief["attempt"] = {**dict(attempt), "current_attempt_id": context.get("attempt_id")}
+    payload = {
+        "repair_turn_parent_attempt_id": context.get("repair_turn_parent_attempt_id"),
+        "current_attempt_id": context.get("attempt_id"),
+        "repair_turn_index": context.get("repair_turn_index"),
+        "reuse_conversation": True,
+        "reuse_worktree": True,
+        "repair_brief": brief,
+    }
+    repair_json = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    return (
+        "[repair-turn]\n"
+        f"{repair_json}\n"
+        "[/repair-turn]\n\n"
+        "Repair turn rules:\n"
+        "- Treat this as a new attempt with fresh evidence boundaries even though "
+        "the conversation is reused.\n"
+        "- Address only the failures in repair_brief.failed_items and required_next_action.\n"
+        "- Re-run the minimum_verifications listed in the brief.\n"
+        "- When complete, report using the current_attempt_id only; include fresh commit_ref, "
+        "git_diff_summary, changed files, test_run evidence, and git status --short."
+    )
+
+
+def _nonnegative_int(value: object) -> int:
+    if isinstance(value, int):
+        return max(value, 0)
+    if isinstance(value, str):
+        with contextlib.suppress(ValueError):
+            return max(int(value.strip()), 0)
+    return 0
 
 
 async def _mark_plan_node_running_after_launch_schedule(
@@ -3069,8 +3446,10 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_judge_failed_criteria",
         "last_verification_judge_next_action_kind",
         "last_verification_judge_rationale",
+        "last_verification_judge_repair_brief",
         "last_verification_judge_required_next_action",
         "last_verification_judge_verdict",
+        "current_repair_turn",
         "verification_evidence_refs",
         "verified_commit_ref",
         "verified_git_diff_summary",

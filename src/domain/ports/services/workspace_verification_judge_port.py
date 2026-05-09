@@ -58,6 +58,7 @@ class WorkspaceVerificationJudgeResult:
     next_action_kind: WorkspaceVerificationNextActionKind = (
         WorkspaceVerificationNextActionKind.RETRY_SAME_NODE
     )
+    repair_brief: dict[str, Any] = field(default_factory=dict)
     confidence: float = 0.0
 
     def __post_init__(self) -> None:

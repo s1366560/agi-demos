@@ -707,6 +707,9 @@ class TestVerifier:
             "Use when"
         )
         assert "same node can fix" in payload["policy"]["next_action_kinds"]["retry_same_node"]
+        repair_policy = " ".join(payload["policy"]["repair_brief_contract"])
+        assert "compact repair_brief object" in repair_policy
+        assert "current-attempt failures" in repair_policy
 
     async def test_file_exists_passes_when_artifact_present(self, tmp_path: Any) -> None:
         target = tmp_path / "out.json"

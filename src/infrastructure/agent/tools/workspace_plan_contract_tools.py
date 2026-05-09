@@ -54,6 +54,15 @@ WORKSPACE_VERIFICATION_JUDGMENT_TOOL_PARAMETERS: dict[str, Any] = {
                 "human_required."
             ),
         },
+        "repair_brief": {
+            "type": "object",
+            "description": (
+                "Compact current-attempt repair brief for retry_same_node verdicts. Include "
+                "failed_items, evidence, allowed_write_scope, forbidden_actions, "
+                "minimum_verifications, and fresh_evidence_requirements when applicable."
+            ),
+            "additionalProperties": True,
+        },
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
     "required": [
@@ -170,6 +179,7 @@ async def workspace_submit_verification_judgment_tool(
     required_next_action: str,
     confidence: float,
     next_action_kind: str = WorkspaceVerificationNextActionKind.RETRY_SAME_NODE.value,
+    repair_brief: dict[str, Any] | None = None,
 ) -> ToolResult:
     error = _require_builtin_agent(
         ctx,
@@ -182,7 +192,7 @@ async def workspace_submit_verification_judgment_tool(
         return _deny(f"invalid verification verdict: {verdict}")
     if next_action_kind not in _VALID_VERIFICATION_NEXT_ACTION_KINDS:
         return _deny(f"invalid verification next_action_kind: {next_action_kind}")
-    payload = {
+    payload: dict[str, Any] = {
         "verdict": verdict,
         "rationale": str(rationale or "").strip() or verdict,
         "failed_criteria": _string_list(failed_criteria, limit=12),
@@ -190,6 +200,8 @@ async def workspace_submit_verification_judgment_tool(
         "next_action_kind": next_action_kind,
         "confidence": _confidence(confidence),
     }
+    if isinstance(repair_brief, dict) and repair_brief:
+        payload["repair_brief"] = repair_brief
     return ToolResult(
         output=json.dumps({"captured": True, "verdict": verdict}, ensure_ascii=False),
         metadata={"verification_judgment": payload},

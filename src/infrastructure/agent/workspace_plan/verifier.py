@@ -885,6 +885,7 @@ def _coerce_judge_result_for_required_context(
             ),
             failed_criteria=("terminal_worker_report_completed", *result.failed_criteria),
             required_next_action="collect a completed worker report and rerun verification",
+            repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.7),
         )
     if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
@@ -899,6 +900,7 @@ def _coerce_judge_result_for_required_context(
             ),
             failed_criteria=("failed_test_evidence", *result.failed_criteria),
             required_next_action="fix or explicitly disposition failing tests before acceptance",
+            repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.8),
         )
     return result
@@ -968,6 +970,7 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
                 "failed_criteria": list(result.failed_criteria),
                 "required_next_action": result.required_next_action,
                 "next_action_kind": result.next_action_kind.value,
+                "repair_brief": result.repair_brief,
             },
             required=True,
             description="Agent-First workspace verification judge verdict",

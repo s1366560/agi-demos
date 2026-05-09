@@ -989,6 +989,26 @@ class TestLaunchWorkerSession:
         assert out["conversation_id"] is None
 
 
+class TestRepairConversationReuse:
+    @pytest.mark.asyncio
+    async def test_clear_reused_worker_session_markers_deletes_finished_and_cooldown(self) -> None:
+        class _Redis:
+            def __init__(self) -> None:
+                self.deleted: tuple[str, ...] = ()
+
+            async def delete(self, *keys: str) -> None:
+                self.deleted = keys
+
+        redis = _Redis()
+
+        await wl._clear_reused_worker_session_markers(redis, "conv-1")
+
+        assert redis.deleted == (
+            "agent:finished:conv-1",
+            "workspace:worker_launch:cooldown:conv-1",
+        )
+
+
 class TestScheduleWorkerSession:
     @pytest.mark.asyncio
     async def test_schedules_background_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1007,6 +1027,8 @@ class TestScheduleWorkerSession:
             actor_user_id="u1",
             leader_agent_id="leader-1",
             attempt_id="att-1",
+            reuse_conversation_id="conv-reuse",
+            repair_brief_prompt="[repair-turn]{}[/repair-turn]",
         )
         # let the scheduled task run
         await asyncio.sleep(0)
@@ -1015,3 +1037,5 @@ class TestScheduleWorkerSession:
         assert called["task"] is task
         assert called["leader_agent_id"] == "leader-1"
         assert called["attempt_id"] == "att-1"
+        assert called["reuse_conversation_id"] == "conv-reuse"
+        assert called["repair_brief_prompt"] == "[repair-turn]{}[/repair-turn]"

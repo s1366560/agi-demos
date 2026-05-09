@@ -213,7 +213,11 @@ async def _seed_workspace_and_plan(db_session: AsyncSession) -> None:
 def _session_factory(db_session: AsyncSession) -> WorkspacePlanSessionFactory:
     @asynccontextmanager
     async def factory() -> AsyncIterator[AsyncSession]:
-        yield db_session
+        try:
+            yield db_session
+        except BaseException:
+            await db_session.rollback()
+            raise
 
     return factory
 
@@ -2243,6 +2247,203 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, leaf.current_attempt_id)
     assert attempt is not None
     assert attempt.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_retry_same_node_dispatches_same_conversation_repair_turn(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_only(db_session)
+    plan = Plan(
+        id="plan-repair-turn",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("goal-repair-turn"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="goal-repair-turn",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Ship repair turn",
+        )
+    )
+    old_worktree = "${sandbox_code_root}/../.memstack/worktrees/attempt-old"
+    plan.add_node(
+        PlanNode(
+            id="node-repair-turn",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Repair missing evidence",
+            description="Provide the fresh commit evidence.",
+            recommended_capabilities=(Capability(name="codegen"),),
+            workspace_task_id="repair-task-1",
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-repair-turn",
+                sequence=1,
+                title="Repair missing evidence",
+                test_commands=("npm test",),
+                expected_artifacts=("src/example.ts",),
+                worktree_path=old_worktree,
+                branch_name="workspace/node-repair-turn-attempt-old",
+                base_ref="HEAD",
+            ),
+            metadata={
+                "write_set": ["src/example.ts"],
+                "verification_commands": ["npm test"],
+                "last_verification_attempt_id": "attempt-old",
+                "last_verification_judge_verdict": "needs_rework",
+                "last_verification_judge_next_action_kind": "retry_same_node",
+                "last_verification_judge_required_next_action": "report fresh commit_ref",
+                "last_verification_judge_failed_criteria": ["missing_commit_ref"],
+                "last_verification_judge_repair_brief": {
+                    "failed_items": ["missing commit_ref"],
+                    "minimum_verifications": ["npm test"],
+                },
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="repair-task-1",
+            workspace_id="workspace-1",
+            title="Repair missing evidence",
+            description="Provide the fresh commit evidence.",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                "lineage_source": "agent",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: "node-repair-turn",
+                "feature_checkpoint": {
+                    "feature_id": "feature-repair-turn",
+                    "worktree_path": old_worktree,
+                    "branch_name": "workspace/node-repair-turn-attempt-old",
+                    "base_ref": "HEAD",
+                },
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-old",
+            workspace_task_id="repair-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="rejected",
+            conversation_id="conversation-reuse",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="judge verdict=needs_rework; missing commit_ref",
+        )
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+    )
+    await db_session.commit()
+
+    launched: list[dict[str, object]] = []
+
+    def fake_schedule_worker_session(**kwargs: object) -> None:
+        launched.append(kwargs)
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        fake_schedule_worker_session,
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    outbox_items = list((await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all())
+    launch_items = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(launch_items) == 1, [
+        (item.event_type, item.status, item.last_error) for item in outbox_items
+    ]
+    assert await worker.run_once() == 1
+    assert launched
+    assert launched[0]["reuse_conversation_id"] == "conversation-reuse"
+    assert "[repair-turn]" in str(launched[0]["repair_brief_prompt"])
+    assert "missing commit_ref" in str(launched[0]["repair_brief_prompt"])
+
+    db_session.expire_all()
+    attempts = list(
+        (
+            await db_session.execute(
+                select(WorkspaceTaskSessionAttemptModel)
+                .where(WorkspaceTaskSessionAttemptModel.workspace_task_id == "repair-task-1")
+                .order_by(WorkspaceTaskSessionAttemptModel.attempt_number.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(attempts) == 2
+    old_attempt, new_attempt = attempts
+    assert old_attempt.id == "attempt-old"
+    assert new_attempt.status == "running"
+    assert new_attempt.conversation_id == "conversation-reuse"
+    assert new_attempt.candidate_artifacts_json == []
+    assert new_attempt.candidate_verifications_json == []
+
+    repaired_plan = await SqlPlanRepository(db_session).get(plan.id)
+    assert repaired_plan is not None
+    repaired_node = repaired_plan.nodes[PlanNodeId("node-repair-turn")]
+    assert repaired_node.current_attempt_id == new_attempt.id
+    assert repaired_node.feature_checkpoint is not None
+    assert repaired_node.feature_checkpoint.worktree_path == old_worktree
+    assert repaired_node.metadata["current_repair_turn"]["previous_attempt_id"] == "attempt-old"
+    assert repaired_node.metadata["same_conversation_repair_turn_count"] == 1
+
+    events = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanEventModel)
+                .where(WorkspacePlanEventModel.plan_id == plan.id)
+                .order_by(WorkspacePlanEventModel.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [event.event_type for event in events] == ["worker_repair_turn_dispatched"]
+    assert events[0].attempt_id == new_attempt.id
 
 
 @pytest.mark.asyncio

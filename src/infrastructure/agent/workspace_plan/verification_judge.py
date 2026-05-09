@@ -310,6 +310,12 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "Accessibility and security audits must verify the claimed property, not only count generic page structure.",
                 "Performance evidence must distinguish HTTP response timing, browser page-load timing, and synthetic simulations.",
             ],
+            "repair_brief_contract": [
+                "When next_action_kind=retry_same_node, include a compact repair_brief object.",
+                "The brief must describe only current-attempt failures and fresh evidence requirements.",
+                "Do not include cumulative historical failure prose as current evidence.",
+                "Prefer keys: failed_items, evidence, allowed_write_scope, forbidden_actions, minimum_verifications, fresh_evidence_requirements.",
+            ],
         },
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -355,6 +361,7 @@ def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudg
         failed_criteria=failed,
         required_next_action=next_action,
         next_action_kind=next_action_kind,
+        repair_brief=_repair_brief(args.get("repair_brief")),
         confidence=_float_between(args.get("confidence"), default=0.0),
     )
 
@@ -423,6 +430,10 @@ def _string_tuple(value: object, *, limit: int) -> tuple[str, ...]:
         return ()
     cleaned = [item.strip() for item in items if item.strip()]
     return tuple(dict.fromkeys(cleaned))[:limit]
+
+
+def _repair_brief(value: object) -> dict[str, Any]:
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _float_between(value: object, *, default: float) -> float:

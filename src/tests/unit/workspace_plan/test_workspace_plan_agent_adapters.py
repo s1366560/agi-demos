@@ -51,6 +51,10 @@ async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -
             "failed_criteria": ["failed_test_evidence"],
             "required_next_action": "fix tests",
             "next_action_kind": "create_repair_node",
+            "repair_brief": {
+                "failed_items": ["failed_test_evidence"],
+                "minimum_verifications": ["npm test"],
+            },
             "confidence": 0.84,
         }
     )
@@ -75,6 +79,10 @@ async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -
     assert result.verdict.value == "needs_rework"
     assert result.failed_criteria == ("failed_test_evidence",)
     assert result.next_action_kind.value == "create_repair_node"
+    assert result.repair_brief == {
+        "failed_items": ["failed_test_evidence"],
+        "minimum_verifications": ["npm test"],
+    }
 
 
 async def test_iteration_review_agent_provider_uses_builtin_agent_turn_runner() -> None:
