@@ -10,6 +10,7 @@ import {
   Clock3,
   Filter,
   GitBranch,
+  History,
   Loader2,
   PackageCheck,
   Pause,
@@ -773,6 +774,7 @@ export function PlanRunSnapshotSection({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
   const [isTickPending, setIsTickPending] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [previewOpeningUrl, setPreviewOpeningUrl] = useState<string | null>(null);
   const [operatorReason, setOperatorReason] = useState('');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
@@ -792,10 +794,12 @@ export function PlanRunSnapshotSection({
       }
       setError(null);
       try {
-        const nextSnapshot = await workspacePlanService.getSnapshot(workspaceId, {
+        const snapshotOptions = {
           outboxLimit: 20,
           eventLimit: 80,
-        });
+          ...(selectedPlanId ? { planId: selectedPlanId } : {}),
+        };
+        const nextSnapshot = await workspacePlanService.getSnapshot(workspaceId, snapshotOptions);
         if (!isMountedRef.current) {
           return;
         }
@@ -811,7 +815,7 @@ export function PlanRunSnapshotSection({
         }
       }
     },
-    [workspaceId]
+    [selectedPlanId, workspaceId]
   );
 
   useEffect(() => {
@@ -900,6 +904,10 @@ export function PlanRunSnapshotSection({
   }, [selectedNode, selectedNodeId]);
 
   const plan = snapshot?.plan ?? null;
+  const planHistory = snapshot?.plan_history ?? [];
+  const selectedPlanHistory =
+    (plan ? planHistory.find((item) => item.plan_id === plan.id) : null) ?? null;
+  const isHistoricalPlan = Boolean(selectedPlanHistory && !selectedPlanHistory.is_latest);
   const outbox = useMemo(() => snapshot?.outbox ?? [], [snapshot]);
   const events = useMemo(() => snapshot?.events ?? [], [snapshot]);
   const blackboard = useMemo(() => snapshot?.blackboard ?? [], [snapshot]);
@@ -1113,6 +1121,20 @@ export function PlanRunSnapshotSection({
   const selectedContract = selectedNode?.phase_contract ?? null;
   const selectedBlocker = selectedNode?.blocker_analysis ?? null;
 
+  const assertCurrentPlanForAction = () => {
+    if (!isHistoricalPlan) {
+      return true;
+    }
+    setActionMessage(null);
+    setActionError(
+      t(
+        'blackboard.planRunHistoryReadOnlyAction',
+        'Select the current goal before running plan actions.'
+      )
+    );
+    return false;
+  };
+
   const formatAutonomyTickMessage = (result: { triggered: boolean; reason: string }) => {
     if (result.triggered) {
       return t('blackboard.planRunAutonomyTriggered', 'Leader scheduled the next autonomy step.');
@@ -1136,6 +1158,9 @@ export function PlanRunSnapshotSection({
   };
 
   const runAutonomyTick = async (force: boolean) => {
+    if (!assertCurrentPlanForAction()) {
+      return;
+    }
     setIsTickPending(true);
     setActionError(null);
     setActionMessage(null);
@@ -1152,6 +1177,9 @@ export function PlanRunSnapshotSection({
 
   const runNodeAction = async (actionId: NodeActionId) => {
     if (!selectedNode) {
+      return;
+    }
+    if (!assertCurrentPlanForAction()) {
       return;
     }
     const action = selectedNode.actions?.[actionId];
@@ -1199,6 +1227,9 @@ export function PlanRunSnapshotSection({
   };
 
   const retryOutbox = async (item: WorkspacePlanOutboxItem) => {
+    if (!assertCurrentPlanForAction()) {
+      return;
+    }
     const action = item.actions?.retry_outbox;
     if (!actionEnabled(action)) {
       setActionError(action?.reason ?? 'This queue job cannot be retried.');
@@ -1224,6 +1255,9 @@ export function PlanRunSnapshotSection({
   const runIterationAction = async (
     actionId: 'pause_auto_loop' | 'resume_auto_loop' | 'trigger_next_iteration'
   ) => {
+    if (!assertCurrentPlanForAction()) {
+      return;
+    }
     const action = iteration?.actions[actionId];
     if (!actionEnabled(action)) {
       setActionError(action?.reason ?? 'This iteration action is not available.');
@@ -1280,6 +1314,9 @@ export function PlanRunSnapshotSection({
   };
 
   const runDeliveryPipeline = async () => {
+    if (!assertCurrentPlanForAction()) {
+      return;
+    }
     const action = delivery?.actions.request_pipeline;
     if (!actionEnabled(action)) {
       setActionError(action?.reason ?? 'Pipeline run is not available.');
@@ -1304,6 +1341,9 @@ export function PlanRunSnapshotSection({
   };
 
   const regenerateDeliveryContract = async () => {
+    if (!assertCurrentPlanForAction()) {
+      return;
+    }
     const action = delivery?.actions.regenerate_contract;
     if (!actionEnabled(action)) {
       setActionError(action?.reason ?? 'Contract regeneration is not available.');
@@ -1396,12 +1436,64 @@ export function PlanRunSnapshotSection({
             {latestEvent && <span>{eventLabel(latestEvent)}</span>}
             {isStale && <span className="text-status-text-warning">stale snapshot</span>}
           </div>
+          {planHistory.length > 1 && (
+            <div className="mt-3 flex max-w-3xl flex-col gap-2 md:flex-row md:items-center">
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-text-secondary dark:text-text-muted">
+                <History className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="shrink-0 font-semibold uppercase">
+                  {t('blackboard.planRunGoalHistory', 'Goal history')}
+                </span>
+                <select
+                  aria-label={t('blackboard.planRunGoalHistory', 'Goal history')}
+                  value={plan?.id ?? selectedPlanId ?? ''}
+                  onChange={(event) => {
+                    const nextPlanId = event.target.value || null;
+                    setSelectedPlanId(nextPlanId);
+                    setSelectedNodeId(null);
+                    closeSelectedTask();
+                  }}
+                  className="min-w-0 flex-1 rounded-md border border-border-light bg-surface-light px-2.5 py-1.5 text-xs text-text-primary outline-none transition-colors focus:border-info-border focus:ring-2 focus:ring-ring dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse"
+                >
+                  {planHistory.map((item) => (
+                    <option key={item.plan_id} value={item.plan_id}>
+                      {`${
+                        item.is_latest ? `${t('blackboard.planRunCurrentGoal', 'Current')} · ` : ''
+                      }${item.title} · ${t(
+                        'blackboard.planRunHistoryIterationSummary',
+                        'Iteration {{current}}/{{max}}',
+                        {
+                          current: item.current_iteration,
+                          max: item.max_iterations,
+                        }
+                      )}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {isHistoricalPlan && (
+                <span className="inline-flex shrink-0 rounded border border-warning-border bg-warning-bg px-2 py-1 text-[11px] font-medium text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
+                  {t(
+                    'blackboard.planRunHistoryReadOnly',
+                    'Viewing a historical goal. Plan actions are read-only.'
+                  )}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 lg:justify-end">
           <button
             type="button"
             onClick={() => void runAutonomyTick(false)}
-            disabled={isTickPending}
+            disabled={isTickPending || isHistoricalPlan}
+            title={
+              isHistoricalPlan
+                ? t(
+                    'blackboard.planRunHistoryReadOnlyAction',
+                    'Select the current goal before running plan actions.'
+                  )
+                : undefined
+            }
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-info-border bg-info-bg px-3 text-sm font-medium text-status-text-info transition-colors hover:bg-info-bg/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark lg:min-h-9 lg:text-xs"
           >
             {isTickPending ? (
@@ -1414,7 +1506,15 @@ export function PlanRunSnapshotSection({
           <button
             type="button"
             onClick={() => void runAutonomyTick(true)}
-            disabled={isTickPending}
+            disabled={isTickPending || isHistoricalPlan}
+            title={
+              isHistoricalPlan
+                ? t(
+                    'blackboard.planRunHistoryReadOnlyAction',
+                    'Select the current goal before running plan actions.'
+                  )
+                : undefined
+            }
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border-light bg-surface-light px-3 text-sm font-medium text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-dark-alt lg:min-h-9 lg:text-xs"
           >
             <Zap className="h-4 w-4" aria-hidden />

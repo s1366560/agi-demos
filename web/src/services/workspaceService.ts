@@ -525,7 +525,7 @@ export const workspaceAutonomyService = {
 export const workspacePlanService = {
   getSnapshot: async (
     workspaceId: string,
-    options: { outboxLimit?: number; eventLimit?: number } = {}
+    options: { outboxLimit?: number; eventLimit?: number; planId?: string } = {}
   ): Promise<WorkspacePlanSnapshot> => {
     const params = new URLSearchParams();
     if (options.outboxLimit !== undefined) {
@@ -533,6 +533,9 @@ export const workspacePlanService = {
     }
     if (options.eventLimit !== undefined) {
       params.set('event_limit', String(options.eventLimit));
+    }
+    if (options.planId) {
+      params.set('plan_id', options.planId);
     }
     const query = params.toString();
     const response = await apiFetch.get(`${planBase(workspaceId)}${query ? `?${query}` : ''}`, {

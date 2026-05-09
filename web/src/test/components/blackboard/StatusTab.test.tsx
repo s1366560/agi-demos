@@ -505,6 +505,146 @@ describe('StatusTab', () => {
     });
   });
 
+  it('keeps historical goal iterations selectable after a new goal becomes latest', async () => {
+    const planHistory = [
+      {
+        plan_id: 'plan-new',
+        title: 'New repeated goal',
+        status: 'active',
+        loop_status: 'active',
+        current_iteration: 1,
+        max_iterations: 8,
+        completed_iterations: [],
+        task_count: 0,
+        created_at: '2026-05-09T00:00:00Z',
+        is_latest: true,
+        is_selected: true,
+      },
+      {
+        plan_id: 'plan-old',
+        title: 'Original repeated goal',
+        status: 'completed',
+        loop_status: 'completed',
+        current_iteration: 10,
+        max_iterations: 12,
+        completed_iterations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        task_count: 5,
+        created_at: '2026-05-08T00:00:00Z',
+        is_latest: false,
+        is_selected: false,
+      },
+    ];
+    vi.mocked(workspacePlanService.getSnapshot)
+      .mockResolvedValueOnce({
+        workspace_id: 'ws-1',
+        plan: {
+          id: 'plan-new',
+          workspace_id: 'ws-1',
+          goal_id: 'goal-new',
+          status: 'active',
+          created_at: '2026-05-09T00:00:00Z',
+          nodes: [],
+          counts: {},
+        },
+        blackboard: [],
+        outbox: [],
+        events: [],
+        plan_history: planHistory,
+        iteration: {
+          current_iteration: 1,
+          loop_label: 'Scrum feedback loop',
+          cadence: 'research -> plan -> implement -> test -> deploy -> review',
+          loop_status: 'active',
+          max_iterations: 8,
+          completed_iterations: [],
+          current_sprint_goal: 'New sprint goal',
+          review_summary: '',
+          stop_reason: '',
+          active_phase: 'research',
+          active_phase_label: 'Research',
+          next_action: '',
+          task_count: 0,
+          task_budget: 6,
+          phases: [],
+          deliverables: [],
+          feedback_items: [],
+          history: [],
+          actions: {},
+        },
+      })
+      .mockResolvedValueOnce({
+        workspace_id: 'ws-1',
+        plan: {
+          id: 'plan-old',
+          workspace_id: 'ws-1',
+          goal_id: 'goal-old',
+          status: 'completed',
+          created_at: '2026-05-08T00:00:00Z',
+          nodes: [],
+          counts: {},
+        },
+        blackboard: [],
+        outbox: [],
+        events: [],
+        plan_history: planHistory.map((item) => ({
+          ...item,
+          is_selected: item.plan_id === 'plan-old',
+        })),
+        iteration: {
+          current_iteration: 10,
+          loop_label: 'Scrum feedback loop',
+          cadence: 'research -> plan -> implement -> test -> deploy -> review',
+          loop_status: 'completed',
+          max_iterations: 12,
+          completed_iterations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+          current_sprint_goal: 'Original sprint goal',
+          review_summary: 'Original goal completed.',
+          stop_reason: '',
+          active_phase: 'review',
+          active_phase_label: 'Review',
+          next_action: '',
+          task_count: 0,
+          task_budget: 6,
+          phases: [],
+          deliverables: [],
+          feedback_items: [],
+          history: [],
+          actions: {},
+        },
+      });
+
+    render(
+      <StatusTab
+        stats={{
+          completionRatio: 0,
+          discussions: 0,
+          activeAgents: 0,
+          pendingAdjudicationTasks: 0,
+        }}
+        topologyEdges={[]}
+        agents={[]}
+        tasks={[]}
+        workspaceId="ws-1"
+        statusBadgeTone={() => 'bg-green-500'}
+      />
+    );
+
+    const historySelect = await screen.findByLabelText('blackboard.planRunGoalHistory');
+    expect(historySelect).toHaveValue('plan-new');
+
+    fireEvent.change(historySelect, { target: { value: 'plan-old' } });
+
+    await waitFor(() => {
+      expect(workspacePlanService.getSnapshot).toHaveBeenLastCalledWith('ws-1', {
+        outboxLimit: 20,
+        eventLimit: 80,
+        planId: 'plan-old',
+      });
+    });
+    expect(await screen.findByText('Original sprint goal')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.planRunHistoryReadOnly')).toBeInTheDocument();
+  });
+
   it('refreshes durable plan snapshot when workspace plan events arrive', async () => {
     const { rerender } = render(
       <StatusTab

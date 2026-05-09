@@ -168,6 +168,60 @@ def _make_plan(workspace_id: str) -> Plan:
     return plan
 
 
+def _make_plan_variant(
+    workspace_id: str,
+    *,
+    plan_id: str,
+    goal_id: str,
+    task_id: str,
+    goal_title: str,
+    task_title: str,
+    current_iteration: int,
+    created_at: datetime,
+) -> Plan:
+    goal_node_id = PlanNodeId(value=goal_id)
+    task_node_id = PlanNodeId(value=task_id)
+    plan = Plan(
+        id=plan_id,
+        workspace_id=workspace_id,
+        goal_id=goal_node_id,
+        status=PlanStatus.ACTIVE,
+        created_at=created_at,
+    )
+    plan.nodes[goal_node_id] = PlanNode(
+        id=goal_node_id.value,
+        plan_id=plan.id,
+        kind=PlanNodeKind.GOAL,
+        title=goal_title,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.IDLE,
+        metadata={
+            "iteration_loop": {
+                "mode": "auto",
+                "loop_status": "active",
+                "current_iteration": current_iteration,
+                "max_iterations": 8,
+                "completed_iterations": list(range(1, current_iteration)),
+                "current_sprint_goal": goal_title,
+            }
+        },
+        created_at=created_at,
+    )
+    plan.nodes[task_node_id] = PlanNode(
+        id=task_node_id.value,
+        plan_id=plan.id,
+        parent_id=goal_node_id,
+        kind=PlanNodeKind.TASK,
+        title=task_title,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.IDLE,
+        priority=1,
+        metadata={"iteration_index": current_iteration, "iteration_phase": "implement"},
+        created_at=created_at,
+    )
+    return plan
+
+
 def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> None:
     plan = _make_plan("workspace-plan-api")
     task = plan.nodes[PlanNodeId("task-api")]
@@ -293,6 +347,85 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert task_node.actions["request_replan"].enabled is True
     assert task_node.actions["reopen_blocked"].enabled is False
     assert task_node.actions["accept_with_human_review"].enabled is False
+
+
+@pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_exposes_and_selects_goal_plan_history(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-history"
+    await _seed_workspace(db_session, workspace_id)
+    old_plan = _make_plan_variant(
+        workspace_id,
+        plan_id="plan-history-old",
+        goal_id="goal-history-old",
+        task_id="task-history-old",
+        goal_title="Original workspace goal",
+        task_title="Original iteration task",
+        current_iteration=4,
+        created_at=datetime(2026, 4, 1, tzinfo=UTC),
+    )
+    latest_plan = _make_plan_variant(
+        workspace_id,
+        plan_id="plan-history-latest",
+        goal_id="goal-history-latest",
+        task_id="task-history-latest",
+        goal_title="New workspace goal",
+        task_title="New iteration task",
+        current_iteration=1,
+        created_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    repo = SqlPlanRepository(db_session)
+    await repo.save(old_plan)
+    await repo.save(latest_plan)
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: _WorkspaceServiceStub(),
+    )
+
+    latest_response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert latest_response.plan is not None
+    assert latest_response.plan.id == "plan-history-latest"
+    assert [item.plan_id for item in latest_response.plan_history] == [
+        "plan-history-latest",
+        "plan-history-old",
+    ]
+    assert latest_response.plan_history[0].is_latest is True
+    assert latest_response.plan_history[0].is_selected is True
+    assert latest_response.plan_history[1].title == "Original workspace goal"
+    assert latest_response.plan_history[1].current_iteration == 4
+
+    historical_response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        plan_id="plan-history-old",
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert historical_response.plan is not None
+    assert historical_response.plan.id == "plan-history-old"
+    assert historical_response.iteration is not None
+    assert historical_response.iteration.current_iteration == 4
+    assert historical_response.root_goal is None
+    assert historical_response.plan_history[0].is_latest is True
+    assert historical_response.plan_history[0].is_selected is False
+    assert historical_response.plan_history[1].is_latest is False
+    assert historical_response.plan_history[1].is_selected is True
 
 
 @pytest.mark.asyncio

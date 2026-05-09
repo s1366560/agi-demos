@@ -493,6 +493,23 @@ class WorkspacePlanRootGoalResponse(BaseModel):
     completed_at: datetime | None = None
 
 
+class WorkspacePlanHistoryItemResponse(BaseModel):
+    plan_id: str
+    title: str
+    status: str
+    loop_status: str
+    root_goal_id: str | None = None
+    root_goal_status: str | None = None
+    current_iteration: int = 1
+    max_iterations: int = _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
+    completed_iterations: list[int] = Field(default_factory=list)
+    task_count: int = 0
+    created_at: datetime
+    updated_at: datetime | None = None
+    is_latest: bool = False
+    is_selected: bool = False
+
+
 class WorkspacePlanSnapshotResponse(BaseModel):
     workspace_id: str
     plan: WorkspacePlanResponse | None = None
@@ -502,6 +519,7 @@ class WorkspacePlanSnapshotResponse(BaseModel):
     blackboard: list[WorkspacePlanBlackboardEntryResponse] = Field(default_factory=list)
     outbox: list[WorkspacePlanOutboxItemResponse] = Field(default_factory=list)
     events: list[WorkspacePlanEventResponse] = Field(default_factory=list)
+    plan_history: list[WorkspacePlanHistoryItemResponse] = Field(default_factory=list)
     iteration_runs: list[WorkspacePlanIterationRunResponse] = Field(default_factory=list)
     run_health: WorkspacePlanRunHealthResponse | None = None
     artifact_index: WorkspacePlanArtifactIndexResponse | None = None
@@ -2620,6 +2638,7 @@ async def _load_root_goal_response(
     *,
     workspace_id: str,
     plan: Plan,
+    allow_workspace_fallback: bool = True,
 ) -> WorkspacePlanRootGoalResponse | None:
     root_goal_id = await _resolve_root_goal_task_id(db, workspace_id=workspace_id, plan=plan)
     row: WorkspaceTaskModel | None = None
@@ -2627,7 +2646,7 @@ async def _load_root_goal_response(
         candidate = await db.get(WorkspaceTaskModel, root_goal_id)
         if candidate is not None and candidate.workspace_id == workspace_id:
             row = candidate
-    if row is None:
+    if row is None and allow_workspace_fallback:
         result = await db.execute(
             refresh_select_statement(
                 select(WorkspaceTaskModel)
@@ -2646,6 +2665,55 @@ async def _load_root_goal_response(
     if row is None:
         return None
     return _to_root_goal_response(row)
+
+
+async def _load_workspace_plan_history(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    plans: list[Plan],
+    selected_plan_id: str | None,
+) -> list[WorkspacePlanHistoryItemResponse]:
+    latest_plan_id = plans[0].id if plans else None
+    rows: list[WorkspacePlanHistoryItemResponse] = []
+    for plan in plans:
+        runnable_nodes = [
+            node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}
+        ]
+        loop = _goal_iteration_loop_metadata(plan)
+        root_goal_id = await _resolve_root_goal_task_id(db, workspace_id=workspace_id, plan=plan)
+        root_goal_status: str | None = None
+        title = plan.goal_node.title
+        if root_goal_id:
+            root_goal = await db.get(WorkspaceTaskModel, root_goal_id)
+            if root_goal is not None and root_goal.workspace_id == workspace_id:
+                root_goal_status = root_goal.status
+                title = root_goal.title or title
+        rows.append(
+            WorkspacePlanHistoryItemResponse(
+                plan_id=plan.id,
+                title=title,
+                status=plan.status.value,
+                loop_status=_iteration_loop_status(plan, loop),
+                root_goal_id=root_goal_id,
+                root_goal_status=root_goal_status,
+                current_iteration=_metadata_int(
+                    loop.get("current_iteration"),
+                    fallback=_current_iteration(runnable_nodes),
+                ),
+                max_iterations=_metadata_int(
+                    loop.get("max_iterations"),
+                    fallback=_ITERATION_LOOP_DEFAULT_MAX_ITERATIONS,
+                ),
+                completed_iterations=_metadata_int_list(loop.get("completed_iterations")),
+                task_count=len(runnable_nodes),
+                created_at=plan.created_at,
+                updated_at=plan.updated_at,
+                is_latest=plan.id == latest_plan_id,
+                is_selected=plan.id == selected_plan_id,
+            )
+        )
+    return rows
 
 
 async def _resolve_root_goal_task_id(
@@ -3918,6 +3986,7 @@ async def get_workspace_plan_snapshot(
     request: Request,
     outbox_limit: int = Query(20, ge=0, le=100),
     event_limit: int = Query(50, ge=0, le=200),
+    plan_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspacePlanSnapshotResponse:
@@ -3931,18 +4000,32 @@ async def get_workspace_plan_snapshot(
         )
         await _ensure_plan_outbox_worker_running(request)
         plan_repo = SqlPlanRepository(db)
-        plan = await plan_repo.get_by_workspace(workspace_id)
-        if plan is None:
+        plans = await plan_repo.list_by_workspace(workspace_id)
+        if not plans:
             return WorkspacePlanSnapshotResponse(workspace_id=workspace_id)
-        if await _recover_stale_attempts_for_snapshot(
-            session=db,
-            workspace_id=workspace_id,
-            plan=plan,
-            actor_id=current_user.id,
-        ):
-            plan = await plan_repo.get_by_workspace(workspace_id)
-            if plan is None:
-                return WorkspacePlanSnapshotResponse(workspace_id=workspace_id)
+        latest_plan_id = plans[0].id
+        selected_plan_id = plan_id or latest_plan_id
+        plan = next((item for item in plans if item.id == selected_plan_id), None)
+        if plan is None:
+            plan = await plan_repo.get(selected_plan_id)
+            if plan is None or plan.workspace_id != workspace_id:
+                raise ValueError(f"workspace plan not found: {selected_plan_id}")
+            plans = [*plans, plan]
+        selected_is_latest = plan.id == latest_plan_id
+        if selected_is_latest:
+            if await _recover_stale_attempts_for_snapshot(
+                session=db,
+                workspace_id=workspace_id,
+                plan=plan,
+                actor_id=current_user.id,
+            ):
+                plans = await plan_repo.list_by_workspace(workspace_id)
+                if not plans:
+                    return WorkspacePlanSnapshotResponse(workspace_id=workspace_id)
+                latest_plan_id = plans[0].id
+                plan = plans[0]
+                selected_plan_id = plan.id
+                selected_is_latest = True
 
         blackboard_entries = await SqlWorkspacePlanBlackboard(db).list(plan.id)
         result = await db.execute(
@@ -3966,7 +4049,12 @@ async def get_workspace_plan_snapshot(
             )
         )
         event_items = list(event_result.scalars().all())
-        root_goal = await _load_root_goal_response(db, workspace_id=workspace_id, plan=plan)
+        root_goal = await _load_root_goal_response(
+            db,
+            workspace_id=workspace_id,
+            plan=plan,
+            allow_workspace_fallback=selected_is_latest,
+        )
         delivery = await _to_delivery_summary(db, plan=plan)
         ledger_attempts = await _load_plan_attempts_for_snapshot(
             session=db,
@@ -3990,6 +4078,12 @@ async def get_workspace_plan_snapshot(
             blackboard=[_to_blackboard_response(entry) for entry in blackboard_entries],
             outbox=[_to_outbox_response(item) for item in outbox_items],
             events=[_to_event_response(item) for item in event_items],
+            plan_history=await _load_workspace_plan_history(
+                db,
+                workspace_id=workspace_id,
+                plans=plans,
+                selected_plan_id=plan.id,
+            ),
             iteration_runs=_iteration_runs(
                 plan=plan,
                 attempts=ledger_attempts,

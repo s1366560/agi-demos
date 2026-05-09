@@ -103,6 +103,17 @@ class SqlPlanRepository(PlanRepositoryPort):
             return None
         return _plan_from_model(model)
 
+    async def list_by_workspace(self, workspace_id: str, *, limit: int = 50) -> list[Plan]:
+        stmt = (
+            select(PlanModel)
+            .options(selectinload(PlanModel.nodes))
+            .where(PlanModel.workspace_id == workspace_id)
+            .order_by(PlanModel.created_at.desc(), PlanModel.id.desc())
+            .limit(max(1, limit))
+        )
+        result = await self._db.execute(refresh_select_statement(stmt))
+        return [_plan_from_model(model) for model in result.scalars().all()]
+
     async def delete(self, plan_id: str) -> None:
         existing = await self._db.get(PlanModel, plan_id)
         if existing is not None:

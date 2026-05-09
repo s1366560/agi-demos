@@ -646,9 +646,27 @@ export interface WorkspacePlanSnapshot {
   blackboard: WorkspacePlanBlackboardEntry[];
   outbox: WorkspacePlanOutboxItem[];
   events: WorkspacePlanEvent[];
+  plan_history?: WorkspacePlanHistoryItem[] | undefined;
   iteration_runs?: WorkspacePlanIterationRunSnapshot[] | undefined;
   run_health?: WorkspacePlanRunHealth | null | undefined;
   artifact_index?: WorkspacePlanArtifactIndex | null | undefined;
+}
+
+export interface WorkspacePlanHistoryItem {
+  plan_id: string;
+  title: string;
+  status: string;
+  loop_status: string;
+  root_goal_id?: string | null | undefined;
+  root_goal_status?: string | null | undefined;
+  current_iteration: number;
+  max_iterations: number;
+  completed_iterations: number[];
+  task_count: number;
+  created_at: string;
+  updated_at?: string | null | undefined;
+  is_latest: boolean;
+  is_selected: boolean;
 }
 
 export interface WorkspacePlanRootGoal {
