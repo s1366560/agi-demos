@@ -75,6 +75,10 @@ _FAILED_TEST_EVIDENCE_PATTERNS = (
     re.compile(r"\b(?:failed|failing|failure|failures)\s*[:=]\s*[1-9]\d*\b", re.I),
 )
 _PARTIAL_TEST_SUMMARY_PATTERN = re.compile(r"\b([1-9]\d*)\s*/\s*([1-9]\d*)\b")
+_PARTIAL_TEST_BUCKET_PATTERN = re.compile(
+    r"\b[1-9]\d*\s+(?:tests?\s+)?partials?\b",
+    re.I,
+)
 _PARTIAL_TEST_SUMMARY_CUE_PATTERN = re.compile(
     r"\b(comprehensive|e2e|pass(?:ed|ing)?|results?|summary|suite)\b",
     re.I,
@@ -1251,6 +1255,8 @@ def _partial_test_summary_value(text: str) -> str | None:
         value = line.strip()
         if not value or not _PARTIAL_TEST_SUMMARY_CUE_PATTERN.search(value):
             continue
+        if _PARTIAL_TEST_BUCKET_PATTERN.search(value):
+            return value
         for match in _PARTIAL_TEST_SUMMARY_PATTERN.finditer(value):
             passed = int(match.group(1))
             total = int(match.group(2))

@@ -1573,6 +1573,41 @@ class TestVerifier:
         assert len(judge.requests) == 1
         assert not judge.requests[0].guard_failures
 
+    async def test_verification_judge_rejects_partial_test_bucket_without_disposition(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="partial checks are informational",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(title="Generate final project acceptance evidence artifact")
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": "Generated final acceptance evidence.",
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "commit_ref:47d4c54c",
+                        "test_run:comprehensive E2E 26 passed 4 partial",
+                    ],
+                },
+            )
+        )
+
+        assert not rep.passed
+        assert "failed_test_evidence" in rep.summary()
+        assert len(judge.requests) == 1
+        assert any("26 passed 4 partial" in item for item in judge.requests[0].guard_failures)
+
     async def test_failed_test_guard_allows_historical_failure_explanation_when_current_run_is_green(
         self,
     ) -> None:

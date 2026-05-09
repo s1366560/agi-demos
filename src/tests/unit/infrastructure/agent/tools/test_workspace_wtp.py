@@ -417,6 +417,36 @@ class TestComplete:
         mock_orchestrator.send_message.assert_not_awaited()
         mock_apply.assert_not_awaited()
 
+    async def test_protected_test_node_rejects_partial_test_bucket_without_disposition(
+        self, ctx, mock_orchestrator
+    ):
+        ctx.runtime_context["workspace_verification_integrity"] = {
+            "iteration_phase": "review",
+            "protected_script_changes": True,
+        }
+
+        with patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply:
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id="leader-agent-id",
+                summary="Generated final acceptance evidence.",
+                verifications=[
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "commit_ref:47d4c54c",
+                    "test_run:comprehensive E2E 26 passed 4 partial",
+                ],
+            )
+
+        assert result.is_error is True
+        payload = json.loads(result.output)
+        assert "completion denied" in payload["error"]
+        assert payload["failed_evidence"] == ["test_run:comprehensive E2E 26 passed 4 partial"]
+        mock_orchestrator.send_message.assert_not_awaited()
+        mock_apply.assert_not_awaited()
+
     async def test_protected_test_node_allows_partial_contract_with_disposition_ref(
         self, ctx, mock_orchestrator
     ):

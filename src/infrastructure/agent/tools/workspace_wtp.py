@@ -65,6 +65,10 @@ _FAILED_TEST_COUNT_RE = re.compile(
 )
 _NONZERO_EXIT_RE = re.compile(r"\bexit\s+code:\s*([1-9]\d*)\b", re.IGNORECASE)
 _PARTIAL_TEST_COUNT_RE = re.compile(r"\b(\d+)\s*/\s*(\d+)\b")
+_PARTIAL_TEST_BUCKET_RE = re.compile(
+    r"\b[1-9]\d*\s+(?:tests?\s+)?partials?\b",
+    re.IGNORECASE,
+)
 _FAILED_TEST_DISPOSITION_PREFIXES = (
     "contract_disposition:",
     "failed_test_disposition:",
@@ -154,6 +158,9 @@ def _failed_completion_evidence(texts: list[str]) -> list[str]:
             failed.append(value)
             continue
         if has_test_context:
+            if _PARTIAL_TEST_BUCKET_RE.search(value):
+                failed.append(value)
+                continue
             for partial in _PARTIAL_TEST_COUNT_RE.finditer(value):
                 passed = int(partial.group(1))
                 total = int(partial.group(2))
