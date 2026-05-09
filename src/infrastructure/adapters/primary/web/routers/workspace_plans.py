@@ -73,6 +73,8 @@ logger = logging.getLogger(__name__)
 _SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS = 180
 _SNAPSHOT_RECOVERY_RUNNING_STALE_SECONDS = 300
 _SNAPSHOT_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS = 300
+_ITERATION_LOOP_DEFAULT_MAX_ITERATIONS = 8
+_OPERATOR_NEXT_ITERATION_LIMIT_EXTENSION = 4
 
 
 class _RedisExistsClient(Protocol):
@@ -2271,6 +2273,14 @@ async def _update_iteration_loop_for_operator(
             },
         }
     )
+    iteration_limit_extension = _extend_iteration_limit_for_operator_next(
+        loop=loop,
+        plan=plan,
+        action=action,
+        actor_id=current_user.id,
+        reason=body.reason,
+        created_at=now,
+    )
     metadata["iteration_loop"] = loop
     plan.replace_node(replace(goal_node, metadata=metadata, updated_at=datetime.now(UTC)))
     plan = replace(plan, status=plan_status, updated_at=datetime.now(UTC))
@@ -2288,6 +2298,11 @@ async def _update_iteration_loop_for_operator(
             **(
                 {"reopened_review_iteration": reopened_review_iteration}
                 if reopened_review_iteration is not None
+                else {}
+            ),
+            **(
+                {"iteration_limit_extended": iteration_limit_extension}
+                if iteration_limit_extension is not None
                 else {}
             ),
         },
@@ -2334,6 +2349,46 @@ def _reopen_current_iteration_review(loop: dict[str, Any]) -> int | None:
     loop["reviewed_iterations"] = kept
     loop["reopened_review_iteration"] = current_iteration
     return current_iteration
+
+
+def _extend_iteration_limit_for_operator_next(
+    *,
+    loop: dict[str, Any],
+    plan: Plan,
+    action: str,
+    actor_id: str,
+    reason: str | None,
+    created_at: str,
+) -> dict[str, Any] | None:
+    if action != "operator_iteration_next_requested":
+        return None
+    current_iteration = _positive_iteration_index(loop.get("current_iteration"))
+    if current_iteration is None:
+        runnable_nodes = [
+            node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}
+        ]
+        current_iteration = _current_iteration(runnable_nodes)
+    previous_limit = _metadata_int(
+        loop.get("max_iterations"),
+        fallback=_ITERATION_LOOP_DEFAULT_MAX_ITERATIONS,
+    )
+    if current_iteration < previous_limit:
+        return None
+    new_limit = max(
+        previous_limit + _OPERATOR_NEXT_ITERATION_LIMIT_EXTENSION,
+        current_iteration + 1,
+    )
+    extension = {
+        "previous_max_iterations": previous_limit,
+        "max_iterations": new_limit,
+        "current_iteration": current_iteration,
+        "actor_id": actor_id,
+        "reason": reason or "",
+        "created_at": created_at,
+    }
+    loop["max_iterations"] = new_limit
+    loop["operator_iteration_limit_extension"] = extension
+    return extension
 
 
 def _positive_iteration_index(value: object) -> int | None:

@@ -494,6 +494,7 @@ async def test_stale_plan_node_recovery_throttles_recent_completed_handoff_resum
     outbox_repo = SqlWorkspacePlanOutboxRepository(db_session)
     outbox = await outbox_repo.list_by_workspace(workspace_id, limit=5)
     outbox[0].status = "completed"
+    outbox[0].created_at = datetime.now(UTC) - timedelta(seconds=10)
     outbox[0].processed_at = datetime.now(UTC)
     await db_session.commit()
 
@@ -1575,6 +1576,71 @@ async def test_trigger_next_reopens_current_reviewed_iteration(
     events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=3)
     assert events[0].event_type == "operator_iteration_next_requested"
     assert events[0].payload["reopened_review_iteration"] == 1
+
+
+@pytest.mark.asyncio
+async def test_trigger_next_extends_iteration_limit_when_max_reached(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-extend-max-loop"
+    await _seed_workspace(db_session, workspace_id)
+    plan = replace(_make_plan(workspace_id), status=PlanStatus.SUSPENDED)
+    goal = plan.goal_node
+    metadata = dict(goal.metadata or {})
+    loop = dict(metadata["iteration_loop"])
+    loop.update(
+        {
+            "loop_status": "suspended",
+            "current_iteration": 8,
+            "max_iterations": 8,
+            "stop_reason": "max iterations reached: 8",
+        }
+    )
+    metadata["iteration_loop"] = loop
+    plan.replace_node(replace(goal, metadata=metadata))
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    result = await workspace_plans.trigger_workspace_plan_next_iteration(
+        workspace_id=workspace_id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="continue after cap"),
+        request=cast(Request, SimpleNamespace()),
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert result.ok is True
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    extended_loop = loaded.goal_node.metadata["iteration_loop"]
+    assert extended_loop["loop_status"] == "active"
+    assert extended_loop["stop_reason"] == ""
+    assert extended_loop["max_iterations"] == 12
+    assert extended_loop["operator_iteration_limit_extension"] == {
+        "previous_max_iterations": 8,
+        "max_iterations": 12,
+        "current_iteration": 8,
+        "actor_id": "plan-api-user",
+        "reason": "continue after cap",
+        "created_at": extended_loop["operator_iteration_limit_extension"]["created_at"],
+    }
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=3)
+    assert events[0].event_type == "operator_iteration_next_requested"
+    assert events[0].payload["iteration_limit_extended"]["previous_max_iterations"] == 8
+    assert events[0].payload["iteration_limit_extended"]["max_iterations"] == 12
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].payload_json["operator_action"] == "operator_iteration_next_requested"
 
 
 @pytest.mark.asyncio

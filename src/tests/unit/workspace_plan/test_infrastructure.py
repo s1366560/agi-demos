@@ -4088,6 +4088,45 @@ class TestSupervisorTick:
         assert reviewer.contexts == []
         assert events[-1][0] == "iteration_loop_suspended"
 
+    async def test_completed_iteration_respects_operator_extended_max_iterations(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("WORKSPACE_V2_ITERATION_LOOP_ENABLED", "true")
+        monkeypatch.setenv("WORKSPACE_V2_MAX_ITERATIONS", "1")
+        repo = InMemoryPlanRepository()
+        plan = _mark_plan_tasks_done(_plan_with_two_tasks())
+        goal = plan.goal_node
+        metadata = dict(goal.metadata or {})
+        metadata["iteration_loop"] = {
+            "mode": "auto",
+            "loop_status": "active",
+            "current_iteration": 1,
+            "max_iterations": 2,
+        }
+        plan.replace_node(replace(goal, metadata=metadata))
+        await repo.save(plan)
+        events: list[tuple[str, str, dict[str, Any]]] = []
+        reviewer = _StaticIterationReviewer(
+            IterationReviewVerdict(
+                verdict="continue_next_iteration",
+                confidence=0.9,
+                summary="Operator allowed another sprint.",
+                next_tasks=(IterationNextTask(id="t1", description="Follow up"),),
+            )
+        )
+
+        await _supervisor_for_iteration_review(repo, reviewer, events).tick("ws-1")
+
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.status is PlanStatus.ACTIVE
+        loop = reloaded.goal_node.metadata["iteration_loop"]
+        assert loop["current_iteration"] == 2
+        assert loop["max_iterations"] == 2
+        assert reviewer.contexts[0].iteration_index == 1
+        assert events[-1][0] == "iteration_next_sprint_planned"
+
     async def test_completed_iteration_suspends_low_confidence_review(
         self,
         monkeypatch: pytest.MonkeyPatch,

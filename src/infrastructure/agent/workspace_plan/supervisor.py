@@ -517,6 +517,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
 
         goal_node = plan.goal_node
         loop_metadata = _goal_iteration_loop_metadata(goal_node)
+        max_iterations = _max_iterations(loop_metadata)
         if self._iteration_reviewer is None and loop_metadata.get("mode") == "auto":
             suspended = _replace_goal_loop_metadata(
                 plan,
@@ -524,7 +525,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 updates={
                     "mode": "auto",
                     "current_iteration": _max_iteration(_runnable_nodes(plan)),
-                    "max_iterations": _max_iterations(),
+                    "max_iterations": max_iterations,
                     "loop_status": "suspended",
                     "stop_reason": "iteration review agent is unavailable",
                 },
@@ -560,7 +561,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 updates={
                     "mode": "auto",
                     "current_iteration": current_iteration + 1,
-                    "max_iterations": _max_iterations(),
+                    "max_iterations": max_iterations,
                     "loop_status": "active",
                     "stop_reason": "",
                 },
@@ -575,7 +576,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 updates={
                     "mode": "auto",
                     "current_iteration": current_iteration,
-                    "max_iterations": _max_iterations(),
+                    "max_iterations": max_iterations,
                     "loop_status": "paused",
                     "stop_reason": str(loop_metadata.get("stop_reason") or "auto-loop paused"),
                 },
@@ -593,7 +594,6 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             )
             return suspended
 
-        max_iterations = _max_iterations()
         if current_iteration >= max_iterations:
             suspended = _replace_goal_loop_metadata(
                 plan,
@@ -780,15 +780,28 @@ def _iteration_loop_enabled() -> bool:
     }
 
 
-def _max_iterations() -> int:
+def _max_iterations(loop_metadata: Mapping[str, Any] | None = None) -> int:
     raw_value = os.getenv(_ITERATION_LOOP_MAX_ITERATIONS_ENV)
     if raw_value is None:
-        return _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        return _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
-    return max(1, parsed)
+        configured = _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
+    else:
+        try:
+            configured = int(raw_value)
+        except ValueError:
+            configured = _ITERATION_LOOP_DEFAULT_MAX_ITERATIONS
+    metadata_limit = _positive_int((loop_metadata or {}).get("max_iterations"))
+    if metadata_limit is None:
+        return max(1, configured)
+    return max(1, configured, metadata_limit)
+
+
+def _positive_int(value: object) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    return None
 
 
 def _runnable_nodes(plan: Plan) -> list[PlanNode]:
