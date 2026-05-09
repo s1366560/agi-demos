@@ -647,10 +647,14 @@ class AcceptanceCriterionVerifier(VerifierPort):
                 results=(transient_guard,),
             )
 
-        results: list[CriterionResult] = []
-        terminal_guard = _terminal_worker_report_guard(ctx)
-        if terminal_guard is not None:
-            results.append(terminal_guard)
+        terminal_results = _terminal_worker_report_results(ctx)
+        if _should_short_circuit_blocked_worker_report(ctx, terminal_results):
+            return VerificationReport(
+                node_id=ctx.node.id,
+                attempt_id=ctx.attempt_id,
+                results=terminal_results,
+            )
+        results = list(terminal_results)
         preflight_guard = _preflight_evidence_guard(ctx)
         if preflight_guard is not None:
             results.append(preflight_guard)
@@ -1029,11 +1033,16 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             ),
         )
     if report_type and report_type != "completed":
+        detail = (
+            f": {report_summary[:500]}"
+            if report_type == "blocked" and report_summary
+            else ""
+        )
         return CriterionResult(
             criterion=criterion,
             passed=False,
             confidence=1.0,
-            message=f"worker report type {report_type!r} is not a completion report",
+            message=f"worker report type {report_type!r} is not a completion report{detail}",
         )
     if attempt_status in {"blocked", "cancelled", "rejected"}:
         if ctx.attempt_id is None and _has_pipeline_success_evidence(ctx):
@@ -1066,6 +1075,19 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             message="missing completed worker report",
         )
     return None
+
+
+def _terminal_worker_report_results(ctx: VerificationContext) -> tuple[CriterionResult, ...]:
+    terminal_guard = _terminal_worker_report_guard(ctx)
+    return (terminal_guard,) if terminal_guard is not None else ()
+
+
+def _should_short_circuit_blocked_worker_report(
+    ctx: VerificationContext,
+    terminal_results: tuple[CriterionResult, ...],
+) -> bool:
+    """Treat a structured blocked worker report as terminal without an LLM judge call."""
+    return bool(terminal_results) and _artifact_text(ctx, "last_worker_report_type") == "blocked"
 
 
 def _transient_infrastructure_failure_guard(ctx: VerificationContext) -> CriterionResult | None:

@@ -842,6 +842,36 @@ class TestVerifier:
         assert rep.hard_fail
         assert "not a completion report" in rep.summary()
 
+    async def test_verifier_does_not_call_judge_for_explicit_blocked_worker_report(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="would accept if called",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node()
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "blocked",
+                    "last_worker_report_summary": (
+                        "write access outside the active attempt worktree is blocked"
+                    ),
+                },
+            )
+        )
+
+        assert judge.requests == []
+        assert not rep.passed
+        assert rep.hard_fail
+        assert "outside the active attempt worktree" in rep.summary()
+
     async def test_verifier_soft_fails_retryable_infrastructure_blocker(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
