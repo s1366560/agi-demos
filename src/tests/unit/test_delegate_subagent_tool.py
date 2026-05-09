@@ -127,6 +127,28 @@ class TestDelegateSubAgentTool:
         assert "todoread" in result.output
         callback.assert_not_awaited()
 
+    async def test_execute_workspace_worker_denies_nested_delegation(self, tool_ctx):
+        callback = self._make_callback("Research findings: ...")
+        self._configure(callback)
+        tool_ctx.runtime_context = {
+            "task_authority": "workspace",
+            "workspace_session_role": "worker",
+            "workspace_id": "ws-1",
+            "root_goal_task_id": "root-1",
+            "workspace_task_id": "task-123",
+            "attempt_id": "attempt-123",
+        }
+        result = await delegate_subagent_tool.execute(
+            tool_ctx,
+            subagent_name="researcher",
+            task="Find info about X",
+            workspace_task_id="task-123",
+        )
+        assert result.is_error is True
+        assert "workspace worker sessions must not use delegate_to_subagent" in result.output
+        assert "workspace_report_blocked" in result.output
+        callback.assert_not_awaited()
+
     async def test_execute_callback_without_on_event_called_once(self, tool_ctx):
         called = 0
 
@@ -159,7 +181,8 @@ class TestDelegateSubAgentTool:
         callback_events = [
             e
             for e in events
-            if isinstance(e, dict) and e.get("type") in ("subagent_started", "subagent_completed")
+            if isinstance(e, dict)
+            and e.get("type") in ("subagent_started", "subagent_completed")
             and "run_id" not in e.get("data", {})
         ]
         assert len(callback_events) == 2

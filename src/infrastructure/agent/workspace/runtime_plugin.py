@@ -34,7 +34,9 @@ _TOOL_FOLLOWUP_INSTRUCTION = (
 _WORKER_TASK_TREE_INSTRUCTION = (
     "This is a workspace worker session. Do not use todowrite add/replace to split or "
     "dispatch global workspace tasks; keep any private checklist in your reasoning and use "
-    "workspace_report_progress/complete/blocked for the bound task."
+    "workspace_report_progress/complete/blocked for the bound task. Do not use "
+    "delegate_to_subagent or parallel_delegate_subagents from a worker session; helper "
+    "subagents do not own this attempt's durable terminal report or worktree guard."
 )
 _WORKSPACE_TASK_HARNESS_FULL_CONTENT = """# Workspace Task Harness
 

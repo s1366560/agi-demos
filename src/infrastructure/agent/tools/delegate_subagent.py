@@ -26,6 +26,10 @@ from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_SESSION_ROLE_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +335,14 @@ def _validate_workspace_delegation_guardrail(
     runtime_context = ctx.runtime_context if isinstance(ctx.runtime_context, dict) else {}
     if runtime_context.get("task_authority") != "workspace":
         return None
+    if runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_WORKER:
+        return (
+            "Error: workspace worker sessions must not use delegate_to_subagent. "
+            "Nested SubAgent runs do not inherit workspace worker authority or the attempt "
+            "worktree guard, and their completion could be mistaken for the bound task's "
+            "terminal report. Use direct tools within the active attempt worktree, or call "
+            "workspace_report_blocked with the blocker."
+        )
     if isinstance(workspace_task_id, str) and workspace_task_id.strip():
         return None
     return (
