@@ -35,9 +35,10 @@ import json
 import logging
 import os
 import posixpath
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,6 +64,12 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # but short enough that a genuine re-assignment after rework can re-fire.
 WORKER_LAUNCH_COOLDOWN_SECONDS = 300
 WORKER_LAUNCH_HEARTBEAT_SECONDS = int(os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBEAT_SECONDS", "45"))
+WORKER_STREAM_FINISH_POLL_SECONDS = int(
+    os.getenv("WORKSPACE_WORKER_STREAM_FINISH_POLL_SECONDS", "15")
+)
+WORKER_STREAM_ORPHAN_GRACE_SECONDS = int(
+    os.getenv("WORKSPACE_WORKER_STREAM_ORPHAN_GRACE_SECONDS", "900")
+)
 WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 4_000
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
@@ -773,12 +780,16 @@ def _rewrite_command_line_root(line: str, *, sandbox_root: str, worktree_root: s
     for key in ("test_command=", "init_command="):
         if stripped.startswith(key):
             command = stripped[len(key) :]
-            return f"{indent}{key}{_rewrite_shell_command_root(command, sandbox_root, worktree_root)}"
+            return (
+                f"{indent}{key}{_rewrite_shell_command_root(command, sandbox_root, worktree_root)}"
+            )
 
     marker = " command="
     if marker in line:
         prefix, command = line.split(marker, 1)
-        return f"{prefix}{marker}{_rewrite_shell_command_root(command, sandbox_root, worktree_root)}"
+        return (
+            f"{prefix}{marker}{_rewrite_shell_command_root(command, sandbox_root, worktree_root)}"
+        )
     return line
 
 
@@ -970,6 +981,85 @@ async def _refresh_launch_cooldown(conversation_id: str | None) -> None:
         )
 
 
+def _decode_redis_text(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+async def _agent_finished_message_id(
+    redis_client: object | None,
+    conversation_id: str | None,
+) -> str | None:
+    if redis_client is None or not conversation_id:
+        return None
+    try:
+        redis = cast(Any, redis_client)
+        return _decode_redis_text(await redis.get(f"agent:finished:{conversation_id}"))
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.finished_state_lookup_failed",
+            extra={
+                "event": "workspace_worker_launch.finished_state_lookup_failed",
+                "conversation_id": conversation_id,
+            },
+            exc_info=True,
+        )
+        return None
+
+
+async def _agent_running_exists(
+    redis_client: object | None,
+    conversation_id: str | None,
+) -> bool:
+    if redis_client is None or not conversation_id:
+        return False
+    try:
+        redis = cast(Any, redis_client)
+        return bool(await redis.exists(f"agent:running:{conversation_id}"))
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.running_state_lookup_failed",
+            extra={
+                "event": "workspace_worker_launch.running_state_lookup_failed",
+                "conversation_id": conversation_id,
+            },
+            exc_info=True,
+        )
+        return False
+
+
+def _stream_message_id_from_event(event: Mapping[str, Any]) -> str | None:
+    if event.get("type") != "message":
+        return None
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    message_id = data.get("id") or data.get("message_id")
+    return message_id if isinstance(message_id, str) and message_id else None
+
+
+def _should_stop_orphaned_worker_stream(
+    *,
+    finished_message_id: str | None,
+    stream_message_id: str | None,
+    running_exists: bool,
+    idle_seconds: float,
+    orphan_grace_seconds: int = WORKER_STREAM_ORPHAN_GRACE_SECONDS,
+) -> tuple[bool, str | None]:
+    if finished_message_id and (
+        stream_message_id is None or finished_message_id == stream_message_id
+    ):
+        return True, "agent_finished_without_terminal_event"
+    if not running_exists and idle_seconds >= max(1, orphan_grace_seconds):
+        return True, "agent_not_running_stream_idle"
+    return False, None
+
+
 async def _publish_worker_launch_heartbeat(
     *,
     workspace_id: str,
@@ -1131,8 +1221,9 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     pushed through ``apply_workspace_worker_report`` with ``report_type="blocked"``.
     A plain stream ``complete`` without an explicit workspace terminal report
     is converted into a completed candidate report so the verifier can accept
-    or reject it. Leaving the attempt RUNNING would stop launcher-owned
-    heartbeats and eventually produce a misleading watchdog ``blocked`` state.
+    or reject it. A stream that exits or becomes orphaned without ``complete`` /
+    ``error`` is reported as ``blocked`` immediately so launcher-owned
+    heartbeats cannot mask the dead worker session from recovery.
     """
     if not worker_agent_id:
         return {
@@ -1628,11 +1719,15 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     final_content = ""
     accumulated_text = ""
     terminal_event: str | None = None  # "complete" | "error" | None
+    stream_message_id: str | None = None
+    stream_orphan_reason: str | None = None
     terminal_report_tool_observed = False
     terminal_report_tool_denied = False
     terminal_report_tool_applied = False
     heartbeat_stop = asyncio.Event()
     heartbeat_task: asyncio.Task[None] | None = None
+    next_event_task: asyncio.Task[dict[str, Any]] | None = None
+    stream_iter: Any = None
 
     try:
         await _publish_worker_launch_heartbeat(
@@ -1672,7 +1767,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             container = DIContainer(db=db, redis_client=redis_client)
             llm = await create_llm_client(workspace.tenant_id)
             agent_service: AgentService = container.agent_service(llm)
-            async for event in agent_service.stream_chat_v2(
+            stream_iter = agent_service.stream_chat_v2(
                 conversation_id=resolved_conversation_id,
                 user_message=user_message,
                 project_id=workspace.project_id,
@@ -1681,7 +1776,68 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 agent_id=worker_agent_id,
                 app_model_context=app_model_context,
                 preferred_language=resolved_preferred_language,
-            ):
+            ).__aiter__()
+            last_stream_event_seen = time.monotonic()
+            while True:
+                if next_event_task is None:
+                    next_event_task = asyncio.create_task(stream_iter.__anext__())
+                done, _pending = await asyncio.wait(
+                    {next_event_task},
+                    timeout=max(1, WORKER_STREAM_FINISH_POLL_SECONDS),
+                )
+                if not done:
+                    idle_seconds = time.monotonic() - last_stream_event_seen
+                    finished_message_id = await _agent_finished_message_id(
+                        redis_client,
+                        resolved_conversation_id,
+                    )
+                    running_exists = await _agent_running_exists(
+                        redis_client,
+                        resolved_conversation_id,
+                    )
+                    should_stop, stream_orphan_reason = _should_stop_orphaned_worker_stream(
+                        finished_message_id=finished_message_id,
+                        stream_message_id=stream_message_id,
+                        running_exists=running_exists,
+                        idle_seconds=idle_seconds,
+                    )
+                    if not should_stop:
+                        continue
+                    next_event_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+                        await next_event_task
+                    if stream_iter is not None:
+                        with contextlib.suppress(Exception):
+                            await stream_iter.aclose()
+                    final_content = (
+                        "Worker stream stopped without a terminal complete/error event "
+                        f"({stream_orphan_reason})."
+                    )
+                    logger.warning(
+                        "workspace_worker_launch.orphaned_stream_detected",
+                        extra={
+                            "event": "workspace_worker_launch.orphaned_stream_detected",
+                            "workspace_id": workspace_id,
+                            "task_id": task.id,
+                            "conversation_id": resolved_conversation_id,
+                            "attempt_id": resolved_attempt_id,
+                            "reason": stream_orphan_reason,
+                            "idle_seconds": idle_seconds,
+                            "finished_message_id": finished_message_id,
+                            "stream_message_id": stream_message_id,
+                        },
+                    )
+                    next_event_task = None
+                    break
+                try:
+                    event = next_event_task.result()
+                except StopAsyncIteration:
+                    final_content = "Worker stream ended without a terminal complete/error event."
+                    next_event_task = None
+                    break
+                next_event_task = None
+                last_stream_event_seen = time.monotonic()
+                stream_message_id = stream_message_id or _stream_message_id_from_event(event)
                 event_type = event.get("type")
                 if event_type == "text_delta":
                     accumulated_text += event.get("data", {}).get("text", "")
@@ -1722,6 +1878,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         final_content = "Worker launch stream raised an exception"
     finally:
         heartbeat_stop.set()
+        if next_event_task is not None and not next_event_task.done():
+            next_event_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+                await next_event_task
         if heartbeat_task is not None:
             heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1819,13 +1979,33 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             launch_state="blocked",
         )
     else:
-        outcome_reason = "no_terminal_event"
+        outcome_reason = (
+            "terminal_report_tool_applied" if terminal_report_tool_applied else "no_terminal_event"
+        )
+        if not terminal_report_tool_applied:
+            summary = (final_content or "").strip()[:2000] or (
+                "Worker stream ended without a terminal complete/error event and without "
+                "a workspace_report_complete/workspace_report_blocked tool call."
+            )
+            await _report_terminal(
+                workspace_id=workspace_id,
+                root_goal_task_id=root_goal_task_id,
+                task_id=task.id,
+                attempt_id=resolved_attempt_id,
+                conversation_id=resolved_conversation_id,
+                actor_user_id=actor_user_id,
+                worker_agent_id=worker_agent_id,
+                leader_agent_id=leader_agent_id,
+                report_type="blocked",
+                summary=summary,
+                apply_fn=apply_workspace_worker_report,
+            )
         await _patch_task_launch_state(
             workspace_id=workspace_id,
             task_id=task.id,
             actor_user_id=actor_user_id,
             leader_agent_id=leader_agent_id,
-            launch_state="no_terminal_event",
+            launch_state=outcome_reason,
         )
         logger.warning(
             "workspace_worker_launch.no_terminal_event",

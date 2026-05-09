@@ -225,6 +225,47 @@ class TestWorkerLaunchHeartbeat:
         publish.assert_not_awaited()
 
 
+class TestWorkerStreamOrphanDetection:
+    def test_finished_marker_stops_matching_worker_stream(self) -> None:
+        should_stop, reason = wl._should_stop_orphaned_worker_stream(
+            finished_message_id="msg-1",
+            stream_message_id="msg-1",
+            running_exists=False,
+            idle_seconds=1,
+        )
+
+        assert should_stop is True
+        assert reason == "agent_finished_without_terminal_event"
+
+    def test_finished_marker_for_other_message_does_not_stop_stream(self) -> None:
+        should_stop, reason = wl._should_stop_orphaned_worker_stream(
+            finished_message_id="old-msg",
+            stream_message_id="msg-1",
+            running_exists=False,
+            idle_seconds=1,
+        )
+
+        assert should_stop is False
+        assert reason is None
+
+    def test_missing_running_state_stops_only_after_orphan_grace(self) -> None:
+        assert wl._should_stop_orphaned_worker_stream(
+            finished_message_id=None,
+            stream_message_id="msg-1",
+            running_exists=False,
+            idle_seconds=899,
+            orphan_grace_seconds=900,
+        ) == (False, None)
+
+        assert wl._should_stop_orphaned_worker_stream(
+            finished_message_id=None,
+            stream_message_id="msg-1",
+            running_exists=False,
+            idle_seconds=900,
+            orphan_grace_seconds=900,
+        ) == (True, "agent_not_running_stream_idle")
+
+
 class TestPreStreamLaunchFailure:
     @pytest.mark.asyncio
     async def test_reports_blocked_and_patches_launch_state(
@@ -341,9 +382,7 @@ class TestStreamCompletionFallback:
 
         assert wl._terminal_report_tool_observation_status(event) == "denied"
         assert (
-            wl._should_synthesize_stream_completion_report(
-                terminal_report_tool_observed=True
-            )
+            wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=True)
             is False
         )
 
@@ -359,9 +398,7 @@ class TestStreamCompletionFallback:
 
         assert wl._terminal_report_tool_observation_status(event) == "applied"
         assert (
-            wl._should_synthesize_stream_completion_report(
-                terminal_report_tool_observed=True
-            )
+            wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=True)
             is False
         )
 
@@ -373,9 +410,7 @@ class TestStreamCompletionFallback:
 
         assert wl._terminal_report_tool_observation_status(event) is None
         assert (
-            wl._should_synthesize_stream_completion_report(
-                terminal_report_tool_observed=False
-            )
+            wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=False)
             is True
         )
 
@@ -669,7 +704,9 @@ class TestBuildBrief:
         )
         assert code_context_payload["agents_files"][0]["content"] == "Always run npm test."
         assert "Before the first file operation" in code_context_payload["rule"]
-        assert "Bash commands must also start from the selected root" in code_context_payload["rule"]
+        assert (
+            "Bash commands must also start from the selected root" in code_context_payload["rule"]
+        )
         assert (
             "Do not create project files directly under /workspace" in code_context_payload["rule"]
         )
@@ -717,14 +754,16 @@ class TestBuildBrief:
             system_context["additional_instructions"]
             == "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2"
         )
-        assert "worktree_path overrides code_context.sandbox_code_root" in (
-            system_context["workspace_root_override"]["rule"]
+        assert (
+            "worktree_path overrides code_context.sandbox_code_root"
+            in (system_context["workspace_root_override"]["rule"])
         )
         assert "file_path arguments" in system_context["workspace_root_override"]["rule"]
         assert "bash writes" in system_context["workspace_root_override"]["rule"]
         assert "temp scripts" in system_context["workspace_root_override"]["rule"]
-        assert "check additional_instructions for a worktree_path" in (
-            system_context["code_context"]["rule"]
+        assert (
+            "check additional_instructions for a worktree_path"
+            in (system_context["code_context"]["rule"])
         )
 
     def test_rewrites_checkpoint_commands_to_attempt_worktree_root(self) -> None:

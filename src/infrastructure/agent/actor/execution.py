@@ -748,7 +748,7 @@ async def execute_project_chat(
             parent_session_id=request.parent_session_id,
         )
     finally:
-        await clear_agent_running(request.conversation_id)
+        await clear_agent_running(request.conversation_id, request.message_id)
 
 
 async def handle_hitl_pending(
@@ -997,7 +997,7 @@ async def continue_project_chat(
             parent_session_id=state.parent_session_id,
         )
     finally:
-        await clear_agent_running(state.conversation_id)
+        await clear_agent_running(state.conversation_id, state.message_id)
 
 
 # ---------------------------------------------------------------------------
