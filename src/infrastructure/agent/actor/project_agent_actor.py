@@ -503,13 +503,13 @@ class ProjectAgentActor:
                     from src.application.services.agent.runtime_bootstrapper import (
                         AgentRuntimeBootstrapper,
                     )
-                    from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (  # noqa: E501
+                    from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
                         RedisAgentMessageBusAdapter,
                     )
                     from src.infrastructure.adapters.secondary.persistence.database import (
                         async_session_factory,
                     )
-                    from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (  # noqa: E501
+                    from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
                         SqlAgentRegistryRepository,
                     )
                     from src.infrastructure.agent.orchestration.orchestrator import (
