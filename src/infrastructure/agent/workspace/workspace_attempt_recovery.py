@@ -51,6 +51,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
     SqlWorkspaceTaskSessionAttemptRepository,
 )
+from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
@@ -66,10 +67,12 @@ DEFAULT_STARTUP_GRACE_SECONDS = 15
 DEFAULT_CHECK_INTERVAL_SECONDS = 60
 DEFAULT_MAX_ATTEMPTS_PER_SWEEP = 3
 DEFAULT_ERROR_EVENT_GRACE_SECONDS = 5
+DEFAULT_FINISHED_STREAM_GRACE_SECONDS = 15
 DEFAULT_TRANSIENT_PROVIDER_ERROR_GRACE_SECONDS = 300
 RECOVERY_SUMMARY_RESTART = "recovered_after_restart_no_heartbeat"
 RECOVERY_SUMMARY_STALE = "recovered_stale_no_heartbeat"
 RECOVERY_SUMMARY_AGENT_ERROR_EVENT = "recovered_agent_error_event"
+RECOVERY_SUMMARY_AGENT_FINISHED_STREAM = "recovered_agent_finished_no_terminal_report"
 TERMINAL_ATTEMPT_STATUSES = {
     WorkspaceTaskSessionAttemptStatus.ACCEPTED,
     WorkspaceTaskSessionAttemptStatus.REJECTED,
@@ -123,6 +126,51 @@ def _error_event_message(event_data: object) -> str:
     return raw.strip() if isinstance(raw, str) else ""
 
 
+def _decode_redis_value(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _stream_event_message(event_data: object) -> str:
+    if not isinstance(event_data, Mapping):
+        return ""
+    raw = (
+        event_data.get("message")
+        or event_data.get("content")
+        or event_data.get("error")
+        or event_data.get("reason")
+        or event_data.get("detail")
+    )
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _finished_stream_recovery_summary(
+    *,
+    event_type: str,
+    event_data: object,
+    finished_message_id: str,
+) -> str:
+    if event_type == "error":
+        base = _error_event_recovery_summary(event_data)
+    else:
+        base = RECOVERY_SUMMARY_AGENT_FINISHED_STREAM
+    message = _stream_event_message(event_data).replace("\r", "\n").strip()
+    if len(message) > 900:
+        message = message[:885] + "...[truncated]"
+    details = [
+        f"stream_event={event_type}",
+        f"message_id={finished_message_id}",
+    ]
+    if message:
+        details.append(f"last_event={message}")
+    return f"{base}: {'; '.join(details)}"
+
+
 def _is_transient_provider_error_event(event_data: object) -> bool:
     message = _error_event_message(event_data).casefold()
     if not message:
@@ -142,6 +190,21 @@ def _should_defer_error_event_recovery(
     if not _is_transient_provider_error_event(event_data):
         return False
     return event_created_at > now - timedelta(seconds=transient_error_grace_seconds)
+
+
+def _should_recover_finished_stream(
+    *,
+    finished_message_id: str | None,
+    running_exists: bool,
+    event_created_at: datetime,
+    now: datetime,
+    finished_stream_grace_seconds: int,
+) -> bool:
+    if not finished_message_id:
+        return False
+    if running_exists:
+        return False
+    return event_created_at <= now - timedelta(seconds=finished_stream_grace_seconds)
 
 
 ApplyReportCallable = Callable[..., Awaitable[object]]
@@ -166,6 +229,7 @@ class WorkspaceAttemptRecoveryService:
         check_interval_seconds: int = DEFAULT_CHECK_INTERVAL_SECONDS,
         max_attempts_per_sweep: int = DEFAULT_MAX_ATTEMPTS_PER_SWEEP,
         error_event_grace_seconds: int = DEFAULT_ERROR_EVENT_GRACE_SECONDS,
+        finished_stream_grace_seconds: int = DEFAULT_FINISHED_STREAM_GRACE_SECONDS,
         transient_error_grace_seconds: int = DEFAULT_TRANSIENT_PROVIDER_ERROR_GRACE_SECONDS,
     ) -> None:
         if stale_seconds <= 0:
@@ -178,6 +242,8 @@ class WorkspaceAttemptRecoveryService:
             raise ValueError("max_attempts_per_sweep must be > 0")
         if error_event_grace_seconds < 0:
             raise ValueError("error_event_grace_seconds must be >= 0")
+        if finished_stream_grace_seconds < 0:
+            raise ValueError("finished_stream_grace_seconds must be >= 0")
         if transient_error_grace_seconds < 0:
             raise ValueError("transient_error_grace_seconds must be >= 0")
         self._session_factory = session_factory
@@ -190,6 +256,7 @@ class WorkspaceAttemptRecoveryService:
         self._check_interval_seconds = check_interval_seconds
         self._max_attempts_per_sweep = max_attempts_per_sweep
         self._error_event_grace_seconds = error_event_grace_seconds
+        self._finished_stream_grace_seconds = finished_stream_grace_seconds
         self._transient_error_grace_seconds = transient_error_grace_seconds
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
@@ -238,7 +305,8 @@ class WorkspaceAttemptRecoveryService:
         Returns the number of attempts recovered.
         """
         threshold = datetime.now(UTC) - timedelta(seconds=self._startup_grace_seconds)
-        recovered = await self._recover_error_events()
+        recovered = await self._recover_finished_streams()
+        recovered += await self._recover_error_events()
         stale = await self._fetch_stale(threshold)
         recovered += await self._recover_all(stale, RECOVERY_SUMMARY_RESTART)
         if recovered:
@@ -256,7 +324,8 @@ class WorkspaceAttemptRecoveryService:
         """Recover non-terminal attempts stale for ``stale_seconds`` and
         not present in the supervisor liveness map. Returns the recovered count.
         """
-        recovered = await self._recover_error_events()
+        recovered = await self._recover_finished_streams()
+        recovered += await self._recover_error_events()
         threshold = datetime.now(UTC) - timedelta(seconds=self._stale_seconds)
         stale = await self._fetch_stale(threshold)
         if not stale:
@@ -280,7 +349,8 @@ class WorkspaceAttemptRecoveryService:
     async def workspace_sweep(self, workspace_id: str) -> int:
         """Recover stale attempts for one workspace without sweeping all history."""
         threshold = datetime.now(UTC) - timedelta(seconds=self._stale_seconds)
-        recovered = await self._recover_error_events(workspace_id=workspace_id)
+        recovered = await self._recover_finished_streams(workspace_id=workspace_id)
+        recovered += await self._recover_error_events(workspace_id=workspace_id)
         stale = await self._fetch_stale(threshold, workspace_id=workspace_id)
         if not stale:
             return recovered
@@ -391,6 +461,136 @@ class WorkspaceAttemptRecoveryService:
             summaries,
         )
 
+    async def _recover_finished_streams(self, *, workspace_id: str | None = None) -> int:
+        """Recover attempts whose actor stream already ended without a WTP report.
+
+        Transient provider errors are normally given a longer grace window so an
+        alive worker can self-recover. The Redis ``agent:finished`` marker means
+        the actor execution has already exited, so waiting on that grace just
+        leaves the workspace node stuck in ``running``.
+        """
+        older_than = datetime.now(UTC) - timedelta(seconds=self._finished_stream_grace_seconds)
+        finished_attempts = await self._fetch_finished_stream_attempts(
+            older_than=older_than,
+            workspace_id=workspace_id,
+        )
+        if not finished_attempts:
+            return 0
+        summaries = {attempt.id: summary for attempt, summary in finished_attempts}
+        return await self._recover_all(
+            [attempt for attempt, _summary in finished_attempts],
+            summaries,
+        )
+
+    async def _fetch_finished_stream_attempts(
+        self,
+        *,
+        older_than: datetime,
+        workspace_id: str | None = None,
+    ) -> list[tuple[WorkspaceTaskSessionAttempt, str]]:
+        non_terminal = [
+            WorkspaceTaskSessionAttemptStatus.PENDING.value,
+            WorkspaceTaskSessionAttemptStatus.RUNNING.value,
+            WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value,
+        ]
+        async with self._session_factory() as session:
+            repo = SqlWorkspaceTaskSessionAttemptRepository(session)
+            now = datetime.now(UTC)
+            stmt = (
+                select(
+                    WorkspaceTaskSessionAttemptModel,
+                    AgentExecutionEvent.event_type,
+                    AgentExecutionEvent.event_data,
+                    AgentExecutionEvent.created_at,
+                )
+                .join(
+                    AgentExecutionEvent,
+                    AgentExecutionEvent.conversation_id
+                    == WorkspaceTaskSessionAttemptModel.conversation_id,
+                )
+                .where(WorkspaceTaskSessionAttemptModel.status.in_(non_terminal))
+                .where(WorkspaceTaskSessionAttemptModel.conversation_id.is_not(None))
+                .where(AgentExecutionEvent.event_type.in_(("complete", "error")))
+                .where(
+                    AgentExecutionEvent.created_at >= WorkspaceTaskSessionAttemptModel.created_at
+                )
+                .where(AgentExecutionEvent.created_at < older_than)
+            )
+            if workspace_id:
+                stmt = stmt.where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+            stmt = stmt.order_by(
+                WorkspaceTaskSessionAttemptModel.updated_at.asc(),
+                AgentExecutionEvent.created_at.desc(),
+            ).limit(self._max_attempts_per_sweep * 4)
+            result = await session.execute(stmt)
+            rows = result.all()
+            if not rows:
+                return []
+            try:
+                redis_client = await get_redis_client()
+            except Exception:
+                logger.warning(
+                    "workspace_attempt_recovery.finished_stream_redis_unavailable",
+                    exc_info=True,
+                    extra={
+                        "event": ("workspace_attempt_recovery.finished_stream_redis_unavailable"),
+                    },
+                )
+                return []
+
+            recovered: list[tuple[WorkspaceTaskSessionAttempt, str]] = []
+            seen: set[str] = set()
+            for attempt_model, event_type, event_data, event_created_at in rows:
+                attempt = repo._to_domain(attempt_model)
+                if attempt is None or attempt.id in seen:
+                    continue
+                conversation_id = attempt.conversation_id
+                if not isinstance(conversation_id, str) or not conversation_id:
+                    continue
+                try:
+                    finished_message_id = _decode_redis_value(
+                        await redis_client.get(f"agent:finished:{conversation_id}")
+                    )
+                    running_exists = bool(
+                        await redis_client.exists(f"agent:running:{conversation_id}")
+                    )
+                except Exception:
+                    logger.warning(
+                        "workspace_attempt_recovery.finished_stream_state_lookup_failed",
+                        exc_info=True,
+                        extra={
+                            "event": (
+                                "workspace_attempt_recovery.finished_stream_state_lookup_failed"
+                            ),
+                            "attempt_id": attempt.id,
+                            "conversation_id": conversation_id,
+                            "workspace_id": attempt.workspace_id,
+                        },
+                    )
+                    continue
+                if not _should_recover_finished_stream(
+                    finished_message_id=finished_message_id,
+                    running_exists=running_exists,
+                    event_created_at=event_created_at,
+                    now=now,
+                    finished_stream_grace_seconds=self._finished_stream_grace_seconds,
+                ):
+                    continue
+                seen.add(attempt.id)
+                recovered.append(
+                    (
+                        attempt,
+                        _finished_stream_recovery_summary(
+                            event_type=str(event_type or "unknown"),
+                            event_data=event_data,
+                            finished_message_id=finished_message_id or "",
+                        ),
+                    )
+                )
+                if len(recovered) >= self._max_attempts_per_sweep:
+                    break
+            return recovered
+
     async def _fetch_error_terminated_attempts(
         self,
         *,
@@ -419,7 +619,9 @@ class WorkspaceAttemptRecoveryService:
                 .where(WorkspaceTaskSessionAttemptModel.status.in_(non_terminal))
                 .where(WorkspaceTaskSessionAttemptModel.conversation_id.is_not(None))
                 .where(AgentExecutionEvent.event_type == "error")
-                .where(AgentExecutionEvent.created_at >= WorkspaceTaskSessionAttemptModel.created_at)
+                .where(
+                    AgentExecutionEvent.created_at >= WorkspaceTaskSessionAttemptModel.created_at
+                )
                 .where(AgentExecutionEvent.created_at < older_than)
             )
             if workspace_id:
@@ -449,9 +651,7 @@ class WorkspaceAttemptRecoveryService:
                             "workspace_task_id": attempt.workspace_task_id,
                             "workspace_id": attempt.workspace_id,
                             "error_event_created_at": event_created_at.isoformat(),
-                            "transient_error_grace_seconds": (
-                                self._transient_error_grace_seconds
-                            ),
+                            "transient_error_grace_seconds": (self._transient_error_grace_seconds),
                         },
                     )
                     continue
@@ -788,9 +988,7 @@ class WorkspaceAttemptRecoveryService:
                     return None
                 if not task.created_by:
                     return None
-                metadata = (
-                    task.metadata if isinstance(task.metadata, Mapping) else {}
-                )
+                metadata = task.metadata if isinstance(task.metadata, Mapping) else {}
                 return task.created_by, task.status, metadata
         except Exception:
             logger.exception(

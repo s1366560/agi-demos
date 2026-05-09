@@ -14,10 +14,12 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
 )
 from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
     RECOVERY_SUMMARY_AGENT_ERROR_EVENT,
+    RECOVERY_SUMMARY_AGENT_FINISHED_STREAM,
     RECOVERY_SUMMARY_RESTART,
     RECOVERY_SUMMARY_STALE,
     WorkspaceAttemptRecoveryService,
     _should_defer_error_event_recovery,
+    _should_recover_finished_stream,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
@@ -87,6 +89,39 @@ def test_does_not_defer_old_or_non_transient_error_recovery() -> None:
         event_created_at=now - timedelta(seconds=30),
         now=now,
         transient_error_grace_seconds=300,
+    )
+
+
+def test_finished_stream_recovery_requires_finished_marker_and_no_running_key() -> None:
+    now = datetime.now(UTC)
+
+    assert _should_recover_finished_stream(
+        finished_message_id="msg-1",
+        running_exists=False,
+        event_created_at=now - timedelta(seconds=16),
+        now=now,
+        finished_stream_grace_seconds=15,
+    )
+    assert not _should_recover_finished_stream(
+        finished_message_id=None,
+        running_exists=False,
+        event_created_at=now - timedelta(seconds=16),
+        now=now,
+        finished_stream_grace_seconds=15,
+    )
+    assert not _should_recover_finished_stream(
+        finished_message_id="msg-1",
+        running_exists=True,
+        event_created_at=now - timedelta(seconds=16),
+        now=now,
+        finished_stream_grace_seconds=15,
+    )
+    assert not _should_recover_finished_stream(
+        finished_message_id="msg-1",
+        running_exists=False,
+        event_created_at=now - timedelta(seconds=14),
+        now=now,
+        finished_stream_grace_seconds=15,
     )
 
 
@@ -179,6 +214,9 @@ def _make_service(
     )
     service._fetch_error_terminated_attempts = AsyncMock(  # type: ignore[method-assign]
         return_value=[]
+    )
+    service._recover_finished_streams = AsyncMock(  # type: ignore[method-assign]
+        return_value=0
     )
     service._filter_recently_active_attempts = AsyncMock(  # type: ignore[method-assign]
         side_effect=lambda attempts, _threshold: attempts
@@ -393,6 +431,57 @@ class TestStartupSweep:
         kwargs = apply_report.await_args.kwargs
         assert kwargs["attempt_id"] == "att-error"
         assert kwargs["summary"] == f"{RECOVERY_SUMMARY_AGENT_ERROR_EVENT}: Executor shutdown"
+        schedule_tick.assert_called_once_with("ws-1", "user-1")
+
+    @pytest.mark.asyncio
+    async def test_finished_stream_recovery_runs_before_transient_error_grace(self) -> None:
+        att = _make_attempt(attempt_id="att-finished", workspace_task_id="task-1")
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[],
+            task_lookup={"task-1": "user-1"},
+        )
+        service._recover_finished_streams = AsyncMock(  # type: ignore[method-assign]
+            return_value=1
+        )
+
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+
+            assert recovered == 1
+            service._recover_finished_streams.assert_awaited_once_with()  # type: ignore[attr-defined]
+            service._fetch_error_terminated_attempts.assert_awaited_once()  # type: ignore[attr-defined]
+            apply_report.assert_not_awaited()
+            schedule_tick.assert_not_called()
+
+            # Exercise the real finished-stream recovery path separately: it must
+            # recover immediately once the actor-finished marker has already been
+            # validated by _fetch_finished_stream_attempts.
+            service._recover_finished_streams = (  # type: ignore[method-assign]
+                WorkspaceAttemptRecoveryService._recover_finished_streams.__get__(
+                    service,
+                    WorkspaceAttemptRecoveryService,
+                )
+            )
+            service._fetch_finished_stream_attempts = AsyncMock(  # type: ignore[method-assign]
+                return_value=[
+                    (
+                        att,
+                        f"{RECOVERY_SUMMARY_AGENT_FINISHED_STREAM}: stream_event=error",
+                    )
+                ]
+            )
+            recovered = await service._recover_finished_streams()  # type: ignore[misc]
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_awaited_once()
+        kwargs = apply_report.await_args.kwargs
+        assert kwargs["attempt_id"] == "att-finished"
+        assert kwargs["summary"] == f"{RECOVERY_SUMMARY_AGENT_FINISHED_STREAM}: stream_event=error"
         schedule_tick.assert_called_once_with("ws-1", "user-1")
 
     @pytest.mark.asyncio
