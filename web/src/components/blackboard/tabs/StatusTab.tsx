@@ -154,6 +154,7 @@ export function StatusTab({
         workspaceId={workspaceId}
         tenantId={tenantId}
         projectId={projectId}
+        agents={agents}
         tasks={tasks}
         refreshToken={planRefreshToken}
       />

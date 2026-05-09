@@ -5,6 +5,7 @@ import {
   workspaceAutonomyService,
   workspaceBlackboardService,
   workspacePlanService,
+  workspaceTaskService,
 } from '@/services/workspaceService';
 import { fireEvent, render, screen, waitFor } from '@/test/utils';
 
@@ -26,6 +27,11 @@ vi.mock('@/services/workspaceService', () => ({
     resumeAutoLoop: vi.fn(),
     retryOutboxItem: vi.fn(),
     triggerNextIteration: vi.fn(),
+  },
+  workspaceTaskService: {
+    getExperience: vi.fn(),
+    getExecutionSession: vi.fn(),
+    applyRecoveryAction: vi.fn(),
   },
 }));
 
@@ -55,6 +61,29 @@ describe('StatusTab', () => {
       triggered: false,
       root_task_id: null,
       reason: 'no_root_needs_progress',
+    });
+    vi.mocked(workspaceTaskService.getExperience).mockResolvedValue({
+      task_id: 'task-1',
+      workspace_id: 'ws-1',
+      readiness: {},
+      execution: {},
+      evidence: {},
+      diagnostics: {},
+      activity: [],
+    });
+    vi.mocked(workspaceTaskService.getExecutionSession).mockResolvedValue({
+      workspace_id: 'ws-1',
+      task_id: 'task-1',
+      task_status: 'todo',
+      health: 'unknown',
+      session_status: 'not_started',
+      has_user_input: false,
+      has_assistant_output: false,
+      incidents: [],
+      recommended_recovery_action: null,
+      available_interventions: [],
+      recent_events: [],
+      recovery_actions: [],
     });
   });
 
@@ -228,7 +257,7 @@ describe('StatusTab', () => {
             },
             assignee_agent_id: 'agent-1',
             current_attempt_id: 'attempt-1',
-            workspace_task_id: null,
+            workspace_task_id: 'task-1',
             priority: 1,
             metadata: {},
             phase_contract: {
@@ -326,7 +355,7 @@ describe('StatusTab', () => {
         loop_label: 'Scrum feedback loop',
         cadence: 'research -> plan -> implement -> test -> deploy -> review',
         loop_status: 'active',
-        max_iterations: 8,
+        max_iterations: 1,
         completed_iterations: [],
         current_sprint_goal: 'Ship the autonomous plan increment.',
         review_summary: 'Review requested implementation evidence.',
@@ -413,13 +442,24 @@ describe('StatusTab', () => {
         }}
         topologyEdges={[]}
         agents={[]}
-        tasks={[]}
+        tasks={[
+          {
+            id: 'task-1',
+            workspace_id: 'ws-1',
+            title: 'Ship autonomous plan workspace task',
+            status: 'in_progress',
+            metadata: {},
+            created_at: '2026-04-23T00:00:00Z',
+          },
+        ]}
         workspaceId="ws-1"
         statusBadgeTone={() => 'bg-green-500'}
       />
     );
 
     expect((await screen.findAllByText('Ship autonomous plan'))[0]).toBeInTheDocument();
+    expect(screen.getByText('blackboard.iterationLedgerTitle')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.iterationTasksTitle')).toBeInTheDocument();
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Iteration 1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('active').length).toBeGreaterThanOrEqual(1);
@@ -435,16 +475,22 @@ describe('StatusTab', () => {
       screen.getByText('Add browser verification before completing the goal.')
     ).toBeInTheDocument();
     expect(screen.getByText('Review history')).toBeInTheDocument();
-    expect(screen.getByText('Plan next')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.planRunPlanNextManual')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.planRunIterationLimitHint')).toBeInTheDocument();
     expect(screen.getByText('Phase contract')).toBeInTheDocument();
     expect(screen.getAllByText(/commit or recovery ref/).length).toBeGreaterThanOrEqual(1);
     fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole('button', { name: 'Runs' }));
-    expect(screen.getByText('supervisor_tick')).toBeInTheDocument();
+    expect(screen.getAllByText('supervisor_tick').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(screen.getByText('Review gate')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('blackboard.iterationOpenTask'));
+    await waitFor(() => {
+      expect(workspaceTaskService.getExperience).toHaveBeenCalledWith('ws-1', 'task-1');
+    });
+    expect(screen.getByText('Ship autonomous plan workspace task')).toBeInTheDocument();
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
       outboxLimit: 20,
       eventLimit: 80,
@@ -690,12 +736,12 @@ describe('StatusTab', () => {
       />
     );
 
-    expect(await screen.findAllByText('Blocked implementation')).toHaveLength(2);
+    expect((await screen.findAllByText('Blocked implementation')).length).toBeGreaterThanOrEqual(2);
     fireEvent.change(screen.getByLabelText('blackboard.planRunSearch'), {
       target: { value: 'blocked' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
-    expect(screen.getByText('artifact.blocked-report')).toBeInTheDocument();
+    expect(screen.getAllByText('artifact.blocked-report').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('link', { name: 'Open attempt' })).toHaveAttribute(
       'href',
       '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1&workspaceId=ws-1'

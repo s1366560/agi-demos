@@ -25,18 +25,26 @@ import {
 } from 'lucide-react';
 
 import { projectSandboxService } from '@/services/projectSandboxService';
-import { workspaceAutonomyService, workspacePlanService } from '@/services/workspaceService';
+import {
+  workspaceAutonomyService,
+  workspacePlanService,
+  workspaceTaskService,
+} from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { getAuthToken } from '@/utils/tokenResolver';
 
+import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
+
 import { EmptyState } from '../EmptyState';
 import { StatBadge } from '../StatBadge';
 
+import { PlanRunIterationLedger } from './PlanRunIterationLedger';
 import {
   actionEnabled,
   asRecord,
   asText,
+  buildIterationRuns,
   countDone,
   criterionSummary,
   eventLabel,
@@ -61,6 +69,9 @@ import {
 } from './PlanRunSnapshotParts';
 
 import type {
+  TaskExecutionSession,
+  TaskRecoveryAction,
+  WorkspaceAgent,
   WorkspacePlanActionCapability,
   WorkspacePlanDeliverySummary,
   WorkspacePlanEvidenceBundle,
@@ -69,6 +80,7 @@ import type {
   WorkspacePlanNode,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
+  WorkspaceTaskExperienceSummary,
   WorkspaceTask,
 } from '@/types/workspace';
 
@@ -78,6 +90,7 @@ interface PlanRunSnapshotSectionProps {
   workspaceId: string;
   tenantId?: string | undefined;
   projectId?: string | undefined;
+  agents?: WorkspaceAgent[] | undefined;
   tasks?: WorkspaceTask[] | undefined;
   refreshToken?: number | undefined;
 }
@@ -174,12 +187,15 @@ function IterationLoopPanel({
   isActionPending: boolean;
   onAction: (actionId: 'pause_auto_loop' | 'resume_auto_loop' | 'trigger_next_iteration') => void;
 }) {
+  const { t } = useTranslation();
+
   if (!iteration) {
     return null;
   }
   const pauseAction = iteration.actions.pause_auto_loop;
   const resumeAction = iteration.actions.resume_auto_loop;
   const triggerAction = iteration.actions.trigger_next_iteration;
+  const isAtIterationLimit = iteration.current_iteration >= iteration.max_iterations;
   const statusTone =
     iteration.loop_status === 'completed'
       ? 'text-status-text-success'
@@ -262,15 +278,33 @@ function IterationLoopPanel({
           type="button"
           className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
           disabled={isActionPending || !actionEnabled(triggerAction)}
-          title={actionDisabledReason(triggerAction, 'Next iteration is not available.')}
+          title={
+            isAtIterationLimit
+              ? t(
+                  'blackboard.planRunPlanNextManualHint',
+                  'Iteration limit reached. Plan next is an explicit operator action.'
+                )
+              : actionDisabledReason(triggerAction, 'Next iteration is not available.')
+          }
           onClick={() => {
             onAction('trigger_next_iteration');
           }}
         >
           <SkipForward className="h-3.5 w-3.5" aria-hidden />
-          Plan next
+          {isAtIterationLimit
+            ? t('blackboard.planRunPlanNextManual', 'Plan next manually')
+            : t('blackboard.planRunPlanNext', 'Plan next')}
         </button>
       </div>
+
+      {isAtIterationLimit && (
+        <p className="mt-2 max-w-3xl break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
+          {t(
+            'blackboard.planRunIterationLimitHint',
+            'The automatic iteration limit has been reached. Plan next remains available as a deliberate operator action.'
+          )}
+        </p>
+      )}
 
       <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
         {iteration.phases.map((phase) => {
@@ -677,6 +711,7 @@ export function PlanRunSnapshotSection({
   workspaceId,
   tenantId,
   projectId,
+  agents = [],
   tasks,
   refreshToken,
 }: PlanRunSnapshotSectionProps) {
@@ -698,6 +733,14 @@ export function PlanRunSnapshotSection({
   const [previewOpeningUrl, setPreviewOpeningUrl] = useState<string | null>(null);
   const [operatorReason, setOperatorReason] = useState('');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [selectedIterationIndex, setSelectedIterationIndex] = useState<number | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskExperience, setSelectedTaskExperience] =
+    useState<WorkspaceTaskExperienceSummary | null>(null);
+  const [selectedTaskSession, setSelectedTaskSession] = useState<TaskExecutionSession | null>(null);
+  const [isTaskExperienceLoading, setIsTaskExperienceLoading] = useState(false);
+  const [isTaskRecoveryPending, setIsTaskRecoveryPending] = useState(false);
+  const [taskExperienceError, setTaskExperienceError] = useState<string | null>(null);
 
   const loadSnapshot = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -829,6 +872,28 @@ export function PlanRunSnapshotSection({
     totalCompletionUnits > 0 ? Math.round((completedUnits / totalCompletionUnits) * 100) : 0;
   const latestEvent = events[0] ?? null;
   const isStale = lastUpdatedAt ? Date.now() - lastUpdatedAt.getTime() > 20000 : false;
+  const iterationRuns = useMemo(() => buildIterationRuns(snapshot, taskList), [snapshot, taskList]);
+  const selectedIterationRun = useMemo(() => {
+    return (
+      iterationRuns.find((run) => run.index === selectedIterationIndex) ??
+      iterationRuns.find((run) => run.index === iteration?.current_iteration) ??
+      iterationRuns.at(-1) ??
+      null
+    );
+  }, [iteration?.current_iteration, iterationRuns, selectedIterationIndex]);
+
+  useEffect(() => {
+    if (iterationRuns.length === 0) {
+      setSelectedIterationIndex(null);
+      return;
+    }
+    setSelectedIterationIndex((current) => {
+      if (current !== null && iterationRuns.some((run) => run.index === current)) {
+        return current;
+      }
+      return iteration?.current_iteration ?? iterationRuns.at(-1)?.index ?? null;
+    });
+  }, [iteration?.current_iteration, iterationRuns]);
 
   const selectedEvents = useMemo(() => {
     if (!selectedNode) {
@@ -911,6 +976,52 @@ export function PlanRunSnapshotSection({
       ) ?? null
     );
   }, [selectedNode, taskList]);
+  const selectedTask = useMemo(
+    () => taskList.find((task) => task.id === selectedTaskId) ?? null,
+    [selectedTaskId, taskList]
+  );
+
+  useEffect(() => {
+    if (!selectedTaskId || selectedTask) {
+      return;
+    }
+    setSelectedTaskId(null);
+    setSelectedTaskExperience(null);
+    setSelectedTaskSession(null);
+    setTaskExperienceError(null);
+  }, [selectedTask, selectedTaskId]);
+
+  useEffect(() => {
+    if (!selectedTaskId || !selectedTask) {
+      return;
+    }
+    let cancelled = false;
+    setIsTaskExperienceLoading(true);
+    setTaskExperienceError(null);
+    Promise.all([
+      workspaceTaskService.getExperience(workspaceId, selectedTaskId),
+      workspaceTaskService.getExecutionSession(workspaceId, selectedTaskId),
+    ])
+      .then(([experience, session]) => {
+        if (!cancelled) {
+          setSelectedTaskExperience(experience);
+          setSelectedTaskSession(session);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setTaskExperienceError(err instanceof Error ? err.message : String(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsTaskExperienceLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTask, selectedTaskId, workspaceId]);
 
   const attemptHref =
     tenantId && projectId && linkedTask?.current_attempt_conversation_id
@@ -1079,6 +1190,29 @@ export function PlanRunSnapshotSection({
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsActionPending(false);
+    }
+  };
+
+  const runTaskRecoveryAction = async (action: TaskRecoveryAction) => {
+    if (!selectedTaskId) {
+      return;
+    }
+    setIsTaskRecoveryPending(true);
+    setTaskExperienceError(null);
+    try {
+      const result = await workspaceTaskService.applyRecoveryAction(workspaceId, selectedTaskId, {
+        action,
+      });
+      const [experience, session] = await Promise.all([
+        workspaceTaskService.getExperience(workspaceId, selectedTaskId),
+        workspaceTaskService.getExecutionSession(workspaceId, selectedTaskId),
+      ]);
+      setSelectedTaskExperience(experience);
+      setSelectedTaskSession(result.session ?? session);
+    } catch (err) {
+      setTaskExperienceError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsTaskRecoveryPending(false);
     }
   };
 
@@ -1319,6 +1453,20 @@ export function PlanRunSnapshotSection({
             iteration={iteration}
             isActionPending={isActionPending}
             onAction={(actionId) => void runIterationAction(actionId)}
+          />
+          <PlanRunIterationLedger
+            runs={iterationRuns}
+            selectedIndex={selectedIterationRun?.index ?? null}
+            selectedNodeId={selectedNode?.id ?? null}
+            onSelectIteration={(index) => {
+              setSelectedIterationIndex(index);
+            }}
+            onSelectNode={(nodeId) => {
+              setSelectedNodeId(nodeId);
+            }}
+            onOpenTask={(taskId) => {
+              setSelectedTaskId(taskId);
+            }}
           />
           <DeliveryPanel
             delivery={delivery}
@@ -1838,6 +1986,28 @@ export function PlanRunSnapshotSection({
               )}
             </aside>
           </div>
+          {selectedTask && (
+            <div className="border-t border-border-separator p-4 dark:border-border-dark">
+              <TaskExperiencePanel
+                task={selectedTask}
+                agents={agents}
+                experience={selectedTaskExperience}
+                executionSession={selectedTaskSession}
+                loading={isTaskExperienceLoading}
+                recoveryActionLoading={isTaskRecoveryPending}
+                error={taskExperienceError}
+                onRecoveryAction={(action) => {
+                  void runTaskRecoveryAction(action);
+                }}
+                onClose={() => {
+                  setSelectedTaskId(null);
+                  setSelectedTaskExperience(null);
+                  setSelectedTaskSession(null);
+                  setTaskExperienceError(null);
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
     </section>

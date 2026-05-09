@@ -1,13 +1,63 @@
 import type {
   WorkspacePlanActionCapability,
+  WorkspacePlanBlackboardEntry,
+  WorkspacePlanDeliverySummary,
   WorkspacePlanEvent,
   WorkspacePlanNode,
   WorkspacePlanOutboxItem,
   WorkspacePlanSnapshot,
+  WorkspaceTask,
 } from '@/types/workspace';
 
 export type NodeFilter = 'all' | 'running' | 'blocked' | 'verifying' | 'done' | 'recovery';
 export type NodeActionId = 'request_replan' | 'reopen_blocked' | 'accept_with_human_review';
+export type IterationStatus = 'active' | 'completed' | 'blocked' | 'planned';
+
+export interface IterationInteractionStats {
+  total: number;
+  worker: number;
+  verifier: number;
+  supervisor: number;
+  operator: number;
+  other: number;
+  retries: number;
+  failed: number;
+}
+
+export interface IterationOutputSummary {
+  artifacts: string[];
+  evidenceRefs: string[];
+  changedFiles: string[];
+  pipelineRefs: string[];
+  commitRefs: string[];
+  blackboardKeys: string[];
+  total: number;
+}
+
+export interface WorkspacePlanIterationRun {
+  index: number;
+  status: IterationStatus;
+  sprintGoal: string;
+  reviewSummary: string;
+  nextSprintGoal: string;
+  startedAt: string;
+  updatedAt: string;
+  completedAt: string;
+  nodes: WorkspacePlanNode[];
+  linkedTasks: WorkspaceTask[];
+  events: WorkspacePlanEvent[];
+  outbox: WorkspacePlanOutboxItem[];
+  outputs: IterationOutputSummary;
+  interactions: IterationInteractionStats;
+  carryoverNodeIds: string[];
+  counts: {
+    total: number;
+    done: number;
+    running: number;
+    blocked: number;
+    verifying: number;
+  };
+}
 
 export const FILTERS: Array<{ id: NodeFilter; label: string }> = [
   { id: 'all', label: 'All' },
@@ -107,12 +157,276 @@ export function asText(value: unknown): string {
   }
 }
 
+function uniqueStrings(items: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(items.filter((item): item is string => Boolean(item))));
+}
+
+function metadataStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+function nodeEvidenceArtifacts(node: WorkspacePlanNode): string[] {
+  return node.evidence_bundle?.artifacts ?? [];
+}
+
+function nodeEvidenceRefs(node: WorkspacePlanNode): string[] {
+  return node.evidence_bundle?.evidence_refs ?? [];
+}
+
+function nodeChangedFiles(node: WorkspacePlanNode): string[] {
+  return node.evidence_bundle?.changed_files ?? nodeWriteSet(node);
+}
+
+function nodePipelineRefs(node: WorkspacePlanNode): string[] {
+  return node.evidence_bundle?.pipeline_refs ?? [];
+}
+
 export function nodeWriteSet(node: WorkspacePlanNode): string[] {
   const value = asRecord(node.metadata).write_set;
   if (!Array.isArray(value)) {
     return [];
   }
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+export function iterationNodeIndex(node: WorkspacePlanNode): number {
+  const value = asRecord(node.metadata).iteration_index;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    return Math.max(1, Number(value));
+  }
+  return 1;
+}
+
+function iterationNodeIds(nodes: WorkspacePlanNode[]): Set<string> {
+  return new Set(nodes.map((node) => node.id));
+}
+
+function iterationAttemptIds(nodes: WorkspacePlanNode[]): Set<string> {
+  return new Set(nodes.map((node) => node.current_attempt_id).filter(Boolean) as string[]);
+}
+
+function eventBelongsToNodes(event: WorkspacePlanEvent, nodes: WorkspacePlanNode[]): boolean {
+  const nodeIds = iterationNodeIds(nodes);
+  const attemptIds = iterationAttemptIds(nodes);
+  return Boolean(
+    (event.node_id && nodeIds.has(event.node_id)) ||
+    (event.attempt_id && attemptIds.has(event.attempt_id))
+  );
+}
+
+function outboxBelongsToNodes(item: WorkspacePlanOutboxItem, nodes: WorkspacePlanNode[]): boolean {
+  const nodeIds = iterationNodeIds(nodes);
+  const attemptIds = iterationAttemptIds(nodes);
+  const payload = asRecord(item.payload);
+  const nodeId = outboxNodeId(item);
+  const attemptId = asText(payload.attempt_id ?? payload.workspace_attempt_id);
+  return Boolean((nodeId && nodeIds.has(nodeId)) || (attemptId && attemptIds.has(attemptId)));
+}
+
+function interactionBucket(source: string, eventType: string): keyof IterationInteractionStats {
+  const text = `${source} ${eventType}`.toLowerCase();
+  if (text.includes('worker')) {
+    return 'worker';
+  }
+  if (text.includes('verifier') || text.includes('verification')) {
+    return 'verifier';
+  }
+  if (text.includes('supervisor') || text.includes('dispatch')) {
+    return 'supervisor';
+  }
+  if (text.includes('operator')) {
+    return 'operator';
+  }
+  return 'other';
+}
+
+export function iterationInteractionStats(
+  events: WorkspacePlanEvent[],
+  outbox: WorkspacePlanOutboxItem[],
+  nodes: WorkspacePlanNode[]
+): IterationInteractionStats {
+  const stats: IterationInteractionStats = {
+    total: 0,
+    worker: 0,
+    verifier: 0,
+    supervisor: 0,
+    operator: 0,
+    other: 0,
+    retries: 0,
+    failed: 0,
+  };
+  const relatedEvents = events.filter((event) => eventBelongsToNodes(event, nodes));
+  const relatedOutbox = outbox.filter((item) => outboxBelongsToNodes(item, nodes));
+  for (const event of relatedEvents) {
+    const bucket = interactionBucket(event.source, event.event_type);
+    stats[bucket] += 1;
+  }
+  for (const item of relatedOutbox) {
+    const bucket = interactionBucket(asText(item.metadata.source), item.event_type);
+    stats[bucket] += 1;
+    stats.retries += Math.max(0, item.attempt_count - 1);
+    if (item.status === 'failed' || item.status === 'dead_letter' || item.status === 'dead') {
+      stats.failed += 1;
+    }
+  }
+  stats.total = relatedEvents.length + relatedOutbox.length;
+  return stats;
+}
+
+export function iterationOutputs(
+  nodes: WorkspacePlanNode[],
+  blackboard: WorkspacePlanBlackboardEntry[],
+  delivery: WorkspacePlanDeliverySummary | null | undefined
+): IterationOutputSummary {
+  const metadata = nodes.map((node) => asRecord(node.metadata));
+  const artifacts = uniqueStrings(nodes.flatMap(nodeEvidenceArtifacts));
+  const evidenceRefs = uniqueStrings(nodes.flatMap(nodeEvidenceRefs));
+  const changedFiles = uniqueStrings(nodes.flatMap(nodeChangedFiles));
+  const pipelineRefs = uniqueStrings(nodes.flatMap(nodePipelineRefs));
+  const commitRefs = uniqueStrings(
+    metadata.flatMap((item) => [
+      asText(item.commit_ref),
+      asText(item.commitRef),
+      asText(item.latest_commit_ref),
+      ...metadataStringList(item.commit_refs),
+    ])
+  );
+  const blackboardKeys = uniqueStrings(
+    blackboard.filter((entry) => entry.key.startsWith('artifact.')).map((entry) => entry.key)
+  );
+  if (delivery?.latest_run?.commit_ref) {
+    commitRefs.push(delivery.latest_run.commit_ref);
+  }
+  const totals = new Set([
+    ...artifacts,
+    ...evidenceRefs,
+    ...changedFiles,
+    ...pipelineRefs,
+    ...commitRefs,
+    ...blackboardKeys,
+  ]);
+  return {
+    artifacts,
+    evidenceRefs,
+    changedFiles,
+    pipelineRefs,
+    commitRefs: uniqueStrings(commitRefs),
+    blackboardKeys,
+    total: totals.size,
+  };
+}
+
+export function iterationCarryover(nodes: WorkspacePlanNode[]): string[] {
+  return nodes.filter((node) => node.intent !== 'done').map((node) => node.id);
+}
+
+function iterationStatus(
+  index: number,
+  nodes: WorkspacePlanNode[],
+  snapshot: WorkspacePlanSnapshot
+): IterationStatus {
+  const current = snapshot.iteration?.current_iteration ?? 1;
+  if (index === current) {
+    return snapshot.iteration?.loop_status === 'completed' ? 'completed' : 'active';
+  }
+  if (
+    snapshot.iteration?.completed_iterations.includes(index) ||
+    (nodes.length > 0 && nodes.every((node) => node.intent === 'done'))
+  ) {
+    return 'completed';
+  }
+  if (nodes.some((node) => node.intent === 'blocked')) {
+    return 'blocked';
+  }
+  return 'planned';
+}
+
+function iterationDates(nodes: WorkspacePlanNode[]) {
+  const sortedCreated = nodes
+    .map((node) => node.created_at)
+    .filter(Boolean)
+    .sort();
+  const sortedUpdated = nodes
+    .map((node) => node.updated_at ?? node.created_at)
+    .filter(Boolean)
+    .sort();
+  const sortedCompleted = nodes
+    .map((node) => node.completed_at)
+    .filter(Boolean)
+    .sort();
+  return {
+    startedAt: sortedCreated[0] ?? '',
+    updatedAt: sortedUpdated.at(-1) ?? '',
+    completedAt: sortedCompleted.at(-1) ?? '',
+  };
+}
+
+export function buildIterationRuns(
+  snapshot: WorkspacePlanSnapshot | null,
+  tasks: WorkspaceTask[] = []
+): WorkspacePlanIterationRun[] {
+  if (!snapshot?.plan) {
+    return [];
+  }
+  const runnableNodes = snapshot.plan.nodes.filter(
+    (node) => node.kind === 'task' || node.kind === 'verify'
+  );
+  const indexes = new Set<number>([
+    snapshot.iteration?.current_iteration ?? 1,
+    ...(snapshot.iteration?.completed_iterations ?? []),
+    ...(snapshot.iteration?.history ?? []).map((item) => item.iteration_index),
+    ...runnableNodes.map(iterationNodeIndex),
+  ]);
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  return Array.from(indexes)
+    .filter((index) => index > 0)
+    .sort((a, b) => a - b)
+    .map((index) => {
+      const nodes = runnableNodes.filter((node) => iterationNodeIndex(node) === index);
+      const history = snapshot.iteration?.history.find((item) => item.iteration_index === index);
+      const isCurrent = index === snapshot.iteration?.current_iteration;
+      const events = snapshot.events.filter((event) => eventBelongsToNodes(event, nodes));
+      const outbox = snapshot.outbox.filter((item) => outboxBelongsToNodes(item, nodes));
+      const dates = iterationDates(nodes);
+      return {
+        index,
+        status: iterationStatus(index, nodes, snapshot),
+        sprintGoal: isCurrent
+          ? (snapshot.iteration?.current_sprint_goal ?? '')
+          : history?.next_sprint_goal || history?.summary || '',
+        reviewSummary: isCurrent
+          ? (snapshot.iteration?.review_summary ?? history?.summary ?? '')
+          : (history?.summary ?? ''),
+        nextSprintGoal: history?.next_sprint_goal ?? '',
+        ...dates,
+        nodes,
+        linkedTasks: uniqueStrings(nodes.map((node) => node.workspace_task_id))
+          .map((taskId) => tasksById.get(taskId))
+          .filter((task): task is WorkspaceTask => Boolean(task)),
+        events,
+        outbox,
+        outputs: iterationOutputs(nodes, snapshot.blackboard, snapshot.delivery),
+        interactions: iterationInteractionStats(snapshot.events, snapshot.outbox, nodes),
+        carryoverNodeIds: iterationCarryover(nodes),
+        counts: {
+          total: nodes.length,
+          done: nodes.filter((node) => node.intent === 'done').length,
+          running: nodes.filter(
+            (node) => node.execution === 'running' || node.execution === 'dispatched'
+          ).length,
+          blocked: nodes.filter((node) => node.intent === 'blocked').length,
+          verifying: nodes.filter(
+            (node) => node.execution === 'reported' || node.execution === 'verifying'
+          ).length,
+        },
+      };
+    });
 }
 
 export function criterionSummary(node: WorkspacePlanNode): string {
