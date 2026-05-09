@@ -82,6 +82,7 @@ class _RedisExistsClient(Protocol):
 
 
 _TERMINAL_ATTEMPT_STATUSES = frozenset({"accepted", "rejected", "blocked", "cancelled"})
+_AWAITING_REPORTED_ATTEMPT_STATUS = "awaiting_leader_adjudication"
 _ITERATION_PHASE_ORDER = ("research", "plan", "implement", "test", "deploy", "review")
 _ITERATION_PHASE_LABELS = {
     "research": "Research",
@@ -2833,6 +2834,56 @@ async def _active_nodes_with_terminal_attempts(
     ]
 
 
+def _has_candidate_attempt_output(
+    summary: str | None,
+    artifacts: list[str] | None,
+    verifications: list[str] | None,
+) -> bool:
+    return bool((summary or "").strip() or artifacts or verifications)
+
+
+async def _active_nodes_with_reported_attempts(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+) -> list[PlanNode]:
+    attempt_ids = [
+        node.current_attempt_id
+        for node in plan.nodes.values()
+        if node.current_attempt_id
+        and (
+            node.execution in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}
+            or (node.intent is TaskIntent.IN_PROGRESS and node.execution is TaskExecution.IDLE)
+        )
+    ]
+    if not attempt_ids:
+        return []
+    result = await session.execute(
+        refresh_select_statement(
+            select(
+                WorkspaceTaskSessionAttemptModel.id,
+                WorkspaceTaskSessionAttemptModel.status,
+                WorkspaceTaskSessionAttemptModel.candidate_summary,
+                WorkspaceTaskSessionAttemptModel.candidate_artifacts_json,
+                WorkspaceTaskSessionAttemptModel.candidate_verifications_json,
+            ).where(WorkspaceTaskSessionAttemptModel.id.in_(attempt_ids))
+        )
+    )
+    reported_attempt_ids = {
+        attempt_id
+        for attempt_id, status, summary, artifacts, verifications in result.all()
+        if str(status or "").lower() == _AWAITING_REPORTED_ATTEMPT_STATUS
+        and _has_candidate_attempt_output(summary, artifacts, verifications)
+    }
+    if not reported_attempt_ids:
+        return []
+    return [
+        node
+        for node in plan.nodes.values()
+        if node.current_attempt_id and node.current_attempt_id in reported_attempt_ids
+    ]
+
+
 async def _has_pending_supervisor_tick_job(
     *,
     session: AsyncSession,
@@ -2909,6 +2960,91 @@ async def _enqueue_terminal_attempt_reconciliation(
             "workspace_id": workspace_id,
             "plan_id": plan.id,
             "node_count": len(nodes),
+        },
+    )
+    return 1
+
+
+async def _reconcile_reported_attempt_nodes_for_snapshot(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan: Plan,
+    nodes: list[PlanNode],
+    actor_id: str,
+) -> int:
+    if not nodes:
+        return 0
+    now = datetime.now(UTC)
+    repaired_nodes: list[PlanNode] = []
+    for node in nodes[:8]:
+        if node.execution is TaskExecution.REPORTED:
+            continue
+        metadata = {
+            **node.metadata,
+            "reported_attempt_reconciled_at": now.isoformat(),
+            "reported_attempt_status": _AWAITING_REPORTED_ATTEMPT_STATUS,
+        }
+        repaired = replace(
+            node,
+            execution=TaskExecution.REPORTED,
+            metadata=metadata,
+            updated_at=now,
+        )
+        plan.replace_node(repaired)
+        repaired_nodes.append(repaired)
+    if not repaired_nodes:
+        return 0
+
+    await SqlPlanRepository(session).save(plan)
+    supervisor_tick_pending = await _has_pending_supervisor_tick_job(
+        session=session,
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+    )
+    if not supervisor_tick_pending:
+        root_goal_task_id = plan.goal_node.workspace_task_id or ""
+        _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
+            plan_id=plan.id,
+            workspace_id=workspace_id,
+            event_type=SUPERVISOR_TICK_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "root_task_id": root_goal_task_id,
+                "actor_user_id": actor_id,
+                "reported_attempt_node_ids": [node.id for node in repaired_nodes],
+                "operator_action": "snapshot_reported_attempt_reconcile",
+            },
+            metadata={
+                "source": "workspace_plan.snapshot_reported_attempt_reconcile",
+                "reported_attempt_ids": [
+                    node.current_attempt_id for node in repaired_nodes if node.current_attempt_id
+                ],
+            },
+        )
+    _ = await SqlWorkspacePlanEventRepository(session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id=repaired_nodes[0].id,
+        attempt_id=repaired_nodes[0].current_attempt_id,
+        event_type="auto_reported_attempt_reconciled",
+        source="workspace_plan_snapshot",
+        actor_id=actor_id,
+        payload={
+            "reason": "active_plan_node_points_to_reported_attempt",
+            "node_ids": [node.id for node in repaired_nodes],
+            "supervisor_tick_pending": supervisor_tick_pending,
+        },
+    )
+    await session.commit()
+    logger.warning(
+        "workspace_plan.snapshot_reported_attempt_reconciled",
+        extra={
+            "event": "workspace_plan.snapshot_reported_attempt_reconciled",
+            "workspace_id": workspace_id,
+            "plan_id": plan.id,
+            "node_count": len(repaired_nodes),
+            "supervisor_tick_pending": supervisor_tick_pending,
         },
     )
     return 1
@@ -3002,6 +3138,19 @@ async def _recover_stale_attempts_for_snapshot(
                 workspace_id=workspace_id,
                 plan=plan,
                 nodes=terminal_nodes,
+                actor_id=actor_id,
+            )
+            > 0
+        )
+
+    reported_nodes = await _active_nodes_with_reported_attempts(session=session, plan=plan)
+    if reported_nodes:
+        return (
+            await _reconcile_reported_attempt_nodes_for_snapshot(
+                session=session,
+                workspace_id=workspace_id,
+                plan=plan,
+                nodes=reported_nodes,
                 actor_id=actor_id,
             )
             > 0
