@@ -38,6 +38,8 @@ const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.iterationOutputsTitle',
   'blackboard.iterationActivityTitle',
   'blackboard.iterationOpenTask',
+  'blackboard.iterationTaskDrawerLabel',
+  'blackboard.iterationTaskDrawerClose',
   'blackboard.iterationPhaseResearch',
   'blackboard.iterationPhasePlan',
   'blackboard.iterationPhaseImplement',

@@ -178,6 +178,48 @@ function nodeGateStatus(node: WorkspacePlanNode): WorkspacePlanGateStatus {
   );
 }
 
+function taskStatusFromPlanNode(node: WorkspacePlanNode): WorkspaceTask['status'] {
+  if (node.intent === 'done') {
+    return 'done';
+  }
+  if (node.intent === 'blocked') {
+    return 'blocked';
+  }
+  if (
+    node.execution === 'running' ||
+    node.execution === 'dispatched' ||
+    node.execution === 'reported' ||
+    node.execution === 'verifying'
+  ) {
+    return 'in_progress';
+  }
+  return 'todo';
+}
+
+function taskFromPlanNode(node: WorkspacePlanNode, workspaceId: string): WorkspaceTask | null {
+  if (!node.workspace_task_id) {
+    return null;
+  }
+  return {
+    id: node.workspace_task_id,
+    workspace_id: workspaceId,
+    title: node.title,
+    description: node.description,
+    assignee_agent_id: node.assignee_agent_id ?? undefined,
+    current_attempt_id: node.current_attempt_id ?? undefined,
+    status: taskStatusFromPlanNode(node),
+    metadata: {
+      ...node.metadata,
+      source_plan_node_id: node.id,
+      source_plan_node_execution: node.execution,
+      source_plan_node_intent: node.intent,
+    },
+    created_at: node.created_at,
+    updated_at: node.updated_at ?? undefined,
+    completed_at: node.completed_at ?? undefined,
+  };
+}
+
 function IterationLoopPanel({
   iteration,
   isActionPending,
@@ -977,8 +1019,14 @@ export function PlanRunSnapshotSection({
     );
   }, [selectedNode, taskList]);
   const selectedTask = useMemo(
-    () => taskList.find((task) => task.id === selectedTaskId) ?? null,
-    [selectedTaskId, taskList]
+    () =>
+      taskList.find((task) => task.id === selectedTaskId) ??
+      (selectedTaskId
+        ? (nodes
+            .map((node) => taskFromPlanNode(node, workspaceId))
+            .find((task) => task?.id === selectedTaskId) ?? null)
+        : null),
+    [nodes, selectedTaskId, taskList, workspaceId]
   );
 
   useEffect(() => {
@@ -1987,25 +2035,43 @@ export function PlanRunSnapshotSection({
             </aside>
           </div>
           {selectedTask && (
-            <div className="border-t border-border-separator p-4 dark:border-border-dark">
-              <TaskExperiencePanel
-                task={selectedTask}
-                agents={agents}
-                experience={selectedTaskExperience}
-                executionSession={selectedTaskSession}
-                loading={isTaskExperienceLoading}
-                recoveryActionLoading={isTaskRecoveryPending}
-                error={taskExperienceError}
-                onRecoveryAction={(action) => {
-                  void runTaskRecoveryAction(action);
-                }}
-                onClose={() => {
+            <div
+              className="fixed inset-0 z-50"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('blackboard.iterationTaskDrawerLabel', 'Iteration task details')}
+            >
+              <button
+                type="button"
+                className="absolute inset-0 cursor-default bg-background-dark/35"
+                aria-label={t('blackboard.iterationTaskDrawerClose', 'Close task details')}
+                onClick={() => {
                   setSelectedTaskId(null);
                   setSelectedTaskExperience(null);
                   setSelectedTaskSession(null);
                   setTaskExperienceError(null);
                 }}
               />
+              <div className="absolute inset-y-0 right-0 flex w-full max-w-[560px] flex-col overflow-y-auto border-l border-border-light bg-background-light p-3 shadow-2xl dark:border-border-dark dark:bg-background-dark sm:p-4">
+                <TaskExperiencePanel
+                  task={selectedTask}
+                  agents={agents}
+                  experience={selectedTaskExperience}
+                  executionSession={selectedTaskSession}
+                  loading={isTaskExperienceLoading}
+                  recoveryActionLoading={isTaskRecoveryPending}
+                  error={taskExperienceError}
+                  onRecoveryAction={(action) => {
+                    void runTaskRecoveryAction(action);
+                  }}
+                  onClose={() => {
+                    setSelectedTaskId(null);
+                    setSelectedTaskExperience(null);
+                    setSelectedTaskSession(null);
+                    setTaskExperienceError(null);
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>

@@ -487,6 +487,9 @@ describe('StatusTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(screen.getByText('Review gate')).toBeInTheDocument();
     fireEvent.click(screen.getByText('blackboard.iterationOpenTask'));
+    expect(
+      screen.getByRole('dialog', { name: 'blackboard.iterationTaskDrawerLabel' })
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(workspaceTaskService.getExperience).toHaveBeenCalledWith('ws-1', 'task-1');
     });

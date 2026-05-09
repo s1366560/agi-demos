@@ -334,6 +334,8 @@
     "iterationTableEvidence": "Evidence",
     "iterationTableOutput": "Output",
     "iterationOpenTask": "Open task details",
+    "iterationTaskDrawerLabel": "Iteration task details",
+    "iterationTaskDrawerClose": "Close task details",
     "iterationEvidenceRefs": "refs",
     "iterationArtifacts": "artifacts",
     "iterationFiles": "files",

@@ -334,6 +334,8 @@
     "iterationTableEvidence": "证据",
     "iterationTableOutput": "产物",
     "iterationOpenTask": "打开任务详情",
+    "iterationTaskDrawerLabel": "迭代任务详情",
+    "iterationTaskDrawerClose": "关闭任务详情",
     "iterationEvidenceRefs": "条证据",
     "iterationArtifacts": "个产物",
     "iterationFiles": "个文件",
