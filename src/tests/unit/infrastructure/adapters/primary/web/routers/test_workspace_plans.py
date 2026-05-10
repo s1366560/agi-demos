@@ -651,6 +651,125 @@ async def test_get_workspace_plan_snapshot_includes_iteration_runs_and_artifact_
 
 
 @pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_attributes_legacy_repair_nodes_to_source_iteration(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-repair-iteration"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-task-repair-ledger",
+                workspace_id=workspace_id,
+                title="Root task",
+                created_by="plan-api-user",
+                status="in_progress",
+            ),
+            WorkspaceTaskModel(
+                id="source-task-repair-ledger",
+                workspace_id=workspace_id,
+                title="Source task",
+                created_by="plan-api-user",
+                status="todo",
+            ),
+            WorkspaceTaskModel(
+                id="repair-task-repair-ledger",
+                workspace_id=workspace_id,
+                title="Repair task",
+                created_by="plan-api-user",
+                status="in_progress",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal = plan.nodes[PlanNodeId("goal-api")]
+    source = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            goal,
+            workspace_task_id="root-task-repair-ledger",
+            metadata={
+                **goal.metadata,
+                "iteration_loop": {
+                    "loop_status": "active",
+                    "current_iteration": 5,
+                    "max_iterations": 8,
+                    "completed_iterations": [1, 2, 3, 4],
+                },
+            },
+        )
+    )
+    plan.replace_node(
+        replace(
+            source,
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            workspace_task_id="source-task-repair-ledger",
+            metadata={
+                **source.metadata,
+                "iteration_index": 5,
+                "iteration_phase": "test",
+            },
+        )
+    )
+    repair_id = PlanNodeId("repair-task-api")
+    plan.add_node(
+        PlanNode(
+            id=repair_id.value,
+            plan_id=plan.id,
+            parent_id=PlanNodeId("goal-api"),
+            kind=PlanNodeKind.TASK,
+            title="Repair verification blockers for Source task",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            workspace_task_id="repair-task-repair-ledger",
+            current_attempt_id="attempt-repair-ledger",
+            metadata={
+                "iteration_index": 1,
+                "iteration_phase": "implement",
+                "repair_for_node_id": "task-api",
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-repair-ledger",
+            workspace_task_id="repair-task-repair-ledger",
+            root_goal_task_id="root-task-repair-ledger",
+            workspace_id=workspace_id,
+            attempt_number=1,
+            status="running",
+        )
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: _WorkspaceServiceStub(),
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.iteration is not None
+    assert response.iteration.current_iteration == 5
+    assert response.iteration.active_phase == "implement"
+    runs_by_index = {run.iteration_index: run for run in response.iteration_runs}
+    assert "repair-task-api" not in runs_by_index[1].node_ids
+    assert "repair-task-api" in runs_by_index[5].node_ids
+    assert runs_by_index[5].attempt_counts["running"] == 1
+
+
+@pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_uses_workspace_delivery_contract_metadata(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -1601,10 +1720,7 @@ async def test_snapshot_recovery_marks_awaiting_reported_attempt_node(
     reloaded_task = reloaded.nodes[task_node_id]
     assert reloaded_task.execution is TaskExecution.REPORTED
     assert reloaded_task.current_attempt_id == "attempt-awaiting-reported"
-    assert (
-        reloaded_task.metadata["reported_attempt_status"]
-        == "awaiting_leader_adjudication"
-    )
+    assert reloaded_task.metadata["reported_attempt_status"] == "awaiting_leader_adjudication"
     outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
         workspace_id,
         limit=5,

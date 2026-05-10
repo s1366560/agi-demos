@@ -1513,13 +1513,16 @@ def _to_iteration_summary(
     event_items: list[WorkspacePlanEventModel],
 ) -> WorkspacePlanIterationSummaryResponse:
     runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
+    nodes_by_id = {node.id: node for node in runnable_nodes}
     loop = _goal_iteration_loop_metadata(plan)
     current_iteration = _metadata_int(
         loop.get("current_iteration"),
-        fallback=_current_iteration(runnable_nodes),
+        fallback=_current_iteration(runnable_nodes, nodes_by_id=nodes_by_id),
     )
     iteration_nodes = [
-        node for node in runnable_nodes if _node_iteration_index(node) == current_iteration
+        node
+        for node in runnable_nodes
+        if _node_iteration_index(node, nodes_by_id=nodes_by_id) == current_iteration
     ]
     phases = [_phase_response(phase_id, iteration_nodes) for phase_id in _ITERATION_PHASE_ORDER]
     active_phase = _active_iteration_phase(iteration_nodes)
@@ -1743,27 +1746,50 @@ def _iteration_actions(
     }
 
 
-def _current_iteration(nodes: list[PlanNode]) -> int:
+def _current_iteration(
+    nodes: list[PlanNode],
+    *,
+    nodes_by_id: Mapping[str, PlanNode] | None = None,
+) -> int:
     if not nodes:
         return 1
     active = [
         index
         for node in nodes
         if node.intent is not TaskIntent.DONE
-        for index in [_node_iteration_index(node)]
+        for index in [_node_iteration_index(node, nodes_by_id=nodes_by_id)]
     ]
     if active:
         return min(active)
-    return max(_node_iteration_index(node) for node in nodes)
+    return max(_node_iteration_index(node, nodes_by_id=nodes_by_id) for node in nodes)
 
 
-def _node_iteration_index(node: PlanNode) -> int:
+def _node_iteration_index(
+    node: PlanNode,
+    *,
+    nodes_by_id: Mapping[str, PlanNode] | None = None,
+    _seen: frozenset[str] = frozenset(),
+) -> int:
     value = dict(node.metadata or {}).get("iteration_index")
+    raw_index = 1
     if isinstance(value, int) and value > 0:
-        return value
-    if isinstance(value, str) and value.isdigit():
-        return max(1, int(value))
-    return 1
+        raw_index = value
+    elif isinstance(value, str) and value.isdigit():
+        raw_index = max(1, int(value))
+    if raw_index > 1 or nodes_by_id is None or node.id in _seen:
+        return raw_index
+    repair_for_node_id = dict(node.metadata or {}).get("repair_for_node_id")
+    if not isinstance(repair_for_node_id, str):
+        return raw_index
+    source_node = nodes_by_id.get(repair_for_node_id)
+    if source_node is None:
+        return raw_index
+    source_index = _node_iteration_index(
+        source_node,
+        nodes_by_id=nodes_by_id,
+        _seen=_seen | {node.id},
+    )
+    return source_index if source_index > 1 else raw_index
 
 
 def _node_iteration_phase(node: PlanNode) -> str:
@@ -2064,7 +2090,9 @@ def _interaction_counts(
             counts["retries"] += item.attempt_count - 1
         if item.status in {"failed", "dead_letter"}:
             counts["failed"] += 1
-    total = sum(counts[key] for key in ("worker", "verifier", "supervisor", "operator", "recovery", "other"))
+    total = sum(
+        counts[key] for key in ("worker", "verifier", "supervisor", "operator", "recovery", "other")
+    )
     return {
         "total": total,
         "worker": counts["worker"],
@@ -2199,7 +2227,10 @@ def _iteration_time_range(
         item
         for item in [
             *(node.completed_at or node.updated_at or node.created_at for node in nodes),
-            *(attempt.completed_at or attempt.updated_at or attempt.created_at for attempt in attempts),
+            *(
+                attempt.completed_at or attempt.updated_at or attempt.created_at
+                for attempt in attempts
+            ),
             *(event.created_at for event in events),
             *(item.processed_at or item.updated_at or item.created_at for item in outbox_items),
         ]
@@ -2219,10 +2250,14 @@ def _iteration_status_for_run(
     loop: Mapping[str, Any],
     plan: Plan,
 ) -> str:
-    current_iteration = _metadata_int(loop.get("current_iteration"), fallback=_current_iteration(nodes))
+    current_iteration = _metadata_int(
+        loop.get("current_iteration"), fallback=_current_iteration(nodes)
+    )
     completed_iterations = set(_metadata_int_list(loop.get("completed_iterations")))
     loop_status = _iteration_loop_status(plan, dict(loop))
-    if index in completed_iterations or (nodes and all(node.intent is TaskIntent.DONE for node in nodes)):
+    if index in completed_iterations or (
+        nodes and all(node.intent is TaskIntent.DONE for node in nodes)
+    ):
         return "completed"
     if loop_status == "completed" and index == current_iteration:
         return "completed"
@@ -2294,6 +2329,7 @@ def _artifact_rows_for_node(
     *,
     outputs: dict[str, list[str]],
     verified: bool,
+    nodes_by_id: Mapping[str, PlanNode] | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for key, values in outputs.items():
@@ -2305,7 +2341,7 @@ def _artifact_rows_for_node(
                     "value": value,
                     "node_id": node.id,
                     "attempt_id": node.current_attempt_id,
-                    "iteration_index": _node_iteration_index(node),
+                    "iteration_index": _node_iteration_index(node, nodes_by_id=nodes_by_id),
                     "verdict": "verified" if verified else "claimed",
                 }
             )
@@ -2320,19 +2356,27 @@ def _artifact_index(
 ) -> WorkspacePlanArtifactIndexResponse:
     verified_outputs: list[dict[str, Any]] = []
     claimed_outputs: list[dict[str, Any]] = []
+    nodes_by_id = {node.id: node for node in plan.nodes.values()}
     for node in plan.nodes.values():
         if node.kind.value not in {"task", "verify"}:
             continue
         outputs = _node_outputs(node, blackboard_entries=blackboard_entries, delivery=delivery)
         if not any(outputs.values()):
             continue
-        rows = _artifact_rows_for_node(node, outputs=outputs, verified=_node_verified(node))
+        rows = _artifact_rows_for_node(
+            node,
+            outputs=outputs,
+            verified=_node_verified(node),
+            nodes_by_id=nodes_by_id,
+        )
         if _node_verified(node):
             verified_outputs.extend(rows)
         else:
             claimed_outputs.extend(rows)
     loop = _goal_iteration_loop_metadata(plan)
-    final_deliverables = verified_outputs if _iteration_loop_status(plan, loop) == "completed" else []
+    final_deliverables = (
+        verified_outputs if _iteration_loop_status(plan, loop) == "completed" else []
+    )
     return WorkspacePlanArtifactIndexResponse(
         verified_outputs=verified_outputs[:200],
         claimed_outputs=claimed_outputs[:200],
@@ -2370,22 +2414,32 @@ def _iteration_runs(
     outbox_items: list[WorkspacePlanOutboxModel],
     blackboard_entries: list[BlackboardEntry],
     delivery: WorkspaceDeliverySummaryResponse | None,
-    ) -> list[WorkspacePlanIterationRunResponse]:
+) -> list[WorkspacePlanIterationRunResponse]:
     runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
+    nodes_by_id = {node.id: node for node in runnable_nodes}
     loop = _goal_iteration_loop_metadata(plan)
-    history = {item.iteration_index: item for item in _iteration_history(loop, event_items, limit=None)}
+    history = {
+        item.iteration_index: item for item in _iteration_history(loop, event_items, limit=None)
+    }
     indexes = {
-        _metadata_int(loop.get("current_iteration"), fallback=_current_iteration(runnable_nodes)),
+        _metadata_int(
+            loop.get("current_iteration"),
+            fallback=_current_iteration(runnable_nodes, nodes_by_id=nodes_by_id),
+        ),
         *_metadata_int_list(loop.get("completed_iterations")),
         *(item.iteration_index for item in history.values()),
-        *(_node_iteration_index(node) for node in runnable_nodes),
+        *(_node_iteration_index(node, nodes_by_id=nodes_by_id) for node in runnable_nodes),
     }
     attempts_by_task_id: dict[str, list[WorkspaceTaskSessionAttemptModel]] = {}
     for attempt in attempts:
         attempts_by_task_id.setdefault(attempt.workspace_task_id, []).append(attempt)
     rows: list[WorkspacePlanIterationRunResponse] = []
     for index in sorted(item for item in indexes if item > 0):
-        nodes = [node for node in runnable_nodes if _node_iteration_index(node) == index]
+        nodes = [
+            node
+            for node in runnable_nodes
+            if _node_iteration_index(node, nodes_by_id=nodes_by_id) == index
+        ]
         node_ids = {node.id for node in nodes}
         node_attempts = [
             attempt
@@ -2398,7 +2452,9 @@ def _iteration_runs(
             for event in event_items
             if _event_belongs_to_iteration(event, node_ids=node_ids, attempt_ids=attempt_ids)
         ]
-        outbox = [item for item in outbox_items if _outbox_belongs_to_iteration(item, node_ids=node_ids)]
+        outbox = [
+            item for item in outbox_items if _outbox_belongs_to_iteration(item, node_ids=node_ids)
+        ]
         output_sets = [
             _node_outputs(node, blackboard_entries=blackboard_entries, delivery=delivery)
             for node in nodes
@@ -2406,7 +2462,7 @@ def _iteration_runs(
         current_history = history.get(index)
         is_current = index == _metadata_int(
             loop.get("current_iteration"),
-            fallback=_current_iteration(runnable_nodes),
+            fallback=_current_iteration(runnable_nodes, nodes_by_id=nodes_by_id),
         )
         rows.append(
             WorkspacePlanIterationRunResponse(
@@ -2415,14 +2471,18 @@ def _iteration_runs(
                 sprint_goal=(
                     _metadata_string(loop.get("current_sprint_goal"))
                     if is_current
-                    else current_history.next_sprint_goal if current_history else ""
+                    else current_history.next_sprint_goal
+                    if current_history
+                    else ""
                 )
                 or (current_history.summary if current_history else "")
                 or plan.goal_node.title,
                 review_summary=(
                     _metadata_string(loop.get("last_review_summary"))
                     if is_current
-                    else current_history.summary if current_history else ""
+                    else current_history.summary
+                    if current_history
+                    else ""
                 ),
                 next_sprint_goal=current_history.next_sprint_goal if current_history else "",
                 time_range=_iteration_time_range(
@@ -2452,7 +2512,9 @@ def _iteration_runs(
                 deliverables=_merge_output_lists(output_sets),
                 verification_summary=_verification_summary(events),
                 repair_turns=_repair_turns(events),
-                carryover_node_ids=[node.id for node in nodes if node.intent is not TaskIntent.DONE],
+                carryover_node_ids=[
+                    node.id for node in nodes if node.intent is not TaskIntent.DONE
+                ],
                 node_ids=[node.id for node in nodes],
             )
         )
@@ -2479,12 +2541,12 @@ def _failure_reason_counts(
     for event in event_items:
         payload = dict(event.payload_json or {})
         reason = _metadata_string(payload.get("reason") or payload.get("reason_code"))
-        if reason and event.event_type in {"verification_completed", "worker_repair_turn_ineligible"}:
+        if reason and event.event_type in {
+            "verification_completed",
+            "worker_repair_turn_ineligible",
+        }:
             counter[reason] += 1
-    return [
-        {"reason": reason, "count": count}
-        for reason, count in counter.most_common(8)
-    ]
+    return [{"reason": reason, "count": count} for reason, count in counter.most_common(8)]
 
 
 def _count_structured_failure(
@@ -2683,6 +2745,7 @@ async def _load_workspace_plan_history(
         runnable_nodes = [
             node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}
         ]
+        nodes_by_id = {node.id: node for node in runnable_nodes}
         loop = _goal_iteration_loop_metadata(plan)
         root_goal_id = await _resolve_root_goal_task_id(db, workspace_id=workspace_id, plan=plan)
         root_goal_status: str | None = None
@@ -2702,7 +2765,7 @@ async def _load_workspace_plan_history(
                 root_goal_status=root_goal_status,
                 current_iteration=_metadata_int(
                     loop.get("current_iteration"),
-                    fallback=_current_iteration(runnable_nodes),
+                    fallback=_current_iteration(runnable_nodes, nodes_by_id=nodes_by_id),
                 ),
                 max_iterations=_metadata_int(
                     loop.get("max_iterations"),
