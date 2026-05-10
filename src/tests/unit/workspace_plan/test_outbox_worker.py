@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import src.infrastructure.agent.workspace_plan.outbox_handlers as outbox_handlers
 from src.domain.model.workspace.workspace_task import WorkspaceTask
 from src.domain.model.workspace_plan import (
+    AcceptanceCriterion,
     Capability,
+    CriterionKind,
     FeatureCheckpoint,
     Plan,
     PlanNode,
@@ -1634,6 +1636,131 @@ async def test_supervisor_tick_releases_node_when_current_attempt_is_missing(
     assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
     assert retried_leaf.metadata["terminal_attempt_retry_reason"] == "missing_attempt"
     assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_reconciles_reported_attempt_before_verification(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="reported-node-task",
+            workspace_id="workspace-1",
+            title="Reported projection",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "reported-attempt",
+                LAST_WORKER_REPORT_ATTEMPT_ID: "reported-attempt",
+                LAST_WORKER_REPORT_SUMMARY: "worker completed with evidence",
+                "last_worker_report_type": "completed",
+                "last_attempt_status": "awaiting_leader_adjudication",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="reported-attempt",
+            workspace_task_id="reported-node-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="reported-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="worker completed with evidence",
+            candidate_verifications_json=[
+                "preflight:read-progress",
+                "preflight:git-status",
+                "test_run:pytest focused",
+            ],
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.DISPATCHED,
+            current_attempt_id="reported-attempt",
+            workspace_task_id="reported-node-task",
+            acceptance_criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={
+                        "name": "terminal_worker_report_present",
+                        "requires_terminal_worker_report": True,
+                    },
+                    required=False,
+                ),
+            ),
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return []
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.leaf_tasks()[0]
+    assert reconciled_leaf.intent is TaskIntent.DONE
+    assert reconciled_leaf.execution is TaskExecution.IDLE
+    assert reconciled_leaf.metadata["reported_attempt_status"] == "awaiting_leader_adjudication"
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == "reported-attempt"
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "reported-attempt")
+    assert attempt is not None
+    assert attempt.status == "accepted"
+    task = await db_session.get(WorkspaceTaskModel, "reported-node-task")
+    assert task is not None
+    assert task.status == "done"
+    events = (
+        await db_session.execute(
+            select(WorkspacePlanEventModel.event_type).where(
+                WorkspacePlanEventModel.plan_id == plan.id
+            )
+        )
+    ).scalars().all()
+    assert "auto_reported_attempt_reconciled" in events
+    assert "verification_completed" in events
 
 
 @pytest.mark.asyncio

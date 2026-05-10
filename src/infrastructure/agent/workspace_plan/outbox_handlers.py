@@ -291,7 +291,12 @@ def make_supervisor_tick_handler(
                 plan_id=item.plan_id,
                 workspace_id=workspace_id,
             )
-            if reconciled_terminal_attempt:
+            reconciled_reported_attempt = await _reconcile_plan_nodes_with_reported_attempts(
+                session=session,
+                plan_id=item.plan_id,
+                workspace_id=workspace_id,
+            )
+            if reconciled_terminal_attempt or reconciled_reported_attempt:
                 await session.commit()
         resolved_agent_pool = agent_pool
         if resolved_agent_pool is None:
@@ -565,6 +570,90 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     return changed
 
 
+async def _reconcile_plan_nodes_with_reported_attempts(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> bool:
+    """Move active plan nodes whose current attempts already produced reports."""
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return False
+
+    now = datetime.now(UTC)
+    changed_nodes: list[PlanNode] = []
+    for node in list(plan.nodes.values()):
+        recoverable_execution = node.execution in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+        }
+        recoverable_in_progress_idle = (
+            node.intent is TaskIntent.IN_PROGRESS
+            and node.execution is TaskExecution.IDLE
+            and bool(node.current_attempt_id)
+        )
+        if not (recoverable_execution or recoverable_in_progress_idle):
+            continue
+        if not node.current_attempt_id:
+            continue
+        attempt = await _load_plan_attempt(session, node.current_attempt_id)
+        if attempt is None:
+            continue
+        if (
+            _attempt_status_value(attempt)
+            != WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
+        ):
+            continue
+        if not _attempt_has_candidate_output(attempt):
+            continue
+        metadata = {
+            **dict(node.metadata or {}),
+            "reported_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
+            "reported_attempt_status": (
+                WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
+            ),
+        }
+        repaired = replace(
+            node,
+            execution=TaskExecution.REPORTED,
+            metadata=metadata,
+            updated_at=now,
+        )
+        plan.replace_node(repaired)
+        changed_nodes.append(repaired)
+
+    if not changed_nodes:
+        return False
+
+    await repo.save(plan)
+    _ = await SqlWorkspacePlanEventRepository(session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id=changed_nodes[0].id,
+        attempt_id=changed_nodes[0].current_attempt_id,
+        event_type="auto_reported_attempt_reconciled",
+        source="workspace_plan_supervisor_tick",
+        actor_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+        payload={
+            "reason": "active_plan_node_points_to_reported_attempt",
+            "node_ids": [node.id for node in changed_nodes],
+        },
+    )
+    logger.warning(
+        "workspace_plan.supervisor_tick_reported_attempt_reconciled",
+        extra={
+            "event": "workspace_plan.supervisor_tick_reported_attempt_reconciled",
+            "workspace_id": workspace_id,
+            "plan_id": plan.id,
+            "node_count": len(changed_nodes),
+        },
+    )
+    return True
+
+
 async def _project_accepted_terminal_attempt_to_task(
     *,
     session: AsyncSession,
@@ -672,6 +761,26 @@ def _attempt_list_field(
     if isinstance(value, list | tuple):
         return list(dict.fromkeys(str(item) for item in value if item))
     return []
+
+
+def _attempt_has_candidate_output(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    if str(getattr(attempt, "candidate_summary", None) or "").strip():
+        return True
+    if _attempt_list_field(
+        attempt,
+        domain_field="candidate_artifacts",
+        model_field="candidate_artifacts_json",
+    ):
+        return True
+    return bool(
+        _attempt_list_field(
+            attempt,
+            domain_field="candidate_verifications",
+            model_field="candidate_verifications_json",
+        )
+    )
 
 
 async def _load_plan_attempt(
