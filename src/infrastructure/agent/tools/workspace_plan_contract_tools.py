@@ -47,6 +47,16 @@ WORKSPACE_VERIFICATION_JUDGMENT_TOOL_PARAMETERS: dict[str, Any] = {
             "items": {"type": "string"},
             "maxItems": 12,
         },
+        "satisfied_guard_failures": {
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": 12,
+            "description": (
+                "Required guard failure ids from the input guard_failures that this verdict "
+                "explicitly satisfies using fresh current-attempt evidence. Leave empty unless "
+                "the evidence proves why the guard no longer blocks acceptance."
+            ),
+        },
         "required_next_action": {"type": "string"},
         "next_action_kind": {
             "type": "string",
@@ -208,6 +218,7 @@ async def workspace_submit_verification_judgment_tool(
     failed_criteria: list[str],
     required_next_action: str,
     confidence: float,
+    satisfied_guard_failures: list[str] | None = None,
     next_action_kind: str = WorkspaceVerificationNextActionKind.RETRY_SAME_NODE.value,
     repair_brief: dict[str, Any] | None = None,
 ) -> ToolResult:
@@ -228,6 +239,7 @@ async def workspace_submit_verification_judgment_tool(
         "verdict": verdict,
         "rationale": str(rationale or "").strip() or verdict,
         "failed_criteria": _string_list(failed_criteria, limit=12),
+        "satisfied_guard_failures": _string_list(satisfied_guard_failures or [], limit=12),
         "required_next_action": str(required_next_action or "").strip(),
         "next_action_kind": next_action_kind,
         "confidence": _confidence(confidence),

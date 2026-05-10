@@ -335,6 +335,11 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "Do not include cumulative historical failure prose as current evidence.",
                 "Prefer keys: failed_items, evidence, allowed_write_scope, forbidden_actions, minimum_verifications, fresh_evidence_requirements.",
             ],
+            "satisfied_guard_failures": [
+                "When accepting despite guard_failures, list only guard ids that fresh current-attempt evidence satisfies.",
+                "For failed_test_evidence, require concrete current-attempt contract, known-failure, or failed-test disposition evidence for every failing or partial test.",
+                "Do not list a guard because a worker summary says it is acceptable; cite evidence in the rationale.",
+            ],
         },
     }
     return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
@@ -374,10 +379,12 @@ def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudg
     next_action = str(args.get("required_next_action") or "").strip()
     next_action_kind = _next_action_kind(args.get("next_action_kind"), raw_verdict)
     failed = _string_tuple(args.get("failed_criteria"), limit=12)
+    satisfied = _string_tuple(args.get("satisfied_guard_failures"), limit=12)
     return WorkspaceVerificationJudgeResult(
         verdict=WorkspaceVerificationJudgeVerdict(raw_verdict),
         rationale=rationale or raw_verdict,
         failed_criteria=failed,
+        satisfied_guard_failures=satisfied,
         required_next_action=next_action,
         next_action_kind=next_action_kind,
         repair_brief=_repair_brief(args.get("repair_brief")),

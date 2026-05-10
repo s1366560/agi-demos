@@ -50,6 +50,7 @@ async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -
             "verdict": "needs_rework",
             "rationale": "Falling tests remain.",
             "failed_criteria": ["failed_test_evidence"],
+            "satisfied_guard_failures": ["clean_worktree_after_commit"],
             "required_next_action": "fix tests",
             "next_action_kind": "create_repair_node",
             "repair_brief": {
@@ -79,6 +80,7 @@ async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -
     assert "workspace_submit_verification_judgment" in runner.calls[0]["user_prompt"]
     assert result.verdict.value == "needs_rework"
     assert result.failed_criteria == ("failed_test_evidence",)
+    assert result.satisfied_guard_failures == ("clean_worktree_after_commit",)
     assert result.next_action_kind.value == "create_repair_node"
     assert result.repair_brief == {
         "failed_items": ["failed_test_evidence"],

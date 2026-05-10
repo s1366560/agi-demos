@@ -645,6 +645,7 @@ class TestVerifier:
         assert "next_action_kind=create_repair_node" in prompt
         assert "next_action_kind=retry_same_node" in prompt
         assert "workspace_submit_verification_judgment" in prompt
+        assert "satisfied_guard_failures" in prompt
 
     def test_iteration_reviewer_prompt_preserves_attempt_worktree_contract(self) -> None:
         prompt = build_builtin_workspace_iteration_reviewer_agent(
@@ -1486,6 +1487,56 @@ class TestVerifier:
 
         assert not rep.passed
         assert "failed_test_evidence" in rep.summary()
+        assert len(judge.requests) == 1
+        assert any(
+            "test evidence reports failing tests" in item
+            for item in judge.requests[0].guard_failures
+        )
+
+    async def test_verification_judge_can_accept_failed_test_evidence_with_satisfied_guard(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale=(
+                    "Current attempt evidence includes explicit known-failure dispositions "
+                    "for every remaining failing E2E case."
+                ),
+                satisfied_guard_failures=("failed_test_evidence",),
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(title="Run full E2E journey tests")
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Results: 22 passed, 1 failed with documented known-failure disposition."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:e2e-journey-complete.js 22 passed 1 failed",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        judge_result = next(
+            item
+            for item in rep.results
+            if item.criterion.spec.get("name") == "workspace_verification_judge"
+        )
+        assert judge_result.criterion.spec["satisfied_guard_failures"] == [
+            "failed_test_evidence"
+        ]
         assert len(judge.requests) == 1
         assert any(
             "test evidence reports failing tests" in item

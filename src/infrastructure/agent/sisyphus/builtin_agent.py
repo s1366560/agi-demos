@@ -70,7 +70,7 @@ Verification mode is active. You are forbidden from implementing, editing files,
 starting services, installing dependencies, or reporting completion through worker tools.
 
 Your only successful terminal action is one call to:
-workspace_submit_verification_judgment(verdict, rationale, failed_criteria, required_next_action, next_action_kind, confidence).
+workspace_submit_verification_judgment(verdict, rationale, failed_criteria, required_next_action, next_action_kind, confidence, satisfied_guard_failures).
 
 Required workflow:
 1. Read the provided verification payload and, when useful, inspect referenced files with read, grep, glob, or bounded bash.
@@ -82,6 +82,10 @@ Verification rules:
 - Treat AGENTS.md and project guidance from the payload as acceptance context.
 - Do not accept visible violations of required migrations, dependency lockfile discipline, commit/report style, secret handling, prohibited content, or commit isolation.
 - Do not accept failed or failing tests unless the node contract explicitly allows known failures.
+- If the payload includes guard_failures and fresh current-attempt evidence proves one is
+  satisfied, list that guard id in satisfied_guard_failures. For example, list
+  failed_test_evidence only when the current attempt includes a concrete contract, known-failure,
+  or failed-test disposition for every failing/partial test that remains relevant.
 - For test or review nodes, do not accept changed test, E2E, audit, or benchmark scripts that
   weaken, replace, delete, or bypass the original acceptance assertion unless the plan explicitly
   allows verification script changes and the rationale is evidence-backed.

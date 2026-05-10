@@ -879,6 +879,7 @@ def _coerce_judge_result_for_required_context(
                 f"Judge rationale: {result.rationale}"
             ),
             failed_criteria=("terminal_worker_report_completed", *result.failed_criteria),
+            satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action="collect a completed worker report and rerun verification",
             repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.7),
@@ -886,7 +887,7 @@ def _coerce_judge_result_for_required_context(
     if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
         results,
         "failed_test_evidence",
-    ):
+    ) and not _judge_satisfied_required_guard(result, "failed_test_evidence"):
         return WorkspaceVerificationJudgeResult(
             verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
             rationale=(
@@ -894,11 +895,19 @@ def _coerce_judge_result_for_required_context(
                 f"accepted as complete. Judge rationale: {result.rationale}"
             ),
             failed_criteria=("failed_test_evidence", *result.failed_criteria),
+            satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action="fix or explicitly disposition failing tests before acceptance",
             repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.8),
         )
     return result
+
+
+def _judge_satisfied_required_guard(
+    result: WorkspaceVerificationJudgeResult,
+    name: str,
+) -> bool:
+    return name in set(result.satisfied_guard_failures)
 
 
 def _required_guard_failed(results: list[CriterionResult], name: str) -> bool:
@@ -956,6 +965,8 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
     message_parts.append(f"next_action_kind={result.next_action_kind.value}")
     if result.failed_criteria:
         message_parts.append("failed=" + ", ".join(result.failed_criteria[:8]))
+    if result.satisfied_guard_failures:
+        message_parts.append("satisfied_guards=" + ", ".join(result.satisfied_guard_failures[:8]))
     return CriterionResult(
         criterion=AcceptanceCriterion(
             kind=CriterionKind.CUSTOM,
@@ -963,6 +974,7 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
                 "name": criterion_name,
                 "judge_verdict": verdict.value,
                 "failed_criteria": list(result.failed_criteria),
+                "satisfied_guard_failures": list(result.satisfied_guard_failures),
                 "required_next_action": result.required_next_action,
                 "next_action_kind": result.next_action_kind.value,
                 "repair_brief": result.repair_brief,

@@ -56,6 +56,7 @@ class WorkspaceVerificationJudgeResult:
     verdict: WorkspaceVerificationJudgeVerdict
     rationale: str
     failed_criteria: tuple[str, ...] = field(default_factory=tuple)
+    satisfied_guard_failures: tuple[str, ...] = field(default_factory=tuple)
     required_next_action: str = ""
     next_action_kind: WorkspaceVerificationNextActionKind = (
         WorkspaceVerificationNextActionKind.RETRY_SAME_NODE
