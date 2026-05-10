@@ -71,6 +71,11 @@ _FAILED_TEST_DISPOSITION_PREFIXES = (
     "failed_test_disposition:",
     "known_failure_disposition:",
 )
+_MISSING_TEST_EXECUTION_DISPOSITION_PREFIXES = (
+    "contract_disposition:no_test_runner_available",
+    "failed_test_disposition:no_test_runner_available",
+    "known_failure_disposition:no_test_runner_available",
+)
 _CURRENT_TEST_FAILURE_CUE_PATTERN = re.compile(
     r"\b("
     r"results?|final\s+state|test\s+results?|test_run|"
@@ -633,6 +638,9 @@ class AcceptanceCriterionVerifier(VerifierPort):
         failed_test_guard = _failed_test_evidence_guard(ctx)
         if failed_test_guard is not None:
             results.append(failed_test_guard)
+        missing_test_execution_guard = _missing_test_execution_evidence_guard(ctx)
+        if missing_test_execution_guard is not None:
+            results.append(missing_test_execution_guard)
         verification_script_guard = await _verification_script_mutation_guard(ctx)
         if verification_script_guard is not None:
             results.append(verification_script_guard)
@@ -884,10 +892,14 @@ def _coerce_judge_result_for_required_context(
             repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.7),
         )
-    if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
-        results,
-        "failed_test_evidence",
-    ) and not _judge_satisfied_required_guard(result, "failed_test_evidence"):
+    if (
+        result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED
+        and _required_guard_failed(
+            results,
+            "failed_test_evidence",
+        )
+        and not _judge_satisfied_required_guard(result, "failed_test_evidence")
+    ):
         return WorkspaceVerificationJudgeResult(
             verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
             rationale=(
@@ -897,6 +909,22 @@ def _coerce_judge_result_for_required_context(
             failed_criteria=("failed_test_evidence", *result.failed_criteria),
             satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action="fix or explicitly disposition failing tests before acceptance",
+            repair_brief=result.repair_brief,
+            confidence=max(result.confidence, 0.8),
+        )
+    if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
+        results,
+        "missing_test_execution_evidence",
+    ):
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Required test execution evidence is missing because the current attempt says "
+                f"tests were not actually run. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=("missing_test_execution_evidence", *result.failed_criteria),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action="run the required tests in the attempt worktree or report blocked",
             repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.8),
         )
@@ -1192,6 +1220,48 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         confidence=1.0,
         message=f"test evidence reports failing tests: {_bounded_text(failed_value, limit=360)}",
         evidence=(EvidenceRef(kind="verification", ref=_bounded_text(failed_value, limit=500)),),
+    )
+
+
+def _missing_test_execution_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
+    value = _missing_test_execution_evidence_value(ctx)
+    if value is None:
+        return None
+    criterion = AcceptanceCriterion(
+        kind=CriterionKind.CUSTOM,
+        spec={"name": "missing_test_execution_evidence"},
+        required=True,
+        description="completed worker reports must not claim verification totals without running tests",
+    )
+    return CriterionResult(
+        criterion=criterion,
+        passed=False,
+        confidence=1.0,
+        message=f"test execution evidence missing: {_bounded_text(value, limit=360)}",
+        evidence=(EvidenceRef(kind="verification", ref=_bounded_text(value, limit=500)),),
+    )
+
+
+def _missing_test_execution_evidence_value(ctx: VerificationContext) -> str | None:
+    values = _attempt_scoped_artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "candidate_artifacts",
+        "candidate_verifications",
+        "execution_verifications",
+    )
+    summary = _artifact_text(ctx, "last_worker_report_summary")
+    if summary:
+        values.add(summary)
+    return next(
+        (
+            value
+            for value in sorted(values)
+            if value.strip().casefold().startswith(_MISSING_TEST_EXECUTION_DISPOSITION_PREFIXES)
+        ),
+        None,
     )
 
 

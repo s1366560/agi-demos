@@ -1558,6 +1558,50 @@ class TestVerifier:
             for item in judge.requests[0].guard_failures
         )
 
+    async def test_verification_judge_cannot_accept_missing_test_execution_evidence(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="report totals look acceptable",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(title="Repair comprehensive E2E evidence")
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "COMPREHENSIVE-TEST-REPORT.md was regenerated with 204/204 total. "
+                        "No actual Playwright/Jest test runs were possible due to missing "
+                        "node_modules in the worktree."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "COMPREHENSIVE-TEST-REPORT.md: 204/204 total",
+                        (
+                            "contract_disposition:no_test_runner_available - node_modules "
+                            "absent from worktree; test runs deferred to harness pipeline"
+                        ),
+                    ],
+                },
+            )
+        )
+
+        assert not rep.passed
+        assert "missing_test_execution_evidence" in rep.summary()
+        assert len(judge.requests) == 1
+        assert any(
+            "test execution evidence missing" in item for item in judge.requests[0].guard_failures
+        )
+
     async def test_verification_judge_can_accept_failed_test_evidence_with_satisfied_guard(
         self,
     ) -> None:
