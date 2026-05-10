@@ -372,9 +372,9 @@ def _workspace_verification_integrity_context(
     node_meta: Mapping[str, Any] = (
         plan_node_metadata if isinstance(plan_node_metadata, Mapping) else {}
     )
-    phase = _metadata_text(task_meta.get("iteration_phase")) or _metadata_text(
-        node_meta.get("iteration_phase")
-    )
+    node_phase = _metadata_text(node_meta.get("iteration_phase"))
+    task_phase = _metadata_text(task_meta.get("iteration_phase"))
+    phase = node_phase or task_phase
     if phase is None or phase.lower() not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
         return None
     allow_script_changes = (
@@ -385,11 +385,7 @@ def _workspace_verification_integrity_context(
         task_meta.get("allow_failed_tests") is True or node_meta.get("allow_failed_tests") is True
     )
     allowed_script_paths = _verification_script_change_allowlist(task_meta, node_meta)
-    source = (
-        "workspace_task_metadata"
-        if _metadata_text(task_meta.get("iteration_phase"))
-        else "workspace_plan_node_metadata"
-    )
+    source = "workspace_plan_node_metadata" if node_phase else "workspace_task_metadata"
     contract_hints = [
         text[:1200]
         for text in (
@@ -849,11 +845,16 @@ def _effective_repair_plan_node_metadata(
     source_metadata: Mapping[str, Any],
 ) -> dict[str, Any]:
     metadata = dict(node_metadata)
-    source_phase = _metadata_text(source_metadata.get("iteration_phase"))
-    if source_phase is None:
+    if metadata.get("allow_verification_script_changes") is True:
         return metadata
 
-    normalized_source_phase = source_phase.lower()
+    source_phase = _metadata_text(source_metadata.get("iteration_phase"))
+    explicit_source_phase = _metadata_text(metadata.get("repair_source_iteration_phase"))
+    effective_source_phase = explicit_source_phase or source_phase
+    if effective_source_phase is None:
+        return metadata
+
+    normalized_source_phase = effective_source_phase.lower()
     metadata.setdefault("repair_source_iteration_phase", normalized_source_phase)
     if normalized_source_phase not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
         return metadata
@@ -861,13 +862,6 @@ def _effective_repair_plan_node_metadata(
     current_phase = _metadata_text(metadata.get("iteration_phase"))
     if current_phase is None or current_phase.lower() not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
         metadata["iteration_phase"] = normalized_source_phase
-    source_allows_script_changes = source_metadata.get("allow_verification_script_changes") is True
-    if (
-        metadata.get("allow_verification_script_changes") is True
-        and not source_allows_script_changes
-    ):
-        metadata["allow_verification_script_changes"] = False
-        metadata["legacy_repair_verification_integrity_repaired"] = True
     return metadata
 
 

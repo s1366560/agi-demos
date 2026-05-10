@@ -640,7 +640,6 @@ class TestBuildBrief:
             {
                 "iteration_phase": "implement",
                 "repair_for_node_id": "node-source",
-                "allow_verification_script_changes": True,
             },
             {"iteration_phase": "test"},
         )
@@ -655,11 +654,93 @@ class TestBuildBrief:
 
         policy = system_context["workspace_verification_integrity"]
         assert plan_node_metadata["iteration_phase"] == "test"
-        assert plan_node_metadata["allow_verification_script_changes"] is False
-        assert plan_node_metadata["legacy_repair_verification_integrity_repaired"] is True
+        assert "allow_verification_script_changes" not in plan_node_metadata
         assert policy["iteration_phase"] == "test"
         assert policy["protected_script_changes"] is True
         assert policy["allow_verification_script_changes"] is False
+
+    def test_explicit_implement_repair_contract_is_not_overwritten_by_test_ancestor(
+        self,
+    ) -> None:
+        task = _make_task(
+            metadata={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-1",
+                "iteration_phase": "test",
+                "workspace_verification_integrity": {
+                    "iteration_phase": "test",
+                    "allow_verification_script_changes": False,
+                    "protected_script_changes": True,
+                },
+            }
+        )
+        plan_node_metadata = wl._effective_repair_plan_node_metadata(
+            {
+                "iteration_phase": "implement",
+                "repair_for_node_id": "node-source",
+                "repair_source_iteration_phase": "implement",
+                "allow_verification_script_changes": True,
+            },
+            {"iteration_phase": "test"},
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+
+        assert plan_node_metadata["iteration_phase"] == "implement"
+        assert plan_node_metadata["repair_source_iteration_phase"] == "implement"
+        assert plan_node_metadata["allow_verification_script_changes"] is True
+        assert "legacy_repair_verification_integrity_repaired" not in plan_node_metadata
+        assert "workspace_verification_integrity" not in system_context
+        assert "## Test/review integrity gate" not in brief
+
+    def test_explicit_script_change_contract_is_authoritative_without_source_phase(
+        self,
+    ) -> None:
+        task = _make_task(
+            metadata={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-1",
+                "iteration_phase": "test",
+                "workspace_verification_integrity": {
+                    "iteration_phase": "test",
+                    "allow_verification_script_changes": False,
+                    "protected_script_changes": True,
+                },
+            }
+        )
+        plan_node_metadata = wl._effective_repair_plan_node_metadata(
+            {
+                "iteration_phase": "implement",
+                "repair_for_node_id": "node-source",
+                "allow_verification_script_changes": True,
+            },
+            {"iteration_phase": "test"},
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+
+        assert plan_node_metadata["iteration_phase"] == "implement"
+        assert plan_node_metadata["allow_verification_script_changes"] is True
+        assert "workspace_verification_integrity" not in system_context
 
     async def test_load_plan_node_metadata_follows_nested_repair_source_chain(self) -> None:
         class _Result:
@@ -675,12 +756,10 @@ class TestBuildBrief:
                     {
                         "iteration_phase": "implement",
                         "repair_for_node_id": "node-repair-2",
-                        "allow_verification_script_changes": True,
                     },
                     {
                         "iteration_phase": "implement",
                         "repair_for_node_id": "node-source",
-                        "allow_verification_script_changes": True,
                     },
                     {"iteration_phase": "test"},
                 ]
@@ -701,8 +780,7 @@ class TestBuildBrief:
         metadata = await wl._load_plan_node_metadata_for_task(_Db(), task)  # type: ignore[arg-type]
 
         assert metadata["iteration_phase"] == "test"
-        assert metadata["allow_verification_script_changes"] is False
-        assert metadata["legacy_repair_verification_integrity_repaired"] is True
+        assert "allow_verification_script_changes" not in metadata
         assert metadata["repair_source_iteration_phase"] == "test"
 
     def test_system_context_extracts_repair_brief_verification_script_allowlist(self) -> None:
