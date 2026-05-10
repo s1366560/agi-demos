@@ -712,10 +712,77 @@ async def _workspace_bash_script_content_escape_error(
 def _command_tail_until_separator(tokens: tuple[str, ...], start: int) -> tuple[str, ...]:
     tail: list[str] = []
     for token in tokens[start:]:
-        if token in {"&&", ";", "||", "|"}:
+        if token in {"&&", ";", "||", "|", "&"}:
             break
         tail.append(token)
     return tuple(tail)
+
+
+def _shell_segment_command_index(tokens: tuple[str, ...], index: int) -> int:
+    segment_start = index
+    while segment_start > 0 and tokens[segment_start - 1] not in {"&&", ";", "||", "|", "&"}:
+        segment_start -= 1
+    for candidate in range(segment_start, len(tokens)):
+        if tokens[candidate] in {"&&", ";", "||", "|", "&"}:
+            break
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=.*", tokens[candidate]):
+            continue
+        return candidate
+    return segment_start
+
+
+def _is_shell_command_token(tokens: tuple[str, ...], index: int) -> bool:
+    return _shell_segment_command_index(tokens, index) == index
+
+
+def _workspace_verification_bash_dependency_install_error(command: str) -> str | None:
+    tokens = _command_tokens(command)
+    normalized = tuple(posixpath.basename(token).lower() for token in tokens)
+    for index, token in enumerate(normalized):
+        if not _is_shell_command_token(tokens, index):
+            continue
+        next_token = normalized[index + 1] if index + 1 < len(normalized) else ""
+        tail = tuple(item.lower() for item in _command_tail_until_separator(tokens, index + 2))
+        if token == "npm" and next_token in {"install", "i", "add"}:
+            return (
+                "bash.command uses mutable dependency install 'npm install' in a protected "
+                "workspace test/review node. Use 'npm ci' from the attempt worktree so "
+                "verification does not rewrite package-lock.json."
+            )
+        if token == "npx":
+            npx_tail = tuple(
+                item.lower() for item in _command_tail_until_separator(tokens, index + 1)
+            )
+            if "--no-install" not in npx_tail:
+                return (
+                    "bash.command uses 'npx' without '--no-install' in a protected workspace "
+                    "test/review node. Run 'npm ci' from the attempt worktree first, then use "
+                    "'npx --no-install <command>' or the local node_modules/.bin executable so "
+                    "verification does not auto-install undeclared package versions."
+                )
+        if token == "pnpm" and next_token == "install" and "--frozen-lockfile" not in tail:
+            return (
+                "bash.command uses mutable dependency install 'pnpm install' in a protected "
+                "workspace test/review node. Add '--frozen-lockfile' so verification does not "
+                "rewrite lockfiles."
+            )
+        if (
+            token == "yarn"
+            and next_token in {"", "install", "add"}
+            and not ("--immutable" in tail or "--frozen-lockfile" in tail)
+        ):
+            return (
+                "bash.command uses mutable dependency install 'yarn install' in a protected "
+                "workspace test/review node. Add '--immutable' or '--frozen-lockfile' so "
+                "verification does not rewrite lockfiles."
+            )
+        if token == "bun" and next_token == "install" and "--frozen-lockfile" not in tail:
+            return (
+                "bash.command uses mutable dependency install 'bun install' in a protected "
+                "workspace test/review node. Add '--frozen-lockfile' so verification does not "
+                "rewrite lockfiles."
+            )
+    return None
 
 
 def _workspace_verification_dependency_install_error(
@@ -738,57 +805,7 @@ def _workspace_verification_dependency_install_error(
     command = kwargs.get("command")
     if not isinstance(command, str) or not command.strip():
         return None
-    tokens = _command_tokens(command)
-    normalized = tuple(posixpath.basename(token).lower() for token in tokens)
-    error: str | None = None
-    for index, token in enumerate(normalized):
-        next_token = normalized[index + 1] if index + 1 < len(normalized) else ""
-        tail = tuple(item.lower() for item in _command_tail_until_separator(tokens, index + 2))
-        if token == "npm" and next_token in {"install", "i", "add"}:
-            error = (
-                "bash.command uses mutable dependency install 'npm install' in a protected "
-                "workspace test/review node. Use 'npm ci' from the attempt worktree so "
-                "verification does not rewrite package-lock.json."
-            )
-            break
-        if token == "npx":
-            npx_tail = tuple(
-                item.lower() for item in _command_tail_until_separator(tokens, index + 1)
-            )
-            if "--no-install" not in npx_tail:
-                error = (
-                    "bash.command uses 'npx' without '--no-install' in a protected workspace "
-                    "test/review node. Run 'npm ci' from the attempt worktree first, then use "
-                    "'npx --no-install <command>' or the local node_modules/.bin executable so "
-                    "verification does not auto-install undeclared package versions."
-                )
-                break
-        if token == "pnpm" and next_token == "install" and "--frozen-lockfile" not in tail:
-            error = (
-                "bash.command uses mutable dependency install 'pnpm install' in a protected "
-                "workspace test/review node. Add '--frozen-lockfile' so verification does not "
-                "rewrite lockfiles."
-            )
-            break
-        if (
-            token == "yarn"
-            and next_token in {"", "install", "add"}
-            and not ("--immutable" in tail or "--frozen-lockfile" in tail)
-        ):
-            error = (
-                "bash.command uses mutable dependency install 'yarn install' in a protected "
-                "workspace test/review node. Add '--immutable' or '--frozen-lockfile' so "
-                "verification does not rewrite lockfiles."
-            )
-            break
-        if token == "bun" and next_token == "install" and "--frozen-lockfile" not in tail:
-            error = (
-                "bash.command uses mutable dependency install 'bun install' in a protected "
-                "workspace test/review node. Add '--frozen-lockfile' so verification does not "
-                "rewrite lockfiles."
-            )
-            break
-    return error
+    return _workspace_verification_bash_dependency_install_error(command)
 
 
 def _workspace_bash_escape_error(command: str, root_override: str | None) -> str | None:
