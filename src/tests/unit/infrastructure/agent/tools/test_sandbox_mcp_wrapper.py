@@ -1018,6 +1018,52 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert [call[0] for call in adapter.calls] == ["read", "bash"]
 
+    async def test_workspace_worker_bash_allows_script_workspace_route_strings(
+        self,
+    ):
+        """Script preflight does not treat frontend /workspace routes as file writes."""
+        adapter = ScriptInspectSandboxAdapter(
+            "const fs = require('fs');\n"
+            "const BASE_URL = 'http://127.0.0.1:3002';\n"
+            "await page.goto(`${BASE_URL}/workspace`);\n"
+            "await page.goto(`${BASE_URL}/workspace/settings`);\n"
+            "\n"
+            "\n"
+            "fs.writeFileSync('test-results/data-persistence/report.md', 'done');\n"
+        )
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="node test-data-persistence.js",
+        )
+
+        assert result.is_error is False
+        assert [call[0] for call in adapter.calls] == ["read", "bash"]
+
     async def test_workspace_worker_bash_rejects_workspace_root_scan_with_worktree_override(
         self,
     ):

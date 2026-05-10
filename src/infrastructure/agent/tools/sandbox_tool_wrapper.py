@@ -162,6 +162,18 @@ _WORKSPACE_SCRIPT_OUTSIDE_WRITE_HINT_PATTERN = re.compile(
     r")",
     re.I | re.S,
 )
+_WORKSPACE_SCRIPT_METHOD_WRITE_HINT_PATTERN = re.compile(r"\b(?:write_text|write_bytes)\b", re.I)
+_WORKSPACE_SCRIPT_CALL_WRITE_HINT_PATTERN = re.compile(
+    r"\b(?:"
+    r"open\s*\(|"
+    r"shutil\.(?:copy|copyfile|move)|"
+    r"fs\.(?:writeFile|writeFileSync|createWriteStream|copyFile|rename|renameSync)|"
+    r"os\.(?:makedirs|mkdir|rename|replace)|"
+    r"subprocess\."
+    r")",
+    re.I,
+)
+_WORKSPACE_SCRIPT_WRITE_CONTEXT_WINDOW = 5
 
 
 def _convert_mcp_schema(input_schema: dict[str, Any]) -> dict[str, Any]:
@@ -584,6 +596,24 @@ def _workspace_script_path_candidates(command: str, root_override: str) -> tuple
     return tuple(dict.fromkeys(candidates))
 
 
+def _workspace_script_outside_write_contexts(content: str) -> tuple[str, ...]:
+    lines = content.splitlines()
+    contexts: list[str] = []
+    for index, line in enumerate(lines):
+        if _WORKSPACE_SCRIPT_METHOD_WRITE_HINT_PATTERN.search(line):
+            start = max(0, index - 3)
+            end = min(len(lines), index + 2)
+        elif _WORKSPACE_SCRIPT_CALL_WRITE_HINT_PATTERN.search(line):
+            start = index
+            end = min(len(lines), index + _WORKSPACE_SCRIPT_WRITE_CONTEXT_WINDOW)
+        else:
+            continue
+        window = "\n".join(lines[start:end])
+        if _WORKSPACE_SCRIPT_OUTSIDE_WRITE_HINT_PATTERN.search(window):
+            contexts.append(window)
+    return tuple(dict.fromkeys(contexts))
+
+
 async def _workspace_bash_script_content_escape_error(
     *,
     sandbox_id: str,
@@ -610,18 +640,17 @@ async def _workspace_bash_script_content_escape_error(
         if result.get("is_error") or result.get("isError"):
             continue
         content = _extract_ok_output(result)
-        if not _WORKSPACE_SCRIPT_OUTSIDE_WRITE_HINT_PATTERN.search(content):
-            continue
-        for path in _workspace_absolute_paths_in_text(content):
-            if _path_is_inside_code_root(path, normalized_root):
-                continue
-            return (
-                f"bash.command executes script {script_path}, whose content references "
-                f"{path}, outside the active attempt worktree {normalized_root}. Keep "
-                "all file reads, writes, copies, reports, and temporary artifacts inside "
-                "the attempt worktree; do not use helper scripts to reach the main "
-                "checkout."
-            )
+        for context in _workspace_script_outside_write_contexts(content):
+            for path in _workspace_absolute_paths_in_text(context):
+                if path == "/workspace" or _path_is_inside_code_root(path, normalized_root):
+                    continue
+                return (
+                    f"bash.command executes script {script_path}, whose content references "
+                    f"{path}, outside the active attempt worktree {normalized_root}. Keep "
+                    "all file reads, writes, copies, reports, and temporary artifacts inside "
+                    "the attempt worktree; do not use helper scripts to reach the main "
+                    "checkout."
+                )
     return None
 
 
