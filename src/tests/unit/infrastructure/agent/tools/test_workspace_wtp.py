@@ -292,6 +292,39 @@ class TestComplete:
         assert apply_kwargs["attempt_id"] == "attempt-1"
         assert apply_kwargs["leader_agent_id"] == "leader-agent-id"
 
+    async def test_complete_normalizes_scalar_report_fields_from_lenient_tool_calls(
+        self, ctx, mock_orchestrator
+    ):
+        mock_orchestrator.send_message.return_value = _ok_send("task.completed")
+
+        with patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply:
+            mock_apply.return_value = {"applied": True, "task_status": "in_review"}
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id="leader-agent-id",
+                summary="All done",
+                artifacts="artifact:report.md",
+                verifications="test_run:22/22 passed",
+                changed_files="run-comprehensive.js",
+            )
+
+        assert result.is_error is False
+        content = json.loads(mock_orchestrator.send_message.await_args.kwargs["message"])
+        assert content["artifacts"] == [
+            "artifact:report.md",
+            "changed_file:run-comprehensive.js",
+        ]
+        assert content["verifications"] == ["test_run:22/22 passed"]
+
+        apply_kwargs = mock_apply.await_args.kwargs
+        assert apply_kwargs["artifacts"] == [
+            "artifact:report.md",
+            "changed_file:run-comprehensive.js",
+        ]
+        assert apply_kwargs["verifications"] == ["test_run:22/22 passed"]
+
     async def test_send_denied_is_warning_when_terminal_report_is_applied(
         self, ctx, mock_orchestrator
     ):

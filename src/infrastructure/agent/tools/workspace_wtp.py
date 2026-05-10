@@ -184,17 +184,13 @@ def _normalize_completion_report_fields(
     git_diff_summary: str | None,
     changed_files: list[str] | None,
 ) -> dict[str, Any]:
-    normalized_artifacts = [a for a in (artifacts or []) if isinstance(a, str) and a]
-    normalized_verifications = [
-        item for item in (verifications or []) if isinstance(item, str) and item
-    ]
+    normalized_artifacts = _string_list(artifacts)
+    normalized_verifications = _string_list(verifications)
     normalized_commit_ref = commit_ref.strip() if isinstance(commit_ref, str) else ""
     normalized_git_diff_summary = (
         git_diff_summary.strip() if isinstance(git_diff_summary, str) else ""
     )
-    normalized_changed_files = [
-        item.strip() for item in (changed_files or []) if isinstance(item, str) and item.strip()
-    ]
+    normalized_changed_files = _string_list(changed_files)
     if normalized_commit_ref:
         normalized_artifacts.append(f"commit_ref:{normalized_commit_ref}")
     if normalized_git_diff_summary:
