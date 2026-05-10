@@ -68,6 +68,15 @@ class RetryPolicy:
 
     # HTTP status codes that indicate retryable errors
     RETRYABLE_STATUS_CODES: ClassVar[set[int]] = {429, 500, 502, 503, 504}
+    NON_RETRYABLE_STATUS_CODES: ClassVar[set[int]] = {400, 401, 403, 404, 422}
+
+    # Provider protocol/client-shape failures do not improve by retrying the
+    # same request against the same provider. They should fail fast so higher
+    # layers can classify, recover, or route around the provider.
+    NON_RETRYABLE_PATTERNS: ClassVar[list[str]] = [
+        r"anthropicexception\s*-\s*400",
+        r"expected http/, rtsp/ or ice/",
+    ]
 
     # Hard cap on the error string we feed to regex pattern matching. Errors
     # carrying multi-megabyte payloads (e.g. raw HTTP bodies) would otherwise
@@ -125,15 +134,22 @@ class RetryPolicy:
         if len(error_str) > self._MAX_ERROR_STR_LEN:
             error_str = error_str[: self._MAX_ERROR_STR_LEN]
 
+        # Check HTTP status code if available
+        status_code = self._get_status_code(error)
+        if status_code:
+            if status_code in self.RETRYABLE_STATUS_CODES:
+                return True
+            if status_code in self.NON_RETRYABLE_STATUS_CODES:
+                return False
+
+        for pattern in self.NON_RETRYABLE_PATTERNS:
+            if re.search(pattern, error_str, re.IGNORECASE):
+                return False
+
         # Check for retryable patterns in error message
         for pattern in self.RETRYABLE_PATTERNS:
             if re.search(pattern, error_str, re.IGNORECASE):
                 return True
-
-        # Check HTTP status code if available
-        status_code = self._get_status_code(error)
-        if status_code and status_code in self.RETRYABLE_STATUS_CODES:
-            return True
 
         # Check for specific error types
         error_type = type(error).__name__.lower()

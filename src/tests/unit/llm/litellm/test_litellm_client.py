@@ -68,6 +68,15 @@ class TestLiteLLMClient:
                 cache=False,
             )
 
+    def test_provider_protocol_400_trips_circuit_breaker(self):
+        """MiniMax/Anthropic protocol 400s are provider failures, not request validation."""
+        error = Exception(
+            "litellm.InternalServerError: AnthropicException - 400, "
+            'message="Expected HTTP/, RTSP/ or ICE/"'
+        )
+
+        assert LiteLLMClient._is_client_error(error) is False
+
     @pytest.mark.asyncio
     async def test_generate_response_basic(self, client):
         """Test basic response generation without structured output."""

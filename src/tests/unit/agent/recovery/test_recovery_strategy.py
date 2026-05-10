@@ -85,6 +85,16 @@ class TestRetryWithBackoffStrategy:
         assert action.recovered is False
         assert action.should_retry is False
 
+    async def test_no_retry_for_provider_protocol_400(self) -> None:
+        """Provider protocol 400s should not retry against the same provider."""
+        policy = RetryPolicy(initial_delay_ms=100, max_attempts=3)
+        error = Exception(
+            "litellm.InternalServerError: AnthropicException - 400, "
+            'message="Expected HTTP/, RTSP/ or ICE/"'
+        )
+
+        assert policy.is_retryable(error) is False
+
 
 @pytest.mark.unit
 class TestCompactContextStrategy:

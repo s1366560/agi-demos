@@ -647,6 +647,8 @@ class LiteLLMClient(LLMClient):
         was simply invalid.
         """
         error_str = str(e).lower()
+        if LiteLLMClient._is_provider_protocol_error(error_str):
+            return False
         client_indicators = [
             "invalidparameter",
             "invalid_parameter",
@@ -658,6 +660,15 @@ class LiteLLMClient(LLMClient):
             "content_policy_violation",
         ]
         return any(indicator in error_str for indicator in client_indicators)
+
+    @staticmethod
+    def _is_provider_protocol_error(error_str: str) -> bool:
+        """Return True for provider transport/protocol failures wrapped as 400s."""
+        protocol_markers = (
+            "expected http/, rtsp/ or ice/",
+            "anthropicexception - 400",
+        )
+        return all(marker in error_str for marker in protocol_markers)
 
     async def _execute_with_resilience(self, coro_factory: Callable[[], Awaitable[Any]]) -> None:
         """Execute an LLM call with circuit breaker and rate limiter.
