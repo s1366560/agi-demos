@@ -350,6 +350,62 @@ class TestReActAgentWorkspaceDelegation:
             "leader_agent_id": "leader-bound",
         }
 
+    def test_workspace_runtime_context_prefers_latest_json_header(self):
+        agent = _make_react_agent()
+        context = [
+            {
+                "role": "system",
+                "content": (
+                    "[Workspace Runtime Context]\n"
+                    + json.dumps(
+                        {
+                            "context_type": "workspace_worker_runtime",
+                            "workspace_binding": {
+                                "workspace_id": "ws-old",
+                                "workspace_task_id": "task-old",
+                            },
+                            "workspace_verification_integrity": {
+                                "iteration_phase": "test",
+                                "protected_script_changes": True,
+                            },
+                        }
+                    )
+                ),
+            },
+            {"role": "assistant", "content": "repair turn starts"},
+            {
+                "role": "system",
+                "content": (
+                    "[Workspace Runtime Context]\n"
+                    + json.dumps(
+                        {
+                            "context_type": "workspace_worker_runtime",
+                            "workspace_binding": {
+                                "workspace_id": "ws-new",
+                                "workspace_task_id": "task-new",
+                            },
+                            "workspace_verification_integrity": {
+                                "iteration_phase": "test",
+                                "allow_verification_script_changes": True,
+                                "protected_script_changes": False,
+                            },
+                        }
+                    )
+                ),
+            },
+        ]
+
+        payload = agent._workspace_runtime_context(context)
+        binding = agent._workspace_binding_from_context(context)
+
+        assert payload is not None
+        assert payload["workspace_binding"]["workspace_id"] == "ws-new"
+        assert (
+            payload["workspace_verification_integrity"]["allow_verification_script_changes"]
+            is True
+        )
+        assert binding == {"workspace_id": "ws-new", "workspace_task_id": "task-new"}
+
     def test_workspace_binding_from_text_parses_worker_brief_block(self):
         agent = _make_react_agent()
 

@@ -31,7 +31,7 @@ def workspace_runtime_context(
     conversation_context: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any] | None:
     """Return hidden workspace worker app context injected as system metadata."""
-    for message in conversation_context:
+    for message in reversed(conversation_context):
         if message.get("role") != "system":
             continue
         content = message.get("content")
