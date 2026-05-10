@@ -53,6 +53,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_sessio
 )
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    CURRENT_ATTEMPT_ID,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
@@ -702,6 +703,7 @@ class WorkspaceAttemptRecoveryService:
             awaiting_recovered = await self._recover_awaiting_leader_attempt(
                 attempt=attempt,
                 parent_status=parent_status,
+                parent_metadata=parent_metadata,
                 terminal_parent_statuses=terminal_parent_statuses,
                 plan_recovery_suppressed=plan_recovery_suppressed,
                 actor_user_id=actor_user_id,
@@ -820,6 +822,7 @@ class WorkspaceAttemptRecoveryService:
         *,
         attempt: WorkspaceTaskSessionAttempt,
         parent_status: WorkspaceTaskStatus,
+        parent_metadata: Mapping[str, object],
         terminal_parent_statuses: set[WorkspaceTaskStatus],
         plan_recovery_suppressed: bool,
         actor_user_id: str,
@@ -848,6 +851,29 @@ class WorkspaceAttemptRecoveryService:
                 },
             )
             return 0
+        if self._awaiting_verification_retry_needs_worker_resume(attempt, parent_metadata):
+            await self._quiet_finalize_attempt(
+                attempt,
+                reason="verification_retry_scheduled",
+                status=WorkspaceTaskSessionAttemptStatus.REJECTED,
+            )
+            await self._enqueue_resume_if_configured(
+                attempt=attempt,
+                summary=attempt_summary,
+                actor_user_id=actor_user_id,
+            )
+            scheduled_roots.add((attempt.workspace_id, actor_user_id))
+            logger.warning(
+                "workspace_attempt_recovery.verification_retry_worker_resume",
+                extra={
+                    "event": "workspace_attempt_recovery.verification_retry_worker_resume",
+                    "attempt_id": attempt.id,
+                    "workspace_task_id": attempt.workspace_task_id,
+                    "workspace_id": attempt.workspace_id,
+                    "reason": attempt_summary,
+                },
+            )
+            return 1
         await self._touch_awaiting_leader_attempt(attempt)
         scheduled_roots.add((attempt.workspace_id, actor_user_id))
         logger.warning(
@@ -861,6 +887,19 @@ class WorkspaceAttemptRecoveryService:
             },
         )
         return 1
+
+    @staticmethod
+    def _awaiting_verification_retry_needs_worker_resume(
+        attempt: WorkspaceTaskSessionAttempt,
+        parent_metadata: Mapping[str, object],
+    ) -> bool:
+        if attempt.adjudication_reason != "verification_retry_scheduled":
+            return False
+        if parent_metadata.get(CURRENT_ATTEMPT_ID) != attempt.id:
+            return False
+        if parent_metadata.get("last_worker_report_type") != "blocked":
+            return False
+        return WorkspaceAttemptRecoveryService._is_v2_plan_linked(parent_metadata)
 
     async def _recover_plan_linked_attempt(
         self,

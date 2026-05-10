@@ -388,6 +388,98 @@ async def test_verification_judge_retry_projection_keeps_attempt_non_terminal(
 
 
 @pytest.mark.asyncio
+async def test_retryable_worker_infrastructure_projection_terminalizes_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_plan_verification",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Provider failed before producing evidence.",
+            candidate_verifications_json=["provider_error:minimax 400"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Run implementation worker",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": False,
+            "summary": "provider protocol error; retry same node",
+            "results": [
+                {
+                    "kind": "custom",
+                    "name": "retryable_infrastructure_failure",
+                    "judge_verdict": "retry_infrastructure",
+                    "next_action_kind": "retry_same_node",
+                    "failed_criteria": ["provider_protocol_error"],
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.8,
+                    "message": "worker provider failed",
+                    "evidence": [],
+                }
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "rejected"
+    assert attempt.completed_at is not None
+    assert attempt.leader_feedback == "provider protocol error; retry same node"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "in_progress"
+    assert task.metadata_json[PENDING_LEADER_ADJUDICATION] is False
+    assert task.metadata_json["last_attempt_status"] == "rejected"
+    assert task.metadata_json["durable_plan_verdict"] == "replan_requested"
+    assert task.metadata_json[CURRENT_ATTEMPT_ID] == "attempt-a"
+
+
+@pytest.mark.asyncio
 async def test_worker_start_restarts_after_stop(db_session: AsyncSession) -> None:
     worker = WorkspacePlanOutboxWorker(
         session_factory=_session_factory(db_session),

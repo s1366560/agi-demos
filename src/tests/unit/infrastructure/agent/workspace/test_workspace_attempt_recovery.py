@@ -22,6 +22,7 @@ from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
     _should_recover_finished_stream,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    CURRENT_ATTEMPT_ID,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
@@ -582,6 +583,46 @@ class TestStartupSweep:
         assert (
             service._saves[0].status  # type: ignore[attr-defined]
             == WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION
+        )
+
+    @pytest.mark.asyncio
+    async def test_awaiting_retry_after_blocked_worker_report_enqueues_resume(self) -> None:
+        att = _make_attempt(
+            workspace_task_id="task-1",
+            status=WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
+        )
+        att.adjudication_reason = "verification_retry_scheduled"
+        enqueue_resume = AsyncMock()
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                    CURRENT_ATTEMPT_ID: "att-1",
+                    "last_worker_report_type": "blocked",
+                }
+            },
+            enqueue_resume=enqueue_resume,
+        )
+        service._plan_recovery_suppressed = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_not_awaited()
+        enqueue_resume.assert_awaited_once()
+        schedule_tick.assert_called_once_with("ws-1", "user-1")
+        assert len(service._saves) == 1  # type: ignore[attr-defined]
+        assert (
+            service._saves[0].status  # type: ignore[attr-defined]
+            == WorkspaceTaskSessionAttemptStatus.REJECTED
         )
 
     @pytest.mark.asyncio

@@ -270,7 +270,12 @@ def _verification_payload_requests_verification_retry(payload: dict[str, Any]) -
         if result.get("judge_verdict") != "retry_infrastructure":
             continue
         if result.get("next_action_kind") == "retry_same_node":
-            return True
+            failed_criteria = result.get("failed_criteria")
+            failed: set[str] = set()
+            if isinstance(failed_criteria, list):
+                failed = {str(item) for item in cast(list[object], failed_criteria)}
+            if "workspace_verification_judge" in failed:
+                return True
     return False
 
 
