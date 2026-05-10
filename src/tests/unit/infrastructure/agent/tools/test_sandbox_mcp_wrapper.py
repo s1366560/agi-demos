@@ -768,6 +768,47 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-2"
 
+    async def test_workspace_worker_bash_scopes_npm_cache_to_worktree_relative_path(self):
+        """Attempt-scoped npm commands should keep cache and debug logs inside the worktree."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command="cd backend && npm ci",
+        )
+
+        assert result.is_error is False
+        assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+        command = adapter.last_kwargs["command"]
+        assert "NPM_CONFIG_CACHE:=node_modules/.cache/npm" in command
+        assert "export npm_config_cache" in command
+        assert "cd backend && npm ci" in command
+        assert "/workspace/.npm" not in command
+
     async def test_workspace_worker_bash_rejects_heredoc_when_worktree_override_active(self):
         """Attempt-scoped workers should use file tools instead of bash heredoc writes."""
         adapter = MockSandboxAdapter()

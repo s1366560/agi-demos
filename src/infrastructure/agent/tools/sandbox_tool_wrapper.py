@@ -1034,6 +1034,29 @@ def _apply_workspace_code_root_defaults(
     return scoped
 
 
+def _with_workspace_package_manager_cache(
+    tool_name: str,
+    kwargs: dict[str, Any],
+    root_override: str | None,
+) -> dict[str, Any]:
+    if tool_name != "bash" or not root_override:
+        return kwargs
+
+    command = kwargs.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return kwargs
+
+    scoped = dict(kwargs)
+    scoped["command"] = (
+        ': "${NPM_CONFIG_CACHE:=node_modules/.cache/npm}"; '
+        "export NPM_CONFIG_CACHE; "
+        ': "${npm_config_cache:=$NPM_CONFIG_CACHE}"; '
+        "export npm_config_cache; "
+        f"{command}"
+    )
+    return scoped
+
+
 def _with_bash_timeout_guard(
     tool_name: str,
     kwargs: dict[str, Any],
@@ -1387,6 +1410,11 @@ def create_sandbox_mcp_tool(
                 root_override=root_override,
             ):
                 return ToolResult(output=argument_error, is_error=True)
+            normalized_kwargs = _with_workspace_package_manager_cache(
+                tool_name,
+                normalized_kwargs,
+                root_override,
+            )
             output, raw_result = await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,
