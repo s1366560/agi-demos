@@ -1666,6 +1666,87 @@ class TestSandboxMCPToolExecute:
         assert "allow_verification_script_changes" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_verification_phase_allows_repair_brief_allowlisted_script_edit(self):
+        """Repair turns may narrowly allow the script named by the verifier brief."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                        "allowed_verification_script_paths": ["test-data-persistence.js"],
+                    },
+                }
+            ),
+            file_path="/workspace/my-evo/test-data-persistence.js",
+            old_string="preferences",
+            new_string="account",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
+    async def test_workspace_verification_phase_rejects_non_allowlisted_script_edit(self):
+        """The repair allowlist must not become a broad test-script bypass."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="create_file",
+            tool_schema={
+                "name": "create_file",
+                "description": "Create file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["file_path", "content"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                        "allowed_verification_script_paths": ["test-data-persistence.js"],
+                    },
+                }
+            ),
+            file_path="/workspace/my-evo/test-suites-runner.js",
+            content="console.log('synthetic runner')",
+        )
+
+        assert result.is_error is True
+        assert "targets verification script test-suites-runner.js" in result.output
+        assert adapter.call_count == 0
+
     async def test_workspace_verification_phase_allows_product_file_edit(self):
         """The protection should not block real product fixes."""
         adapter = MockSandboxAdapter()

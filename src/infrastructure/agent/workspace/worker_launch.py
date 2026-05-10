@@ -35,8 +35,9 @@ import json
 import logging
 import os
 import posixpath
+import re
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
@@ -76,6 +77,11 @@ WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
 WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
     "preflight:read-progress",
     "preflight:git-status",
+)
+_VERIFICATION_SCRIPT_SCOPE_PATH_PATTERN = re.compile(
+    r"(?P<path>[A-Za-z0-9_./-]*(?:test|spec|e2e|integration|audit|benchmark)"
+    + r"[A-Za-z0-9_./-]*\.(?:js|jsx|ts|tsx|mjs|cjs|py|sh))",
+    re.I,
 )
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
@@ -304,6 +310,58 @@ def _metadata_text(value: object) -> str | None:
     return stripped if stripped else None
 
 
+def _iter_verification_script_scope_paths(value: object) -> list[str]:
+    paths: list[str] = []
+    if isinstance(value, str):
+        for match in _VERIFICATION_SCRIPT_SCOPE_PATH_PATTERN.finditer(value):
+            path = posixpath.normpath(match.group("path").strip().lstrip("./"))
+            if path and path != "." and path not in paths:
+                paths.append(path)
+        return paths
+    if isinstance(value, Mapping):
+        mapped = cast(Mapping[str, object], value)
+        for key in (
+            "allowed_write_scope",
+            "allowed_verification_script_paths",
+            "verification_script_paths",
+        ):
+            paths.extend(_iter_verification_script_scope_paths(mapped.get(key)))
+        return list(dict.fromkeys(paths))
+    if isinstance(value, (list, tuple, set)):
+        for item in cast(Iterable[object], value):
+            paths.extend(_iter_verification_script_scope_paths(item))
+        return list(dict.fromkeys(paths))
+    return paths
+
+
+def _verification_script_change_allowlist(
+    task_meta: Mapping[str, Any],
+    node_meta: Mapping[str, Any],
+) -> list[str]:
+    paths: list[str] = []
+    for metadata in (task_meta, node_meta):
+        paths.extend(
+            _iter_verification_script_scope_paths(
+                metadata.get("allowed_verification_script_paths")
+            )
+        )
+        for repair_key in (
+            "current_repair_turn",
+            "last_verification_judge_repair_brief",
+        ):
+            repair = metadata.get(repair_key)
+            if not isinstance(repair, Mapping):
+                continue
+            mapped_repair = cast(Mapping[str, object], repair)
+            brief: object = (
+                mapped_repair.get("repair_brief")
+                if repair_key == "current_repair_turn"
+                else mapped_repair
+            )
+            paths.extend(_iter_verification_script_scope_paths(brief))
+    return list(dict.fromkeys(paths))
+
+
 def _workspace_verification_integrity_context(
     task_metadata: Mapping[str, Any] | None,
     plan_node_metadata: Mapping[str, Any] | None = None,
@@ -311,8 +369,12 @@ def _workspace_verification_integrity_context(
     task_title: str | None = None,
     task_description: str | None = None,
 ) -> dict[str, Any] | None:
-    task_meta = task_metadata if isinstance(task_metadata, Mapping) else {}
-    node_meta = plan_node_metadata if isinstance(plan_node_metadata, Mapping) else {}
+    task_meta: Mapping[str, Any] = (
+        task_metadata if isinstance(task_metadata, Mapping) else {}
+    )
+    node_meta: Mapping[str, Any] = (
+        plan_node_metadata if isinstance(plan_node_metadata, Mapping) else {}
+    )
     phase = _metadata_text(task_meta.get("iteration_phase")) or _metadata_text(
         node_meta.get("iteration_phase")
     )
@@ -325,6 +387,7 @@ def _workspace_verification_integrity_context(
     allow_failed_tests = (
         task_meta.get("allow_failed_tests") is True or node_meta.get("allow_failed_tests") is True
     )
+    allowed_script_paths = _verification_script_change_allowlist(task_meta, node_meta)
     source = (
         "workspace_task_metadata"
         if _metadata_text(task_meta.get("iteration_phase"))
@@ -343,12 +406,14 @@ def _workspace_verification_integrity_context(
         "iteration_phase": phase.lower(),
         "allow_failed_tests": allow_failed_tests,
         "allow_verification_script_changes": allow_script_changes,
+        "allowed_verification_script_paths": allowed_script_paths,
         "protected_script_changes": not allow_script_changes,
         "test_contract_hints": contract_hints,
         "rule": (
             "For test/review workspace nodes, sandbox write tools must not modify "
             "test, spec, E2E, integration, audit, or benchmark scripts unless the "
-            "plan node explicitly sets allow_verification_script_changes=true."
+            "plan node explicitly sets allow_verification_script_changes=true or a "
+            "repair brief allowlists the exact verification script path."
         ),
     }
 
@@ -364,6 +429,21 @@ def _render_visible_verification_integrity_gate(policy: Mapping[str, Any] | None
             "contract, but you still must preserve assertion strength and explain why "
             "each verification script change is necessary. Do not loosen checks, skip "
             "failed cases, or report success with known failed tests."
+        )
+    allowed_paths = policy.get("allowed_verification_script_paths")
+    if isinstance(allowed_paths, list) and allowed_paths:
+        rendered_paths = ", ".join(
+            f"`{path}`" for path in cast(list[str], allowed_paths[:8])
+        )
+        return (
+            "## Test/review integrity gate\n"
+            f"This is a protected `{phase}` workspace node. The current repair brief "
+            f"explicitly permits changing only these verification scripts: {rendered_paths}. "
+            "Use that exception only to fix the listed failure; do not edit, replace, "
+            "regenerate, or loosen other test, spec, E2E, integration, audit, or "
+            "benchmark scripts. If the required verification still cannot run with "
+            "0 failed tests, call workspace_report_blocked with the failing command "
+            "and exact evidence instead of workspace_report_complete."
         )
     return (
         "## Test/review integrity gate\n"

@@ -592,6 +592,32 @@ class TestBuildBrief:
         assert "202/203" in policy["test_contract_hints"][0]
         assert "allow_verification_script_changes=true" in policy["rule"]
 
+    def test_system_context_extracts_repair_brief_verification_script_allowlist(self) -> None:
+        task = _make_task()
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={
+                "iteration_phase": "test",
+                "current_repair_turn": {
+                    "repair_brief": {
+                        "allowed_write_scope": (
+                            "test-data-persistence.js (fix selector), "
+                            "test-results/iteration-sprint/SPRINT-TEST-REPORT.md"
+                        )
+                    }
+                },
+            },
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert policy["protected_script_changes"] is True
+        assert policy["allow_verification_script_changes"] is False
+        assert policy["allowed_verification_script_paths"] == ["test-data-persistence.js"]
+
     def test_system_context_honors_explicit_failed_tests_contract(self) -> None:
         task = _make_task(
             metadata={

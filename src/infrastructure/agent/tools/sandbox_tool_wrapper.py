@@ -375,6 +375,26 @@ def _workspace_verification_integrity_policy_from_context(
     return policy
 
 
+def _verification_script_change_allowlisted(
+    relative_path: str,
+    policy: Mapping[str, Any],
+) -> bool:
+    raw_paths = policy.get("allowed_verification_script_paths")
+    if not isinstance(raw_paths, list):
+        return False
+    normalized = posixpath.normpath(relative_path).lstrip("./")
+    basename = posixpath.basename(normalized)
+    for raw in raw_paths:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        allowed = posixpath.normpath(raw.strip().lstrip("./"))
+        if normalized == allowed:
+            return True
+        if "/" not in allowed and basename == allowed:
+            return True
+    return False
+
+
 def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
     try:
         tokens = shlex.split(command, posix=True)
@@ -832,6 +852,8 @@ def _workspace_verification_script_argument_error(
             )
             relative_path = _path_relative_to_code_root(scoped_path, code_root)
             if _is_verification_script_path(relative_path):
+                if _verification_script_change_allowlisted(relative_path, policy):
+                    continue
                 return (
                     f"{tool_name}.{key} targets verification script {relative_path}. "
                     "This workspace test/review node is protected from changing test, "
@@ -853,6 +875,8 @@ def _workspace_verification_script_argument_error(
                 code_root,
             )
             if _is_verification_script_path(relative_path):
+                if _verification_script_change_allowlisted(relative_path, policy):
+                    continue
                 return (
                     f"bash.command attempts to modify verification script {relative_path}. "
                     "This workspace test/review node is protected from changing test, "
