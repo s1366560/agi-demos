@@ -6,7 +6,7 @@ import json
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from src.domain.model.review.finding_filter import filter_findings
 from src.domain.model.review.review_finding import (
@@ -278,18 +278,38 @@ def _user_payload(context: IterationReviewContext) -> str:
 
 
 def _iteration_review_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:
-    if event.get("type") != "observe":
-        return None
     data = event.get("data")
     if not isinstance(data, Mapping):
         return None
-    if data.get("tool_name") != WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME:
+    if _tool_name_from_event(event) != WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME:
         return None
-    observation = data.get("observation") or data.get("result")
-    if not isinstance(observation, Mapping):
+
+    event_data = cast("Mapping[str, Any]", data)
+    for key in ("observation", "result", "metadata"):
+        payload = _iteration_review_payload_from_value(event_data.get(key))
+        if payload is not None:
+            return payload
+    return _iteration_review_payload_from_value(event_data)
+
+
+def _iteration_review_payload_from_value(value: object) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+
+    if not isinstance(value, Mapping):
         return None
-    payload = observation.get("iteration_review")
-    return dict(payload) if isinstance(payload, Mapping) else None
+
+    mapping_value = cast("Mapping[str, Any]", value)
+    payload = mapping_value.get("iteration_review")
+    if not isinstance(payload, Mapping):
+        metadata = mapping_value.get("metadata")
+        if isinstance(metadata, Mapping):
+            metadata_value = cast("Mapping[str, Any]", metadata)
+            payload = metadata_value.get("iteration_review")
+    return dict(cast("Mapping[str, Any]", payload)) if isinstance(payload, Mapping) else None
 
 
 def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:

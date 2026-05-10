@@ -17,6 +17,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
 )
 from src.infrastructure.agent.workspace_plan.iteration_review import (
     WorkspaceIterationReviewAgentProvider,
+    _iteration_review_from_event,
 )
 from src.infrastructure.agent.workspace_plan.verification_judge import WorkspaceVerifierAgentJudge
 
@@ -124,3 +125,40 @@ async def test_iteration_review_agent_provider_uses_builtin_agent_turn_runner() 
     assert "workspace_submit_iteration_review" in runner.calls[0]["user_prompt"]
     assert result.verdict == "continue_next_iteration"
     assert result.next_tasks[0].id == "browser-proof"
+
+
+def test_iteration_review_event_parser_accepts_tool_result_metadata() -> None:
+    payload = {
+        "verdict": "complete_goal",
+        "confidence": 0.9,
+        "summary": "Done.",
+    }
+
+    assert _iteration_review_from_event(
+        {
+            "type": "tool_result",
+            "data": {
+                "tool_name": "workspace_submit_iteration_review",
+                "result": {"iteration_review": payload},
+            },
+        }
+    ) == payload
+
+
+def test_iteration_review_event_parser_accepts_json_observation() -> None:
+    payload = {
+        "verdict": "continue_next_iteration",
+        "confidence": 0.82,
+        "summary": "Need one proof sprint.",
+    }
+
+    assert _iteration_review_from_event(
+        {
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_submit_iteration_review",
+                "observation": "{\"iteration_review\":{\"verdict\":\"continue_next_iteration\","
+                "\"confidence\":0.82,\"summary\":\"Need one proof sprint.\"}}",
+            },
+        }
+    ) == payload
