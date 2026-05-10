@@ -736,6 +736,10 @@ def _build_worker_system_context(
                 "working directory. Perform repository inspection, file edits, terminal "
                 "commands, git diff, and tests from the selected root. Do not create project "
                 "files directly under /workspace or another sibling directory. "
+                "When a worktree_path is present, treat sandbox_code_root as a baseline checkout "
+                "for historical context only; do not read current reports, screenshots, git "
+                "state, or test outputs from sandbox_code_root. If required evidence is missing "
+                "from the worktree, regenerate it inside the worktree or report the blocker. "
                 "Ignore unrelated files outside the selected root unless the task explicitly "
                 "asks for them. Read and follow the listed AGENTS.md files before decomposing "
                 "or executing the task."
@@ -766,7 +770,9 @@ def _build_worker_system_context(
                         "All file tool file_path arguments, bash working directories, bash "
                         "writes, temp scripts, git operations, test outputs, and generated "
                         "artifacts must stay under that worktree_path unless the task "
-                        "explicitly names another path."
+                        "explicitly names another path. Treat code_context.sandbox_code_root "
+                        "as a baseline checkout only; do not inspect it for current attempt "
+                        "reports, screenshots, git status, or test output."
                     ),
                 }
 
@@ -982,7 +988,11 @@ def _build_worker_brief(
             "repository inspection, file edits, terminal commands, git status, commits, and "
             "tests; every file tool file_path must also start with that worktree_path, and "
             "bash commands must not create temp scripts, reports, commits, or copied "
-            "artifacts outside that worktree. "
+            "artifacts outside that worktree. When a worktree_path is provided, "
+            f"`{code_root}` is only a baseline checkout for historical context; do not read "
+            "current reports, screenshots, git state, or test output from it. If required "
+            "evidence is missing in the worktree, regenerate it inside the worktree or report "
+            "the blocker. "
             "Otherwise, before creating, reading, editing, or testing project files, "
             f"run `mkdir -p {code_root} && cd {code_root}` or pass the same directory as the "
             "tool working directory. Do not place `package.json`, source files, tests, build "
@@ -1008,7 +1018,8 @@ def _build_worker_brief(
                 "start with that worktree_path; never pass a main-checkout path for "
                 "attempt-scoped files. For bash, do not write temp scripts, generated "
                 "reports, commits, or copied artifacts outside that worktree. Do not edit "
-                "the main sandbox checkout for attempt-scoped work."
+                "or inspect the main sandbox checkout for current reports, screenshots, git "
+                "state, or test output from this attempt."
             )
             if handoff_gate := _render_visible_handoff_interpretation_gate(
                 rendered_extra=rendered_extra,

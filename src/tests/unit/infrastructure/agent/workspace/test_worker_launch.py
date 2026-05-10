@@ -776,6 +776,8 @@ class TestBuildBrief:
         assert "## Code root discipline" in brief
         assert "mkdir -p /workspace/my-evo && cd /workspace/my-evo" in brief
         assert "Do not place `package.json`" in brief
+        assert "baseline checkout for historical context" in brief
+        assert "regenerate it inside the worktree" in brief
         assert "Artifact write discipline" in brief
         assert "git_diff_summary" in brief
         assert "## Code quality gate" in brief
@@ -810,6 +812,8 @@ class TestBuildBrief:
         assert (
             "Do not create project files directly under /workspace" in code_context_payload["rule"]
         )
+        assert "do not read current reports" in code_context_payload["rule"]
+        assert "regenerate it inside the worktree" in code_context_payload["rule"]
         quality_policy = system_context["code_quality_policy"]
         assert quality_policy["source"] == "workspace_generic_quality_gate"
         quality_instructions = " ".join(quality_policy["instructions"])
@@ -840,7 +844,7 @@ class TestBuildBrief:
         assert "every absolute file_path must start with that worktree_path" in brief
         assert "bash commands must not create temp scripts" in brief
         assert "For bash, do not write temp scripts" in brief
-        assert "Do not edit the main sandbox checkout" in brief
+        assert "Do not edit or inspect the main sandbox checkout" in brief
         system_context = wl._build_worker_system_context(
             workspace_id="w",
             task=task,
@@ -861,6 +865,10 @@ class TestBuildBrief:
         assert "file_path arguments" in system_context["workspace_root_override"]["rule"]
         assert "bash writes" in system_context["workspace_root_override"]["rule"]
         assert "temp scripts" in system_context["workspace_root_override"]["rule"]
+        assert "baseline checkout only" in system_context["workspace_root_override"]["rule"]
+        assert "do not inspect it for current attempt reports" in (
+            system_context["workspace_root_override"]["rule"]
+        )
         assert (
             "check additional_instructions for a worktree_path"
             in (system_context["code_context"]["rule"])
