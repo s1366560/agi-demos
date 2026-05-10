@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import src.infrastructure.agent.workspace_plan.outbox_handlers as outbox_handlers
 from src.domain.model.workspace.workspace_task import WorkspaceTask
@@ -715,6 +715,80 @@ async def test_run_once_completes_registered_handler(
     assert loaded.attempt_count == 1
     assert loaded.lease_owner is None
     assert loaded.processed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_run_once_renews_processing_lease_during_long_handler(test_engine) -> None:
+    session_maker = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_maker() as seed_session:
+        await _seed_workspace_and_plan(seed_session)
+        repo = SqlWorkspacePlanOutboxRepository(seed_session)
+        item = await repo.enqueue(
+            plan_id="worker-plan-1",
+            workspace_id="workspace-1",
+            event_type="supervisor_tick",
+            payload={"workspace_id": "workspace-1"},
+        )
+        await seed_session.commit()
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[AsyncSession]:
+        async with session_maker() as session:
+            try:
+                yield session
+            except BaseException:
+                await session.rollback()
+                raise
+
+    handler_can_finish = asyncio.Event()
+    handler_started = asyncio.Event()
+
+    async def long_handler(
+        _outbox_item: WorkspacePlanOutboxModel,
+        _session: AsyncSession,
+    ) -> None:
+        handler_started.set()
+        await handler_can_finish.wait()
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=factory,
+        handlers={"supervisor_tick": long_handler},
+        worker_id="worker-a",
+        lease_seconds=2,
+    )
+
+    run_task = asyncio.create_task(worker.run_once())
+    try:
+        await asyncio.wait_for(handler_started.wait(), timeout=2)
+        async with session_maker() as inspect_session:
+            inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+            initial = await inspect_repo.get_by_id(item.id)
+            assert initial is not None
+            initial_lease_expires_at = initial.lease_expires_at
+
+        await asyncio.sleep(1.2)
+
+        async with session_maker() as inspect_session:
+            inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+            renewed = await inspect_repo.get_by_id(item.id)
+            assert renewed is not None
+            assert renewed.status == "processing"
+            assert renewed.lease_owner == "worker-a"
+            assert renewed.attempt_count == 1
+            assert renewed.lease_expires_at is not None
+            assert initial_lease_expires_at is not None
+            assert renewed.lease_expires_at > initial_lease_expires_at
+    finally:
+        handler_can_finish.set()
+        assert await run_task == 1
+
+    async with session_maker() as inspect_session:
+        inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+        completed = await inspect_repo.get_by_id(item.id)
+        assert completed is not None
+        assert completed.status == "completed"
+        assert completed.attempt_count == 1
+        assert completed.lease_owner is None
 
 
 @pytest.mark.asyncio

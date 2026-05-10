@@ -142,11 +142,14 @@ class SqlWorkspacePlanOutboxRepository:
         self,
         outbox_id: str,
         *,
+        lease_owner: str | None = None,
         now: datetime | None = None,
     ) -> bool:
         """Mark a claimed outbox item as completed."""
         item = await self.get_by_id(outbox_id)
         if item is None or item.status != "processing":
+            return False
+        if lease_owner is not None and item.lease_owner != lease_owner:
             return False
 
         item.status = "completed"
@@ -163,11 +166,14 @@ class SqlWorkspacePlanOutboxRepository:
         outbox_id: str,
         error_message: str,
         *,
+        lease_owner: str | None = None,
         now: datetime | None = None,
     ) -> bool:
         """Release a claimed item for retry, or move it to dead letter."""
         item = await self.get_by_id(outbox_id)
         if item is None or item.status != "processing":
+            return False
+        if lease_owner is not None and item.lease_owner != lease_owner:
             return False
 
         current_time = now or datetime.now(UTC)
@@ -188,6 +194,8 @@ class SqlWorkspacePlanOutboxRepository:
         self,
         outbox_id: str,
         error_message: str | None = None,
+        *,
+        lease_owner: str | None = None,
     ) -> bool:
         """Release a claimed item without counting it as a handler failure.
 
@@ -199,6 +207,8 @@ class SqlWorkspacePlanOutboxRepository:
         item = await self.get_by_id(outbox_id)
         if item is None or item.status != "processing":
             return False
+        if lease_owner is not None and item.lease_owner != lease_owner:
+            return False
 
         item.status = "pending"
         item.lease_owner = None
@@ -207,6 +217,24 @@ class SqlWorkspacePlanOutboxRepository:
         item.next_attempt_at = None
         if int(item.attempt_count) > 0:
             item.attempt_count = int(item.attempt_count) - 1
+        await self._db.flush()
+        return True
+
+    async def renew_processing_lease(
+        self,
+        outbox_id: str,
+        *,
+        lease_owner: str,
+        lease_seconds: int = 60,
+        now: datetime | None = None,
+    ) -> bool:
+        """Extend a processing lease when the current worker still owns it."""
+        item = await self.get_by_id(outbox_id)
+        if item is None or item.status != "processing" or item.lease_owner != lease_owner:
+            return False
+
+        current_time = now or datetime.now(UTC)
+        item.lease_expires_at = current_time + timedelta(seconds=lease_seconds)
         await self._db.flush()
         return True
 

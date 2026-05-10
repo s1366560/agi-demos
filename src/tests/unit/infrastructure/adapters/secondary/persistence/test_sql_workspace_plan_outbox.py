@@ -199,6 +199,51 @@ async def test_claim_due_recovers_expired_processing_lease(
 
 
 @pytest.mark.asyncio
+async def test_renew_processing_lease_extends_current_owner_without_consuming_attempt(
+    db_session: AsyncSession,
+    workspace_test_seed: dict[str, str],
+) -> None:
+    await _seed_plan(db_session, "workspace-1", "outbox-plan-1")
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    current_time = datetime(2026, 4, 24, 8, 0, tzinfo=UTC)
+
+    item = await repo.enqueue(
+        plan_id="outbox-plan-1",
+        workspace_id="workspace-1",
+        event_type="supervisor_tick",
+    )
+    await repo.claim_due(
+        limit=1,
+        lease_owner="worker-a",
+        lease_seconds=30,
+        now=current_time,
+    )
+
+    wrong_owner_renewed = await repo.renew_processing_lease(
+        item.id,
+        lease_owner="worker-b",
+        lease_seconds=120,
+        now=current_time + timedelta(seconds=10),
+    )
+    assert wrong_owner_renewed is False
+
+    renewed = await repo.renew_processing_lease(
+        item.id,
+        lease_owner="worker-a",
+        lease_seconds=120,
+        now=current_time + timedelta(seconds=10),
+    )
+
+    loaded = await repo.get_by_id(item.id)
+    assert renewed is True
+    assert loaded is not None
+    assert loaded.status == "processing"
+    assert loaded.lease_owner == "worker-a"
+    assert loaded.attempt_count == 1
+    assert _as_utc(loaded.lease_expires_at) == current_time + timedelta(seconds=130)
+
+
+@pytest.mark.asyncio
 async def test_mark_completed_clears_lease_and_sets_processed_at(
     db_session: AsyncSession,
     workspace_test_seed: dict[str, str],

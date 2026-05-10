@@ -137,6 +137,7 @@ class WorkspacePlanOutboxWorker:
                     marked = await repo.mark_failed(
                         outbox_id,
                         f"no handler for event_type={item.event_type}",
+                        lease_owner=self._worker_id,
                     )
                     payload = (
                         _outbox_update_payload(item, "outbox_handler_missing") if marked else None
@@ -146,8 +147,17 @@ class WorkspacePlanOutboxWorker:
                         await self._publish_outbox_update(payload)
                     return
 
-                await handler(item, session)
-                marked = await repo.mark_completed(outbox_id)
+                lease_renewal_task = asyncio.create_task(
+                    self._renew_processing_lease_until_done(outbox_id),
+                    name=f"{self._worker_id}:renew:{outbox_id}",
+                )
+                try:
+                    await handler(item, session)
+                finally:
+                    _ = lease_renewal_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await lease_renewal_task
+                marked = await repo.mark_completed(outbox_id, lease_owner=self._worker_id)
                 payload = _outbox_update_payload(item, "outbox_completed") if marked else None
                 await session.commit()
                 if payload is not None:
@@ -170,7 +180,11 @@ class WorkspacePlanOutboxWorker:
             async with self._session_factory() as session:
                 repo = SqlWorkspacePlanOutboxRepository(session)
                 item = await repo.get_by_id(outbox_id)
-                marked = await repo.mark_failed(outbox_id, error_message)
+                marked = await repo.mark_failed(
+                    outbox_id,
+                    error_message,
+                    lease_owner=self._worker_id,
+                )
                 if marked and item is not None:
                     payload = _outbox_update_payload(item, "outbox_failed")
                 await session.commit()
@@ -186,7 +200,11 @@ class WorkspacePlanOutboxWorker:
             async with self._session_factory() as session:
                 repo = SqlWorkspacePlanOutboxRepository(session)
                 item = await repo.get_by_id(outbox_id)
-                released = await repo.release_processing(outbox_id, error_message)
+                released = await repo.release_processing(
+                    outbox_id,
+                    error_message,
+                    lease_owner=self._worker_id,
+                )
                 if released and item is not None:
                     payload = _outbox_update_payload(item, "outbox_released")
                 await session.commit()
@@ -195,6 +213,34 @@ class WorkspacePlanOutboxWorker:
             return
         if payload is not None:
             await self._publish_outbox_update(payload)
+
+    async def _renew_processing_lease_until_done(self, outbox_id: str) -> None:
+        renew_interval_seconds = max(1.0, min(float(self._lease_seconds) / 2.0, 30.0))
+        while True:
+            await asyncio.sleep(renew_interval_seconds)
+            try:
+                async with self._session_factory() as session:
+                    repo = SqlWorkspacePlanOutboxRepository(session)
+                    renewed = await repo.renew_processing_lease(
+                        outbox_id,
+                        lease_owner=self._worker_id,
+                        lease_seconds=self._lease_seconds,
+                    )
+                    await session.commit()
+                    if not renewed:
+                        return
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning(
+                    "workspace plan outbox lease renewal failed",
+                    exc_info=True,
+                    extra={
+                        "event": "workspace_plan_outbox.lease_renewal_failed",
+                        "outbox_id": outbox_id,
+                        "worker_id": self._worker_id,
+                    },
+                )
 
     async def _publish_outbox_update(self, payload: dict[str, Any]) -> None:
         if self._event_publisher is None:
