@@ -2194,6 +2194,80 @@ class TestSandboxMCPToolExecute:
         assert "environment blocker" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_verification_phase_rejects_npx_auto_install(self):
+        """npx must not auto-install unpinned packages in protected verification nodes."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            command="cd /workspace/my-evo/backend && npx jest --coverage",
+        )
+
+        assert result.is_error is True
+        assert "uses 'npx' without '--no-install'" in result.output
+        assert "npm ci" in result.output
+        assert adapter.call_count == 0
+
+    async def test_workspace_verification_phase_allows_no_install_npx(self):
+        """Pinned local npx execution remains available after immutable dependency setup."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "test",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            command="cd /workspace/my-evo/backend && npx --no-install jest --coverage",
+        )
+
+        assert result.is_error is False
+        assert adapter.call_count == 1
+
     async def test_workspace_verification_phase_allows_npm_ci(self):
         """Immutable dependency setup remains available for attempt worktrees."""
         adapter = MockSandboxAdapter()

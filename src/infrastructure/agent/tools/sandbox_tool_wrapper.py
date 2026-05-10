@@ -751,6 +751,18 @@ def _workspace_verification_dependency_install_error(
                 "verification does not rewrite package-lock.json."
             )
             break
+        if token == "npx":
+            npx_tail = tuple(
+                item.lower() for item in _command_tail_until_separator(tokens, index + 1)
+            )
+            if "--no-install" not in npx_tail:
+                error = (
+                    "bash.command uses 'npx' without '--no-install' in a protected workspace "
+                    "test/review node. Run 'npm ci' from the attempt worktree first, then use "
+                    "'npx --no-install <command>' or the local node_modules/.bin executable so "
+                    "verification does not auto-install undeclared package versions."
+                )
+                break
         if token == "pnpm" and next_token == "install" and "--frozen-lockfile" not in tail:
             error = (
                 "bash.command uses mutable dependency install 'pnpm install' in a protected "
