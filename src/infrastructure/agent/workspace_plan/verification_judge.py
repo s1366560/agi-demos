@@ -250,6 +250,18 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
         "sandbox": {
             "code_root": request.sandbox_code_root,
             "worktree_path": request.worktree_path,
+            "active_execution_root": request.active_execution_root,
+            "worktree_isolation_active": request.worktree_isolation_active,
+            "code_root_role": (
+                "baseline_only_when_worktree_is_active"
+                if request.worktree_isolation_active
+                else "active_root"
+            ),
+            "verification_scope": (
+                "current_attempt_worktree"
+                if request.worktree_isolation_active
+                else "sandbox_code_root"
+            ),
         },
         "task_metadata": request.task_metadata,
         "policy": {
@@ -300,9 +312,13 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
             ],
             "attempt_worktree_isolation": [
                 "The sandbox.worktree_path is the active execution root for worker attempts.",
+                "When sandbox.worktree_isolation_active is true, sandbox.active_execution_root is the only current acceptance root.",
+                "Do not fail because sandbox.code_root, sandbox_code_root, or the main checkout lacks the current attempt's worktree commits, files, reports, grep results, screenshots, or generated artifacts.",
                 "A tool denial caused by writing verification artifacts outside sandbox.worktree_path is an intentional policy failure, not a transient retry_infrastructure condition.",
                 "Do not recommend running from the main checkout, symlinking into the main checkout, copying artifacts outside the attempt worktree, or bypassing the worktree root.",
                 "Judge candidate state from sandbox.worktree_path and reported commit_refs; do not require commit_refs to already be merged into sandbox.code_root, the main checkout, or another master branch before acceptance.",
+                "Treat node descriptions, prior verifier text, repair descriptions, task metadata, or prior criteria that mention code root, sandbox_code_root, master, or main checkout as historical context while sandbox.worktree_isolation_active is true unless latest_verification_results or recent_git_status came from sandbox.active_execution_root.",
+                "Do not create repair nodes whose purpose is to copy or re-apply current attempt worktree commits into sandbox.code_root, sandbox_code_root, the main checkout, or another master branch.",
                 "If prior criteria mention master or main checkout while sandbox.worktree_path is present, reinterpret that as the active attempt worktree branch unless a separate integration node explicitly owns merging.",
                 "If protected test or review scripts hardcode main-checkout artifact paths, use needs_rework and require bounded follow-up work to make those scripts worktree-relative or environment-configurable.",
             ],

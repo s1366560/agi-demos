@@ -43,6 +43,8 @@ class WorkspaceVerificationJudgeRequest:
     guard_failures: tuple[str, ...] = field(default_factory=tuple)
     sandbox_code_root: str | None = None
     worktree_path: str | None = None
+    active_execution_root: str | None = None
+    worktree_isolation_active: bool = False
     recent_git_status: str = ""
     task_metadata: dict[str, Any] = field(default_factory=dict)
 

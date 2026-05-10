@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import os
+import posixpath
 import re
 import shlex
 from collections.abc import Mapping
@@ -702,6 +703,9 @@ def _build_judge_request(
         for result in results
         if result.criterion.required and not result.passed and result.message
     )[:12]
+    sandbox_code_root = _sandbox_code_root(ctx)
+    worktree_path = _clean_worktree_git_root(ctx)
+    active_execution_root = worktree_path or sandbox_code_root
     return WorkspaceVerificationJudgeRequest(
         workspace_id=ctx.workspace_id,
         node_id=ctx.node.id,
@@ -755,8 +759,13 @@ def _build_judge_request(
         ),
         latest_verification_results=result_payloads,
         guard_failures=failed_messages,
-        sandbox_code_root=_sandbox_code_root(ctx),
-        worktree_path=_clean_worktree_git_root(ctx),
+        sandbox_code_root=sandbox_code_root,
+        worktree_path=worktree_path,
+        active_execution_root=active_execution_root,
+        worktree_isolation_active=_worktree_isolation_active(
+            code_root=sandbox_code_root,
+            worktree_path=worktree_path,
+        ),
         recent_git_status=_recent_git_status_from_results(results),
         task_metadata=_metadata_summary(ctx),
     )
@@ -1711,6 +1720,20 @@ def _clean_worktree_git_root(ctx: VerificationContext) -> str | None:
             return None
         return worktree_path
     return code_root
+
+
+def _worktree_isolation_active(
+    *,
+    code_root: str | None,
+    worktree_path: str | None,
+) -> bool:
+    if not code_root or not worktree_path:
+        return False
+    return _normalize_posix_path(code_root) != _normalize_posix_path(worktree_path)
+
+
+def _normalize_posix_path(path: str) -> str:
+    return posixpath.normpath(path.rstrip("/"))
 
 
 def _sandbox_code_root(ctx: VerificationContext) -> str | None:

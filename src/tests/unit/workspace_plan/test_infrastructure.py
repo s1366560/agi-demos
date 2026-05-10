@@ -360,6 +360,8 @@ class TestLLMGoalPlanner:
         assert repair.metadata["repair_source"] == "verification_judge_create_repair_node"
         assert "active attempt worktree only" in repair.description
         assert "do not require or attempt edits, merges" in repair.description
+        assert "code root" in repair.description
+        assert "sandbox_code_root" in repair.description
         assert repair.description.index("active attempt worktree only") < repair.description.index(
             "Make E2E report paths worktree-relative"
         )
@@ -670,10 +672,20 @@ class TestVerifier:
                             "agents_excerpt": "No generated docs without evidence.",
                         }
                     },
+                    sandbox_code_root="/workspace/my-evo",
+                    worktree_path="/workspace/.memstack/worktrees/attempt-1",
+                    active_execution_root="/workspace/.memstack/worktrees/attempt-1",
+                    worktree_isolation_active=True,
                 )
             )
         )
 
+        assert payload["sandbox"]["active_execution_root"] == (
+            "/workspace/.memstack/worktrees/attempt-1"
+        )
+        assert payload["sandbox"]["worktree_isolation_active"] is True
+        assert payload["sandbox"]["code_root_role"] == "baseline_only_when_worktree_is_active"
+        assert payload["sandbox"]["verification_scope"] == "current_attempt_worktree"
         assert payload["task_metadata"]["code_context"]["loaded_agents_files"] == [
             "/workspace/app/AGENTS.md"
         ]
@@ -701,9 +713,15 @@ class TestVerifier:
         assert "non-zero failed or failing test count" in rework_policy
         isolation_policy = " ".join(payload["policy"]["attempt_worktree_isolation"])
         assert "sandbox.worktree_path is the active execution root" in isolation_policy
+        assert "sandbox.active_execution_root is the only current acceptance root" in (
+            isolation_policy
+        )
+        assert "Do not fail because sandbox.code_root" in isolation_policy
         assert "not a transient retry_infrastructure condition" in isolation_policy
         assert "Do not recommend running from the main checkout" in isolation_policy
         assert "reported commit_refs" in isolation_policy
+        assert "copy or re-apply current attempt worktree commits" in isolation_policy
+        assert "repair descriptions" in isolation_policy
         assert "active attempt worktree branch" in isolation_policy
         assert "environment-configurable" in isolation_policy
         assert payload["policy"]["next_action_kinds"]["create_repair_node"].startswith("Use when")
@@ -1292,10 +1310,17 @@ class TestVerifier:
         ]
         assert any(result.message == "clean worktree after commit" for result in rep.results)
         assert len(judge.requests) == 1
-        assert judge.requests[0].recent_git_status == ""
+        request = judge.requests[0]
+        assert request.sandbox_code_root == "/workspace/my-evo"
+        assert request.worktree_path == (
+            "/workspace/my-evo/../.memstack/worktrees/attempt-current"
+        )
+        assert request.active_execution_root == request.worktree_path
+        assert request.worktree_isolation_active is True
+        assert request.recent_git_status == ""
         assert any(
             result["name"] == "clean_worktree_after_commit" and result["passed"] is True
-            for result in judge.requests[0].latest_verification_results
+            for result in request.latest_verification_results
         )
 
     @pytest.mark.parametrize(
@@ -1392,6 +1417,9 @@ class TestVerifier:
         assert "commit_ref:abc123" in request.candidate_artifacts
         assert "test_run:uv run pytest src/tests/unit/api.py" in request.candidate_verifications
         assert request.sandbox_code_root == "/workspace/my-evo"
+        assert request.worktree_path == "/workspace/my-evo"
+        assert request.active_execution_root == "/workspace/my-evo"
+        assert request.worktree_isolation_active is False
         assert request.latest_verification_results
 
     async def test_verification_judge_cannot_accept_without_required_worker_report(
