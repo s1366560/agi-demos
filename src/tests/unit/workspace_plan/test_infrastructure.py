@@ -1855,6 +1855,50 @@ class TestVerifier:
             "test_run:117 passed 0 failed npm test exit 0",
         )
 
+    async def test_failed_test_guard_ignores_historical_node_description_for_current_attempt(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="current attempt evidence is green",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Re-run comprehensive test validation",
+            description=(
+                "Prior review summary: verification failed: 2/5 required criteria did not pass. "
+                "Carry this node forward for a fresh attempt."
+            ),
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                attempt_id="attempt-current",
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Current attempt completed with all required tests green: "
+                        "204/204 passed, 0 failed."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:204/204 passed 0 failed comprehensive suite",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert "failed_test_evidence" not in rep.summary()
+        assert len(judge.requests) == 1
+        assert not judge.requests[0].guard_failures
+
     async def test_current_attempt_checkpoint_ignores_aggregated_task_evidence(
         self,
     ) -> None:

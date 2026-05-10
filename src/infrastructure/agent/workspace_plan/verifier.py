@@ -1276,8 +1276,9 @@ def _partial_test_summary_value_from_context(ctx: VerificationContext) -> str | 
         "execution_verifications",
     )
     values.add(_artifact_text(ctx, "last_worker_report_summary"))
-    values.add(ctx.node.title)
-    values.add(ctx.node.description)
+    if not ctx.attempt_id:
+        values.add(ctx.node.title)
+        values.add(ctx.node.description)
     for value in sorted(item for item in values if item):
         partial = _partial_test_summary_value(value)
         if partial:
