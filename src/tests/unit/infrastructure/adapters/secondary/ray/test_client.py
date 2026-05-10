@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.configuration.ray_config import RaySettings
 from src.infrastructure.adapters.secondary import ray as ray_pkg
 from src.infrastructure.adapters.secondary.ray import client
 
@@ -36,6 +37,13 @@ def _settings() -> SimpleNamespace:
         ray_namespace="memstack",
         ray_log_to_driver=False,
     )
+
+
+def test_ray_init_timeout_default_allows_container_client_startup():
+    """The default Ray client init window must tolerate normal Docker startup latency."""
+
+    assert RaySettings().ray_init_timeout_seconds >= 15.0
+    assert client._ray_init_timeout_seconds() >= 15.0
 
 
 def test_ray_adapter_import_has_no_connection_side_effects(monkeypatch):

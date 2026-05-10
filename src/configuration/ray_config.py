@@ -13,7 +13,7 @@ class RaySettings(BaseSettings):
     ray_namespace: str = Field(default="memstack", alias="RAY_NAMESPACE")
     ray_log_to_driver: bool = Field(default=False, alias="RAY_LOG_TO_DRIVER")
     ray_connect_timeout: float = Field(default=3.0, alias="RAY_CONNECT_TIMEOUT")
-    ray_init_timeout_seconds: float = Field(default=5.0, alias="RAY_INIT_TIMEOUT_SECONDS")
+    ray_init_timeout_seconds: float = Field(default=15.0, alias="RAY_INIT_TIMEOUT_SECONDS")
     ray_failure_cooldown_seconds: float = Field(
         default=30.0,
         alias="RAY_FAILURE_COOLDOWN_SECONDS",
