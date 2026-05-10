@@ -308,6 +308,32 @@ class TestStartupSweep:
         assert age_from_before < 10
 
     @pytest.mark.asyncio
+    async def test_startup_sweep_drains_bounded_batches(self) -> None:
+        attempts = [
+            _make_attempt(attempt_id=f"att-{index}", workspace_task_id=f"task-{index}")
+            for index in range(5)
+        ]
+        service, apply_report, _schedule_tick = _make_service(
+            stale_attempts=attempts,
+            task_lookup={f"task-{index}": "user-1" for index in range(5)},
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            repo = service._repo_instance  # type: ignore[attr-defined]
+            repo.find_stale_non_terminal = AsyncMock(
+                side_effect=[attempts[:3], attempts[3:], []]
+            )
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 5
+        assert repo.find_stale_non_terminal.await_count == 2
+        assert apply_report.await_count == 5
+
+    @pytest.mark.asyncio
     async def test_successful_recovery_enqueues_resume_job(self) -> None:
         enqueue_resume = AsyncMock()
         att = _make_attempt(attempt_id="att-resume", workspace_task_id="task-1")

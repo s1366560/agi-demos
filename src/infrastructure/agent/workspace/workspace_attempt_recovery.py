@@ -8,8 +8,8 @@ be flipped by the supervisor watchdog — it silently stalls forever.
 
 This service closes the gap with two sweeps:
 
-* ``startup_sweep`` — runs once at API boot. Finds every non-terminal attempt
-  older than a small grace window and marks it ``blocked`` via
+* ``startup_sweep`` — runs once at API boot. Drains bounded batches of every
+  non-terminal attempt older than a small grace window and marks it ``blocked`` via
   :func:`apply_workspace_worker_report`, then schedules an autonomy tick for
   each unique parent root goal so the leader can re-plan.
 
@@ -67,6 +67,7 @@ DEFAULT_STALE_SECONDS = 900
 DEFAULT_STARTUP_GRACE_SECONDS = 15
 DEFAULT_CHECK_INTERVAL_SECONDS = 60
 DEFAULT_MAX_ATTEMPTS_PER_SWEEP = 3
+DEFAULT_STARTUP_SWEEP_BATCHES = 5
 DEFAULT_ERROR_EVENT_GRACE_SECONDS = 5
 DEFAULT_FINISHED_STREAM_GRACE_SECONDS = 15
 DEFAULT_TRANSIENT_PROVIDER_ERROR_GRACE_SECONDS = 300
@@ -256,6 +257,7 @@ class WorkspaceAttemptRecoveryService:
         self._startup_grace_seconds = startup_grace_seconds
         self._check_interval_seconds = check_interval_seconds
         self._max_attempts_per_sweep = max_attempts_per_sweep
+        self._startup_sweep_batches = DEFAULT_STARTUP_SWEEP_BATCHES
         self._error_event_grace_seconds = error_event_grace_seconds
         self._finished_stream_grace_seconds = finished_stream_grace_seconds
         self._transient_error_grace_seconds = transient_error_grace_seconds
@@ -308,15 +310,30 @@ class WorkspaceAttemptRecoveryService:
         threshold = datetime.now(UTC) - timedelta(seconds=self._startup_grace_seconds)
         recovered = await self._recover_finished_streams()
         recovered += await self._recover_error_events()
-        stale = await self._fetch_stale(threshold)
-        recovered += await self._recover_all(stale, RECOVERY_SUMMARY_RESTART)
+        total_candidates = 0
+        batches = 0
+        seen_attempt_ids: set[str] = set()
+        for _batch_index in range(self._startup_sweep_batches):
+            stale = await self._fetch_stale(threshold)
+            if not stale:
+                break
+            new_stale = [attempt for attempt in stale if attempt.id not in seen_attempt_ids]
+            if not new_stale:
+                break
+            seen_attempt_ids.update(attempt.id for attempt in new_stale)
+            batches += 1
+            total_candidates += len(new_stale)
+            recovered += await self._recover_all(new_stale, RECOVERY_SUMMARY_RESTART)
+            if len(stale) < self._max_attempts_per_sweep:
+                break
         if recovered:
             logger.warning(
                 "workspace_attempt_recovery.startup_swept",
                 extra={
                     "event": "workspace_attempt_recovery.startup_swept",
                     "recovered": recovered,
-                    "total_candidates": len(stale),
+                    "total_candidates": total_candidates,
+                    "batches": batches,
                 },
             )
         return recovered
