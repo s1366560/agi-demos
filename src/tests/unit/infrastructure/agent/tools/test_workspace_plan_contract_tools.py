@@ -7,6 +7,7 @@ import json
 import pytest
 
 from src.infrastructure.agent.sisyphus.builtin_agent import (
+    BUILTIN_AGENT_DECISION_BROKER_ID,
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
 )
@@ -117,3 +118,40 @@ async def test_iteration_review_captures_next_tasks_and_findings() -> None:
     assert payload["verdict"] == "continue_next_iteration"
     assert payload["next_tasks"][0]["id"] == "browser-proof"
     assert payload["findings"][0]["severity"] == "WARNING"
+
+
+async def test_agent_decision_rejects_non_broker_agent() -> None:
+    result = await plan_contract_tools.workspace_submit_agent_decision_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_VERIFIER_ID),
+        decision_kind="execution_route",
+        verdict="route_to_worker",
+        rationale="Route by structured facts.",
+        confidence=0.8,
+    )
+
+    assert result.is_error is True
+    assert BUILTIN_AGENT_DECISION_BROKER_ID in json.loads(result.output)["error"]
+
+
+async def test_agent_decision_captures_structured_payload() -> None:
+    result = await plan_contract_tools.workspace_submit_agent_decision_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_AGENT_DECISION_BROKER_ID),
+        decision_kind="execution_route",
+        verdict="route_to_worker",
+        rationale="Route by structured facts.",
+        confidence=0.8,
+        selected_ids=["worker"],
+        next_action_kind="dispatch",
+        payload={"route": "worker"},
+    )
+
+    assert result.is_error is False
+    assert result.metadata["agent_decision"] == {
+        "decision_kind": "execution_route",
+        "verdict": "route_to_worker",
+        "rationale": "Route by structured facts.",
+        "confidence": 0.8,
+        "selected_ids": ["worker"],
+        "next_action_kind": "dispatch",
+        "payload": {"route": "worker"},
+    }

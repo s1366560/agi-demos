@@ -6,12 +6,14 @@ import json
 from typing import Any
 
 from src.domain.model.review.review_finding import ReviewSeverity
+from src.domain.ports.services.agent_decision_broker_port import AgentDecisionKind
 from src.domain.ports.services.iteration_review_port import IterationReviewDecision
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeVerdict,
     WorkspaceVerificationNextActionKind,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
+    BUILTIN_AGENT_DECISION_BROKER_ID,
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
 )
@@ -26,11 +28,11 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 
 WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME = "workspace_submit_verification_judgment"
 WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME = "workspace_submit_iteration_review"
+WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME = "workspace_submit_agent_decision"
 
 _VALID_VERIFICATION_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
-_VALID_VERIFICATION_NEXT_ACTION_KINDS = {
-    item.value for item in WorkspaceVerificationNextActionKind
-}
+_VALID_VERIFICATION_NEXT_ACTION_KINDS = {item.value for item in WorkspaceVerificationNextActionKind}
+_VALID_DECISION_KINDS = {item.value for item in AgentDecisionKind}
 _VALID_REVIEW_VERDICTS = {"complete_goal", "continue_next_iteration", "needs_human_review"}
 _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
 _VALID_SEVERITIES = {item.value for item in ReviewSeverity}
@@ -139,6 +141,32 @@ WORKSPACE_ITERATION_REVIEW_TOOL_PARAMETERS: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+WORKSPACE_AGENT_DECISION_TOOL_PARAMETERS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "decision_kind": {"type": "string", "enum": sorted(_VALID_DECISION_KINDS)},
+        "verdict": {"type": "string"},
+        "rationale": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "selected_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": 32,
+        },
+        "next_action_kind": {"type": "string"},
+        "repair_brief": {
+            "type": "object",
+            "additionalProperties": True,
+        },
+        "payload": {
+            "type": "object",
+            "additionalProperties": True,
+        },
+    },
+    "required": ["decision_kind", "verdict", "rationale", "confidence"],
+    "additionalProperties": False,
+}
+
 
 def _deny(error: str, **extra: Any) -> ToolResult:
     payload: dict[str, Any] = {"error": error}
@@ -146,7 +174,9 @@ def _deny(error: str, **extra: Any) -> ToolResult:
     return ToolResult(output=json.dumps(payload, ensure_ascii=False), is_error=True)
 
 
-def _require_builtin_agent(ctx: ToolContext, *, expected_agent_id: str, tool_name: str) -> str | None:
+def _require_builtin_agent(
+    ctx: ToolContext, *, expected_agent_id: str, tool_name: str
+) -> str | None:
     role_error = require_workspace_session_role(
         ctx,
         expected_role=WORKSPACE_ROLE_WORKER,
@@ -187,7 +217,9 @@ async def workspace_submit_verification_judgment_tool(
         tool_name=WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
     )
     if error:
-        return _deny(error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None)
+        return _deny(
+            error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None
+        )
     if verdict not in _VALID_VERIFICATION_VERDICTS:
         return _deny(f"invalid verification verdict: {verdict}")
     if next_action_kind not in _VALID_VERIFICATION_NEXT_ACTION_KINDS:
@@ -235,7 +267,9 @@ async def workspace_submit_iteration_review_tool(
         tool_name=WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
     )
     if error:
-        return _deny(error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None)
+        return _deny(
+            error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None
+        )
     if verdict not in _VALID_REVIEW_VERDICTS:
         return _deny(f"invalid iteration review verdict: {verdict}")
     payload = {
@@ -250,6 +284,59 @@ async def workspace_submit_iteration_review_tool(
     return ToolResult(
         output=json.dumps({"captured": True, "verdict": verdict}, ensure_ascii=False),
         metadata={"iteration_review": payload},
+    )
+
+
+@tool_define(
+    name=WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME,
+    description=(
+        "Terminal Agent-First decision broker tool. The builtin decision broker calls this "
+        "exactly once to submit a structured semantic gate verdict."
+    ),
+    parameters=WORKSPACE_AGENT_DECISION_TOOL_PARAMETERS,
+    permission=None,
+    category="workspace",
+)
+async def workspace_submit_agent_decision_tool(
+    ctx: ToolContext,
+    *,
+    decision_kind: str,
+    verdict: str,
+    rationale: str,
+    confidence: float,
+    selected_ids: list[str] | None = None,
+    next_action_kind: str = "",
+    repair_brief: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
+) -> ToolResult:
+    error = _require_builtin_agent(
+        ctx,
+        expected_agent_id=BUILTIN_AGENT_DECISION_BROKER_ID,
+        tool_name=WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME,
+    )
+    if error:
+        return _deny(
+            error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None
+        )
+    if decision_kind not in _VALID_DECISION_KINDS:
+        return _deny(f"invalid agent decision kind: {decision_kind}")
+    decision_payload: dict[str, Any] = {
+        "decision_kind": decision_kind,
+        "verdict": str(verdict or "").strip(),
+        "rationale": str(rationale or "").strip() or str(verdict or "").strip(),
+        "confidence": _confidence(confidence),
+        "selected_ids": _string_list(selected_ids or [], limit=32),
+        "next_action_kind": str(next_action_kind or "").strip(),
+    }
+    if isinstance(repair_brief, dict) and repair_brief:
+        decision_payload["repair_brief"] = repair_brief
+    if isinstance(payload, dict) and payload:
+        decision_payload["payload"] = payload
+    return ToolResult(
+        output=json.dumps(
+            {"captured": True, "verdict": decision_payload["verdict"]}, ensure_ascii=False
+        ),
+        metadata={"agent_decision": decision_payload},
     )
 
 

@@ -705,9 +705,7 @@ def _configure_skill_evolution_capture() -> None:
         configure_skill_evolution_capture(session_factory=async_session_factory)
         logger.info("Agent Worker: Skill evolution capture configured")
     except Exception as e:
-        logger.warning(
-            f"Agent Worker: Failed to configure skill evolution capture: {e}"
-        )
+        logger.warning(f"Agent Worker: Failed to configure skill evolution capture: {e}")
 
 
 def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
@@ -782,6 +780,7 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "workspace_submit_planning_contract",
             "workspace_submit_verification_judgment",
             "workspace_submit_iteration_review",
+            "workspace_submit_agent_decision",
         )
         for name in agent_tool_names:
             if name in registry:
@@ -797,8 +796,10 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
     try:
         from src.infrastructure.agent.tools.define import get_registered_tools
         from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
+            WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME,
             WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
             WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+            workspace_submit_agent_decision_tool,
             workspace_submit_iteration_review_tool,
             workspace_submit_verification_judgment_tool,
         )
@@ -810,11 +811,13 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
         _ = workspace_submit_planning_contract_tool
         _ = workspace_submit_verification_judgment_tool
         _ = workspace_submit_iteration_review_tool
+        _ = workspace_submit_agent_decision_tool
         registry = get_registered_tools()
         for tool_name in (
             WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
             WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
             WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
+            WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME,
         ):
             if tool_name in registry:
                 tools[tool_name] = registry[tool_name]

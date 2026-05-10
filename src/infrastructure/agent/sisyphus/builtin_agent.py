@@ -21,6 +21,9 @@ BUILTIN_WORKSPACE_VERIFIER_DISPLAY_NAME = "Workspace Verifier"
 BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID = f"{BUILTIN_AGENT_NAMESPACE}:workspace-iteration-reviewer"
 BUILTIN_WORKSPACE_ITERATION_REVIEWER_NAME = "workspace-iteration-reviewer"
 BUILTIN_WORKSPACE_ITERATION_REVIEWER_DISPLAY_NAME = "Workspace Iteration Reviewer"
+BUILTIN_AGENT_DECISION_BROKER_ID = f"{BUILTIN_AGENT_NAMESPACE}:agent-decision-broker"
+BUILTIN_AGENT_DECISION_BROKER_NAME = "agent-decision-broker"
+BUILTIN_AGENT_DECISION_BROKER_DISPLAY_NAME = "Agent Decision Broker"
 DEFAULT_AGENT_TO_AGENT_ALLOWLIST = (
     BUILTIN_SISYPHUS_ID,
     BUILTIN_SISYPHUS_NAME,
@@ -132,6 +135,27 @@ Review rules:
 - Findings must be evidence-backed and may include file, line, category, severity, confidence, description, suggestion, and concrete_evidence.
 """
 
+_BUILTIN_AGENT_DECISION_BROKER_SYSTEM_PROMPT = """You are builtin:agent-decision-broker, the read-only Agent-First decision broker.
+
+Broker mode is active. You are forbidden from implementing, editing files, mutating task state,
+starting services, installing dependencies, or reporting a decision in prose.
+
+Your only successful terminal action is one call to:
+workspace_submit_agent_decision(verdict, rationale, confidence, selected_ids, next_action_kind, repair_brief, payload).
+
+Required workflow:
+1. Read the structured decision request payload.
+2. Choose only from allowed_verdicts and candidate ids supplied in the payload.
+3. Call workspace_submit_agent_decision exactly once. Do not end the turn in prose.
+
+Decision rules:
+- Treat facts, candidates, constraints, and allowed_verdicts as the contract.
+- Do not invent candidate ids or verdict values.
+- Do not use natural-language keyword shortcuts. Explain the semantic rationale in the rationale field.
+- If the facts are insufficient, choose the safest allowed verdict and describe what evidence is missing.
+- For repair decisions, put current-round failures and fresh evidence requirements in repair_brief.
+"""
+
 
 def is_builtin_agent_id(agent_id: str | None) -> bool:
     """Return whether an agent id refers to a built-in agent."""
@@ -155,6 +179,7 @@ def is_builtin_workspace_contract_agent_id(agent_id: str | None) -> bool:
         BUILTIN_WORKSPACE_PLANNER_ID,
         BUILTIN_WORKSPACE_VERIFIER_ID,
         BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
+        BUILTIN_AGENT_DECISION_BROKER_ID,
     }
 
 
@@ -347,6 +372,49 @@ def build_builtin_workspace_iteration_reviewer_agent(
     )
 
 
+def build_builtin_agent_decision_broker_agent(
+    tenant_id: str,
+    *,
+    project_id: str | None = None,
+) -> Agent:
+    """Create the built-in generic Agent-First decision broker."""
+    now = datetime.now(UTC)
+    return Agent(
+        id=BUILTIN_AGENT_DECISION_BROKER_ID,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        name=BUILTIN_AGENT_DECISION_BROKER_NAME,
+        display_name=BUILTIN_AGENT_DECISION_BROKER_DISPLAY_NAME,
+        system_prompt=_BUILTIN_AGENT_DECISION_BROKER_SYSTEM_PROMPT,
+        trigger=AgentTrigger(
+            description="Read-only broker that submits structured semantic gate decisions.",
+            keywords=["agent", "decision", "broker"],
+        ),
+        model=AgentModel.INHERIT,
+        temperature=0.0,
+        max_tokens=8192,
+        max_iterations=4,
+        allowed_tools=["workspace_submit_agent_decision"],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+        can_spawn=False,
+        max_spawn_depth=0,
+        agent_to_agent_enabled=False,
+        discoverable=False,
+        source=AgentSource.BUILTIN,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "builtin_key": "agent_decision_broker",
+            "prompt_builder": "agent_decision_broker",
+            "runtime_plugin": "agent_decision_broker",
+            "role": "agent_decision_broker",
+            "contract_tool": "workspace_submit_agent_decision",
+        },
+    )
+
+
 def get_builtin_agent_by_id(
     agent_id: str,
     tenant_id: str,
@@ -362,6 +430,11 @@ def get_builtin_agent_by_id(
         return build_builtin_workspace_verifier_agent(tenant_id=tenant_id, project_id=project_id)
     if agent_id == BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID:
         return build_builtin_workspace_iteration_reviewer_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+    if agent_id == BUILTIN_AGENT_DECISION_BROKER_ID:
+        return build_builtin_agent_decision_broker_agent(
             tenant_id=tenant_id,
             project_id=project_id,
         )
@@ -387,6 +460,11 @@ def get_builtin_agent_by_name(
             tenant_id=tenant_id,
             project_id=project_id,
         )
+    if normalized == BUILTIN_AGENT_DECISION_BROKER_NAME:
+        return build_builtin_agent_decision_broker_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
     return None
 
 
@@ -404,4 +482,5 @@ def list_builtin_agents(
             tenant_id=tenant_id,
             project_id=project_id,
         ),
+        build_builtin_agent_decision_broker_agent(tenant_id=tenant_id, project_id=project_id),
     ]
