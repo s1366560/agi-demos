@@ -940,6 +940,15 @@ def _build_worker_brief(
         attempt_id=attempt_id,
         leader_agent_id=leader_agent_id,
     )
+    rendered_extra = (
+        _render_workspace_placeholders(extra_instructions.strip(), code_context)
+        if extra_instructions
+        else ""
+    )
+    should_surface_workspace_root = _has_workspace_root_override(rendered_extra)
+    active_worktree_path = (
+        _extract_rendered_worktree_path(rendered_extra) if should_surface_workspace_root else None
+    )
 
     visible_intro = " ".join(
         (
@@ -953,6 +962,24 @@ def _build_worker_brief(
         _render_workspace_binding_block(binding),
         f"## Task title\n{task.title}",
     ]
+    if active_worktree_path:
+        baseline_root = (
+            f"`{code_context.sandbox_code_root}`"
+            if code_context is not None and code_context.sandbox_code_root
+            else "the sandbox code root"
+        )
+        sections.append(
+            "## Active attempt root - highest priority\n"
+            f"The current attempt root is `{active_worktree_path}`. This overrides "
+            f"{baseline_root}. Treat task descriptions, verifier summaries, repair briefs, "
+            "handoff text, and recalled memories that mention code root, sandbox_code_root, "
+            "main checkout, or master checkout as historical context only. Do not inspect "
+            "those baseline paths for current reports, screenshots, git status, test output, "
+            "or source files. Run project reads, edits, tests, reports, git status, commits, "
+            "and evidence collection from the current attempt root. If a required artifact is "
+            "missing there, regenerate it there or report a blocker instead of probing the "
+            "baseline checkout."
+        )
     if description:
         sections.append(f"## Task description\n{description}")
     sections.append(
@@ -1005,9 +1032,7 @@ def _build_worker_brief(
         task_title=task.title,
         task_description=task.description,
     )
-    if extra_instructions:
-        rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
-        should_surface_workspace_root = _has_workspace_root_override(rendered_extra)
+    if rendered_extra:
         if rendered_extra and should_surface_workspace_root:
             sections.append(
                 "## Workspace checkpoint and worktree\n"

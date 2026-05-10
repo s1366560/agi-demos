@@ -840,6 +840,13 @@ class TestBuildBrief:
         assert "## Workspace checkpoint and worktree" in brief
         assert "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-2" in brief
         assert "${sandbox_code_root}" not in brief
+        assert "## Active attempt root - highest priority" in brief
+        assert "This overrides `/workspace/my-evo`" in brief
+        assert "recalled memories" in brief
+        assert "regenerate it there or report a blocker" in brief
+        assert brief.index("## Active attempt root - highest priority") < brief.index(
+            "## Task description"
+        )
         assert "use that path as the task root" in brief
         assert "every absolute file_path must start with that worktree_path" in brief
         assert "bash commands must not create temp scripts" in brief
