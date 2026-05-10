@@ -413,8 +413,11 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
     except ValueError:
         tokens = command.split()
 
+    message_token_indexes = _workspace_git_commit_message_token_indexes(tokens)
     paths: list[str] = []
-    for token in tokens:
+    for index, token in enumerate(tokens):
+        if index in message_token_indexes and "$(" not in token and "`" not in token:
+            continue
         cleaned = token.strip("'\"")
         if cleaned == "/workspace" or cleaned.startswith("/workspace/"):
             raw_path = cleaned
@@ -427,6 +430,45 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
         if raw_path:
             paths.append(posixpath.normpath(raw_path))
     return tuple(paths)
+
+
+def _workspace_git_commit_message_token_indexes(tokens: list[str]) -> set[int]:
+    """Return token indexes for literal git commit message values.
+
+    The worktree guard should reject executable path arguments, but commit-message prose
+    may legitimately mention an old baseline path while explaining a repair.
+    """
+    message_indexes: set[int] = set()
+    segment_start = 0
+    index = 0
+    separators = {"&&", "||", ";", "|"}
+    while index <= len(tokens):
+        if index < len(tokens) and tokens[index] not in separators:
+            index += 1
+            continue
+        segment_end = index
+        segment = tokens[segment_start:segment_end]
+        try:
+            git_offset = segment.index("git")
+            commit_offset = segment.index("commit", git_offset + 1)
+        except ValueError:
+            segment_start = index + 1
+            index += 1
+            continue
+        segment_index = commit_offset + 1
+        while segment_index < len(segment):
+            token = segment[segment_index]
+            absolute_index = segment_start + segment_index
+            if token in {"-m", "--message"} and segment_index + 1 < len(segment):
+                message_indexes.add(absolute_index + 1)
+                segment_index += 2
+                continue
+            if token.startswith("--message="):
+                message_indexes.add(absolute_index)
+            segment_index += 1
+        segment_start = index + 1
+        index += 1
+    return message_indexes
 
 
 def _workspace_absolute_paths_in_text(text: str) -> tuple[str, ...]:
