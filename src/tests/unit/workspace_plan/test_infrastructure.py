@@ -371,6 +371,51 @@ class TestLLMGoalPlanner:
         assert repair.node_id in reset.depends_on
         assert reset.metadata["blocked_by_repair_node_id"] == repair.id
 
+    async def test_replan_repair_node_title_collapses_nested_repair_prefixes(self) -> None:
+        planner = LLMGoalPlanner(decomposer=None)
+        plan = await planner.plan(_goal("x"), _ctx())
+        leaf = plan.leaf_tasks()[0]
+        from dataclasses import replace
+
+        noisy_title = (
+            "Repair verification blockers for Repair verification blockers for "
+            "Publish final evidence ledger"
+        )
+        plan.replace_node(
+            replace(
+                leaf,
+                title=noisy_title,
+                intent=TaskIntent.BLOCKED,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="att-1",
+                metadata={
+                    **leaf.metadata,
+                    "last_verification_attempt_id": "att-1",
+                    "last_verification_judge_verdict": "needs_rework",
+                    "last_verification_judge_next_action_kind": "create_repair_node",
+                },
+            )
+        )
+        from src.domain.ports.services.goal_planner_port import ReplanTrigger
+
+        await planner.replan(
+            plan,
+            ReplanTrigger(kind="verification_failed", node_id=leaf.id),
+        )
+
+        repair = next(
+            node
+            for node in plan.nodes.values()
+            if node.metadata.get("repair_for_node_id") == leaf.id
+        )
+        assert repair.title == "Repair verification blockers for Publish final evidence ledger"
+        assert (
+            "Repair the blockers that prevented verification of `Publish final evidence ledger`."
+            in repair.description
+        )
+        assert "Repair verification blockers for Repair verification blockers" not in repair.title
+        assert "Repair verification blockers for Repair verification blockers" not in repair.description
+
     async def test_structural_checks_and_write_set_are_inferred_from_task_text(self) -> None:
         sub = [
             _FakeSubTask(

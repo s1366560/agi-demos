@@ -77,6 +77,7 @@ _SCRUM_ARTIFACT_BY_PHASE = {
     "deploy": "release_candidate",
     "review": "feedback",
 }
+_REPAIR_TITLE_PREFIX = "Repair verification blockers for "
 
 
 class PlanningSuspended(Exception):
@@ -440,13 +441,21 @@ def _existing_pending_repair_node(plan: Plan, node: PlanNode) -> PlanNode | None
 
 
 def _repair_title(node: PlanNode) -> str:
-    return f"Repair verification blockers for {node.title}"[:120]
+    return f"{_REPAIR_TITLE_PREFIX}{_repair_subject_title(node)}"[:120]
+
+
+def _repair_subject_title(node: PlanNode) -> str:
+    title = node.title.strip()
+    while title.startswith(_REPAIR_TITLE_PREFIX):
+        title = title[len(_REPAIR_TITLE_PREFIX) :].strip()
+    return title or node.id
 
 
 def _repair_description(node: PlanNode, trigger: ReplanTrigger) -> str:
     next_action = str(node.metadata.get("last_verification_judge_required_next_action") or "")
+    subject_title = _repair_subject_title(node)
     parts = [
-        f"Repair the blockers that prevented verification of `{node.title}`.",
+        f"Repair the blockers that prevented verification of `{subject_title}`.",
         (
             "Repair execution constraints:\n"
             "- Perform the repair in the active attempt worktree only; do not require or "
