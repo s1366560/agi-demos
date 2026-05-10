@@ -1528,25 +1528,14 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason=f"previous_attempt_status_{previous_status or 'unknown'}",
             previous_attempt_id=previous_attempt_id,
         )
-    previous_reason = str(
-        previous_attempt.adjudication_reason or previous_attempt.leader_feedback or ""
-    ).casefold()
-    if any(
-        marker in previous_reason
-        for marker in (
-            "recovery:",
-            "orphan",
-            "provider",
-            "retryable_infrastructure",
-            "no_terminal_report",
-        )
-    ):
+    judge_verdict = _mapping_string(metadata, "last_verification_judge_verdict")
+    if judge_verdict != "needs_rework":
         return await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
             leader_agent_id=leader_agent_id,
-            reason="previous_attempt_infrastructure_or_recovery_failure",
+            reason=f"judge_verdict_{judge_verdict or 'missing'}",
             previous_attempt_id=previous_attempt_id,
         )
     conversation_id = _mapping_string(

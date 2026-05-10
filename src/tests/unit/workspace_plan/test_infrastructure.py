@@ -38,6 +38,7 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeRequest,
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
+    WorkspaceVerificationNextActionKind,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_workspace_iteration_reviewer_agent,
@@ -842,13 +843,15 @@ class TestVerifier:
         assert rep.hard_fail
         assert "not a completion report" in rep.summary()
 
-    async def test_verifier_does_not_call_judge_for_explicit_blocked_worker_report(
+    async def test_verifier_routes_explicit_blocked_worker_report_to_judge(
         self,
     ) -> None:
         judge = _RecordingVerificationJudge(
             WorkspaceVerificationJudgeResult(
-                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
-                rationale="would accept if called",
+                verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+                rationale="blocked report is locally repairable",
+                failed_criteria=("terminal_worker_report_completed",),
+                next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
                 confidence=0.9,
             )
         )
@@ -867,50 +870,38 @@ class TestVerifier:
             )
         )
 
-        assert judge.requests == []
-        assert not rep.passed
-        assert rep.hard_fail
-        assert "outside the active attempt worktree" in rep.summary()
-
-    async def test_verifier_soft_fails_retryable_infrastructure_blocker(self) -> None:
-        verifier = AcceptanceCriterionVerifier()
-        node = _leaf_node(
-            criteria=(
-                AcceptanceCriterion(
-                    kind=CriterionKind.REGEX,
-                    spec={
-                        "pattern": r"\S",
-                        "source": "stdout",
-                        "requires_terminal_worker_report": True,
-                    },
-                    required=True,
-                ),
-            )
-        )
-        ctx = VerificationContext(
-            workspace_id="ws",
-            node=node,
-            stdout="litellm.APIConnectionError: Executor shutdown has been called",
-            artifacts={
-                "last_worker_report_type": "blocked",
-                "last_worker_report_summary": (
-                    "litellm.APIConnectionError: Executor shutdown has been called"
-                ),
-            },
-        )
-        rep = await verifier.verify(ctx)
-
+        assert len(judge.requests) == 1
         assert not rep.passed
         assert not rep.hard_fail
-        assert "retryable infrastructure failure" in rep.summary()
+        assert "judge verdict=needs_rework" in rep.summary()
 
-    async def test_verifier_soft_fails_litellm_internal_server_blocker(self) -> None:
-        verifier = AcceptanceCriterionVerifier()
-        node = _leaf_node()
-        summary = (
-            "litellm.InternalServerError: AnthropicException - 400, "
-            'message="Expected HTTP/, RTSP/ or ICE/"'
+    @pytest.mark.parametrize(
+        "summary",
+        [
+            "litellm.APIConnectionError: Executor shutdown has been called",
+            (
+                "litellm.InternalServerError: AnthropicException - 400, "
+                'message="Expected HTTP/, RTSP/ or ICE/"'
+            ),
+            "Rate limit exceeded. Please wait a moment and try again.",
+            "All tool operations are timing out; filesystem appears to be unresponsive",
+        ],
+    )
+    async def test_verifier_uses_judge_for_infrastructure_blocker_classification(
+        self,
+        summary: str,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+                rationale="structured judge classified infrastructure retry",
+                failed_criteria=("terminal_worker_report_completed",),
+                next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+                confidence=0.8,
+            )
         )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node()
         ctx = VerificationContext(
             workspace_id="ws",
             node=node,
@@ -922,57 +913,10 @@ class TestVerifier:
         )
         rep = await verifier.verify(ctx)
 
+        assert len(judge.requests) == 1
         assert not rep.passed
         assert not rep.hard_fail
-        assert "retryable infrastructure failure" in rep.summary()
-
-    async def test_verifier_soft_fails_rate_limit_blocker(self) -> None:
-        verifier = AcceptanceCriterionVerifier()
-        node = _leaf_node()
-        ctx = VerificationContext(
-            workspace_id="ws",
-            node=node,
-            stdout="Rate limit exceeded. Please wait a moment and try again.",
-            artifacts={
-                "last_worker_report_type": "blocked",
-                "last_worker_report_summary": (
-                    "Rate limit exceeded. Please wait a moment and try again."
-                ),
-            },
-        )
-        rep = await verifier.verify(ctx)
-
-        assert not rep.passed
-        assert not rep.hard_fail
-        assert "retryable infrastructure failure" in rep.summary()
-
-    async def test_verifier_soft_fails_sandbox_tool_timeout_blocker(self) -> None:
-        verifier = AcceptanceCriterionVerifier()
-        node = _leaf_node(
-            metadata={
-                "preflight_checks": [
-                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
-                    {"check_id": "git-status", "kind": "git_status", "required": True},
-                ]
-            }
-        )
-        ctx = VerificationContext(
-            workspace_id="ws",
-            node=node,
-            stdout="Tool execution failed after 1 attempts: 工具执行超时: bash",
-            artifacts={
-                "last_worker_report_type": "blocked",
-                "last_worker_report_summary": (
-                    "All tool operations are timing out; filesystem appears to be unresponsive"
-                ),
-            },
-        )
-        rep = await verifier.verify(ctx)
-
-        assert not rep.passed
-        assert not rep.hard_fail
-        assert "retryable infrastructure failure" in rep.summary()
-        assert "missing preflight evidence" not in rep.summary()
+        assert "judge verdict=retry_infrastructure" in rep.summary()
 
     async def test_verifier_rejects_default_report_criterion_without_completed_report(
         self,
@@ -2349,6 +2293,7 @@ class _VerificationJudgeRetryVerifier:
                             "judge_verdict": "retry_infrastructure",
                             "failed_criteria": ["workspace_verification_judge"],
                             "required_next_action": "retry verification judge",
+                            "next_action_kind": "retry_same_node",
                         },
                         required=True,
                     ),

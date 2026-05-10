@@ -350,8 +350,8 @@ class Skill:
         """
         Match query semantically against patterns.
 
-        This is a simple implementation using keyword overlap.
-        Can be enhanced with embeddings for better semantic matching.
+        This is a simple implementation used by management/search surfaces.
+        Runtime agent activation must go through the AgentDecisionBroker.
         """
         if not self.trigger_patterns:
             return 0.0

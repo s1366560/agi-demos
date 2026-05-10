@@ -544,7 +544,7 @@ class ReActAgent(
 
     def _match_subagent(self, query: str) -> SubAgentMatch:
         """
-        Match query against available subagents using keyword router.
+        Return no implicit subagent match.
 
         Args:
             query: User query
@@ -552,23 +552,15 @@ class ReActAgent(
         Returns:
             SubAgentMatch result
         """
-        if not self.subagent_router:
-            return SubAgentMatch(subagent=None, confidence=0.0, match_reason="no_router")
-
-        result = self.subagent_router.match(query)
-        if result.subagent:
-            logger.info(
-                f"[ReActAgent] Matched subagent: {result.subagent.name} "
-                f"with confidence {result.confidence:.2f} ({result.match_reason})"
-            )
-        return result
+        _ = query
+        return SubAgentMatch(subagent=None, confidence=0.0, match_reason="agent_decision_required")
 
     async def _match_subagent_async(
         self,
         query: str,
         conversation_context: list[dict[str, str]] | None = None,
     ) -> SubAgentMatch:
-        """Async match -- delegates to sync keyword router.
+        """Async match placeholder for future broker-backed selection.
 
         Args:
             query: User query.

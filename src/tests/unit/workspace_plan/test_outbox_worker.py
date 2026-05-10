@@ -359,6 +359,7 @@ async def test_verification_judge_retry_projection_keeps_attempt_non_terminal(
                     "kind": "custom",
                     "name": "retryable_infrastructure_failure",
                     "judge_verdict": "retry_infrastructure",
+                    "next_action_kind": "retry_same_node",
                     "required_next_action": "retry verification judge",
                     "required": True,
                     "passed": False,
@@ -2516,7 +2517,9 @@ async def test_retry_same_node_dispatches_same_conversation_repair_turn(
     )
 
     assert await worker.run_once() == 1
-    outbox_items = list((await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all())
+    outbox_items = list(
+        (await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all()
+    )
     launch_items = list(
         (
             await db_session.execute(

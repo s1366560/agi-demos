@@ -1503,9 +1503,9 @@ def _is_verification_judge_retry_report(report: VerificationReport) -> bool:
             continue
         if result.criterion.spec.get("judge_verdict") != "retry_infrastructure":
             continue
-        next_action = str(result.criterion.spec.get("required_next_action") or "").casefold()
+        next_action_kind = str(result.criterion.spec.get("next_action_kind") or "")
         failed = set(_string_list(result.criterion.spec.get("failed_criteria")))
-        if "retry verification" in next_action or "workspace_verification_judge" in failed:
+        if next_action_kind == "retry_same_node" and "workspace_verification_judge" in failed:
             return True
     return False
 
@@ -1669,6 +1669,7 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
                 "kind": result.criterion.kind.value,
                 "name": result.criterion.spec.get("name"),
                 "judge_verdict": result.criterion.spec.get("judge_verdict"),
+                "next_action_kind": result.criterion.spec.get("next_action_kind"),
                 "required_next_action": result.criterion.spec.get("required_next_action"),
                 "required": result.criterion.required,
                 "passed": result.passed,

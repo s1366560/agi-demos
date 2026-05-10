@@ -1,6 +1,5 @@
 """Tests for IntentGate pre-classification system."""
 
-
 import pytest
 
 from src.infrastructure.agent.routing.execution_router import (
@@ -61,7 +60,7 @@ class TestIntentGate:
         assert result is None
 
     def test_classify_custom_patterns(self) -> None:
-        """IntentGate works with custom patterns."""
+        """IntentGate ignores natural-language custom patterns."""
         custom_patterns = [
             IntentPattern(
                 name="greeting",
@@ -73,10 +72,7 @@ class TestIntentGate:
         gate = IntentGate(patterns=custom_patterns)
 
         result = gate.classify("hello world")
-        assert result is not None
-        assert result.path == ExecutionPath.REACT_LOOP
-        assert result.confidence == 0.9
-        assert (result.metadata or {}).get("pattern_name") == "greeting"
+        assert result is None
 
     def test_classify_min_confidence_threshold(self) -> None:
         """Patterns below min_confidence threshold return None."""
@@ -115,10 +111,7 @@ class TestIntentGate:
         gate = IntentGate(patterns=patterns)
 
         result = gate.classify("search for something")
-        assert result is not None
-        assert result.path == ExecutionPath.PLAN_MODE
-        assert result.confidence == 0.95
-        assert (result.metadata or {}).get("pattern_name") == "high"
+        assert result is None
 
     def test_default_patterns_not_empty(self) -> None:
         """Default IntentGate ships empty under Agent First; natural language returns None."""
@@ -145,23 +138,23 @@ class TestIntentGate:
         assert result.metadata["pattern_name"] == "explicit_plan"
 
     def test_keyword_match_case_insensitive(self) -> None:
-        """Custom keyword matching is case-insensitive via normalization."""
+        """Structural command matching is case-insensitive via normalization."""
         patterns = [
             IntentPattern(
                 name="plan_cmd",
                 path=ExecutionPath.PLAN_MODE,
-                keywords=("make a plan",),
+                keywords=("/plan",),
                 confidence=0.9,
             ),
         ]
         gate = IntentGate(patterns=patterns)
 
-        result = gate.classify("Make A Plan for the feature")
+        result = gate.classify("/PLAN for the feature")
         assert result is not None
         assert result.path == ExecutionPath.PLAN_MODE
 
     def test_regex_pattern_matching(self) -> None:
-        """Regex-only custom patterns match correctly."""
+        """Regex-only custom patterns require a structural command message."""
         import re as _re
 
         patterns = [
@@ -171,14 +164,14 @@ class TestIntentGate:
                 keywords=(),
                 confidence=0.8,
                 regex=_re.compile(
-                    r"(?:implement|build)\s+(?:a\s+)?(?:full|complete)\s+",
+                    r"^/build\s+(?:full|complete)\s+",
                     _re.IGNORECASE,
                 ),
             ),
         ]
         gate = IntentGate(patterns=patterns)
 
-        result = gate.classify("build a complete REST API for user management")
+        result = gate.classify("/build complete REST API for user management")
         assert result is not None
         assert result.path == ExecutionPath.PLAN_MODE
         assert (result.metadata or {}).get("pattern_name") == "complex_task"
@@ -200,14 +193,14 @@ class TestIntentGate:
             IntentPattern(
                 name="targeted",
                 path=ExecutionPath.DIRECT_SKILL,
-                keywords=("deploy",),
+                keywords=("/deploy",),
                 confidence=0.9,
                 target="deploy_skill",
             ),
         ]
         gate = IntentGate(patterns=patterns)
 
-        result = gate.classify("deploy the application")
+        result = gate.classify("/deploy application")
         assert result is not None
         assert result.target == "deploy_skill"
         assert result.path == ExecutionPath.DIRECT_SKILL

@@ -1,8 +1,9 @@
 """Category-based model routing for LLM task dispatch.
 
-Routes tasks by semantic category (code, writing, analysis, etc.) to the
-optimal model for that category, replacing hardcoded model names with
-intent-driven selection.
+Routes tasks by structured category to the optimal model for that category.
+Runtime semantic category detection is intentionally not implemented with
+local keyword tables; callers should use an agent-backed decision broker when
+they need to classify natural-language intent.
 
 Inspired by oh-my-opencode's category routing pattern.
 
@@ -13,13 +14,12 @@ Usage::
     )
     category = router.detect_category("Write a Python function to sort a list")
     config = router.route(category)
-    # config.preferred_models -> ["deepseek-chat", "qwen-plus", ...]
+    # category is a safe default unless a structured broker verdict is supplied.
 """
 
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -66,145 +66,6 @@ class CategoryModelConfig:
     fallback_model: str | None = None
     max_tokens_override: int | None = None
     temperature_override: float | None = None
-
-
-# ---------------------------------------------------------------------------
-# Keyword tables for heuristic category detection
-# ---------------------------------------------------------------------------
-
-_CODE_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "code",
-        "function",
-        "class",
-        "debug",
-        "refactor",
-        "implement",
-        "programming",
-        "algorithm",
-        "syntax",
-        "compile",
-        "runtime",
-        "bug",
-        "test",
-        "unittest",
-        "pytest",
-        "api",
-        "endpoint",
-        "database",
-        "sql",
-        "query",
-        "script",
-        "variable",
-        "loop",
-        "recursion",
-        "typescript",
-        "python",
-        "javascript",
-        "rust",
-        "java",
-        "golang",
-        "cpp",
-        "html",
-        "css",
-        "regex",
-        "git",
-        "commit",
-        "merge",
-        "docker",
-        "deploy",
-    },
-)
-
-_ANALYSIS_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "analyze",
-        "analysis",
-        "reason",
-        "reasoning",
-        "math",
-        "calculate",
-        "statistics",
-        "data",
-        "evaluate",
-        "compare",
-        "benchmark",
-        "metric",
-        "correlation",
-        "hypothesis",
-        "probability",
-        "logic",
-        "proof",
-        "theorem",
-        "equation",
-        "formula",
-    },
-)
-
-_WRITING_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "write",
-        "essay",
-        "article",
-        "blog",
-        "document",
-        "documentation",
-        "summarize",
-        "summary",
-        "paraphrase",
-        "rewrite",
-        "proofread",
-        "grammar",
-        "creative",
-        "story",
-        "poem",
-        "novel",
-        "narrative",
-        "draft",
-        "copywriting",
-        "content",
-    },
-)
-
-_PLANNING_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "plan",
-        "planning",
-        "roadmap",
-        "decompose",
-        "breakdown",
-        "strategy",
-        "architecture",
-        "design",
-        "milestone",
-        "schedule",
-        "prioritize",
-        "organize",
-        "workflow",
-        "project",
-        "sprint",
-        "backlog",
-    },
-)
-
-_VISION_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "image",
-        "picture",
-        "photo",
-        "screenshot",
-        "diagram",
-        "chart",
-        "visual",
-        "look at",
-        "see",
-        "ocr",
-        "multimodal",
-        "vision",
-    },
-)
-
-_WORD_RE = re.compile(r"[a-z]+")
 
 
 # ---------------------------------------------------------------------------
@@ -370,38 +231,17 @@ class CategoryRouter:
         query: str,
         tools_requested: bool = False,
     ) -> TaskCategory:
-        """Heuristically detect the task category from *query* text.
+        """Return a safe default category without semantic text parsing.
 
-        Uses simple keyword matching with weighted scoring.  When
-        *tools_requested* is ``True`` the result is biased toward
-        ``TOOL_USE`` unless another category scores significantly
-        higher.
+        ``tools_requested`` is a structured signal from the caller and may
+        select ``TOOL_USE``. Natural-language category judgment belongs to an
+        agent-backed decision broker; this sync method intentionally avoids
+        keyword or regex fallbacks.
         """
         if not query or not query.strip():
             return TaskCategory.TOOL_USE if tools_requested else TaskCategory.DEFAULT
 
-        words = set(_WORD_RE.findall(query.lower()))
-
-        scores: dict[TaskCategory, int] = {
-            TaskCategory.CODE: len(words & _CODE_KEYWORDS),
-            TaskCategory.ANALYSIS: len(words & _ANALYSIS_KEYWORDS),
-            TaskCategory.WRITING: len(words & _WRITING_KEYWORDS),
-            TaskCategory.PLANNING: len(words & _PLANNING_KEYWORDS),
-            TaskCategory.VISION: len(words & _VISION_KEYWORDS),
-        }
-
-        best_category = max(scores, key=lambda c: scores[c])
-        best_score = scores[best_category]
-
-        if tools_requested:
-            # TOOL_USE wins unless another category has >= 2 keyword hits
-            if best_score < 2:
-                return TaskCategory.TOOL_USE
-
-        if best_score == 0:
-            return TaskCategory.TOOL_USE if tools_requested else TaskCategory.CONVERSATION
-
-        return best_category
+        return TaskCategory.TOOL_USE if tools_requested else TaskCategory.CONVERSATION
 
     # ------------------------------------------------------------------
     # Properties

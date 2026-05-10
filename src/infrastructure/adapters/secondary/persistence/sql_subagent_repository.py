@@ -90,11 +90,13 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBSubAgent)
-                .where(DBSubAgent.id == subagent_id)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBSubAgent)
+                    .where(DBSubAgent.id == subagent_id)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
         db_subagent = result.scalar_one_or_none()
 
@@ -109,12 +111,14 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBSubAgent)
-                .where(DBSubAgent.tenant_id == tenant_id)
-                .where(DBSubAgent.name == name)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBSubAgent)
+                    .where(DBSubAgent.tenant_id == tenant_id)
+                    .where(DBSubAgent.name == name)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
 
         db_subagent = result.scalar_one_or_none()
@@ -126,11 +130,13 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBSubAgent)
-                .where(DBSubAgent.id == subagent.id)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBSubAgent)
+                    .where(DBSubAgent.id == subagent.id)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
         db_subagent = result.scalar_one_or_none()
 
@@ -171,7 +177,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(delete(DBSubAgent).where(DBSubAgent.id == subagent_id)))
+            refresh_select_statement(
+                self._refresh_statement(delete(DBSubAgent).where(DBSubAgent.id == subagent_id))
+            )
         )
 
         if cast(CursorResult[Any], result).rowcount == 0:
@@ -196,7 +204,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         query = query.order_by(DBSubAgent.created_at.desc()).limit(limit).offset(offset)
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(query.execution_options(populate_existing=True)))
+            refresh_select_statement(
+                self._refresh_statement(query.execution_options(populate_existing=True))
+            )
         )
         db_subagents = result.scalars().all()
 
@@ -232,7 +242,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         query = query.order_by(DBSubAgent.created_at.desc())
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(query.execution_options(populate_existing=True)))
+            refresh_select_statement(
+                self._refresh_statement(query.execution_options(populate_existing=True))
+            )
         )
         db_subagents = result.scalars().all()
 
@@ -247,11 +259,13 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBSubAgent)
-                .where(DBSubAgent.id == subagent_id)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBSubAgent)
+                    .where(DBSubAgent.id == subagent_id)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
         db_subagent = result.scalar_one_or_none()
 
@@ -292,7 +306,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         if enabled_only:
             query = query.where(DBSubAgent.enabled.is_(True))
 
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         return result.scalar() or 0
 
     async def find_by_keywords(
@@ -301,17 +317,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         query: str,
         enabled_only: bool = True,
     ) -> list[SubAgent]:
-        """Find subagents by keyword matching."""
-        # Get all subagents for the tenant
-        subagents = await self.list_by_tenant(tenant_id, enabled_only=enabled_only)
-
-        # Filter by keyword matching
-        matching = []
-        for subagent in subagents:
-            if subagent.trigger.matches_keywords(query):
-                matching.append(subagent)
-
-        return matching
+        """Deprecated runtime path; agent broker owns subagent selection."""
+        _ = (tenant_id, query, enabled_only)
+        return []
 
     def _to_domain(self, db_subagent: Any) -> SubAgent | None:
         """Convert database model to domain entity."""

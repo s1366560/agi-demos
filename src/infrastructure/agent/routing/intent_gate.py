@@ -48,9 +48,8 @@ class IntentPattern:
 class IntentGate:
     """Lightweight pre-classification gate for routing decisions.
 
-    Examines user messages using keyword and regex patterns to make
-    fast routing decisions without LLM invocation. Returns None when
-    no strong match is found, allowing the default routing to proceed.
+    Examines only explicit structural commands, such as slash commands.
+    It does not classify natural-language intent.
     """
 
     def __init__(
@@ -130,8 +129,15 @@ class IntentGate:
         normalized_message: str,
         pattern: IntentPattern,
     ) -> float:
-        """Score how well a message matches a pattern."""
-        keyword_match = any(kw in normalized_message for kw in pattern.keywords)
+        """Score structural command matches only."""
+        is_structural_message = normalized_message.startswith("/")
+        if not is_structural_message:
+            return 0.0
+
+        keyword_match = any(
+            _is_structural_keyword(kw) and normalized_message.startswith(kw.lower())
+            for kw in pattern.keywords
+        )
         regex_match = False
         if pattern.regex is not None:
             try:
@@ -149,3 +155,8 @@ class IntentGate:
         if keyword_match or regex_match:
             return pattern.confidence
         return 0.0
+
+
+def _is_structural_keyword(keyword: str) -> bool:
+    """Return whether *keyword* denotes an explicit control surface."""
+    return keyword.strip().startswith("/")

@@ -1,16 +1,16 @@
 # pyright: reportUninitializedInstanceVariable=false
 """Routing mixin extracted from ``react_agent.py``.
 
-Hosts the lane-inference / execution-path-decision / skill-matching helpers
-without changing any behavior. ``ReActAgent`` composes this mixin via
-multiple inheritance.
+Hosts the execution-path decision helpers. Runtime semantic routing is
+agent-first: explicit structural commands may force a path, otherwise the
+ReAct loop owns the decision instead of local keyword gates.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..routing import ExecutionPath, IntentGate, RoutingDecision
 from ..skill import SkillProtocol
@@ -45,14 +45,6 @@ class _RoutingAgent(Protocol):
 class RoutingMixin:
     """Routing helpers (lane inference, execution path, skill match)."""
 
-    _DOMAIN_LANE_RULES: ClassVar[tuple[tuple[str, tuple[str, ...]], ...]] = (
-        ("plugin", ("plugin", "channel", "reload", "install", "uninstall", "enable", "disable")),
-        ("mcp", ("mcp", "sandbox", "tool server", "connector")),
-        ("governance", ("policy", "permission", "compliance", "audit", "risk", "guard")),
-        ("code", ("code", "refactor", "test", "build", "compile", "debug", "function", "class")),
-        ("data", ("memory", "entity", "graph", "sql", "database", "query", "episode")),
-    )
-
     def _infer_domain_lane(
         self: _RoutingAgent,
         *,
@@ -61,18 +53,14 @@ class RoutingMixin:
         forced_skill_name: str | None = None,
         plan_mode_requested: bool = False,
     ) -> str:
-        """Infer routing lane for router-fabric diagnostics."""
+        """Return structural routing lane for router-fabric diagnostics."""
+        _ = message
         if forced_subagent_name:
             return "subagent"
         if forced_skill_name:
             return "skill"
         if plan_mode_requested:
             return "planning"
-
-        normalized = message.lower()
-        for lane, keywords in RoutingMixin._DOMAIN_LANE_RULES:
-            if any(keyword in normalized for keyword in keywords):
-                return lane
         return "general"
 
     def _decide_execution_path(
@@ -125,17 +113,9 @@ class RoutingMixin:
                 },
             )
 
-        # Intent gate: lightweight pattern-based pre-classification
-        gate_result = self._intent_gate.classify(
-            message,
-            _available_skills=[s.name for s in (self.skills or [])],
-        )
-        if gate_result is not None:
-            if gate_result.metadata is None:
-                gate_result.metadata = {}
-            gate_result.metadata["domain_lane"] = domain_lane
-            gate_result.metadata["router_fabric_version"] = "lane-v1"
-            return gate_result
+        # Natural-language routing is intentionally prompt-driven here.
+        # IntentGate remains available for explicit structural commands only,
+        # and is not used as a local keyword fallback in this runtime path.
 
         # Default to ReAct loop -- prompt-driven routing replaces
         # confidence scoring
@@ -167,9 +147,11 @@ class RoutingMixin:
         query: str,
         available_skills: list[SkillProtocol] | None = None,
     ) -> tuple[SkillProtocol | None, float]:
-        """Match query against available skills, filtered by agent_mode.
+        """Return no implicit skill match.
 
-        Inlined from SkillOrchestrator.match() (Wave 5.1).
+        Forced skill execution remains structural. Natural-language skill
+        activation must be decided by an agent-backed broker, not by local
+        pattern scoring.
 
         Args:
             query: User query
@@ -177,29 +159,6 @@ class RoutingMixin:
         Returns:
             Tuple of (best matching skill or None, match score)
         """
-        skills = available_skills or cast("list[SkillProtocol]", self.skills or [])
-        if not skills:
-            logger.debug("[ReActAgent] No skills available for matching")
-            return None, 0.0
-
-        best_skill: SkillProtocol | None = None
-        best_score = 0.0
-
-        for skill in skills:
-            if not skill.is_accessible_by_agent(self.agent_mode):
-                continue
-            if skill.status.value != "active":
-                continue
-            score = skill.matches_query(query)
-            if score > best_score:
-                best_score = score
-                best_skill = skill
-
-        if best_skill and best_score >= self.skill_match_threshold:
-            logger.info(
-                f"[ReActAgent] Matched skill: {best_skill.name} with score {best_score:.2f}"
-            )
-            return best_skill, best_score
-
-        logger.debug("[ReActAgent] No skill matched for query")
+        _ = (query, available_skills)
+        logger.debug("[ReActAgent] Implicit skill matching requires agent decision broker")
         return None, 0.0

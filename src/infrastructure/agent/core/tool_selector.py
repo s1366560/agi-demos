@@ -1,14 +1,13 @@
-"""Tool Selection Strategy - Intelligent tool filtering for LLM context optimization.
+"""Tool Selection Strategy - structured tool filtering for LLM context optimization.
 
-When too many tools are available, this module provides intelligent
-selection based on relevance to the conversation context.
+When too many tools are available, this module preserves deterministic safety
+filters and allows an injected agent-backed ranker to order candidates. It
+does not infer tool relevance from conversation keywords locally.
 """
 
 import logging
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from hashlib import blake2b
 from typing import Any, Protocol, cast
 
 logger = logging.getLogger(__name__)
@@ -72,30 +71,10 @@ class SemanticToolRanker(Protocol):
         ...
 
 
-class KeywordSemanticToolRanker:
-    """Keyword relevance ranker (legacy behavior)."""
+class DeterministicToolRanker:
+    """Safe default ranker using only structured/static tool facts."""
 
-    name = "keyword"
-
-    def rank_tools(
-        self,
-        tools: dict[str, Any],
-        context: ToolSelectionContext,
-        *,
-        score_fallback: Callable[[Any], float],
-    ) -> list[str]:
-        scored = [(name, score_fallback(tool)) for name, tool in tools.items()]
-        scored.sort(key=lambda item: item[1], reverse=True)
-        return [name for name, _ in scored]
-
-
-class TokenVectorSemanticToolRanker:
-    """Token-hashed vector ranker with keyword fallback blending."""
-
-    name = "token_vector"
-
-    def __init__(self, *, vector_dimensions: int = 128) -> None:
-        self._vector_dimensions = max(16, int(vector_dimensions))
+    name = "deterministic"
 
     def rank_tools(
         self,
@@ -104,58 +83,12 @@ class TokenVectorSemanticToolRanker:
         *,
         score_fallback: Callable[[Any], float],
     ) -> list[str]:
-        user_message = str(context.metadata.get("user_message", "")).strip().lower()
-        conversation_text = (
-            " ".join(
-                str(item.get("content", ""))
-                for item in context.conversation_history
-                if isinstance(item, dict)
-            )
-            .strip()
-            .lower()
-        )
-        query_text = f"{user_message}\n{conversation_text}".strip()
-        if not query_text:
-            return KeywordSemanticToolRanker().rank_tools(
-                tools,
-                context,
-                score_fallback=score_fallback,
-            )
-
-        query_vector = self._build_sparse_vector(query_text)
-        scored: list[tuple[str, float]] = []
-        for name, tool in tools.items():
-            description = str(getattr(tool, "description", "") or "")
-            tool_text = f"{name} {description}".strip().lower()
-            semantic_score = self._cosine_similarity(
-                query_vector,
-                self._build_sparse_vector(tool_text),
-            )
-            # Blend lexical fallback with lightweight vector score.
-            blended_score = score_fallback(tool) + (semantic_score * 25.0)
-            scored.append((name, blended_score))
-
-        scored.sort(key=lambda item: item[1], reverse=True)
-        return [name for name, _ in scored]
-
-    def _build_sparse_vector(self, text: str) -> dict[int, float]:
-        counts: dict[int, float] = {}
-        for token in re.findall(r"\b[a-z][a-z0-9_]*\b", text):
-            digest = blake2b(token.encode("utf-8"), digest_size=2).digest()
-            slot = int.from_bytes(digest, byteorder="big") % self._vector_dimensions
-            counts[slot] = counts.get(slot, 0.0) + 1.0
-        return counts
-
-    @staticmethod
-    def _cosine_similarity(vec_a: dict[int, float], vec_b: dict[int, float]) -> float:
-        if not vec_a or not vec_b:
-            return 0.0
-        dot = sum(value * vec_b.get(key, 0.0) for key, value in vec_a.items())
-        norm_a = sum(value * value for value in vec_a.values()) ** 0.5
-        norm_b = sum(value * value for value in vec_b.values()) ** 0.5
-        if norm_a == 0.0 or norm_b == 0.0:
-            return 0.0
-        return cast(float, dot / (norm_a * norm_b))
+        _ = context
+        ranked = [
+            (name, score_fallback(tool), index) for index, (name, tool) in enumerate(tools.items())
+        ]
+        ranked.sort(key=lambda item: (-item[1], item[2]))
+        return [name for name, _, _ in ranked]
 
 
 class _CallableSemanticToolRanker:
@@ -191,106 +124,7 @@ class ToolSelector:
 
     def __init__(self) -> None:
         """Initialize the tool selector."""
-        self._stopwords = {
-            "a",
-            "an",
-            "the",
-            "is",
-            "are",
-            "was",
-            "were",
-            "be",
-            "been",
-            "being",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "will",
-            "would",
-            "could",
-            "should",
-            "may",
-            "might",
-            "must",
-            "shall",
-            "can",
-            "need",
-            "dare",
-            "ought",
-            "used",
-            "to",
-            "of",
-            "in",
-            "for",
-            "on",
-            "with",
-            "at",
-            "by",
-            "from",
-            "as",
-            "into",
-            "through",
-            "during",
-            "before",
-            "after",
-            "above",
-            "below",
-            "between",
-            "under",
-            "again",
-            "further",
-            "then",
-            "once",
-            "i",
-            "me",
-            "my",
-            "myself",
-            "we",
-            "our",
-            "ours",
-            "ourselves",
-            "you",
-            "your",
-            "yours",
-            "yourself",
-            "yourselves",
-            "he",
-            "him",
-            "his",
-            "himself",
-            "she",
-            "her",
-            "hers",
-            "herself",
-            "it",
-            "its",
-            "itself",
-            "they",
-            "them",
-            "their",
-            "theirs",
-            "themselves",
-            "what",
-            "which",
-            "who",
-            "whom",
-            "this",
-            "that",
-            "these",
-            "those",
-            "and",
-            "but",
-            "or",
-            "if",
-            "because",
-            "until",
-            "while",
-        }
-        self._keyword_ranker = KeywordSemanticToolRanker()
-        self._vector_ranker = TokenVectorSemanticToolRanker()
+        self._deterministic_ranker = DeterministicToolRanker()
 
     def select_tools(
         self,
@@ -365,25 +199,6 @@ class ToolSelector:
 
         score = 0.0
 
-        # Get tool metadata
-        description = getattr(tool, "description", "") or ""
-        name_lower = tool_name.lower()
-        desc_lower = description.lower()
-
-        # Extract keywords from conversation
-        conversation_text = self._extract_conversation_text(context.conversation_history)
-        keywords = self._extract_keywords(conversation_text)
-
-        # Score based on name matches
-        for keyword in keywords:
-            if keyword in name_lower:
-                score += 10.0
-
-        # Score based on description matches
-        for keyword in keywords:
-            if keyword in desc_lower:
-                score += 5.0
-
         # MCP tools get slight bonus (they're user-configured, likely important)
         if tool_name.startswith("mcp__"):
             score += 1.0
@@ -395,45 +210,9 @@ class ToolSelector:
 
         return score
 
-    def _extract_conversation_text(
-        self,
-        history: list[dict[str, str]],
-    ) -> str:
-        """Extract all text from conversation history.
-
-        Args:
-            history: List of message dicts
-
-        Returns:
-            Combined text from all messages
-        """
-        texts = []
-        for msg in history:
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                texts.append(content)
-        return " ".join(texts).lower()
-
-    def _extract_keywords(self, text: str) -> set[str]:
-        """Extract meaningful keywords from text.
-
-        Args:
-            text: Input text
-
-        Returns:
-            Set of keywords (lowercase, no stopwords)
-        """
-        # Tokenize on word boundaries
-        words = re.findall(r"\b[a-z][a-z0-9_]*\b", text.lower())
-
-        # Filter stopwords and short words
-        keywords = {word for word in words if word not in self._stopwords and len(word) >= 2}
-
-        return keywords
-
     def _resolve_semantic_ranker(self, context: ToolSelectionContext) -> SemanticToolRanker:
         metadata = context.metadata if isinstance(context.metadata, Mapping) else {}
-        backend = str(metadata.get("semantic_backend", "embedding_vector")).strip().lower()
+        backend = str(metadata.get("semantic_backend", "")).strip().lower()
 
         if backend == "embedding_vector":
             embedding_ranker = metadata.get("embedding_ranker")
@@ -455,9 +234,9 @@ class ToolSelector:
                 cast(Callable[[dict[str, Any], ToolSelectionContext], list[str]], custom_ranker)
             )
 
-        if backend == "keyword":
-            return self._keyword_ranker
-        return self._vector_ranker
+        if backend and backend != "agent_decision":
+            logger.debug("Ignoring unsupported local tool ranking backend: %s", backend)
+        return self._deterministic_ranker
 
     def _resolve_quality_boost(self, tool_name: str, metadata: Mapping[str, Any]) -> float:
         scores = metadata.get("tool_quality_scores")
@@ -505,8 +284,8 @@ class ToolSelector:
                 score_fallback=_score_fallback,
             )
         except Exception:
-            logger.exception("Semantic ranker failed, falling back to keyword backend")
-            ranked_names = self._keyword_ranker.rank_tools(
+            logger.exception("Semantic ranker failed, using deterministic fallback")
+            ranked_names = self._deterministic_ranker.rank_tools(
                 tools,
                 context,
                 score_fallback=_score_fallback,
@@ -521,7 +300,7 @@ class ToolSelector:
 
         # Guarantee all tools are represented in deterministic fallback order.
         if len(unique_ranked) < len(tools):
-            for name in self._keyword_ranker.rank_tools(
+            for name in self._deterministic_ranker.rank_tools(
                 tools,
                 context,
                 score_fallback=_score_fallback,

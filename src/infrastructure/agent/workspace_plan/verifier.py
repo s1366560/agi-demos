@@ -51,24 +51,6 @@ _NO_OUTPUT_SENTINELS = {
     "tool executed successfully. (no output)",
 }
 
-_TRANSIENT_INFRA_FAILURE_MARKERS = (
-    "Executor shutdown has been called",
-    "SystemExit: 15",
-    "All tool operations",
-    "MCP request 'tools/call' timed out",
-    "Server is still running but unresponsive",
-    "Tool execution failed after 1 attempts",
-    "filesystem appears to be unresponsive",
-    "request timed out",
-    "工具执行超时",
-    "litellm.APIConnectionError",
-    "litellm.InternalServerError",
-    "Expected HTTP/, RTSP/ or ICE/",
-    "Handle with `litellm.InternalServerError`",
-    "is unavailable and could not be rebuilt",
-    "Rate limit exceeded",
-    "Please wait a moment and try again",
-)
 _FAILED_TEST_EVIDENCE_PATTERNS = (
     re.compile(r"\b[1-9]\d*/\d+\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
     re.compile(r"\b[1-9]\d*\s+(?:tests?\s+)?(?:failed|failing|failure|failures)\b", re.I),
@@ -639,21 +621,7 @@ class AcceptanceCriterionVerifier(VerifierPort):
         self._runners[kind] = runner
 
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
-        transient_guard = _transient_infrastructure_failure_guard(ctx)
-        if transient_guard is not None:
-            return VerificationReport(
-                node_id=ctx.node.id,
-                attempt_id=ctx.attempt_id,
-                results=(transient_guard,),
-            )
-
         terminal_results = _terminal_worker_report_results(ctx)
-        if _should_short_circuit_blocked_worker_report(ctx, terminal_results):
-            return VerificationReport(
-                node_id=ctx.node.id,
-                attempt_id=ctx.attempt_id,
-                results=terminal_results,
-            )
         results = list(terminal_results)
         preflight_guard = _preflight_evidence_guard(ctx)
         if preflight_guard is not None:
@@ -1033,11 +1001,7 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             ),
         )
     if report_type and report_type != "completed":
-        detail = (
-            f": {report_summary[:500]}"
-            if report_type == "blocked" and report_summary
-            else ""
-        )
+        detail = f": {report_summary[:500]}" if report_type == "blocked" and report_summary else ""
         return CriterionResult(
             criterion=criterion,
             passed=False,
@@ -1052,13 +1016,6 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
             passed=False,
             confidence=1.0,
             message=f"attempt status {attempt_status!r} cannot pass durable verification",
-        )
-    if report_summary.startswith("recovered_stale_"):
-        return CriterionResult(
-            criterion=criterion,
-            passed=False,
-            confidence=1.0,
-            message=report_summary,
         )
     if report_type == "completed":
         return CriterionResult(
@@ -1080,39 +1037,6 @@ def _terminal_worker_report_guard(ctx: VerificationContext) -> CriterionResult |
 def _terminal_worker_report_results(ctx: VerificationContext) -> tuple[CriterionResult, ...]:
     terminal_guard = _terminal_worker_report_guard(ctx)
     return (terminal_guard,) if terminal_guard is not None else ()
-
-
-def _should_short_circuit_blocked_worker_report(
-    ctx: VerificationContext,
-    terminal_results: tuple[CriterionResult, ...],
-) -> bool:
-    """Treat a structured blocked worker report as terminal without an LLM judge call."""
-    return bool(terminal_results) and _artifact_text(ctx, "last_worker_report_type") == "blocked"
-
-
-def _transient_infrastructure_failure_guard(ctx: VerificationContext) -> CriterionResult | None:
-    """Return a soft verification failure for retryable runtime interruptions."""
-    report_type = _artifact_text(ctx, "last_worker_report_type")
-    if report_type != "blocked":
-        return None
-
-    report_summary = _artifact_text(ctx, "last_worker_report_summary")
-    haystack = f"{report_summary}\n{ctx.stdout}".casefold()
-    if not any(marker.casefold() in haystack for marker in _TRANSIENT_INFRA_FAILURE_MARKERS):
-        return None
-
-    criterion = AcceptanceCriterion(
-        kind=CriterionKind.CUSTOM,
-        spec={"name": "retryable_infrastructure_failure"},
-        required=True,
-        description="retryable infrastructure failures should redispatch instead of blocking",
-    )
-    return CriterionResult(
-        criterion=criterion,
-        passed=False,
-        confidence=0.5,
-        message="retryable infrastructure failure; redispatch node",
-    )
 
 
 def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:

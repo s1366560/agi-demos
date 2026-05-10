@@ -271,7 +271,7 @@ class TestSqlSubAgentRepositorySearch:
 
     @pytest.mark.asyncio
     async def test_find_by_keywords(self, v2_subagent_repo: SqlSubAgentRepository):
-        """Test finding subagents by keyword matching."""
+        """Runtime keyword matching is disabled pending broker-backed selection."""
         subagent1 = make_subagent("subagent-keyword-1", "tenant-keyword-1", "search_subagent")
         subagent1.trigger = AgentTrigger(
             description="Search helper",
@@ -289,5 +289,4 @@ class TestSqlSubAgentRepositorySearch:
         await v2_subagent_repo.create(subagent2)
 
         results = await v2_subagent_repo.find_by_keywords("tenant-keyword-1", "search")
-        assert len(results) == 1
-        assert results[0].id == "subagent-keyword-1"
+        assert results == []

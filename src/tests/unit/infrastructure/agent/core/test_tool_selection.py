@@ -1,13 +1,12 @@
-"""Tests for intelligent tool selection strategy.
+"""Tests for structured tool selection strategy.
 
 This test file follows TDD methodology:
 1. Write failing test first (RED)
 2. Implement minimal code to pass (GREEN)
 3. Refactor while keeping tests passing (REFACTOR)
 
-The tests verify that when too many tools are available,
-the system can intelligently select the most relevant ones
-to reduce LLM context consumption.
+The tests verify that when too many tools are available, the system preserves
+core tools, applies deterministic pruning, and accepts injected rankers.
 """
 
 from unittest.mock import MagicMock
@@ -56,7 +55,7 @@ class TestToolSelector:
         """
         Test that core tools are always included.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -71,8 +70,7 @@ class TestToolSelector:
             "mcp_tool_2": MagicMock(),
         }
 
-        context = MagicMock()
-        context.max_tools = 5
+        context = ToolSelectionContext(max_tools=5)
 
         selected = selector.select_tools(tools, context)
 
@@ -86,7 +84,7 @@ class TestToolSelector:
         """
         Test that selection is limited to max_tools.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -95,9 +93,7 @@ class TestToolSelector:
         tools["read"] = MagicMock()  # Core tool
         tools["write"] = MagicMock()  # Core tool
 
-        context = MagicMock()
-        context.max_tools = 20
-        context.conversation_history = []
+        context = ToolSelectionContext(max_tools=20)
 
         selected = selector.select_tools(tools, context)
 
@@ -106,9 +102,9 @@ class TestToolSelector:
 
     def test_rank_tools_by_relevance(self):
         """
-        Test that tools are ranked by relevance to conversation.
+        Test that default pruning is deterministic without keyword ranking.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -120,16 +116,16 @@ class TestToolSelector:
             "send_email": MagicMock(description="Send an email"),
         }
 
-        context = MagicMock()
-        context.max_tools = 3
-        context.conversation_history = [
-            {"role": "user", "content": "I need to search for information about Python"}
-        ]
+        context = ToolSelectionContext(
+            max_tools=3,
+            conversation_history=[
+                {"role": "user", "content": "I need to search for information about Python"}
+            ],
+        )
 
         selected = selector.select_tools(tools, context)
 
-        # search_web should be included due to keyword match
-        # Note: actual implementation may vary, this is a basic test
+        assert selected == ["read", "write", "search_web"]
         assert len(selected) <= 3
 
     def test_no_selection_needed_when_under_limit(self):
@@ -164,9 +160,9 @@ class TestToolRelevanceScoring:
 
     def test_score_based_on_name_match(self):
         """
-        Test that tools are scored based on name match.
+        Test that local conversation keywords do not affect score.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -174,21 +170,19 @@ class TestToolRelevanceScoring:
         tool.name = "search_web"
         tool.description = "Search the web"
 
-        context = MagicMock()
-        context.conversation_history = [
-            {"role": "user", "content": "I want to search for something"}
-        ]
+        context = ToolSelectionContext(
+            conversation_history=[{"role": "user", "content": "I want to search for something"}]
+        )
 
         score = selector.score_tool_relevance(tool, context)
 
-        # Should have positive score due to keyword match
-        assert score > 0
+        assert score == 0
 
     def test_score_based_on_description_match(self):
         """
-        Test that tools are scored based on description match.
+        Test that local description keywords do not affect score.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -196,26 +190,25 @@ class TestToolRelevanceScoring:
         tool.name = "tool_x"
         tool.description = "This tool sends emails to users"
 
-        context = MagicMock()
-        context.conversation_history = [{"role": "user", "content": "I need to send an email"}]
+        context = ToolSelectionContext(
+            conversation_history=[{"role": "user", "content": "I need to send an email"}]
+        )
 
         score = selector.score_tool_relevance(tool, context)
 
-        # Should have positive score due to description match
-        assert score > 0
+        assert score == 0
 
     def test_core_tools_get_high_score(self):
         """
         Test that core tools always get high relevance score.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
         core_tools = ["read", "write", "edit", "bash", "todoread", "todowrite"]
 
-        context = MagicMock()
-        context.conversation_history = []
+        context = ToolSelectionContext()
 
         for tool_name in core_tools:
             tool = MagicMock()
@@ -235,7 +228,7 @@ class TestToolSelectorIntegration:
         """
         Test that core tools are always preserved even with very low limit.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -247,9 +240,7 @@ class TestToolSelectorIntegration:
             "mcp_3": MagicMock(),
         }
 
-        context = MagicMock()
-        context.max_tools = 2  # Very limited
-        context.conversation_history = []
+        context = ToolSelectionContext(max_tools=2)
 
         selected = selector.select_tools(tools, context)
 
@@ -258,9 +249,9 @@ class TestToolSelectorIntegration:
 
     def test_mcp_tools_selected_by_relevance(self):
         """
-        Test that MCP tools are selected based on relevance.
+        Test that default tool pruning uses deterministic safe order.
         """
-        from src.infrastructure.agent.core.tool_selector import ToolSelector
+        from src.infrastructure.agent.core.tool_selector import ToolSelectionContext, ToolSelector
 
         selector = ToolSelector()
 
@@ -272,11 +263,10 @@ class TestToolSelectorIntegration:
             "mcp__email__send": MagicMock(description="Send an email"),
         }
 
-        context = MagicMock()
-        context.max_tools = 4
-        context.conversation_history = [
-            {"role": "user", "content": "I want to send an email to users"}
-        ]
+        context = ToolSelectionContext(
+            max_tools=4,
+            conversation_history=[{"role": "user", "content": "I want to send an email to users"}],
+        )
 
         selected = selector.select_tools(tools, context)
 
@@ -284,6 +274,5 @@ class TestToolSelectorIntegration:
         assert "read" in selected
         assert "write" in selected
 
-        # Email tool should be selected due to relevance
-        # (actual behavior depends on implementation)
+        assert "mcp__api__get_users" in selected
         assert len(selected) <= 4

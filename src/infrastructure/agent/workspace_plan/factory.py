@@ -269,8 +269,7 @@ def _verification_payload_requests_verification_retry(payload: dict[str, Any]) -
             continue
         if result.get("judge_verdict") != "retry_infrastructure":
             continue
-        next_action = str(result.get("required_next_action") or "").casefold()
-        if "retry verification" in next_action:
+        if result.get("next_action_kind") == "retry_same_node":
             return True
     return False
 

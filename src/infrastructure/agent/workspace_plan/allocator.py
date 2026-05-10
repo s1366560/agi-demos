@@ -150,9 +150,9 @@ class CapabilityAllocator(TaskAllocatorPort):
         if node.preferred_agent_id and node.preferred_agent_id == agent.agent_id:
             aff = 1.0
             reasons.append("affinity:preferred")
-        # Also match on persona tags (used by MetaGPT-style personas).
+        # Affinity is structural only: preferred id or explicit capability tags.
         for tag in agent.affinity_tags:
-            if tag in cap_names or tag in node.description.lower():
+            if tag in cap_names:
                 aff = max(aff, 0.7)
                 reasons.append(f"affinity:tag:{tag}")
                 break
@@ -174,9 +174,7 @@ def _default_execution_fit(capabilities: Iterable[str]) -> float:
     caps = set(capabilities)
     if not caps:
         return 0.0
-    return len(caps & _DEFAULT_EXECUTION_CAPABILITIES) / len(
-        _DEFAULT_EXECUTION_CAPABILITIES
-    )
+    return len(caps & _DEFAULT_EXECUTION_CAPABILITIES) / len(_DEFAULT_EXECUTION_CAPABILITIES)
 
 
 def _name_token_match(caps: set[str], tools: Iterable[str]) -> float:

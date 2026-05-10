@@ -292,36 +292,25 @@ class TestCategoryRouterRoute:
 
 @pytest.mark.unit
 class TestDetectCategory:
-    """Test heuristic category detection from query text."""
+    """Test safe default category detection without local text heuristics."""
 
-    def test_detect_code_query(self, router: CategoryRouter) -> None:
-        """Code-related queries map to CODE."""
-        query = "Write a Python function to sort a list using recursion"
-        assert router.detect_category(query) == TaskCategory.CODE
-
-    def test_detect_analysis_query(self, router: CategoryRouter) -> None:
-        """Analysis/reasoning queries map to ANALYSIS."""
-        query = "Analyze the correlation between these data statistics"
-        assert router.detect_category(query) == TaskCategory.ANALYSIS
-
-    def test_detect_writing_query(self, router: CategoryRouter) -> None:
-        """Writing/documentation queries map to WRITING."""
-        query = "Write an essay summarizing the article about climate"
-        assert router.detect_category(query) == TaskCategory.WRITING
-
-    def test_detect_planning_query(self, router: CategoryRouter) -> None:
-        """Planning/strategy queries map to PLANNING."""
-        query = "Create a project roadmap with milestones and schedule"
-        assert router.detect_category(query) == TaskCategory.PLANNING
-
-    def test_detect_vision_query(self, router: CategoryRouter) -> None:
-        """Image/visual queries map to VISION."""
-        query = "Look at this screenshot and describe the diagram"
-        assert router.detect_category(query) == TaskCategory.VISION
-
-    def test_detect_generic_conversation(self, router: CategoryRouter) -> None:
-        """Generic greetings map to CONVERSATION."""
-        query = "Hello, how are you today?"
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "Write a Python function to sort a list using recursion",
+            "Analyze the correlation between these data statistics",
+            "Write an essay summarizing the article about climate",
+            "Create a project roadmap with milestones and schedule",
+            "Look at this screenshot and describe the diagram",
+            "Hello, how are you today?",
+        ],
+    )
+    def test_detect_nonempty_query_returns_conversation(
+        self,
+        router: CategoryRouter,
+        query: str,
+    ) -> None:
+        """Natural-language category judgment is broker-owned."""
         assert router.detect_category(query) == TaskCategory.CONVERSATION
 
     def test_detect_empty_query_returns_default(
@@ -342,10 +331,10 @@ class TestDetectCategory:
         self,
         router: CategoryRouter,
     ) -> None:
-        """Even with tools_requested, a strong category signal wins."""
+        """tools_requested is the only structural bias in this sync fallback."""
         query = "Write a Python function to debug and refactor this code"
         result = router.detect_category(query, tools_requested=True)
-        assert result == TaskCategory.CODE
+        assert result == TaskCategory.TOOL_USE
 
     def test_detect_empty_with_tools_returns_tool_use(
         self,
