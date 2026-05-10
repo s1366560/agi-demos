@@ -78,6 +78,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     _is_structural_sandbox_command,
     _node_allowed_sandbox_commands,
     _persisted_attempt_leader_agent_id,
+    _prepare_attempt_worktree_if_available,
     _WorkspaceSandboxCommandRunner,
     _worktree_setup_command,
     make_handoff_resume_handler,
@@ -611,6 +612,7 @@ async def test_worker_launch_handler_supplies_system_leader_when_payload_omits_l
         _workspace_id: str,
         _task: WorkspaceTask,
         _extra_instructions: str | None,
+        _attempt_id: str | None,
     ) -> str:
         return "[worktree-setup]\nstatus=skipped\n[/worktree-setup]"
 
@@ -734,6 +736,64 @@ def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
     assert 'kill -KILL "-$1" 2>/dev/null || true' in command
     assert 'stop_stale_pid "$pid"' in command
     assert "git worktree add -B" in command
+
+
+@pytest.mark.asyncio
+async def test_prepare_attempt_worktree_defaults_to_attempt_scope_without_checkpoint(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    await db_session.flush()
+
+    commands: list[str] = []
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            assert timeout == 120
+            commands.append(command)
+            return {"exit_code": 0, "stdout": "git_head=abc123\n", "stderr": ""}
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    task = WorkspaceTask(
+        id="task-no-feature",
+        workspace_id="workspace-1",
+        title="Repair without checkpoint",
+        description="Retry task created outside the plan node checkpoint path.",
+        created_by="worker-user-1",
+        status="in_progress",
+        metadata={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+        },
+    )
+
+    note = await _prepare_attempt_worktree_if_available(
+        db_session,
+        "workspace-1",
+        task,
+        None,
+        "attempt-direct-1",
+    )
+
+    assert note is not None
+    assert "status=prepared" in note
+    assert "worktree_path=/workspace/.memstack/worktrees/attempt-direct-1" in note
+    assert "branch_name=workspace/task-no-feature-attempt-dire" in note
+    assert commands
+    assert "cd /workspace/my-evo" in commands[0]
+    assert (
+        "git worktree add -B workspace/task-no-feature-attempt-dire "
+        "/workspace/.memstack/worktrees/attempt-direct-1 HEAD"
+    ) in commands[0]
 
 
 def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> None:
@@ -2373,9 +2433,11 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
         workspace_id: str,
         task: WorkspaceTask,
         extra_instructions: str | None,
+        attempt_id: str | None,
     ) -> str:
         assert extra_instructions is not None
         assert "[feature-checkpoint]" in extra_instructions
+        assert attempt_id is not None
         prepared_worktrees.append((workspace_id, task.id))
         return "[worktree-setup]\nstatus=prepared\n[/worktree-setup]"
 
@@ -3180,6 +3242,7 @@ async def _noop_worktree(
     _workspace_id: str,
     _task: WorkspaceTask,
     _extra_instructions: str | None,
+    _attempt_id: str | None,
 ) -> str | None:
     return None
 

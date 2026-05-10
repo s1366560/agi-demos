@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import posixpath
 import re
 import shlex
 import uuid
@@ -183,7 +184,9 @@ _NO_OUTPUT_SENTINELS = frozenset(
     }
 )
 
-WorktreePreparer = Callable[[AsyncSession, str, WorkspaceTask, str | None], Awaitable[str | None]]
+WorktreePreparer = Callable[
+    [AsyncSession, str, WorkspaceTask, str | None, str | None], Awaitable[str | None]
+]
 
 _AUTO_TEAM_AGENT_TOOLS = [
     "*",
@@ -1270,6 +1273,7 @@ def make_worker_launch_handler(
             workspace_id=workspace_id,
             task=task,
             extra_instructions=extra_instructions,
+            attempt_id=attempt_id,
         )
         extra_instructions = _append_launch_instruction_note(extra_instructions, setup_note)
 
@@ -2857,9 +2861,10 @@ async def _worker_launch_worktree_note(
     workspace_id: str,
     task: WorkspaceTask,
     extra_instructions: str | None,
+    attempt_id: str | None,
 ) -> str | None:
     try:
-        return await preparer(session, workspace_id, task, extra_instructions)
+        return await preparer(session, workspace_id, task, extra_instructions, attempt_id)
     except Exception as exc:
         logger.warning(
             "workspace_plan.worker_launch.worktree_prepare_failed",
@@ -2867,6 +2872,7 @@ async def _worker_launch_worktree_note(
                 "event": "workspace_plan.worker_launch.worktree_prepare_failed",
                 "workspace_id": workspace_id,
                 "task_id": task.id,
+                "attempt_id": attempt_id,
             },
             exc_info=True,
         )
@@ -2886,17 +2892,22 @@ async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
     workspace_id: str,
     task: WorkspaceTask,
     _extra_instructions: str | None,
+    attempt_id: str | None,
 ) -> str | None:
     metadata = dict(task.metadata or {})
     feature_checkpoint = metadata.get("feature_checkpoint")
-    if not isinstance(feature_checkpoint, Mapping):
+    if not isinstance(feature_checkpoint, Mapping) and not attempt_id:
         return None
-    feature_metadata = cast(Mapping[str, Any], feature_checkpoint)
+    feature_metadata: Mapping[str, Any] = (
+        cast(Mapping[str, Any], feature_checkpoint)
+        if isinstance(feature_checkpoint, Mapping)
+        else {}
+    )
 
     worktree_path_template = _mapping_string(feature_metadata, "worktree_path")
     branch_name = _mapping_string(feature_metadata, "branch_name")
     base_ref = _mapping_string(feature_metadata, "base_ref") or "HEAD"
-    if not worktree_path_template or not branch_name:
+    if (not worktree_path_template or not branch_name) and not attempt_id:
         return _worktree_setup_note(
             status="skipped",
             reason="feature checkpoint does not include worktree_path and branch_name",
@@ -2929,9 +2940,17 @@ async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
             reason="sandbox_code_root is not available for this workspace",
         )
 
-    worktree_path = worktree_path_template.replace(
-        "${sandbox_code_root}", code_context.sandbox_code_root
-    )
+    if not worktree_path_template:
+        worktree_path = _default_attempt_worktree_path(
+            sandbox_code_root=code_context.sandbox_code_root,
+            attempt_id=str(attempt_id),
+        )
+    else:
+        worktree_path = worktree_path_template.replace(
+            "${sandbox_code_root}", code_context.sandbox_code_root
+        )
+    if not branch_name:
+        branch_name = _worktree_branch_name(node_id=task.id, attempt_id=str(attempt_id))
     if "${sandbox_code_root}" in worktree_path:
         return _worktree_setup_note(
             status="skipped",
@@ -2976,6 +2995,12 @@ async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
         worktree_path=worktree_path,
         branch_name=branch_name,
         base_ref=base_ref,
+    )
+
+
+def _default_attempt_worktree_path(*, sandbox_code_root: str, attempt_id: str) -> str:
+    return posixpath.normpath(
+        posixpath.join(sandbox_code_root.rstrip("/"), "..", ".memstack", "worktrees", attempt_id)
     )
 
 
