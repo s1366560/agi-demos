@@ -390,6 +390,7 @@ def _ensure_repair_node_for_verification_failure(
     metadata = _planner_node_metadata(description, node_id=repair_id, sequence=sequence)
     metadata.update(
         {
+            "iteration_index": _repair_iteration_index(plan, node),
             "iteration_phase": "implement",
             "scrum_artifact": _SCRUM_ARTIFACT_BY_PHASE["implement"],
             "allow_verification_script_changes": True,
@@ -437,6 +438,30 @@ def _existing_pending_repair_node(plan: Plan, node: PlanNode) -> PlanNode | None
         if candidate.intent is TaskIntent.DONE:
             continue
         return candidate
+    return None
+
+
+def _repair_iteration_index(plan: Plan, node: PlanNode) -> int:
+    goal_metadata = dict(plan.goal_node.metadata or {})
+    loop = goal_metadata.get("iteration_loop")
+    if isinstance(loop, dict):
+        loop_metadata = cast(dict[str, object], loop)
+        current_iteration = _positive_iteration_index(loop_metadata.get("current_iteration"))
+        if current_iteration is not None:
+            return current_iteration
+    return _node_iteration_index(node)
+
+
+def _node_iteration_index(node: PlanNode) -> int:
+    return _positive_iteration_index(dict(node.metadata or {}).get("iteration_index")) or 1
+
+
+def _positive_iteration_index(value: object) -> int | None:
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit():
+        parsed = int(value)
+        return parsed if parsed > 0 else None
     return None
 
 

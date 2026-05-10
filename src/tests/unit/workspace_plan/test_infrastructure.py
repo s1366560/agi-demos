@@ -315,9 +315,22 @@ class TestLLMGoalPlanner:
     async def test_replan_inserts_repair_node_when_judge_requests_one(self) -> None:
         planner = LLMGoalPlanner(decomposer=None)
         plan = await planner.plan(_goal("x"), _ctx())
-        leaf = plan.leaf_tasks()[0]
         from dataclasses import replace
 
+        plan.replace_node(
+            replace(
+                plan.goal_node,
+                metadata={
+                    **plan.goal_node.metadata,
+                    "iteration_loop": {
+                        "current_iteration": 5,
+                        "max_iterations": 8,
+                        "loop_status": "active",
+                    },
+                },
+            )
+        )
+        leaf = plan.leaf_tasks()[0]
         plan.replace_node(
             replace(
                 leaf,
@@ -326,6 +339,7 @@ class TestLLMGoalPlanner:
                 current_attempt_id="att-1",
                 metadata={
                     **leaf.metadata,
+                    "iteration_index": 4,
                     "last_verification_attempt_id": "att-1",
                     "last_verification_judge_verdict": "needs_rework",
                     "last_verification_judge_next_action_kind": "create_repair_node",
@@ -356,6 +370,7 @@ class TestLLMGoalPlanner:
         repair = repair_nodes[0]
         assert repair.intent is TaskIntent.TODO
         assert repair.metadata["allow_verification_script_changes"] is True
+        assert repair.metadata["iteration_index"] == 5
         assert repair.metadata["iteration_phase"] == "implement"
         assert repair.metadata["repair_source"] == "verification_judge_create_repair_node"
         assert "active attempt worktree only" in repair.description
@@ -390,6 +405,7 @@ class TestLLMGoalPlanner:
                 current_attempt_id="att-1",
                 metadata={
                     **leaf.metadata,
+                    "iteration_index": "3",
                     "last_verification_attempt_id": "att-1",
                     "last_verification_judge_verdict": "needs_rework",
                     "last_verification_judge_next_action_kind": "create_repair_node",
@@ -414,7 +430,11 @@ class TestLLMGoalPlanner:
             in repair.description
         )
         assert "Repair verification blockers for Repair verification blockers" not in repair.title
-        assert "Repair verification blockers for Repair verification blockers" not in repair.description
+        assert (
+            "Repair verification blockers for Repair verification blockers"
+            not in repair.description
+        )
+        assert repair.metadata["iteration_index"] == 3
 
     async def test_structural_checks_and_write_set_are_inferred_from_task_text(self) -> None:
         sub = [
@@ -1358,9 +1378,7 @@ class TestVerifier:
         assert len(judge.requests) == 1
         request = judge.requests[0]
         assert request.sandbox_code_root == "/workspace/my-evo"
-        assert request.worktree_path == (
-            "/workspace/my-evo/../.memstack/worktrees/attempt-current"
-        )
+        assert request.worktree_path == ("/workspace/my-evo/../.memstack/worktrees/attempt-current")
         assert request.active_execution_root == request.worktree_path
         assert request.worktree_isolation_active is True
         assert request.recent_git_status == ""
@@ -1579,9 +1597,7 @@ class TestVerifier:
             for item in rep.results
             if item.criterion.spec.get("name") == "workspace_verification_judge"
         )
-        assert judge_result.criterion.spec["satisfied_guard_failures"] == [
-            "failed_test_evidence"
-        ]
+        assert judge_result.criterion.spec["satisfied_guard_failures"] == ["failed_test_evidence"]
         assert len(judge.requests) == 1
         assert any(
             "test evidence reports failing tests" in item
