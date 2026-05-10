@@ -87,6 +87,17 @@ _WORKSPACE_SERVICE_START_PATTERN = re.compile(
     r")",
     re.I,
 )
+_WORKSPACE_LONG_RUNNING_BACKGROUND_COMMAND_PATTERN = re.compile(
+    r"\b(?:"
+    r"npm\s+(?:ci|test|run\s+(?:test|build|lint|typecheck|type-check))|"
+    r"npx\s+(?:jest|vitest|playwright|cypress)|"
+    r"pnpm\s+(?:install|test|run\s+(?:test|build|lint|typecheck|type-check))|"
+    r"yarn\s+(?:install|test|run\s+(?:test|build|lint|typecheck|type-check))|"
+    r"bun\s+(?:install|test|run\s+(?:test|build|lint|typecheck|type-check))|"
+    r"uv\s+run\s+pytest|pytest\b"
+    r")",
+    re.I,
+)
 _WORKSPACE_BACKGROUND_SERVICE_SUPERVISOR_PATTERN = re.compile(
     r"\b(?:nohup|setsid|daemonize|supervisord|pm2)\b",
     re.I,
@@ -866,19 +877,29 @@ def _workspace_bare_background_service_error(command: str, root_override: str | 
         return None
     normalized_root = posixpath.normpath(root_override.rstrip("/"))
     for segment in _workspace_background_command_segments(command):
-        if not _WORKSPACE_SERVICE_START_PATTERN.search(segment):
-            continue
         if _WORKSPACE_BACKGROUND_SERVICE_SUPERVISOR_PATTERN.search(segment):
             continue
+        if _WORKSPACE_SERVICE_START_PATTERN.search(segment):
+            return (
+                "bash.command starts a dev/watch/server process with bare background `&` "
+                f"inside attempt worktree {normalized_root}. The workspace harness wraps bash "
+                "with a timeout; bare background commands can keep the tool blocked or kill "
+                "the process. Use a supervised one-shot command such as "
+                "`mkdir -p logs && (setsid sh -lc 'cd backend && exec npm run dev' > "
+                "logs/backend.log 2>&1 < /dev/null & echo $! > logs/backend.pid)`, then run "
+                "a separate short health-check command. If setsid is unavailable, use the same "
+                "subshell shape with `nohup sh -lc`."
+            )
+        if not _WORKSPACE_LONG_RUNNING_BACKGROUND_COMMAND_PATTERN.search(segment):
+            continue
         return (
-            "bash.command starts a dev/watch/server process with bare background `&` "
+            "bash.command starts a package-manager, test, or build command with bare "
+            "background `&` "
             f"inside attempt worktree {normalized_root}. The workspace harness wraps bash "
             "with a timeout; bare background commands can keep the tool blocked or kill "
-            "the process. Use a supervised one-shot command such as "
-            "`mkdir -p logs && (setsid sh -lc 'cd backend && exec npm run dev' > "
-            "logs/backend.log 2>&1 < /dev/null & echo $! > logs/backend.pid)`, then run "
-            "a separate short health-check command. If setsid is unavailable, use the same "
-            "subshell shape with `nohup sh -lc`."
+            "the process. Run the command in the foreground with an adequate timeout, or "
+            "use a supervised one-shot shape with nohup/setsid, worktree-local logs, stdin "
+            "from /dev/null, a PID file, and a separate short poll command."
         )
     return None
 

@@ -885,6 +885,44 @@ class TestSandboxMCPToolExecute:
         assert "logs/backend.pid" in result.output
         assert adapter.call_count == 0
 
+    async def test_workspace_worker_bash_rejects_bare_background_npm_ci(self):
+        """Attempt-scoped workers should not hide dependency installs behind bare &."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "additional_instructions": (
+                        "worktree_path=/workspace/my-evo/../.memstack/worktrees/att-1"
+                    ),
+                    "workspace_root_override": {"source": "additional_instructions"},
+                }
+            ),
+            command='cd backend && npm ci 2>&1 & echo "Install started in background"',
+        )
+
+        assert result.is_error is True
+        assert "package-manager, test, or build command with bare background `&`" in result.output
+        assert "Run the command in the foreground with an adequate timeout" in result.output
+        assert adapter.call_count == 0
+
     async def test_workspace_worker_bash_rejects_subshell_background_dev_server(self):
         """Attempt-scoped workers must not hide bare dev servers in subshells."""
         adapter = MockSandboxAdapter()
