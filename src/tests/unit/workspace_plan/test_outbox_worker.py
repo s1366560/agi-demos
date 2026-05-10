@@ -713,6 +713,29 @@ def test_worktree_setup_command_installs_local_push_remote_when_missing() -> Non
     assert "git config push.default current" in command
 
 
+def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
+    command = _worktree_setup_command(
+        sandbox_code_root="/workspace/my-evo",
+        worktree_path="/workspace/my-evo/../.memstack/worktrees/attempt-2",
+        branch_name="workspace/node-1-attempt-2",
+        base_ref="HEAD",
+        protected_worktree_names=("attempt-2", "attempt-active"),
+    )
+
+    assert (
+        'worktree_root="$(dirname /workspace/my-evo/../.memstack/worktrees/attempt-2)"' in command
+    )
+    assert 'worktree_root="$(cd "$worktree_root" && pwd -P)"' in command
+    assert "protected_worktree_names='attempt-2 attempt-active'" in command
+    assert '*"npm run dev"*' in command
+    assert '*"tsx watch"*' in command
+    assert 'case " $protected_worktree_names " in *" $attempt_name "*) continue ;; esac' in command
+    assert 'kill -TERM "$1" 2>/dev/null || true' in command
+    assert 'kill -KILL "-$1" 2>/dev/null || true' in command
+    assert 'stop_stale_pid "$pid"' in command
+    assert "git worktree add -B" in command
+
+
 def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> None:
     node = PlanNode(
         id="node-1",

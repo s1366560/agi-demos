@@ -2938,11 +2938,13 @@ async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
             reason="worktree_path still contains an unresolved sandbox_code_root placeholder",
         )
 
+    protected_worktree_names = await _active_attempt_worktree_names(session, workspace_id)
     command = _worktree_setup_command(
         sandbox_code_root=code_context.sandbox_code_root,
         worktree_path=worktree_path,
         branch_name=branch_name,
         base_ref=base_ref,
+        protected_worktree_names=protected_worktree_names,
     )
     try:
         result = await _WorkspaceSandboxCommandRunner(
@@ -2977,17 +2979,38 @@ async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
     )
 
 
+async def _active_attempt_worktree_names(
+    session: AsyncSession, workspace_id: str
+) -> tuple[str, ...]:
+    rows = await session.execute(
+        select(WorkspaceTaskSessionAttemptModel.id)
+        .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+        .where(
+            WorkspaceTaskSessionAttemptModel.status.in_(
+                [
+                    WorkspaceTaskSessionAttemptStatus.PENDING.value,
+                    WorkspaceTaskSessionAttemptStatus.RUNNING.value,
+                    WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value,
+                ]
+            )
+        )
+    )
+    return tuple(sorted(str(row[0]) for row in rows.all() if row[0]))
+
+
 def _worktree_setup_command(
     *,
     sandbox_code_root: str,
     worktree_path: str,
     branch_name: str,
     base_ref: str,
+    protected_worktree_names: Iterable[str] = (),
 ) -> str:
     code_root = shlex.quote(sandbox_code_root)
     worktree = shlex.quote(worktree_path)
     branch = shlex.quote(branch_name)
     base = shlex.quote(base_ref)
+    protected = shlex.quote(" ".join(sorted({name for name in protected_worktree_names if name})))
     return "\n".join(
         [
             "set -e",
@@ -3001,6 +3024,39 @@ def _worktree_setup_command(
             "fi",
             "git config push.default current",
             f'mkdir -p "$(dirname {worktree})"',
+            f'worktree_root="$(dirname {worktree})"',
+            'worktree_root="$(cd "$worktree_root" && pwd -P)"',
+            f"protected_worktree_names={protected}",
+            'if [ -d "$worktree_root" ]; then',
+            "  stop_stale_pid() {",
+            '    kill -TERM "$1" 2>/dev/null || true',
+            '    kill -TERM "-$1" 2>/dev/null || true',
+            '    kill -KILL "$1" 2>/dev/null || true',
+            '    kill -KILL "-$1" 2>/dev/null || true',
+            "  }",
+            "  ps -eo pid= 2>/dev/null | while read -r pid; do",
+            '    [ -n "$pid" ] || continue',
+            '    [ "$pid" = "$$" ] && continue',
+            '    proc_args="$(ps -p "$pid" -o args= 2>/dev/null || true)"',
+            '    case "$proc_args" in',
+            '      *"npm run dev"*|*"pnpm run dev"*|*"yarn dev"*|*"bun run dev"*|*"tsx watch"*|*"nodemon"*|*"next dev"*|*"vite"*|*"webpack serve"*) ;;',
+            "      *) continue ;;",
+            "    esac",
+            '    proc_cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"',
+            '    for attempt_dir in "$worktree_root"/*; do',
+            '      [ -d "$attempt_dir" ] || continue',
+            '      attempt_name="$(basename "$attempt_dir")"',
+            '      case " $protected_worktree_names " in *" $attempt_name "*) continue ;; esac',
+            "      matched=0",
+            '      case "$proc_cwd" in "$attempt_dir"|"$attempt_dir"/*) matched=1 ;; esac',
+            '      case "$proc_args" in *"$attempt_dir"*) matched=1 ;; esac',
+            '      if [ "$matched" = 1 ]; then',
+            '        stop_stale_pid "$pid"',
+            "        break",
+            "      fi",
+            "    done",
+            "  done",
+            "fi",
             f"if [ -e {worktree}/.git ] || [ -f {worktree}/.git ]; then",
             f"  git -C {worktree} checkout {branch}",
             "else",
