@@ -242,6 +242,40 @@ def test_merge_execution_task_metadata_accepts_verification_integrity_patch() ->
 
 
 @pytest.mark.unit
+def test_merge_execution_task_metadata_accepts_full_verification_integrity_policy() -> None:
+    metadata = merge_validated_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "current_attempt_conversation_id": "conversation-old",
+        },
+        {
+            "current_attempt_id": "attempt-new",
+            "current_attempt_conversation_id": "conversation-new",
+            "workspace_verification_integrity": {
+                "source": "workspace_plan_node_metadata",
+                "iteration_phase": "test",
+                "allow_failed_tests": False,
+                "allow_verification_script_changes": True,
+                "allowed_verification_script_paths": ["test-data-persistence.js"],
+                "protected_script_changes": False,
+                "rule": "Protect verification scripts unless explicitly allowed.",
+                "test_contract_hints": ["Restore the user preferences form assertion."],
+            },
+        },
+    )
+
+    policy = metadata["workspace_verification_integrity"]
+    assert metadata["current_attempt_id"] == "attempt-new"
+    assert metadata["current_attempt_conversation_id"] == "conversation-new"
+    assert policy["allow_verification_script_changes"] is True
+    assert policy["allowed_verification_script_paths"] == ["test-data-persistence.js"]
+    assert policy["test_contract_hints"] == ["Restore the user preferences form assertion."]
+
+
+@pytest.mark.unit
 def test_root_metadata_accepts_workspace_type_and_profile_override() -> None:
     metadata = validate_autonomy_metadata(
         {

@@ -296,9 +296,12 @@ class RootGoalMetadataModel(ContractModel):
 class WorkspaceVerificationIntegrityModel(ContractModel):
     source: VerificationIntegritySource
     iteration_phase: VerificationIntegrityPhase
+    allow_failed_tests: bool = False
     allow_verification_script_changes: bool
+    allowed_verification_script_paths: list[str] = Field(default_factory=list)
     protected_script_changes: bool
     rule: str
+    test_contract_hints: list[str] = Field(default_factory=list)
 
 
 class ExecutionTaskMetadataModel(ContractModel):
