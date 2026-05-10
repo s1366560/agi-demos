@@ -1098,6 +1098,37 @@ async def _refresh_launch_cooldown(conversation_id: str | None) -> None:
         )
 
 
+async def _refresh_worker_agent_running_marker(
+    conversation_id: str | None,
+    attempt_id: str | None,
+) -> None:
+    """Keep Redis agent-running liveness present for long workspace tool calls."""
+
+    if not conversation_id or not attempt_id:
+        return
+    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+    try:
+        redis = await get_redis_client()
+        if await redis.exists(f"agent:finished:{conversation_id}"):
+            return
+        await redis.setex(
+            f"agent:running:{conversation_id}",
+            WORKER_LAUNCH_COOLDOWN_SECONDS,
+            attempt_id,
+        )
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.running_marker_refresh_failed",
+            extra={
+                "event": "workspace_worker_launch.running_marker_refresh_failed",
+                "conversation_id": conversation_id,
+                "attempt_id": attempt_id,
+            },
+            exc_info=True,
+        )
+
+
 def _decode_redis_text(value: object) -> str | None:
     if value is None:
         return None
@@ -1251,6 +1282,7 @@ async def _publish_worker_launch_heartbeat(
         )
         await publish_envelope_default(envelope)
         await _refresh_launch_cooldown(conversation_id)
+        await _refresh_worker_agent_running_marker(conversation_id, attempt_id)
     except Exception:
         logger.debug(
             "workspace_worker_launch.heartbeat_publish_failed",

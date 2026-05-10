@@ -164,6 +164,7 @@ class TestWorkerLaunchHeartbeat:
     ) -> None:
         publish = AsyncMock(return_value="1-0")
         redis = AsyncMock()
+        redis.exists.return_value = 0
         monkeypatch.setattr(
             "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
             publish,
@@ -200,6 +201,47 @@ class TestWorkerLaunchHeartbeat:
             "workspace:worker_launch:cooldown:conv-1",
             wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
         )
+        redis.exists.assert_awaited_once_with("agent:finished:conv-1")
+        redis.setex.assert_awaited_once_with(
+            "agent:running:conv-1",
+            wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
+            "attempt-1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_publish_worker_launch_heartbeat_does_not_resurrect_finished_agent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish = AsyncMock(return_value="1-0")
+        redis = AsyncMock()
+        redis.exists.return_value = 1
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
+            publish,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+            AsyncMock(return_value=redis),
+        )
+
+        await wl._publish_worker_launch_heartbeat(
+            workspace_id="ws-1",
+            task_id="task-1",
+            attempt_id="attempt-1",
+            root_goal_task_id="root-1",
+            conversation_id="conv-1",
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+        )
+
+        publish.assert_awaited_once()
+        redis.expire.assert_awaited_once_with(
+            "workspace:worker_launch:cooldown:conv-1",
+            wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
+        )
+        redis.exists.assert_awaited_once_with("agent:finished:conv-1")
+        redis.setex.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_publish_worker_launch_heartbeat_skips_without_attempt_id(
