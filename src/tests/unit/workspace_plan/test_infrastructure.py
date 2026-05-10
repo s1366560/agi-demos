@@ -340,6 +340,7 @@ class TestLLMGoalPlanner:
                 metadata={
                     **leaf.metadata,
                     "iteration_index": 4,
+                    "iteration_phase": "test",
                     "last_verification_attempt_id": "att-1",
                     "last_verification_judge_verdict": "needs_rework",
                     "last_verification_judge_next_action_kind": "create_repair_node",
@@ -369,9 +370,10 @@ class TestLLMGoalPlanner:
         assert len(repair_nodes) == 1
         repair = repair_nodes[0]
         assert repair.intent is TaskIntent.TODO
-        assert repair.metadata["allow_verification_script_changes"] is True
+        assert repair.metadata.get("allow_verification_script_changes") is not True
         assert repair.metadata["iteration_index"] == 5
-        assert repair.metadata["iteration_phase"] == "implement"
+        assert repair.metadata["iteration_phase"] == "test"
+        assert repair.metadata["repair_source_iteration_phase"] == "test"
         assert repair.metadata["repair_source"] == "verification_judge_create_repair_node"
         assert "active attempt worktree only" in repair.description
         assert "do not require or attempt edits, merges" in repair.description
@@ -3253,7 +3255,7 @@ class TestSupervisorTick:
         assert repair.intent is TaskIntent.IN_PROGRESS
         assert repair.execution is TaskExecution.DISPATCHED
         assert repair.current_attempt_id == "attempt-repair"
-        assert repair.metadata["allow_verification_script_changes"] is True
+        assert repair.metadata.get("allow_verification_script_changes") is not True
         assert not any(event[0] == "verification_retry_scheduled" for event in events)
 
     async def test_pipeline_gate_does_not_hide_non_pipeline_verification_failures(self) -> None:

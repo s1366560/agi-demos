@@ -387,16 +387,17 @@ def _ensure_repair_node_for_verification_failure(
     repair_id = PlanNodeId(f"node-{uuid.uuid4().hex[:12]}")
     description = _repair_description(node, trigger)
     sequence = _next_repair_sequence(plan)
+    repair_phase = _repair_iteration_phase(node)
     metadata = _planner_node_metadata(description, node_id=repair_id, sequence=sequence)
     metadata.update(
         {
             "iteration_index": _repair_iteration_index(plan, node),
-            "iteration_phase": "implement",
-            "scrum_artifact": _SCRUM_ARTIFACT_BY_PHASE["implement"],
-            "allow_verification_script_changes": True,
+            "iteration_phase": repair_phase,
+            "scrum_artifact": _SCRUM_ARTIFACT_BY_PHASE[repair_phase],
             "generated_from_verification_failure": True,
             "repair_for_node_id": node.id,
             "repair_source": "verification_judge_create_repair_node",
+            "repair_source_iteration_phase": repair_phase,
             "repair_trigger": trigger.kind,
             "source_verification_attempt_id": node.metadata.get("last_verification_attempt_id"),
             "source_verification_judge_verdict": node.metadata.get(
@@ -407,6 +408,8 @@ def _ensure_repair_node_for_verification_failure(
             ),
         }
     )
+    if node.metadata.get("allow_verification_script_changes") is True:
+        metadata["allow_verification_script_changes"] = True
     plan.add_node(
         PlanNode(
             id=repair_id.value,
@@ -450,6 +453,15 @@ def _repair_iteration_index(plan: Plan, node: PlanNode) -> int:
         if current_iteration is not None:
             return current_iteration
     return _node_iteration_index(node)
+
+
+def _repair_iteration_phase(node: PlanNode) -> str:
+    phase = dict(node.metadata or {}).get("iteration_phase")
+    if isinstance(phase, str):
+        normalized = phase.strip().lower()
+        if normalized in _SCRUM_ARTIFACT_BY_PHASE:
+            return normalized
+    return "implement"
 
 
 def _node_iteration_index(node: PlanNode) -> int:

@@ -634,6 +634,77 @@ class TestBuildBrief:
         assert "202/203" in policy["test_contract_hints"][0]
         assert "allow_verification_script_changes=true" in policy["rule"]
 
+    def test_legacy_repair_node_inherits_source_verification_integrity(self) -> None:
+        task = _make_task()
+        plan_node_metadata = wl._effective_repair_plan_node_metadata(
+            {
+                "iteration_phase": "implement",
+                "repair_for_node_id": "node-source",
+                "allow_verification_script_changes": True,
+            },
+            {"iteration_phase": "test"},
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert plan_node_metadata["iteration_phase"] == "test"
+        assert plan_node_metadata["allow_verification_script_changes"] is False
+        assert plan_node_metadata["legacy_repair_verification_integrity_repaired"] is True
+        assert policy["iteration_phase"] == "test"
+        assert policy["protected_script_changes"] is True
+        assert policy["allow_verification_script_changes"] is False
+
+    async def test_load_plan_node_metadata_follows_nested_repair_source_chain(self) -> None:
+        class _Result:
+            def __init__(self, value: dict) -> None:
+                self._value = value
+
+            def scalar_one_or_none(self) -> dict:
+                return self._value
+
+        class _Db:
+            def __init__(self) -> None:
+                self.values = [
+                    {
+                        "iteration_phase": "implement",
+                        "repair_for_node_id": "node-repair-2",
+                        "allow_verification_script_changes": True,
+                    },
+                    {
+                        "iteration_phase": "implement",
+                        "repair_for_node_id": "node-source",
+                        "allow_verification_script_changes": True,
+                    },
+                    {"iteration_phase": "test"},
+                ]
+                self.calls = 0
+
+            async def execute(self, _stmt: object) -> _Result:
+                value = self.values[self.calls]
+                self.calls += 1
+                return _Result(value)
+
+        task = _make_task(
+            metadata={
+                "workspace_plan_id": "plan-1",
+                "workspace_plan_node_id": "node-repair-1",
+            },
+        )
+
+        metadata = await wl._load_plan_node_metadata_for_task(_Db(), task)  # type: ignore[arg-type]
+
+        assert metadata["iteration_phase"] == "test"
+        assert metadata["allow_verification_script_changes"] is False
+        assert metadata["legacy_repair_verification_integrity_repaired"] is True
+        assert metadata["repair_source_iteration_phase"] == "test"
+
     def test_system_context_extracts_repair_brief_verification_script_allowlist(self) -> None:
         task = _make_task()
 
@@ -873,8 +944,9 @@ class TestBuildBrief:
         assert "bash writes" in system_context["workspace_root_override"]["rule"]
         assert "temp scripts" in system_context["workspace_root_override"]["rule"]
         assert "baseline checkout only" in system_context["workspace_root_override"]["rule"]
-        assert "do not inspect it for current attempt reports" in (
-            system_context["workspace_root_override"]["rule"]
+        assert (
+            "do not inspect it for current attempt reports"
+            in (system_context["workspace_root_override"]["rule"])
         )
         assert (
             "check additional_instructions for a worktree_path"

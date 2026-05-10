@@ -74,6 +74,7 @@ WORKER_STREAM_ORPHAN_GRACE_SECONDS = int(
 WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 4_000
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
+WORKER_REPAIR_SOURCE_METADATA_MAX_DEPTH = 12
 WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
     "preflight:read-progress",
     "preflight:git-status",
@@ -341,9 +342,7 @@ def _verification_script_change_allowlist(
     paths: list[str] = []
     for metadata in (task_meta, node_meta):
         paths.extend(
-            _iter_verification_script_scope_paths(
-                metadata.get("allowed_verification_script_paths")
-            )
+            _iter_verification_script_scope_paths(metadata.get("allowed_verification_script_paths"))
         )
         for repair_key in (
             "current_repair_turn",
@@ -369,9 +368,7 @@ def _workspace_verification_integrity_context(
     task_title: str | None = None,
     task_description: str | None = None,
 ) -> dict[str, Any] | None:
-    task_meta: Mapping[str, Any] = (
-        task_metadata if isinstance(task_metadata, Mapping) else {}
-    )
+    task_meta: Mapping[str, Any] = task_metadata if isinstance(task_metadata, Mapping) else {}
     node_meta: Mapping[str, Any] = (
         plan_node_metadata if isinstance(plan_node_metadata, Mapping) else {}
     )
@@ -432,9 +429,7 @@ def _render_visible_verification_integrity_gate(policy: Mapping[str, Any] | None
         )
     allowed_paths = policy.get("allowed_verification_script_paths")
     if isinstance(allowed_paths, list) and allowed_paths:
-        rendered_paths = ", ".join(
-            f"`{path}`" for path in cast(list[str], allowed_paths[:8])
-        )
+        rendered_paths = ", ".join(f"`{path}`" for path in cast(list[str], allowed_paths[:8]))
         return (
             "## Test/review integrity gate\n"
             f"This is a protected `{phase}` workspace node. The current repair brief "
@@ -825,7 +820,55 @@ async def _load_plan_node_metadata_for_task(
         stmt = stmt.where(PlanNodeModel.plan_id == plan_id)
     result = await db.execute(stmt)
     value = result.scalar_one_or_none()
-    return dict(value) if isinstance(value, Mapping) else {}
+    node_metadata = dict(value) if isinstance(value, Mapping) else {}
+    if not node_metadata:
+        return {}
+
+    source_metadata: dict[str, Any] = {}
+    source_node_id = _metadata_text(node_metadata.get("repair_for_node_id"))
+    seen_source_ids: set[str] = set()
+    for _ in range(WORKER_REPAIR_SOURCE_METADATA_MAX_DEPTH):
+        if not source_node_id or source_node_id in seen_source_ids:
+            break
+        seen_source_ids.add(source_node_id)
+        source_stmt = select(PlanNodeModel.metadata_json).where(PlanNodeModel.id == source_node_id)
+        if isinstance(plan_id, str) and plan_id:
+            source_stmt = source_stmt.where(PlanNodeModel.plan_id == plan_id)
+        source_result = await db.execute(source_stmt)
+        source_value = source_result.scalar_one_or_none()
+        candidate = dict(source_value) if isinstance(source_value, Mapping) else {}
+        if not candidate:
+            break
+        source_metadata = candidate
+        source_node_id = _metadata_text(candidate.get("repair_for_node_id"))
+    return _effective_repair_plan_node_metadata(node_metadata, source_metadata)
+
+
+def _effective_repair_plan_node_metadata(
+    node_metadata: Mapping[str, Any],
+    source_metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    metadata = dict(node_metadata)
+    source_phase = _metadata_text(source_metadata.get("iteration_phase"))
+    if source_phase is None:
+        return metadata
+
+    normalized_source_phase = source_phase.lower()
+    metadata.setdefault("repair_source_iteration_phase", normalized_source_phase)
+    if normalized_source_phase not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
+        return metadata
+
+    current_phase = _metadata_text(metadata.get("iteration_phase"))
+    if current_phase is None or current_phase.lower() not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
+        metadata["iteration_phase"] = normalized_source_phase
+    source_allows_script_changes = source_metadata.get("allow_verification_script_changes") is True
+    if (
+        metadata.get("allow_verification_script_changes") is True
+        and not source_allows_script_changes
+    ):
+        metadata["allow_verification_script_changes"] = False
+        metadata["legacy_repair_verification_integrity_repaired"] = True
+    return metadata
 
 
 def _normalize_preflight_checks(raw_checks: object) -> list[dict[str, Any]]:
