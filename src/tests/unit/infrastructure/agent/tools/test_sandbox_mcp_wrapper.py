@@ -1019,7 +1019,7 @@ class TestSandboxMCPToolExecute:
     ):
         """Attempt-scoped workers must not hide main-checkout writes in helper scripts."""
         adapter = ScriptInspectSandboxAdapter(
-            'from pathlib import Path\n'
+            "from pathlib import Path\n"
             'Path("/workspace/my-evo/docs/GOAL-COMPLETION.md").write_text("done")\n'
         )
         tool = create_sandbox_mcp_tool(
@@ -1067,7 +1067,7 @@ class TestSandboxMCPToolExecute:
     ):
         """Script preflight permits paths scoped to the active attempt worktree."""
         adapter = ScriptInspectSandboxAdapter(
-            'from pathlib import Path\n'
+            "from pathlib import Path\n"
             'Path("/workspace/.memstack/worktrees/att-1/docs/GOAL-COMPLETION.md").write_text("done")\n'
         )
         tool = create_sandbox_mcp_tool(
@@ -1795,6 +1795,47 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is True
         assert "targets verification script test-data-persistence.js" in result.output
         assert "allow_verification_script_changes" in result.output
+        assert adapter.call_count == 0
+
+    async def test_workspace_verification_phase_rejects_test_runner_config_edit(self):
+        """Test/review nodes should not be able to rewrite runner configuration."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="edit",
+            tool_schema={
+                "name": "edit",
+                "description": "Edit file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "old_string": {"type": "string"},
+                        "new_string": {"type": "string"},
+                    },
+                    "required": ["file_path", "old_string", "new_string"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "workspace_verification_integrity": {
+                        "iteration_phase": "review",
+                        "protected_script_changes": True,
+                    },
+                }
+            ),
+            file_path="/workspace/my-evo/backend/jest.config.js",
+            old_string="preset: 'ts-jest'",
+            new_string="preset: '/usr/lib/node_modules/ts-jest'",
+        )
+
+        assert result.is_error is True
+        assert "targets verification script backend/jest.config.js" in result.output
         assert adapter.call_count == 0
 
     async def test_workspace_verification_phase_allows_repair_brief_allowlisted_script_edit(self):

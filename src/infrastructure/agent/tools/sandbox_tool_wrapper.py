@@ -60,7 +60,9 @@ _WORKSPACE_VERIFICATION_SCRIPT_NAME_PATTERN = re.compile(
     r"(^|/)([^/]*(test|spec|e2e|integration|audit|benchmark)[^/]*"
     r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh)|"
     r"(tests?|spec|e2e|integration|audit|benchmarks?)/.+"
-    r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh))$",
+    r"\.(js|jsx|ts|tsx|mjs|cjs|py|sh)|"
+    r"(jest|vitest|playwright|cypress|karma|mocha|nyc|wdio)"
+    r"\.(config|conf)\.(js|jsx|ts|tsx|mjs|cjs))$",
     re.I,
 )
 _WORKSPACE_VERIFICATION_OUTPUT_PATH_PREFIXES = (
