@@ -470,7 +470,12 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                 recoverable_done_idle
                 and node.metadata.get("terminal_attempt_status") == "accepted"
                 and node.metadata.get("last_verification_attempt_id") == attempt.id
-                and _accepted_attempt_projection_complete(node.metadata)
+                and await _accepted_attempt_projection_complete_for_node(
+                    session=session,
+                    workspace_id=workspace_id,
+                    node=node,
+                    attempt=attempt,
+                )
             ):
                 continue
             summary = str(
@@ -769,6 +774,92 @@ def _accepted_attempt_projection_complete(metadata: Mapping[str, object]) -> boo
     return status in _WORKTREE_INTEGRATION_DONE_STATUSES
 
 
+async def _accepted_attempt_projection_complete_for_node(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    metadata = dict(node.metadata or {})
+    if not _accepted_attempt_projection_complete(metadata):
+        return False
+    if metadata.get("worktree_integration_status") != "blocked_dirty_main":
+        return True
+    return await _blocked_dirty_main_projection_still_current(
+        session=session,
+        workspace_id=workspace_id,
+        node=node,
+        attempt=attempt,
+        metadata=metadata,
+    )
+
+
+async def _blocked_dirty_main_projection_still_current(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttemptModel,
+    metadata: Mapping[str, object],
+) -> bool:
+    stored_signature = _metadata_string(metadata.get("worktree_integration_dirty_signature"))
+    task_id = node.workspace_task_id or attempt.workspace_task_id
+    task = await session.get(WorkspaceTaskModel, task_id) if task_id else None
+    if task is None or task.workspace_id != workspace_id:
+        return False
+    if stored_signature is None:
+        stored_signature = _metadata_string(
+            dict(task.metadata_json or {}).get("worktree_integration_dirty_signature")
+        )
+    if stored_signature is None:
+        return False
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    if workspace is None:
+        return False
+    code_context = await _load_workspace_code_context_for_task(
+        session=session,
+        workspace_id=workspace_id,
+        task=task,
+        workspace=workspace,
+    )
+    sandbox_code_root = getattr(code_context, "sandbox_code_root", None)
+    if not sandbox_code_root:
+        return False
+
+    command = _worktree_dirty_signature_command(sandbox_code_root=str(sandbox_code_root))
+    signature_status = await _run_worktree_dirty_signature_command(
+        project_id=workspace.project_id,
+        tenant_id=workspace.tenant_id,
+        command=command,
+    )
+    if signature_status is None:
+        return False
+    status, current_signature = signature_status
+    return bool(status == "dirty" and current_signature == stored_signature)
+
+
+async def _run_worktree_dirty_signature_command(
+    *,
+    project_id: str,
+    tenant_id: str,
+    command: str,
+) -> tuple[str, str] | None:
+    try:
+        result = await _WorkspaceSandboxCommandRunner(
+            project_id=project_id,
+            tenant_id=tenant_id,
+        ).run_command(command, timeout=30)
+    except Exception:
+        return None
+
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    status = _integration_output_field("status", stdout, stderr)
+    dirty_signature = _integration_output_field("dirty_signature", stdout, stderr)
+    return status, dirty_signature
+
+
 def _integration_commit_ref_from_metadata(metadata: Mapping[str, object]) -> str | None:
     raw = metadata.get("verified_commit_ref")
     commit_ref = _commit_ref_token(raw)
@@ -879,6 +970,7 @@ async def _integrate_accepted_attempt_worktree(  # noqa: PLR0911
     stderr = str(result.get("stderr") or "")
     output = _compact_command_output(stdout or stderr)
     command_status = _integration_status_from_output(stdout, stderr)
+    dirty_signature = _integration_output_field("dirty_signature", stdout, stderr) or None
     exit_code = int(result.get("exit_code") or 0)
     if exit_code == 0 and command_status in {"merged", "already_merged"}:
         status = command_status
@@ -897,6 +989,7 @@ async def _integrate_accepted_attempt_worktree(  # noqa: PLR0911
         summary=summary,
         commit_ref=commit_token,
         worktree_path=worktree_path,
+        dirty_signature=dirty_signature,
         now=now,
     )
 
@@ -965,6 +1058,7 @@ async def _record_worktree_integration_result(
     commit_ref: str | None,
     worktree_path: str | None,
     now: datetime,
+    dirty_signature: str | None = None,
 ) -> dict[str, object]:
     metadata = dict(task.metadata_json or {})
     event_type = {
@@ -980,6 +1074,7 @@ async def _record_worktree_integration_result(
         attempt_id=attempt.id,
         commit_ref=commit_ref,
         worktree_path=worktree_path,
+        dirty_signature=dirty_signature,
         now=now,
     )
     metadata.update(integration_metadata)
@@ -999,6 +1094,7 @@ async def _record_worktree_integration_result(
             "commit_ref": commit_ref,
             "worktree_path": worktree_path,
             "workspace_task_id": task.id,
+            "dirty_signature": dirty_signature,
         },
     )
     return integration_metadata
@@ -1012,6 +1108,7 @@ def _worktree_integration_metadata(
     commit_ref: str | None,
     worktree_path: str | None,
     now: datetime,
+    dirty_signature: str | None = None,
 ) -> dict[str, object]:
     metadata: dict[str, object] = {
         "worktree_integration_status": status,
@@ -1023,6 +1120,7 @@ def _worktree_integration_metadata(
         metadata["worktree_integration_commit_ref"] = commit_ref
     if worktree_path:
         metadata["worktree_integration_worktree_path"] = worktree_path
+    metadata["worktree_integration_dirty_signature"] = dirty_signature
     return metadata
 
 
@@ -1053,21 +1151,55 @@ def _worktree_integration_command(
             'if [ -n "$dirty" ]; then',
             '  echo "status=blocked_dirty_main"',
             '  echo "reason=sandbox_code_root has uncommitted changes"',
-            '  git status --short',
+            '  printf "dirty_signature=%s\\n" "$(printf "%s" "$dirty" | git hash-object --stdin)"',
+            "  git status --short",
             "  exit 66",
             "fi",
+            "set +e",
             f"git merge --no-edit {commit}",
+            'merge_status="$?"',
+            "set -e",
+            'if [ "$merge_status" -ne 0 ]; then',
+            '  echo "status=failed"',
+            '  echo "reason=merge_failed_aborted"',
+            "  git status --short",
+            "  git merge --abort >/dev/null 2>&1 || true",
+            '  exit "$merge_status"',
+            "fi",
             'echo "status=merged"',
             'printf "git_head=%s\\n" "$(git rev-parse --short HEAD)"',
         ]
     )
 
 
+def _worktree_dirty_signature_command(*, sandbox_code_root: str) -> str:
+    code_root = shlex.quote(sandbox_code_root)
+    return "\n".join(
+        [
+            "set -e",
+            f"cd {code_root}",
+            'dirty="$(git status --porcelain)"',
+            'if [ -n "$dirty" ]; then',
+            '  echo "status=dirty"',
+            '  printf "dirty_signature=%s\\n" "$(printf "%s" "$dirty" | git hash-object --stdin)"',
+            "  git status --short",
+            "  exit 0",
+            "fi",
+            'echo "status=clean"',
+        ]
+    )
+
+
 def _integration_status_from_output(*outputs: str) -> str:
+    return _integration_output_field("status", *outputs)
+
+
+def _integration_output_field(field: str, *outputs: str) -> str:
+    prefix = f"{field}="
     for output in outputs:
         for line in output.splitlines():
-            if line.startswith("status="):
-                return line.removeprefix("status=").strip()
+            if line.startswith(prefix):
+                return line.removeprefix(prefix).strip()
     return ""
 
 

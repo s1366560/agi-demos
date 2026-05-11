@@ -755,7 +755,11 @@ def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
     assert "git merge-base --is-ancestor abc1234 HEAD" in command
     assert 'dirty="$(git status --porcelain)"' in command
     assert 'echo "status=blocked_dirty_main"' in command
+    assert "dirty_signature=%s" in command
+    assert "git hash-object --stdin" in command
     assert "git merge --no-edit abc1234" in command
+    assert 'echo "reason=merge_failed_aborted"' in command
+    assert "git merge --abort" in command
 
 
 def test_commit_ref_token_accepts_hash_prefix_and_rejects_notes() -> None:
@@ -766,6 +770,13 @@ def test_commit_ref_token_accepts_hash_prefix_and_rejects_notes() -> None:
     assert _commit_ref_token("branch-name") is None
     assert _integration_status_from_output("status=blocked_dirty_main\n M file") == (
         "blocked_dirty_main"
+    )
+    assert (
+        outbox_handlers._integration_output_field(
+            "dirty_signature",
+            "status=blocked_dirty_main\ndirty_signature=abc123\n M file",
+        )
+        == "abc123"
     )
 
 
@@ -883,6 +894,111 @@ async def test_accepted_terminal_attempt_integrates_worktree_commit(
     assert event.payload_json["commit_ref"] == "abc1234"
     assert event.payload_json["worktree_path"] == (
         "/workspace/.memstack/worktrees/attempt-integrate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_blocked_dirty_main_projection_waits_until_dirty_signature_changes(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    task = WorkspaceTaskModel(
+        id="task-blocked-integration-1",
+        workspace_id="workspace-1",
+        title="Blocked accepted integration",
+        description="Accepted commit blocked by dirty main checkout.",
+        created_by="worker-user-1",
+        status="completed",
+        priority=0,
+        metadata_json={AUTONOMY_SCHEMA_VERSION_KEY: 1, ROOT_GOAL_TASK_ID: "root-task-1"},
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-blocked-integration-1",
+        workspace_task_id=task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-blocked-integration",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=["commit_ref:abc1234"],
+        candidate_verifications_json=["commit_ref:abc1234"],
+    )
+    db_session.add_all([task, attempt])
+    await db_session.flush()
+
+    commands: list[str] = []
+    runner_init_args: list[tuple[str, str]] = []
+    runner_result = {
+        "exit_code": 0,
+        "stdout": "status=dirty\ndirty_signature=sig-current\n M scratch.js\n",
+        "stderr": "",
+    }
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            runner_init_args.append((project_id, tenant_id))
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            assert timeout == 30
+            commands.append(command)
+            return runner_result
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    node = PlanNode(
+        id="node-blocked-integration",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Blocked accepted integration",
+        workspace_task_id=task.id,
+        current_attempt_id=attempt.id,
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": attempt.id,
+            "verified_commit_ref": "abc1234",
+            "worktree_integration_status": "blocked_dirty_main",
+            "worktree_integration_dirty_signature": "sig-current",
+        },
+    )
+
+    assert await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+    )
+    assert commands
+    assert runner_init_args == [("worker-project-1", "worker-tenant-1")]
+    assert "git status --porcelain" in commands[0]
+
+    changed_signature_node = replace(
+        node,
+        metadata={
+            **dict(node.metadata),
+            "worktree_integration_dirty_signature": "sig-old",
+        },
+    )
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=changed_signature_node,
+        attempt=attempt,
+    )
+
+    runner_result["stdout"] = "status=clean\n"
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
     )
 
 
@@ -1899,12 +2015,16 @@ async def test_supervisor_tick_reconciles_reported_attempt_before_verification(
     assert task is not None
     assert task.status == "done"
     events = (
-        await db_session.execute(
-            select(WorkspacePlanEventModel.event_type).where(
-                WorkspacePlanEventModel.plan_id == plan.id
+        (
+            await db_session.execute(
+                select(WorkspacePlanEventModel.event_type).where(
+                    WorkspacePlanEventModel.plan_id == plan.id
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert "auto_reported_attempt_reconciled" in events
     assert "verification_completed" in events
 
