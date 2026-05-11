@@ -76,13 +76,20 @@ class CompositionMixin:
         selected_agent: Agent | None,
         tenant_agent_config: TenantAgentConfig,
     ) -> str:
-        """Resolve the request-scoped base model before per-turn overrides."""
+        """Resolve the request-scoped base model before per-turn overrides.
+
+        When neither the selected agent nor the tenant config pins a specific
+        model, fall back to the pool sentinel ``"auto"`` so that
+        ``PooledLLMClient`` can spread traffic across every eligible provider
+        in the tenant pool instead of being collapsed to the single model
+        embedded in the resolved primary provider.
+        """
         if selected_agent is not None and selected_agent.model.value != "inherit":
             return selected_agent.model.value
         tenant_model = tenant_agent_config.llm_model.strip()
         if tenant_model and tenant_model.lower() != "default":
             return tenant_model
-        return self.model
+        return "auto"
 
     @classmethod
     def _filter_workspace_root_tools(

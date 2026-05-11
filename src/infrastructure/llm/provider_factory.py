@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
     from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
     from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
+    from src.infrastructure.llm.litellm.pooled_llm_client import PooledLLMClient
     from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
 
 from src.application.services.provider_resolution_service import (
@@ -114,6 +115,26 @@ class AIServiceFactory:
             provider_config, catalog=get_model_catalog_service()
         )
         return UnifiedLLMClient(litellm_client=litellm_client, temperature=temperature)
+
+    def create_pooled_llm_client(
+        self,
+        tenant_id: str | None = None,
+        temperature: float = 0.7,
+    ) -> PooledLLMClient:
+        """Create a tenant-bound :class:`PooledLLMClient`.
+
+        Unlike :meth:`create_unified_llm_client`, this client is **not**
+        tied to a single ``ProviderConfig``: every call fans out across
+        the tenant's full provider pool via the load balancer, and
+        supports the ``model="auto"`` sentinel for Agent-First routing.
+
+        Embeddings and rerankers still go through
+        :meth:`create_unified_llm_client` / :meth:`create_embedder`
+        because those operations are single-provider by design.
+        """
+        from src.infrastructure.llm.litellm.pooled_llm_client import PooledLLMClient
+
+        return PooledLLMClient(tenant_id=tenant_id, temperature=temperature)
 
     # ------------------------------------------------------------------
     # Embedder

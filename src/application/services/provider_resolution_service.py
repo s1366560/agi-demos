@@ -351,6 +351,33 @@ class ProviderResolutionService:
             return next(iter(matched_provider_keys))
         return None
 
+    async def list_pool_providers(
+        self,
+        tenant_id: str | None = None,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> list[ProviderConfig]:
+        """List every provider eligible for the tenant pool.
+
+        Unlike :meth:`resolve_provider` which returns a single best match,
+        this returns *all* active providers that pass the eligibility
+        checks (enabled, compatible operation type, pool_enabled=True).
+        Used by the load-balancer / auto-router to spread traffic.
+        """
+        active_providers = await self.repository.list_active()
+        eligible: list[ProviderConfig] = []
+        for candidate in active_providers:
+            if not self._is_provider_eligible(
+                candidate,
+                model_id=None,
+                operation_type=operation_type,
+                requested_provider=None,
+            ):
+                continue
+            if not getattr(candidate, "pool_enabled", True):
+                continue
+            eligible.append(candidate)
+        return eligible
+
     def invalidate_cache(self, tenant_id: str | None = None) -> None:
         """
         Invalidate cached provider resolution.

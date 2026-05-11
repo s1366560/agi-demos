@@ -131,15 +131,19 @@ async def create_native_graph_adapter(
 
 
 async def create_llm_client(tenant_id: str | None = None) -> LLMClient:
-    """Create a unified LLM client using AIServiceFactory.
+    """Create a pooled LLM client for the tenant.
 
-    Resolves provider configuration from the database.
+    Returns a :class:`PooledLLMClient` that fans out across every
+    ``pool_enabled`` provider configured for the tenant. Supports the
+    sentinel ``model="auto"`` for Agent-First auto-routing.
+
+    The previous single-provider behavior is preserved when callers
+    pass an explicit concrete model name on each ``generate`` call.
     """
     from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
     factory = get_ai_service_factory()
-    provider_config = await factory.resolve_provider(tenant_id)
-    return cast(LLMClient, factory.create_unified_llm_client(provider_config))
+    return cast(LLMClient, factory.create_pooled_llm_client(tenant_id))
 
 
 # Deprecated: Use create_llm_client instead

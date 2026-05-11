@@ -347,6 +347,110 @@ class StructuredLLMLogger:
             extra=extra,
         )
 
+    # ------------------------------------------------------------------
+    # Pool / broker observability (Phase 9.3)
+    # ------------------------------------------------------------------
+
+    def log_pool_pick(
+        self,
+        *,
+        tenant_id: str | None,
+        candidate_key: str,
+        model: str,
+        provider_type: str,
+        inflight: int,
+        latency_ewma_ms: float,
+        weight: float,
+        alternatives_count: int,
+    ) -> None:
+        """Log a successful pool pick decision.
+
+        Emitted by :class:`PooledLLMClient` after the balancer chooses a
+        candidate model. Structured ``extra.event = "pool_pick"`` so log
+        pipelines (Loki, Datadog) can aggregate selection distribution
+        per tenant / model.
+        """
+        self._logger.info(
+            "Pool pick: %s (inflight=%d, ewma=%.1fms, alts=%d)",
+            candidate_key,
+            inflight,
+            latency_ewma_ms,
+            alternatives_count,
+            extra={
+                "event": "pool_pick",
+                "tenant_id": tenant_id,
+                "candidate_key": candidate_key,
+                "llm_model": model,
+                "llm_provider": provider_type,
+                "pool_inflight": inflight,
+                "pool_latency_ewma_ms": round(latency_ewma_ms, 2),
+                "pool_weight": weight,
+                "pool_alternatives_count": alternatives_count,
+            },
+        )
+
+    def log_pool_failover(
+        self,
+        *,
+        tenant_id: str | None,
+        failed_candidate_key: str,
+        error_type: str,
+        attempt: int,
+        max_attempts: int,
+    ) -> None:
+        """Log a pool-level failover (one candidate failed, retry next)."""
+        self._logger.warning(
+            "Pool failover: %s failed (%s) attempt=%d/%d",
+            failed_candidate_key,
+            error_type,
+            attempt,
+            max_attempts,
+            extra={
+                "event": "pool_failover",
+                "tenant_id": tenant_id,
+                "failed_candidate_key": failed_candidate_key,
+                "error_type": error_type,
+                "pool_attempt": attempt,
+                "pool_max_attempts": max_attempts,
+            },
+        )
+
+    def log_auto_broker_verdict(
+        self,
+        *,
+        tenant_id: str | None,
+        tier: str,
+        require_vision: bool,
+        require_tools: bool,
+        category: str,
+        source: str,
+        rationale_length: int,
+    ) -> None:
+        """Log an :class:`AutoBroker` verdict.
+
+        The full ``rationale`` text is intentionally NOT logged (it may
+        contain user-quoted PII). Only its length is emitted so audits
+        can confirm a rationale was produced.
+        """
+        self._logger.info(
+            "AutoBroker verdict: tier=%s vision=%s tools=%s category=%s source=%s",
+            tier,
+            require_vision,
+            require_tools,
+            category,
+            source,
+            extra={
+                "event": "auto_broker_verdict",
+                "tenant_id": tenant_id,
+                "broker_tier": tier,
+                "broker_require_vision": require_vision,
+                "broker_require_tools": require_tools,
+                "broker_category": category,
+                "broker_source": source,
+                "broker_rationale_length": rationale_length,
+            },
+        )
+
     def cleanup_stale_calls(self, max_age_seconds: float = 300) -> int:
         """
         Clean up stale active calls.

@@ -360,6 +360,11 @@ export interface ProviderConfig {
   error_message?: string | undefined;
   // Resilience status (circuit breaker + rate limiter)
   resilience?: ResilienceStatus | undefined;
+  // Pool / load-balancing configuration
+  pool_enabled?: boolean | undefined;
+  pool_weight?: number | undefined;
+  model_tier?: 'small' | 'medium' | 'large' | null | undefined;
+  secondary_models?: string[] | undefined;
 }
 
 export interface ProviderCreate {
@@ -378,6 +383,10 @@ export interface ProviderCreate {
   is_default?: boolean | undefined;
   allowed_models?: string[] | undefined;
   blocked_models?: string[] | undefined;
+  pool_enabled?: boolean | undefined;
+  pool_weight?: number | undefined;
+  model_tier?: 'small' | 'medium' | 'large' | null | undefined;
+  secondary_models?: string[] | undefined;
 }
 
 export interface ProviderUpdate {
@@ -396,6 +405,10 @@ export interface ProviderUpdate {
   is_default?: boolean | undefined;
   allowed_models?: string[] | undefined;
   blocked_models?: string[] | undefined;
+  pool_enabled?: boolean | undefined;
+  pool_weight?: number | undefined;
+  model_tier?: 'small' | 'medium' | 'large' | null | undefined;
+  secondary_models?: string[] | undefined;
 }
 
 export interface ModelCatalogEntry {

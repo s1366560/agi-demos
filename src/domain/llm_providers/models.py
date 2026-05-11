@@ -413,6 +413,39 @@ class ProviderConfigBase(BaseModel):
         description="Blacklist of blocked model prefixes (takes precedence)",
     )
 
+    # Pool / load-balancer routing -----------------------------------------
+    pool_weight: float = Field(
+        1.0,
+        ge=0.0,
+        description=(
+            "Relative weight in the tenant model pool. Higher = more traffic "
+            "when the load balancer ties on inflight/latency."
+        ),
+    )
+    pool_enabled: bool = Field(
+        True,
+        description=(
+            "Whether this provider participates in the tenant LLM pool used "
+            "by load-balancing / auto-routing. is_active stays the master "
+            "on/off switch."
+        ),
+    )
+    model_tier: Literal["small", "medium", "large"] | None = Field(
+        None,
+        description=(
+            "Optional capability tier hint. The auto-broker uses it to map a "
+            "task verdict (complexity=small|medium|large) onto candidates."
+        ),
+    )
+    secondary_models: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional extra model names that share this provider's API key "
+            "and base_url, exposed to the pool alongside llm_model / "
+            "llm_small_model."
+        ),
+    )
+
     @field_validator("name")
     @classmethod
     def name_must_not_be_empty(cls, v: str) -> str:
@@ -470,6 +503,10 @@ class ProviderConfigUpdate(BaseModel):
     is_enabled: bool | None = None
     allowed_models: list[str] | None = None
     blocked_models: list[str] | None = None
+    pool_weight: float | None = Field(None, ge=0.0)
+    pool_enabled: bool | None = None
+    model_tier: Literal["small", "medium", "large"] | None = None
+    secondary_models: list[str] | None = None
 
     @field_validator("api_key")
     @classmethod

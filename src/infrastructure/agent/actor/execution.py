@@ -137,6 +137,11 @@ async def _resolve_chat_runtime_overrides(
         if isinstance(raw_model_override, str) and raw_model_override.strip():
             model_override = raw_model_override.strip()
 
+    # Normalize the "auto" sentinel so downstream pooled clients can
+    # dispatch case-insensitively regardless of UI / persisted casing.
+    if isinstance(model_override, str) and model_override.lower() == "auto":
+        model_override = "auto"
+
     return llm_overrides, model_override
 
 

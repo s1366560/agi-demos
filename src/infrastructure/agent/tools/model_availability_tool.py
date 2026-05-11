@@ -313,9 +313,24 @@ async def list_available_models_tool(
     )
     limited_names = filtered_names[:limit]
 
+    # Prepend the virtual "auto" entry when it matches the query so the
+    # LLM (and downstream selector UI) can discover Agent-First routing.
+    show_auto = not normalized_query or "auto" in normalized_query
+    auto_entry_meta = {
+        "name": "auto",
+        "provider": None,
+        "description": (
+            "Agent-First auto-router. Picks the best concrete model from "
+            "the tenant's pool per turn (tier, vision, tools)."
+        ),
+        "is_virtual": True,
+    }
+
     models_payload: list[Any]
     if include_metadata:
         models_payload = []
+        if show_auto:
+            models_payload.append(auto_entry_meta)
         for name in limited_names:
             meta = metadata_by_name.get(name)
             if meta is None:
@@ -323,7 +338,7 @@ async def list_available_models_tool(
                 continue
             models_payload.append(_build_model_metadata_payload(meta))
     else:
-        models_payload = limited_names
+        models_payload = (["auto"] if show_auto else []) + limited_names
 
     primary_provider = providers_payload[0] if providers_payload else None
     payload = {

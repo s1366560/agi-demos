@@ -110,6 +110,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         embedding_model = orm.embedding_model or (
             embedding_config.model if embedding_config else None
         )
+        secondary_models = list(orm.secondary_models) if orm.secondary_models else []
         return ProviderConfig(
             id=orm.id,
             name=orm.name,
@@ -128,6 +129,10 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             is_enabled=orm.is_enabled,
             allowed_models=(json.loads(orm.allowed_models) if orm.allowed_models else []),
             blocked_models=(json.loads(orm.blocked_models) if orm.blocked_models else []),
+            pool_weight=orm.pool_weight,
+            pool_enabled=bool(orm.pool_enabled),
+            model_tier=orm.model_tier,  # type: ignore[arg-type]
+            secondary_models=secondary_models,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
@@ -173,6 +178,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 "blocked_models": (
                     json.dumps(config.blocked_models) if config.blocked_models else None
                 ),
+                "pool_weight": config.pool_weight,
+                "pool_enabled": config.pool_enabled,
+                "model_tier": config.model_tier,
+                "secondary_models": list(config.secondary_models)
+                if config.secondary_models
+                else None,
             }
 
             # Use PostgreSQL ON CONFLICT DO NOTHING for atomic upsert
@@ -271,6 +282,23 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         if config.blocked_models is not None:
             orm.blocked_models = (
                 json.dumps(config.blocked_models) if config.blocked_models else None
+            )
+        self._apply_pool_field_updates(orm, config)
+
+    @staticmethod
+    def _apply_pool_field_updates(
+        orm: LLMProviderORM, config: ProviderConfigUpdate
+    ) -> None:
+        """Apply pool/routing field updates (pool_weight, pool_enabled, model_tier, secondary_models)."""
+        if config.pool_weight is not None:
+            orm.pool_weight = config.pool_weight
+        if config.pool_enabled is not None:
+            orm.pool_enabled = config.pool_enabled
+        if config.model_tier is not None:
+            orm.model_tier = config.model_tier
+        if config.secondary_models is not None:
+            orm.secondary_models = (
+                list(config.secondary_models) if config.secondary_models else None
             )
 
     def _apply_api_key_update(self, orm: LLMProviderORM, config: ProviderConfigUpdate) -> None:

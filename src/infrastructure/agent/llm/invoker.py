@@ -434,6 +434,23 @@ class LLMInvoker:
         if not is_failover_worthy(error):
             return
 
+        # Short-circuit: if the configured LLM client is already a
+        # PooledLLMClient, it has exhausted its internal cross-provider
+        # retries (up to ``_max_attempts``) before raising. Attempting
+        # another cross-provider failover here would be redundant — and
+        # would surface a different model than the one the caller has
+        # been logically bound to for this invocation.
+        from src.infrastructure.llm.litellm.pooled_llm_client import (
+            PooledLLMClient,
+        )
+
+        if isinstance(config.llm_client, PooledLLMClient):
+            logger.debug(
+                "[LLMInvoker] llm_client is PooledLLMClient — internal "
+                "retries already exhausted; skipping cross-provider failover",
+            )
+            return
+
         logger.info(
             "[LLMInvoker] Attempting failover for %s: %s",
             type(error).__name__,

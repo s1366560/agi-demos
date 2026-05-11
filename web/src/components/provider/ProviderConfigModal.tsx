@@ -174,6 +174,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     is_active: true,
     is_default: false,
     use_custom_base_url: false,
+    pool_enabled: true,
+    pool_weight: 1.0,
+    model_tier: '' as '' | 'small' | 'medium' | 'large',
+    secondary_models: [] as string[],
   });
 
   const selectedModelMeta: ModelCatalogEntry | null = useMemo(() => {
@@ -278,6 +282,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_active: provider.is_active,
         is_default: provider.is_default,
         use_custom_base_url: !!provider.base_url,
+        pool_enabled: provider.pool_enabled ?? true,
+        pool_weight: provider.pool_weight ?? 1.0,
+        model_tier: (provider.model_tier ?? '') as '' | 'small' | 'medium' | 'large',
+        secondary_models: provider.secondary_models ?? [],
       });
       setConfigJsonStr(JSON.stringify(provider.config || {}, null, 2));
 
@@ -316,6 +324,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_active: true,
         is_default: false,
         use_custom_base_url: false,
+        pool_enabled: true,
+        pool_weight: 1.0,
+        model_tier: '',
+        secondary_models: [],
       });
       setConfigJsonStr('{}');
 
@@ -500,6 +512,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           config: config,
           is_active: formData.is_active,
           is_default: formData.is_default,
+          pool_enabled: formData.pool_enabled,
+          pool_weight: formData.pool_weight,
+          model_tier: formData.model_tier ? formData.model_tier : null,
+          secondary_models: formData.secondary_models,
         };
         if (!showLlmFields) {
           delete updateData.llm_model;
@@ -530,6 +546,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           config: config,
           is_active: formData.is_active,
           is_default: formData.is_default,
+          pool_enabled: formData.pool_enabled,
+          pool_weight: formData.pool_weight,
+          ...(formData.model_tier ? { model_tier: formData.model_tier } : {}),
+          secondary_models: formData.secondary_models,
         };
         if (!showLlmFields) {
           delete createData.llm_model;
@@ -1782,6 +1802,106 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         placeholder="Select or enter custom model..."
                       />
                     )}
+                  </div>
+                )}
+
+                {/* Pool & Routing (load-balancing / auto-routing) */}
+                {showLlmFields && (
+                  <div className="mt-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                          Pool & Routing
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Controls whether this provider participates in the tenant LLM pool
+                          (load balancing + auto-routing). Turn off to silence a broken provider
+                          without disabling it entirely.
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer shrink-0 ml-4">
+                        <input
+                          type="checkbox"
+                          checked={formData.pool_enabled}
+                          onChange={(e) => {
+                            setFormData({ ...formData, pool_enabled: e.target.checked });
+                          }}
+                          className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
+                        />
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                          Pool enabled
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          Pool weight
+                          <span className="text-slate-400 font-normal ml-1">
+                            (≥ 0, default 1.0)
+                          </span>
+                        </label>
+                        <InputNumber
+                          value={formData.pool_weight}
+                          onChange={(v) => {
+                            setFormData({
+                              ...formData,
+                              pool_weight: typeof v === 'number' && v >= 0 ? v : 1.0,
+                            });
+                          }}
+                          min={0}
+                          step={0.1}
+                          disabled={!formData.pool_enabled}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          Model tier
+                          <span className="text-slate-400 font-normal ml-1">(optional)</span>
+                        </label>
+                        <Select
+                          value={formData.model_tier || undefined}
+                          onChange={(value) => {
+                            setFormData({
+                              ...formData,
+                              model_tier: (value ?? '') as '' | 'small' | 'medium' | 'large',
+                            });
+                          }}
+                          allowClear
+                          placeholder="auto"
+                          options={[
+                            { value: 'small', label: 'small' },
+                            { value: 'medium', label: 'medium' },
+                            { value: 'large', label: 'large' },
+                          ]}
+                          className="w-full h-[36px] custom-ant-select"
+                          disabled={!formData.pool_enabled}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                        Secondary models
+                        <span className="text-slate-400 font-normal ml-1">
+                          (extra model names sharing this API key)
+                        </span>
+                      </label>
+                      <Select
+                        mode="tags"
+                        value={formData.secondary_models}
+                        onChange={(values: string[]) => {
+                          setFormData({ ...formData, secondary_models: values });
+                        }}
+                        tokenSeparators={[',', ' ']}
+                        placeholder="Type a model name and press Enter"
+                        className="w-full custom-ant-select"
+                        disabled={!formData.pool_enabled}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

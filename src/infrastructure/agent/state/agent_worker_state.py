@@ -3235,34 +3235,32 @@ async def get_or_create_llm_client(
     provider_config: Any = None,
     tenant_id: str | None = None,
 ) -> Any:
-    """Get or create a cached LLM client using AIServiceFactory.
+    """Get or create a tenant-bound pooled LLM client.
 
-    Delegates to AIServiceFactory which handles caching and provider resolution.
+    Returns a :class:`PooledLLMClient` so every agent request flows
+    through the tenant LLM pool (load-balancing + auto-routing) instead
+    of a single hard-bound provider. Embeddings / rerankers still use
+    the single-provider client via ``AIServiceFactory.create_embedder``
+    / ``create_reranker``.
 
     Args:
-        provider_config: Legacy argument, ignored in favor of tenant_id resolution
-        tenant_id: Tenant ID for provider resolution
+        provider_config: Legacy argument, ignored. Kept for backward
+            compatibility with callers that still pass a resolved
+            ``ProviderConfig``.
+        tenant_id: Tenant ID for pool resolution. Falls back to
+            ``"default"`` if not provided.
 
     Returns:
-        Cached or newly created LLM client
+        ``PooledLLMClient`` instance bound to the resolved tenant.
     """
     from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
-    # If tenant_id not provided, we might have issues resolving the correct provider.
-    # But for backward compatibility with tests/legacy calls that pass provider_config,
-    # we might need to handle it. However, the goal is to enforce tenant isolation.
-    # Since we updated the main caller (ProjectReActAgent), we assume tenant_id is present.
-
     if not tenant_id:
-        # Fallback to "default" tenant if not provided
         logger.warning("get_or_create_llm_client called without tenant_id, using 'default'")
         tenant_id = "default"
 
     factory = get_ai_service_factory()
-    # Resolve provider config first
-    resolved_config = await factory.resolve_provider(tenant_id)
-    # Create client using resolved config
-    return factory.create_llm_client(resolved_config)
+    return factory.create_pooled_llm_client(tenant_id)
 
 
 def get_cached_skills() -> dict[str, list[Any]]:

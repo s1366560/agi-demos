@@ -62,6 +62,8 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
       [modelCatalog, modelOverride]
     );
 
+    const isAutoOverride = modelOverride?.toLowerCase() === 'auto';
+
     const visibleModels = useMemo(() => {
       let filtered = modelCatalog;
       if (activeProviderHints.size > 0 && modelCatalog.length > 0) {
@@ -84,13 +86,15 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
     }, [activeProviderHints, defaultModel, modelCatalog]);
 
     const catalogLoaded = modelCatalog.length > 0;
-    const isOverrideValid = Boolean(
-      modelOverride &&
-      (!catalogLoaded ||
-        (overrideModelMeta &&
-          (activeProviderHints.size === 0 ||
-            activeProviderHints.has((overrideModelMeta.provider || '').toLowerCase()))))
-    );
+    const isOverrideValid =
+      isAutoOverride ||
+      Boolean(
+        modelOverride &&
+          (!catalogLoaded ||
+            (overrideModelMeta &&
+              (activeProviderHints.size === 0 ||
+                activeProviderHints.has((overrideModelMeta.provider || '').toLowerCase()))))
+      );
     const activeModelOverride = isOverrideValid ? modelOverride : null;
     const effectiveModel = activeModelOverride || defaultModel;
 
@@ -122,6 +126,7 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
 
     useEffect(() => {
       if (loading || !conversationId || !modelOverride || !catalogLoaded) return;
+      if (isAutoOverride) return;
       if (!isOverrideValid) {
         useAgentV3Store.getState().setLlmModelOverride(conversationId, null);
         return;
@@ -129,7 +134,15 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
       if (overrideModelMeta && overrideModelMeta.name !== modelOverride) {
         useAgentV3Store.getState().setLlmModelOverride(conversationId, overrideModelMeta.name);
       }
-    }, [catalogLoaded, conversationId, isOverrideValid, loading, modelOverride, overrideModelMeta]);
+    }, [
+      catalogLoaded,
+      conversationId,
+      isAutoOverride,
+      isOverrideValid,
+      loading,
+      modelOverride,
+      overrideModelMeta,
+    ]);
 
     const handleSelect = useCallback(
       (value: string | undefined) => {
@@ -199,7 +212,14 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
           loading={loading}
           value={activeModelOverride || undefined}
           placeholder={defaultModel ? `Default: ${defaultModel}` : 'Select a model'}
-          options={visibleModels.map((name) => ({ value: name, label: name }))}
+          options={[
+            {
+              value: 'auto',
+              label: 'Auto (Router)',
+              title: 'Let the platform pick the best model per turn',
+            },
+            ...visibleModels.map((name) => ({ value: name, label: name })),
+          ]}
           onChange={(value) => {
             handleSelect(value);
           }}

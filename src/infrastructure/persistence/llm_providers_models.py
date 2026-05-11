@@ -14,6 +14,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float as sa_Float,
     ForeignKey,
     Index,
     Integer,
@@ -78,6 +79,18 @@ class LLMProvider(Base):
         Text, nullable=True, comment="JSON array of blocked model prefixes"
     )
 
+    # Pool / load-balancer routing
+    pool_weight: Mapped[float] = mapped_column(
+        sa_Float, default=1.0, server_default="1.0", nullable=False
+    )
+    pool_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    model_tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    secondary_models: Mapped[list[str] | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), nullable=False
@@ -106,6 +119,15 @@ class LLMProvider(Base):
         Index("idx_llm_providers_type", "provider_type"),
         Index("idx_llm_providers_active", "is_active", postgresql_where=is_active),
         Index("idx_llm_providers_default", "is_default", postgresql_where=is_default),
+        Index(
+            "idx_llm_providers_pool_enabled",
+            "pool_enabled",
+            postgresql_where=pool_enabled,
+        ),
+        CheckConstraint(
+            "model_tier IS NULL OR model_tier IN ('small', 'medium', 'large')",
+            name="llm_providers_valid_model_tier",
+        ),
     )
 
     @override

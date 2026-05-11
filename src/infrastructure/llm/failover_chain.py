@@ -36,8 +36,10 @@ import re
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
+
+from src.infrastructure.llm.load_balancer import ProviderHealthStore
 
 logger = logging.getLogger(__name__)
 
@@ -100,15 +102,15 @@ class FailoverConfig:
 
 @dataclass(kw_only=True)
 class ProviderHealth:
-    """Mutable health state for a single provider/model pair.
+    """Read-only view of a provider/model's health.
 
-    Attributes:
-        provider: Provider identifier (e.g. "openai").
-        model: Model identifier (e.g. "gpt-4o").
-        consecutive_failures: Number of consecutive failures since
-            last success.
-        last_failure_at: Timestamp of the most recent failure.
-        is_healthy: Whether the provider is considered healthy.
+    The authoritative state lives in :class:`ProviderHealthStore` (shared
+    with the load balancer). This dataclass exists as a backwards-compatible
+    surface for callers and tests: a :class:`FailoverChain` builds a fresh
+    ``ProviderHealth`` on demand from the underlying store record.
+
+    Fields remain mutable so legacy code that manually adjusts them in
+    tests still works — mutations do NOT propagate back to the store.
     """
 
     provider: str
@@ -227,6 +229,8 @@ class FailoverChain:
         self,
         fallback_sequence: list[tuple[str, str]],
         config: FailoverConfig | None = None,
+        *,
+        health_store: ProviderHealthStore | None = None,
     ) -> None:
         """Initialize the failover chain.
 
@@ -235,6 +239,11 @@ class FailoverChain:
                 The first entry is the primary; subsequent entries are
                 fallbacks tried in order.
             config: Optional configuration. Uses defaults if not provided.
+            health_store: Optional shared :class:`ProviderHealthStore`.
+                When omitted, a private store is created using
+                ``config.cooldown_seconds``. Provide an explicit store
+                only when the chain should share health state with the
+                load balancer or another chain.
 
         Raises:
             ValueError: If ``fallback_sequence`` is empty.
@@ -244,13 +253,9 @@ class FailoverChain:
 
         self._sequence = list(fallback_sequence)
         self._config = config or FailoverConfig()
-        self._health: dict[str, ProviderHealth] = {}
-
-        # Pre-populate health entries.
-        for provider, model in self._sequence:
-            key = self._health_key(provider, model)
-            if key not in self._health:
-                self._health[key] = ProviderHealth(provider=provider, model=model)
+        self._health_store = health_store or ProviderHealthStore(
+            cooldown_seconds=self._config.cooldown_seconds,
+        )
 
     @property
     def config(self) -> FailoverConfig:
@@ -406,7 +411,7 @@ class FailoverChain:
         )
 
     # ------------------------------------------------------------------
-    # Health tracking
+    # Health tracking (delegates to ProviderHealthStore)
     # ------------------------------------------------------------------
 
     def is_provider_healthy(self, provider: str, model: str | None = None) -> bool:
@@ -424,127 +429,82 @@ class FailoverChain:
             True if the provider is healthy or past cooldown.
         """
         if model is not None:
-            key = self._health_key(provider, model)
-            health = self._health.get(key)
-            if health is None:
-                return True
-            return self._check_health(health)
+            return self._health_store.is_healthy(self._health_key(provider, model))
 
-        # Check all models for this provider.
-        for _key, health in self._health.items():
-            if health.provider == provider:
-                if self._check_health(health):
-                    return True
-        # No entries means healthy (unknown provider).
-        has_entries = any(h.provider == provider for h in self._health.values())
-        return not has_entries
+        tracked_models = [m for p, m in self._sequence if p == provider]
+        if not tracked_models:
+            # Unknown provider — treat as healthy.
+            return True
+        return any(
+            self._health_store.is_healthy(self._health_key(provider, m))
+            for m in tracked_models
+        )
 
     def mark_provider_failed(self, provider: str, model: str | None = None) -> None:
-        """Record a failure for a provider/model pair.
-
-        Args:
-            provider: Provider identifier.
-            model: Model identifier. Defaults to first model in sequence
-                for this provider.
-        """
+        """Record a failure for a provider/model pair."""
         model = model or self._default_model(provider)
         key = self._health_key(provider, model)
-        health = self._health.get(key)
-        if health is None:
-            health = ProviderHealth(provider=provider, model=model)
-            self._health[key] = health
-
-        health.consecutive_failures += 1
-        health.last_failure_at = datetime.now(UTC)
-        health.is_healthy = False
-
+        self._health_store.record_failure(key)
+        rec = self._health_store.get(key)
         logger.debug(
             "Provider %s/%s marked failed (consecutive: %d)",
             provider,
             model,
-            health.consecutive_failures,
+            rec.consecutive_failures,
         )
 
     def mark_provider_recovered(self, provider: str, model: str | None = None) -> None:
-        """Record a success and reset failure state for a provider.
-
-        Args:
-            provider: Provider identifier.
-            model: Model identifier. Defaults to first model in sequence
-                for this provider.
-        """
+        """Record a success and reset failure state for a provider."""
         model = model or self._default_model(provider)
         key = self._health_key(provider, model)
-        health = self._health.get(key)
-        if health is None:
-            return
-
-        health.consecutive_failures = 0
-        health.last_failure_at = None
-        health.is_healthy = True
-
+        self._health_store.record_success(key)
         logger.debug("Provider %s/%s marked recovered", provider, model)
 
     def get_healthy_sequence(self) -> list[tuple[str, str]]:
-        """Return the fallback sequence filtered to healthy providers.
-
-        Providers still within their cooldown window are excluded. If
-        health tracking is disabled, the full sequence is returned.
-
-        Returns:
-            Ordered list of ``(provider, model)`` tuples for healthy
-            providers.
-        """
+        """Return the fallback sequence filtered to healthy providers."""
         if not self._config.track_provider_health:
             return list(self._sequence)
+        return [
+            (p, m)
+            for p, m in self._sequence
+            if self._health_store.is_healthy(self._health_key(p, m))
+        ]
 
-        healthy: list[tuple[str, str]] = []
-        for provider, model in self._sequence:
-            key = self._health_key(provider, model)
-            health = self._health.get(key)
-            if health is None or self._check_health(health):
-                healthy.append((provider, model))
+    def get_provider_health(
+        self, provider: str, model: str | None = None
+    ) -> ProviderHealth | None:
+        """Build a :class:`ProviderHealth` view from the store record.
 
-        return healthy
-
-    def get_provider_health(self, provider: str, model: str | None = None) -> ProviderHealth | None:
-        """Get the health record for a provider/model pair.
-
-        Args:
-            provider: Provider identifier.
-            model: Model identifier. Defaults to first model in sequence
-                for this provider.
-
-        Returns:
-            ProviderHealth or None if not tracked.
+        Returns a default-healthy view for any provider/model in the
+        configured sequence (matching the legacy pre-populated behaviour);
+        returns ``None`` for unknown provider/model pairs.
         """
         model = model or self._default_model(provider)
+        if (provider, model) not in self._sequence:
+            return None
         key = self._health_key(provider, model)
-        return self._health.get(key)
+        rec = self._health_store.get(key)
+        return ProviderHealth(
+            provider=provider,
+            model=model,
+            consecutive_failures=rec.consecutive_failures,
+            last_failure_at=rec.last_failure_at,
+            is_healthy=self._health_store.is_healthy(key),
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _check_health(self, health: ProviderHealth) -> bool:
-        """Determine if a provider is healthy, accounting for cooldown."""
-        if health.is_healthy:
-            return True
-
-        # Check if cooldown has elapsed.
-        if health.last_failure_at is not None:
-            elapsed = (datetime.now(UTC) - health.last_failure_at).total_seconds()
-            if elapsed >= self._config.cooldown_seconds:
-                # Cooldown expired -- mark as tentatively healthy.
-                health.is_healthy = True
-                return True
-
-        return False
-
     @staticmethod
     def _health_key(provider: str, model: str) -> str:
-        """Create a unique key for a provider/model pair."""
-        return f"{provider}:{model}"
+        """Create a unique key for a provider/model pair.
+
+        Prefixed with ``chain:`` so chain entries cannot collide with
+        pool candidate keys (``{provider_id}:{model_name}``) when the
+        same :class:`ProviderHealthStore` is shared.
+        """
+        return f"chain:{provider}:{model}"
 
     def _default_model(self, provider: str) -> str:
         """Find the first model for a provider in the sequence."""
