@@ -27,7 +27,7 @@ import hashlib
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from src.domain.llm_providers.llm_types import Message
@@ -203,6 +203,16 @@ class AutoBroker:
                 has_tools=has_tools,
                 reason=f"broker error: {type(exc).__name__}",
             )
+
+        # Clamp capability requirements to objective state. The LLM may
+        # over-eagerly demand vision/tools support even when the current
+        # turn has neither images nor a tool schema, which would empty
+        # the candidate set against pools whose models are not flagged
+        # vision-capable in the catalog.
+        if verdict.require_vision and not has_image:
+            verdict = replace(verdict, require_vision=False)
+        if verdict.require_tools and not has_tools:
+            verdict = replace(verdict, require_tools=False)
 
         self._cache[cache_key] = _CacheEntry(verdict=verdict, cached_at=time.monotonic())
         self._log_verdict(tenant_id, verdict)
