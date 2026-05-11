@@ -48,6 +48,10 @@ def is_workspace_conversation(payload: Mapping[str, Any] | None) -> bool:
     """Authoritative predicate: is this turn bound to a workspace?
 
     A conversation is workspace-bound iff one of:
+    - ``context_type == "workspace_worker_runtime"`` is set on the payload
+      (canonical marker emitted by every workspace dispatch path: the
+      mention router, the planner agent decomposer, iteration review, and
+      verification judge)
     - ``runtime_context.task_authority == "workspace"`` (worker dispatch path)
     - both ``runtime_context.workspace_id`` and
       ``runtime_context.workspace_session_role`` are present (leader or worker
@@ -63,6 +67,11 @@ def is_workspace_conversation(payload: Mapping[str, Any] | None) -> bool:
     """
     if not isinstance(payload, Mapping):
         return False
+    # Canonical marker — present on every workspace dispatch shape, including
+    # the planner/review/verification paths that nest workspace_id inside
+    # ``workspace_binding`` instead of placing it at the top level.
+    if payload.get("context_type") == "workspace_worker_runtime":
+        return True
     nested = payload.get("runtime_context")
     runtime_context = nested if isinstance(nested, Mapping) else payload
     if runtime_context.get("task_authority") == "workspace":

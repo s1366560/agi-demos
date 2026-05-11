@@ -73,6 +73,23 @@ class TestIsWorkspaceConversationPredicate:
     def test_accepts_raw_runtime_context_mapping(self) -> None:
         assert is_workspace_conversation({"task_authority": "workspace"}) is True
 
+    def test_workspace_worker_runtime_context_type_marks_conversation(self) -> None:
+        # Regression: planner_agent_decomposer / iteration_review /
+        # verification_judge emit payloads where ``workspace_id`` lives inside
+        # ``workspace_binding`` (not at the top level) and ``task_authority``
+        # is unset. The canonical ``context_type`` marker must still classify
+        # these turns as workspace, otherwise the tool filter will strip
+        # ``workspace_report_complete`` and friends.
+        payload = {
+            "context_type": "workspace_worker_runtime",
+            "workspace_session_role": "worker",
+            "workspace_binding": {
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+            },
+        }
+        assert is_workspace_conversation(payload) is True
+
 
 class TestNonWorkspaceConversationToolFilter:
     def test_strips_workspace_prefix_when_not_workspace(self) -> None:
