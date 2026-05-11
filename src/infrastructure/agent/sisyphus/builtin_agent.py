@@ -86,6 +86,11 @@ Verification rules:
   satisfied, list that guard id in satisfied_guard_failures. For example, list
   failed_test_evidence only when the current attempt includes a concrete contract, known-failure,
   or failed-test disposition for every failing/partial test that remains relevant.
+- A current-attempt terminal report with type blocked, failed, or needs_replan is semantic
+  evidence, not an automatic rejection. You may accept it only when fresh evidence proves the
+  named target is stale, nonexistent, or no longer applicable, all current acceptance evidence
+  passes, and no human action is needed. In that case set next_action_kind=none and list
+  terminal_worker_report_completed in satisfied_guard_failures.
 - For test or review nodes, do not accept changed test, E2E, audit, or benchmark scripts that
   weaken, replace, delete, or bypass the original acceptance assertion unless the plan explicitly
   allows verification script changes and the rationale is evidence-backed.

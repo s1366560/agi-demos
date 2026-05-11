@@ -298,6 +298,12 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                 "unconditional success counters or catch blocks that convert failures into passes",
                 "synthetic benchmarks or shallow scans reported as real browser, rendering, accessibility, security, or end-to-end proof",
             ],
+            "terminal_worker_reports": [
+                "A current-attempt terminal report with type blocked, failed, or needs_replan is semantic evidence, not an automatic verdict.",
+                "Use accepted with next_action_kind=none only when fresh current-attempt evidence proves the named target is stale, nonexistent, or no longer applicable, the current contract is satisfied, and relevant equivalent checks pass.",
+                "When accepting despite a terminal_worker_report_completed guard, list terminal_worker_report_completed in satisfied_guard_failures and cite concrete evidence in the rationale.",
+                "Use needs_rework when the terminal report shows incomplete work, missing evidence, unresolved failures, or a fix that remains possible inside the same node contract.",
+            ],
             "repository_guidance": [
                 "If task_metadata.code_context.agents_excerpt is present, use it as acceptance context.",
                 "Require a project_guidance:checked evidence ref when project guidance exists and the node edits software artifacts.",

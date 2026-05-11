@@ -713,6 +713,9 @@ class TestVerifier:
         assert "next_action_kind=retry_same_node" in prompt
         assert "workspace_submit_verification_judgment" in prompt
         assert "satisfied_guard_failures" in prompt
+        assert "not an automatic rejection" in prompt
+        assert "stale, nonexistent, or no longer applicable" in prompt
+        assert "terminal_worker_report_completed" in prompt
 
     def test_iteration_reviewer_prompt_preserves_attempt_worktree_contract(self) -> None:
         prompt = build_builtin_workspace_iteration_reviewer_agent(
@@ -779,6 +782,10 @@ class TestVerifier:
         assert "every branch records success" in rework_policy
         assert "synthetic benchmarks" in rework_policy
         assert "non-zero failed or failing test count" in rework_policy
+        report_policy = " ".join(payload["policy"]["terminal_worker_reports"])
+        assert "not an automatic verdict" in report_policy
+        assert "stale, nonexistent, or no longer applicable" in report_policy
+        assert "terminal_worker_report_completed" in report_policy
         isolation_policy = " ".join(payload["policy"]["attempt_worktree_isolation"])
         assert "sandbox.worktree_path is the active execution root" in isolation_policy
         assert "sandbox.active_execution_root is the only current acceptance root" in (
@@ -1518,6 +1525,84 @@ class TestVerifier:
         assert not rep.passed
         assert not rep.hard_fail
         assert "terminal_worker_report_completed" in rep.summary()
+
+    async def test_verification_judge_can_accept_current_blocked_stale_target_disposition(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale=(
+                    "Fresh current-attempt grep and test evidence prove the named test target is "
+                    "stale while equivalent persistence checks pass."
+                ),
+                satisfied_guard_failures=("terminal_worker_report_completed",),
+                next_action_kind=WorkspaceVerificationNextActionKind.NONE,
+                confidence=0.91,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            title="Fix User preferences form exists",
+            description="Investigate the reported failing selector test.",
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.REGEX,
+                    spec={
+                        "pattern": r"\S",
+                        "source": "stdout",
+                        "requires_terminal_worker_report": True,
+                    },
+                    required=True,
+                ),
+            ),
+        )
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                attempt_id="attempt-current",
+                stdout="target test is stale; current persistence checks pass",
+                artifacts={
+                    "last_worker_report_type": "blocked",
+                    LAST_WORKER_REPORT_ATTEMPT_ID: "attempt-current",
+                    "last_worker_report_summary": (
+                        "No test named User preferences form exists exists in the active "
+                        "attempt worktree; actual persistence checks pass."
+                    ),
+                    "candidate_artifacts": [
+                        "contract_disposition:stale_target:User preferences form exists",
+                        "grep_result:User preferences form exists:0 matches",
+                    ],
+                    "candidate_verifications": [
+                        "test_run:test-data-persistence.js User preferences page accessible passed",
+                        "test_run:test-data-persistence.js Local preference keys exist passed",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert len(judge.requests) == 1
+        assert any(
+            "worker report type 'blocked' is not a completion report" in item
+            for item in judge.requests[0].guard_failures
+        )
+        terminal_result = next(
+            result
+            for result in rep.results
+            if result.criterion.spec.get("name") == "terminal_worker_report_completed"
+        )
+        assert terminal_result.criterion.required is False
+        judge_result = next(
+            result
+            for result in rep.results
+            if result.criterion.spec.get("name") == "workspace_verification_judge"
+        )
+        assert judge_result.criterion.spec["satisfied_guard_failures"] == [
+            "terminal_worker_report_completed"
+        ]
 
     async def test_verification_judge_cannot_accept_failed_test_evidence(
         self,

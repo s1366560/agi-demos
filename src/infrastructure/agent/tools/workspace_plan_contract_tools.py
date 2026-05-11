@@ -219,7 +219,7 @@ async def workspace_submit_verification_judgment_tool(
     required_next_action: str,
     confidence: float,
     satisfied_guard_failures: list[str] | None = None,
-    next_action_kind: str = WorkspaceVerificationNextActionKind.RETRY_SAME_NODE.value,
+    next_action_kind: str = "",
     repair_brief: dict[str, Any] | None = None,
 ) -> ToolResult:
     error = _require_builtin_agent(
@@ -233,7 +233,8 @@ async def workspace_submit_verification_judgment_tool(
         )
     if verdict not in _VALID_VERIFICATION_VERDICTS:
         return _deny(f"invalid verification verdict: {verdict}")
-    if next_action_kind not in _VALID_VERIFICATION_NEXT_ACTION_KINDS:
+    resolved_next_action_kind = _verification_next_action_kind(next_action_kind, verdict)
+    if resolved_next_action_kind not in _VALID_VERIFICATION_NEXT_ACTION_KINDS:
         return _deny(f"invalid verification next_action_kind: {next_action_kind}")
     payload: dict[str, Any] = {
         "verdict": verdict,
@@ -241,7 +242,7 @@ async def workspace_submit_verification_judgment_tool(
         "failed_criteria": _string_list(failed_criteria, limit=12),
         "satisfied_guard_failures": _string_list(satisfied_guard_failures or [], limit=12),
         "required_next_action": str(required_next_action or "").strip(),
-        "next_action_kind": next_action_kind,
+        "next_action_kind": resolved_next_action_kind,
         "confidence": _confidence(confidence),
     }
     if isinstance(repair_brief, dict) and repair_brief:
@@ -250,6 +251,17 @@ async def workspace_submit_verification_judgment_tool(
         output=json.dumps({"captured": True, "verdict": verdict}, ensure_ascii=False),
         metadata={"verification_judgment": payload},
     )
+
+
+def _verification_next_action_kind(value: str, verdict: str) -> str:
+    normalized = str(value or "").strip()
+    if normalized:
+        return normalized
+    if verdict == WorkspaceVerificationJudgeVerdict.ACCEPTED.value:
+        return WorkspaceVerificationNextActionKind.NONE.value
+    if verdict == WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED.value:
+        return WorkspaceVerificationNextActionKind.HUMAN_REQUIRED.value
+    return WorkspaceVerificationNextActionKind.RETRY_SAME_NODE.value
 
 
 @tool_define(

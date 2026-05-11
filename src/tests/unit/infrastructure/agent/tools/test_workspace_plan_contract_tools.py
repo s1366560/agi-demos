@@ -73,6 +73,20 @@ async def test_verification_judgment_captures_structured_payload() -> None:
     }
 
 
+async def test_verification_judgment_defaults_accepted_next_action_to_none() -> None:
+    result = await plan_contract_tools.workspace_submit_verification_judgment_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_VERIFIER_ID),
+        verdict="accepted",
+        rationale="Fresh evidence satisfies the node.",
+        failed_criteria=[],
+        required_next_action="",
+        confidence=0.93,
+    )
+
+    assert result.is_error is False
+    assert result.metadata["verification_judgment"]["next_action_kind"] == "none"
+
+
 async def test_iteration_review_rejects_non_reviewer_agent() -> None:
     result = await plan_contract_tools.workspace_submit_iteration_review_tool.execute(
         _ctx(selected_agent_id=BUILTIN_WORKSPACE_VERIFIER_ID),

@@ -106,6 +106,7 @@ _VERIFICATION_OUTPUT_PATH_PREFIXES = (
     "screenshots/",
     "test-results/",
 )
+_TERMINAL_WORKER_REPORT_TYPES = frozenset({"completed", "failed", "blocked", "needs_replan"})
 
 
 # --- Sandbox shim -----------------------------------------------------
@@ -878,17 +879,18 @@ def _coerce_judge_result_for_required_context(
     if (
         result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED
         and _requires_terminal_worker_report(ctx)
-        and _artifact_text(ctx, "last_worker_report_type") != "completed"
+        and not _has_current_terminal_worker_report(ctx)
     ):
         return WorkspaceVerificationJudgeResult(
             verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
             rationale=(
-                "Completed worker report is required before this node can be accepted. "
+                "A current-attempt terminal worker report is required before this node can "
+                "be accepted. "
                 f"Judge rationale: {result.rationale}"
             ),
             failed_criteria=("terminal_worker_report_completed", *result.failed_criteria),
             satisfied_guard_failures=result.satisfied_guard_failures,
-            required_next_action="collect a completed worker report and rerun verification",
+            required_next_action="collect a current-attempt terminal worker report and rerun verification",
             repair_brief=result.repair_brief,
             confidence=max(result.confidence, 0.7),
         )
@@ -945,6 +947,17 @@ def _required_guard_failed(results: list[CriterionResult], name: str) -> bool:
         and result.criterion.spec.get("name") == name
         for result in results
     )
+
+
+def _has_current_terminal_worker_report(ctx: VerificationContext) -> bool:
+    report_type = _artifact_text(ctx, "last_worker_report_type")
+    if report_type not in _TERMINAL_WORKER_REPORT_TYPES:
+        return False
+    report_attempt_id = _artifact_text(ctx, "last_worker_report_attempt_id") or _artifact_text(
+        ctx,
+        "last_attempt_id",
+    )
+    return not (ctx.attempt_id and report_attempt_id and report_attempt_id != ctx.attempt_id)
 
 
 def _normalize_results_for_judge(
