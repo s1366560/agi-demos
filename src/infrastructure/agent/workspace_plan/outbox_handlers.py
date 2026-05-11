@@ -31,6 +31,7 @@ from src.application.services.workspace_task_session_attempt_service import (
     WorkspaceTaskSessionAttemptService,
 )
 from src.domain.model.agent.agent_definition import Agent
+from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
@@ -469,12 +470,13 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                 recoverable_done_idle
                 and node.metadata.get("terminal_attempt_status") == "accepted"
                 and node.metadata.get("last_verification_attempt_id") == attempt.id
+                and _accepted_attempt_projection_complete(node.metadata)
             ):
                 continue
             summary = str(
                 attempt.leader_feedback or attempt.candidate_summary or "accepted terminal attempt"
             )
-            await _project_accepted_terminal_attempt_to_task(
+            integration_metadata = await _project_accepted_terminal_attempt_to_task(
                 session=session,
                 workspace_id=workspace_id,
                 node=node,
@@ -497,6 +499,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                         "last_verification_attempt_id": attempt.id,
                         "last_verification_ran_at": now.isoformat().replace("+00:00", "Z"),
                         **_accepted_attempt_evidence_metadata(attempt),
+                        **integration_metadata,
                     },
                     updated_at=now,
                 )
@@ -515,7 +518,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                     or accepted_attempt.candidate_summary
                     or "accepted terminal attempt"
                 )
-                await _project_accepted_terminal_attempt_to_task(
+                integration_metadata = await _project_accepted_terminal_attempt_to_task(
                     session=session,
                     workspace_id=workspace_id,
                     node=node,
@@ -550,6 +553,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                                 "Z",
                             ),
                             **_accepted_attempt_evidence_metadata(accepted_attempt),
+                            **integration_metadata,
                         },
                         updated_at=now,
                     )
@@ -662,13 +666,13 @@ async def _project_accepted_terminal_attempt_to_task(
     attempt: WorkspaceTaskSessionAttemptModel,
     summary: str,
     now: datetime,
-) -> None:
+) -> dict[str, object]:
     task_id = node.workspace_task_id or attempt.workspace_task_id
     if not task_id:
-        return
+        return {}
     task = await session.get(WorkspaceTaskModel, task_id)
     if task is None or task.workspace_id != workspace_id:
-        return
+        return {}
     evidence_refs = _accepted_attempt_evidence_refs(attempt)
     commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:")
     git_diff_summary = _first_prefixed_ref(evidence_refs, "git_diff_summary:")
@@ -686,6 +690,15 @@ async def _project_accepted_terminal_attempt_to_task(
         commit_ref=commit_ref,
         git_diff_summary=git_diff_summary,
         test_commands=test_commands,
+        now=now,
+    )
+    return await _integrate_accepted_attempt_worktree(
+        session=session,
+        workspace_id=workspace_id,
+        node=node,
+        task=task,
+        attempt=attempt,
+        commit_ref=commit_ref,
         now=now,
     )
 
@@ -716,6 +729,9 @@ def _first_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
     for ref in refs:
         if ref.startswith(prefix):
             return ref.removeprefix(prefix)
+        artifact_prefix = f"artifact:{prefix}"
+        if ref.startswith(artifact_prefix):
+            return ref.removeprefix(artifact_prefix)
     return None
 
 
@@ -738,6 +754,334 @@ def _accepted_attempt_evidence_metadata(
     if candidate_verifications:
         metadata["candidate_verifications"] = candidate_verifications
     return metadata
+
+
+_WORKTREE_INTEGRATION_DONE_STATUSES = frozenset(
+    {"merged", "already_merged", "skipped", "blocked_dirty_main", "failed"}
+)
+
+
+def _accepted_attempt_projection_complete(metadata: Mapping[str, object]) -> bool:
+    commit_ref = _integration_commit_ref_from_metadata(metadata)
+    if not commit_ref:
+        return True
+    status = str(metadata.get("worktree_integration_status") or "")
+    return status in _WORKTREE_INTEGRATION_DONE_STATUSES
+
+
+def _integration_commit_ref_from_metadata(metadata: Mapping[str, object]) -> str | None:
+    raw = metadata.get("verified_commit_ref")
+    commit_ref = _commit_ref_token(raw)
+    if commit_ref:
+        return commit_ref
+    feature = metadata.get("feature_checkpoint")
+    if isinstance(feature, Mapping):
+        return _commit_ref_token(feature.get("commit_ref"))
+    return None
+
+
+async def _integrate_accepted_attempt_worktree(  # noqa: PLR0911
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    node: PlanNode,
+    task: WorkspaceTaskModel,
+    attempt: WorkspaceTaskSessionAttemptModel,
+    commit_ref: str | None,
+    now: datetime,
+) -> dict[str, object]:
+    commit_token = _commit_ref_token(commit_ref)
+    if not commit_token:
+        return {}
+
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    if workspace is None:
+        return _worktree_integration_metadata(
+            status="skipped",
+            summary="workspace not found",
+            attempt_id=attempt.id,
+            commit_ref=commit_token,
+            worktree_path=None,
+            now=now,
+        )
+
+    code_context = await _load_workspace_code_context_for_task(
+        session=session,
+        workspace_id=workspace_id,
+        task=task,
+        workspace=workspace,
+    )
+    sandbox_code_root = getattr(code_context, "sandbox_code_root", None)
+    if not sandbox_code_root:
+        return _worktree_integration_metadata(
+            status="skipped",
+            summary="sandbox_code_root is not available for accepted worktree integration",
+            attempt_id=attempt.id,
+            commit_ref=commit_token,
+            worktree_path=None,
+            now=now,
+        )
+
+    worktree_path = _accepted_attempt_worktree_path(
+        node=node,
+        task=task,
+        sandbox_code_root=str(sandbox_code_root),
+        attempt_id=attempt.id,
+    )
+    if not worktree_path:
+        return _worktree_integration_metadata(
+            status="skipped",
+            summary="accepted attempt has no worktree_path",
+            attempt_id=attempt.id,
+            commit_ref=commit_token,
+            worktree_path=None,
+            now=now,
+        )
+    if _normalize_posix_path(worktree_path) == _normalize_posix_path(str(sandbox_code_root)):
+        return await _record_worktree_integration_result(
+            session=session,
+            workspace_id=workspace_id,
+            node=node,
+            task=task,
+            attempt=attempt,
+            status="already_merged",
+            summary="accepted attempt already ran in sandbox_code_root",
+            commit_ref=commit_token,
+            worktree_path=worktree_path,
+            now=now,
+        )
+
+    command = _worktree_integration_command(
+        sandbox_code_root=str(sandbox_code_root),
+        worktree_path=worktree_path,
+        commit_ref=commit_token,
+    )
+    try:
+        result = await _WorkspaceSandboxCommandRunner(
+            project_id=workspace.project_id,
+            tenant_id=workspace.tenant_id,
+        ).run_command(command, timeout=120)
+    except Exception as exc:
+        return await _record_worktree_integration_result(
+            session=session,
+            workspace_id=workspace_id,
+            node=node,
+            task=task,
+            attempt=attempt,
+            status="failed",
+            summary=f"accepted worktree integration raised: {exc}",
+            commit_ref=commit_token,
+            worktree_path=worktree_path,
+            now=now,
+        )
+
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    output = _compact_command_output(stdout or stderr)
+    command_status = _integration_status_from_output(stdout, stderr)
+    exit_code = int(result.get("exit_code") or 0)
+    if exit_code == 0 and command_status in {"merged", "already_merged"}:
+        status = command_status
+    elif command_status == "blocked_dirty_main":
+        status = "blocked_dirty_main"
+    else:
+        status = "failed"
+    summary = output or f"accepted worktree integration {status}"
+    return await _record_worktree_integration_result(
+        session=session,
+        workspace_id=workspace_id,
+        node=node,
+        task=task,
+        attempt=attempt,
+        status=status,
+        summary=summary,
+        commit_ref=commit_token,
+        worktree_path=worktree_path,
+        now=now,
+    )
+
+
+async def _load_workspace_code_context_for_task(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    task: WorkspaceTaskModel,
+    workspace: Workspace,
+) -> object:
+    root_metadata: Mapping[str, Any] = {}
+    task_metadata = dict(task.metadata_json or {})
+    root_task_id = _mapping_string(task_metadata, ROOT_GOAL_TASK_ID)
+    if root_task_id:
+        root_task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
+        if root_task is not None and root_task.workspace_id == workspace_id:
+            root_metadata = dict(root_task.metadata or {})
+
+    from src.infrastructure.agent.workspace.code_context import (
+        load_workspace_code_context,
+    )
+
+    workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
+    return load_workspace_code_context(
+        project_id=str(workspace.project_id),
+        root_metadata=root_metadata,
+        workspace_metadata=workspace_metadata,
+    )
+
+
+def _accepted_attempt_worktree_path(
+    *,
+    node: PlanNode,
+    task: WorkspaceTaskModel,
+    sandbox_code_root: str,
+    attempt_id: str,
+) -> str | None:
+    feature = node.feature_checkpoint
+    raw_path = feature.worktree_path if feature is not None else None
+    if not raw_path:
+        task_metadata = dict(task.metadata_json or {})
+        raw_feature = task_metadata.get("feature_checkpoint")
+        if isinstance(raw_feature, Mapping):
+            raw_path = _mapping_string(raw_feature, "worktree_path")
+    if not raw_path:
+        raw_path = _default_attempt_worktree_path(
+            sandbox_code_root=sandbox_code_root,
+            attempt_id=attempt_id,
+        )
+    path = raw_path.replace("${sandbox_code_root}", sandbox_code_root)
+    if "${sandbox_code_root}" in path:
+        return None
+    return posixpath.normpath(path)
+
+
+async def _record_worktree_integration_result(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    node: PlanNode,
+    task: WorkspaceTaskModel,
+    attempt: WorkspaceTaskSessionAttemptModel,
+    status: str,
+    summary: str,
+    commit_ref: str | None,
+    worktree_path: str | None,
+    now: datetime,
+) -> dict[str, object]:
+    metadata = dict(task.metadata_json or {})
+    event_type = {
+        "merged": "accepted_worktree_integrated",
+        "already_merged": "accepted_worktree_integration_skipped",
+        "skipped": "accepted_worktree_integration_skipped",
+        "blocked_dirty_main": "accepted_worktree_integration_blocked",
+        "failed": "accepted_worktree_integration_failed",
+    }.get(status, "accepted_worktree_integration_failed")
+    integration_metadata = _worktree_integration_metadata(
+        status=status,
+        summary=summary,
+        attempt_id=attempt.id,
+        commit_ref=commit_ref,
+        worktree_path=worktree_path,
+        now=now,
+    )
+    metadata.update(integration_metadata)
+    task.metadata_json = metadata
+    task.updated_at = now
+    await SqlWorkspacePlanEventRepository(session).append(
+        plan_id=node.plan_id,
+        workspace_id=workspace_id,
+        node_id=node.id,
+        attempt_id=attempt.id,
+        event_type=event_type,
+        source="workspace_plan.accepted_worktree_integration",
+        actor_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+        payload={
+            "status": status,
+            "summary": summary,
+            "commit_ref": commit_ref,
+            "worktree_path": worktree_path,
+            "workspace_task_id": task.id,
+        },
+    )
+    return integration_metadata
+
+
+def _worktree_integration_metadata(
+    *,
+    status: str,
+    summary: str,
+    attempt_id: str,
+    commit_ref: str | None,
+    worktree_path: str | None,
+    now: datetime,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "worktree_integration_status": status,
+        "worktree_integration_summary": summary,
+        "worktree_integration_attempt_id": attempt_id,
+        "worktree_integration_ran_at": now.isoformat().replace("+00:00", "Z"),
+    }
+    if commit_ref:
+        metadata["worktree_integration_commit_ref"] = commit_ref
+    if worktree_path:
+        metadata["worktree_integration_worktree_path"] = worktree_path
+    return metadata
+
+
+def _worktree_integration_command(
+    *,
+    sandbox_code_root: str,
+    worktree_path: str,
+    commit_ref: str,
+) -> str:
+    code_root = shlex.quote(sandbox_code_root)
+    worktree = shlex.quote(worktree_path)
+    commit = shlex.quote(commit_ref)
+    return "\n".join(
+        [
+            "set -e",
+            f"cd {code_root}",
+            f"if ! git -C {worktree} cat-file -e {commit}^{{commit}}; then",
+            '  echo "status=failed"',
+            '  echo "reason=commit_ref not found in attempt worktree"',
+            "  exit 65",
+            "fi",
+            f"if git merge-base --is-ancestor {commit} HEAD; then",
+            '  echo "status=already_merged"',
+            '  printf "git_head=%s\\n" "$(git rev-parse --short HEAD)"',
+            "  exit 0",
+            "fi",
+            'dirty="$(git status --porcelain)"',
+            'if [ -n "$dirty" ]; then',
+            '  echo "status=blocked_dirty_main"',
+            '  echo "reason=sandbox_code_root has uncommitted changes"',
+            '  git status --short',
+            "  exit 66",
+            "fi",
+            f"git merge --no-edit {commit}",
+            'echo "status=merged"',
+            'printf "git_head=%s\\n" "$(git rev-parse --short HEAD)"',
+        ]
+    )
+
+
+def _integration_status_from_output(*outputs: str) -> str:
+    for output in outputs:
+        for line in output.splitlines():
+            if line.startswith("status="):
+                return line.removeprefix("status=").strip()
+    return ""
+
+
+def _commit_ref_token(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    token = value.strip().split(maxsplit=1)[0] if value.strip() else ""
+    if re.fullmatch(r"[0-9A-Fa-f]{7,40}", token):
+        return token
+    return None
+
+
+def _normalize_posix_path(value: str) -> str:
+    return posixpath.normpath(value.rstrip("/") or "/")
 
 
 def _attempt_status_value(

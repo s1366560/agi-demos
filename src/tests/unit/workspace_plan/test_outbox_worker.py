@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -76,12 +77,16 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
     _apply_attempt_worktree_checkpoint,
+    _commit_ref_token,
     _extract_task_evidence,
+    _first_prefixed_ref,
+    _integration_status_from_output,
     _is_structural_sandbox_command,
     _node_allowed_sandbox_commands,
     _persisted_attempt_leader_agent_id,
     _prepare_attempt_worktree_if_available,
     _WorkspaceSandboxCommandRunner,
+    _worktree_integration_command,
     _worktree_setup_command,
     make_handoff_resume_handler,
     make_supervisor_tick_handler,
@@ -738,6 +743,147 @@ def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
     assert 'kill -KILL "-$1" 2>/dev/null || true' in command
     assert 'stop_stale_pid "$pid"' in command
     assert "git worktree add -B" in command
+
+
+def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
+    command = _worktree_integration_command(
+        sandbox_code_root="/workspace/my-evo",
+        worktree_path="/workspace/my-evo/../.memstack/worktrees/attempt-1",
+        commit_ref="abc1234",
+    )
+
+    assert "git merge-base --is-ancestor abc1234 HEAD" in command
+    assert 'dirty="$(git status --porcelain)"' in command
+    assert 'echo "status=blocked_dirty_main"' in command
+    assert "git merge --no-edit abc1234" in command
+
+
+def test_commit_ref_token_accepts_hash_prefix_and_rejects_notes() -> None:
+    assert _commit_ref_token("c459cc73 (second evidence commit)") == "c459cc73"
+    assert _commit_ref_token("2055a373e2dfecf90f03c687fcecffa8be330746") == (
+        "2055a373e2dfecf90f03c687fcecffa8be330746"
+    )
+    assert _commit_ref_token("branch-name") is None
+    assert _integration_status_from_output("status=blocked_dirty_main\n M file") == (
+        "blocked_dirty_main"
+    )
+
+
+def test_first_prefixed_ref_accepts_artifact_wrapped_commit_ref() -> None:
+    refs = [
+        "artifact:commit_ref:edd6b848",
+        "artifact:changed_file:docs/INDEX.md",
+        "git_diff_summary:1 file changed",
+    ]
+
+    assert _first_prefixed_ref(refs, "commit_ref:") == "edd6b848"
+    assert _first_prefixed_ref(refs, "git_diff_summary:") == "1 file changed"
+
+
+@pytest.mark.asyncio
+async def test_accepted_terminal_attempt_integrates_worktree_commit(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    task = WorkspaceTaskModel(
+        id="task-integrate-1",
+        workspace_id="workspace-1",
+        title="Integrate accepted commit",
+        description="Project accepted worktree commit to the main checkout.",
+        created_by="worker-user-1",
+        status="in_progress",
+        priority=0,
+        metadata_json={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+            "feature_checkpoint": {
+                "feature_id": "feature-integrate",
+                "worktree_path": "${sandbox_code_root}/../.memstack/worktrees/attempt-integrate",
+                "branch_name": "workspace/node-integrate-attempt",
+            },
+        },
+    )
+    task_id = task.id
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-integrate",
+        workspace_task_id=task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-integrate",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=["commit_ref:abc1234", "changed_file:src/example.py"],
+        candidate_verifications_json=["commit_ref:abc1234", "test_run:pytest"],
+    )
+    db_session.add_all([task, attempt])
+    await db_session.flush()
+
+    commands: list[str] = []
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            assert timeout == 120
+            commands.append(command)
+            return {"exit_code": 0, "stdout": "status=merged\ngit_head=def5678\n", "stderr": ""}
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    node = PlanNode(
+        id="node-integrate",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Integrate accepted commit",
+        workspace_task_id=task.id,
+        current_attempt_id=attempt.id,
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-integrate",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-integrate",
+            branch_name="workspace/node-integrate-attempt",
+        ),
+    )
+
+    result = await outbox_handlers._project_accepted_terminal_attempt_to_task(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+        summary="accepted",
+        now=datetime.now(UTC),
+    )
+
+    assert result["worktree_integration_status"] == "merged"
+    assert result["worktree_integration_commit_ref"] == "abc1234"
+    assert commands
+    assert "cd /workspace/my-evo" in commands[0]
+    assert "git merge --no-edit abc1234" in commands[0]
+    db_session.expire_all()
+    projected_task = await db_session.get(WorkspaceTaskModel, task_id)
+    assert projected_task is not None
+    assert projected_task.metadata_json["worktree_integration_status"] == "merged"
+    assert projected_task.metadata_json["feature_checkpoint"]["commit_ref"] == "abc1234"
+    event = (
+        await db_session.execute(
+            select(WorkspacePlanEventModel).where(
+                WorkspacePlanEventModel.event_type == "accepted_worktree_integrated"
+            )
+        )
+    ).scalar_one()
+    assert event.payload_json["commit_ref"] == "abc1234"
+    assert event.payload_json["worktree_path"] == (
+        "/workspace/.memstack/worktrees/attempt-integrate"
+    )
 
 
 @pytest.mark.asyncio
