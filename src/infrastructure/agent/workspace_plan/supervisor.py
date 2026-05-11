@@ -253,6 +253,20 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "verification_completed",
                     _verification_payload(report),
                 )
+                feedback_items = _verification_feedback_items(report)
+                if feedback_items:
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        node,
+                        "verification_feedback_routed",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "feedback_items": feedback_items,
+                            "feedback_counts": _verification_feedback_counts(feedback_items),
+                            "summary": report.summary(),
+                        },
+                    )
                 verifies_ran += 1
                 if report.passed:
                     if _should_request_pipeline_after_verification(node, ctx.artifacts):
@@ -294,6 +308,33 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                                 "summary": report.summary(),
                             },
                         )
+                    nodes_done += 1
+                elif _verification_feedback_obsoletes_node(report):
+                    obsolete_node = _node_with_verification_feedback_disposition(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                        disposition="obsolete_node",
+                    )
+                    plan.replace_node(
+                        _force_intent(
+                            _force_execution(obsolete_node, TaskExecution.IDLE),
+                            TaskIntent.DONE,
+                            summary=report.summary(),
+                        )
+                    )
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        obsolete_node,
+                        "verification_feedback_disposition",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "disposition": "obsolete_node",
+                            "feedback_items": feedback_items,
+                            "summary": report.summary(),
+                        },
+                    )
                     nodes_done += 1
                 elif _should_request_pipeline_from_report(node, report):
                     pipeline_node = _node_with_pipeline_request(node, report)
@@ -1427,6 +1468,10 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_judge_repair_brief",
         "last_verification_judge_required_next_action",
         "last_verification_judge_verdict",
+        "last_verification_feedback_items",
+        "verification_feedback_disposition",
+        "obsolete_by_verifier_feedback",
+        "obsolete_feedback_items",
         "current_repair_turn",
         "verification_evidence_refs",
         "verified_commit_ref",
@@ -1671,6 +1716,7 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
                 "judge_verdict": result.criterion.spec.get("judge_verdict"),
                 "next_action_kind": result.criterion.spec.get("next_action_kind"),
                 "required_next_action": result.criterion.spec.get("required_next_action"),
+                "feedback_items": result.criterion.spec.get("feedback_items") or [],
                 "required": result.criterion.required,
                 "passed": result.passed,
                 "confidence": result.confidence,
@@ -1683,6 +1729,58 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def _verification_feedback_items(report: VerificationReport) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for result in report.results:
+        raw_items = result.criterion.spec.get("feedback_items")
+        if not isinstance(raw_items, list):
+            continue
+        for raw in raw_items:
+            if not isinstance(raw, Mapping):
+                continue
+            payload = {
+                "target_layer": _feedback_string(raw.get("target_layer")),
+                "feedback_kind": _feedback_string(raw.get("feedback_kind")),
+                "severity": _feedback_string(raw.get("severity")),
+                "recommended_action": _feedback_string(raw.get("recommended_action")),
+                "summary": _feedback_string(raw.get("summary")),
+                "failure_signature": _feedback_string(raw.get("failure_signature")),
+                "evidence_refs": _string_list(raw.get("evidence_refs")),
+            }
+            payload = {key: value for key, value in payload.items() if value not in ("", [])}
+            if {"target_layer", "feedback_kind", "recommended_action"} <= set(payload):
+                items.append(payload)
+    return items
+
+
+def _feedback_string(value: object) -> str:
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def _verification_feedback_counts(feedback_items: list[dict[str, Any]]) -> dict[str, int]:
+    counter: dict[str, int] = {}
+    for item in feedback_items:
+        for key, prefix in (
+            ("target_layer", "layer"),
+            ("feedback_kind", "kind"),
+            ("recommended_action", "action"),
+            ("severity", "severity"),
+        ):
+            value = item.get(key)
+            if isinstance(value, str) and value:
+                counter[f"{prefix}:{value}"] = counter.get(f"{prefix}:{value}", 0) + 1
+    return counter
+
+
+def _verification_feedback_obsoletes_node(report: VerificationReport) -> bool:
+    for item in _verification_feedback_items(report):
+        if item.get("recommended_action") != "obsolete_node":
+            continue
+        if item.get("target_layer") in {"planner", "reviewer"}:
+            return True
+    return False
 
 
 def _node_with_verification_evidence(
@@ -1746,6 +1844,21 @@ def _node_with_verification_evidence(
     )
 
 
+def _node_with_verification_feedback_disposition(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    artifacts: Mapping[str, Any] | None = None,
+    disposition: str,
+) -> PlanNode:
+    evidenced = _node_with_verification_evidence(node, report, artifacts=artifacts)
+    metadata = dict(evidenced.metadata)
+    metadata["verification_feedback_disposition"] = disposition
+    metadata["obsolete_by_verifier_feedback"] = disposition == "obsolete_node"
+    metadata["obsolete_feedback_items"] = _verification_feedback_items(report)
+    return replace(evidenced, metadata=metadata, updated_at=datetime.now(UTC))
+
+
 def _report_evidence_refs(report: VerificationReport) -> list[str]:
     refs: list[str] = []
     for result in report.results:
@@ -1777,6 +1890,11 @@ def _judge_result_metadata(report: VerificationReport) -> dict[str, Any]:
         repair_brief = result.criterion.spec.get("repair_brief")
         if isinstance(repair_brief, Mapping) and repair_brief:
             metadata["last_verification_judge_repair_brief"] = dict(repair_brief)
+        feedback_items = result.criterion.spec.get("feedback_items")
+        if isinstance(feedback_items, list):
+            metadata["last_verification_feedback_items"] = [
+                dict(item) for item in feedback_items if isinstance(item, Mapping)
+            ]
         return metadata
     return {}
 

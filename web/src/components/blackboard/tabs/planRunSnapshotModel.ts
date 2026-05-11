@@ -51,6 +51,7 @@ export interface WorkspacePlanIterationRun {
   interactions: IterationInteractionStats;
   attempts: Record<string, number>;
   verification: Record<string, number>;
+  feedback: Record<string, number>;
   repairTurns: Array<Record<string, unknown>>;
   carryoverNodeIds: string[];
   counts: {
@@ -429,14 +430,18 @@ function normalizeBackendIterationRuns(
       startedAt: run.time_range?.started_at ?? '',
       updatedAt: run.time_range?.updated_at ?? '',
       completedAt: run.time_range?.completed_at ?? '',
-      nodes: nodes.length > 0 ? nodes : Array.from(nodeIds).flatMap((id) => nodesById.get(id) ?? []),
-      linkedTasks: taskIds.map((taskId) => tasksById.get(taskId)).filter(Boolean) as WorkspaceTask[],
+      nodes:
+        nodes.length > 0 ? nodes : Array.from(nodeIds).flatMap((id) => nodesById.get(id) ?? []),
+      linkedTasks: taskIds
+        .map((taskId) => tasksById.get(taskId))
+        .filter(Boolean) as WorkspaceTask[],
       events: snapshot.events.filter((event) => eventBelongsToNodes(event, nodes)),
       outbox: snapshot.outbox.filter((item) => outboxBelongsToNodes(item, nodes)),
       outputs,
       interactions,
       attempts: run.attempt_counts ?? {},
       verification: run.verification_summary ?? {},
+      feedback: run.feedback_counts ?? {},
       repairTurns: run.repair_turns ?? [],
       carryoverNodeIds: run.carryover_node_ids ?? [],
       counts: {
@@ -503,6 +508,7 @@ export function buildIterationRuns(
         interactions: iterationInteractionStats(snapshot.events, snapshot.outbox, nodes),
         attempts: {},
         verification: {},
+        feedback: {},
         repairTurns: [],
         carryoverNodeIds: iterationCarryover(nodes),
         counts: {

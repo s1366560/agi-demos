@@ -35,10 +35,15 @@ from src.domain.ports.services.iteration_review_port import (
 from src.domain.ports.services.task_allocator_port import WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationFeedbackItem,
+    WorkspaceVerificationFeedbackKind,
+    WorkspaceVerificationFeedbackSeverity,
+    WorkspaceVerificationFeedbackTargetLayer,
     WorkspaceVerificationJudgeRequest,
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
     WorkspaceVerificationNextActionKind,
+    WorkspaceVerificationRecommendedAction,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_workspace_iteration_reviewer_agent,
@@ -388,6 +393,55 @@ class TestLLMGoalPlanner:
         assert repair.node_id in reset.depends_on
         assert reset.metadata["blocked_by_repair_node_id"] == repair.id
 
+    async def test_replan_does_not_create_repair_node_for_stale_planner_feedback(self) -> None:
+        planner = LLMGoalPlanner(decomposer=None)
+        plan = await planner.plan(_goal("x"), _ctx())
+        leaf = plan.leaf_tasks()[0]
+        plan.replace_node(
+            replace(
+                leaf,
+                intent=TaskIntent.BLOCKED,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="att-1",
+                metadata={
+                    **leaf.metadata,
+                    "last_verification_attempt_id": "att-1",
+                    "last_verification_judge_verdict": "needs_rework",
+                    "last_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_feedback_items": [
+                        {
+                            "target_layer": "planner",
+                            "feedback_kind": "stale_or_invalid_task_target",
+                            "severity": "blocking",
+                            "recommended_action": "obsolete_node",
+                            "failure_signature": "missing-test-target:old-e2e",
+                        }
+                    ],
+                },
+            )
+        )
+        from src.domain.ports.services.goal_planner_port import ReplanTrigger
+
+        await planner.replan(
+            plan,
+            ReplanTrigger(
+                kind="verification_failed",
+                node_id=leaf.id,
+                detail="stale target should not spawn repair chain",
+            ),
+        )
+
+        repair_nodes = [
+            node
+            for node in plan.nodes.values()
+            if node.metadata.get("repair_for_node_id") == leaf.id
+        ]
+        reset = plan.nodes[leaf.node_id]
+        assert repair_nodes == []
+        assert reset.intent is TaskIntent.TODO
+        assert reset.execution is TaskExecution.IDLE
+        assert reset.current_attempt_id is None
+
     async def test_replan_repair_node_title_collapses_nested_repair_prefixes(self) -> None:
         planner = LLMGoalPlanner(decomposer=None)
         plan = await planner.plan(_goal("x"), _ctx())
@@ -712,6 +766,9 @@ class TestVerifier:
         assert "next_action_kind=create_repair_node" in prompt
         assert "next_action_kind=retry_same_node" in prompt
         assert "workspace_submit_verification_judgment" in prompt
+        assert "feedback_items" in prompt
+        assert "target_layer=planner" in prompt
+        assert "failure_signature" in prompt
         assert "satisfied_guard_failures" in prompt
         assert "not an automatic rejection" in prompt
         assert "stale, nonexistent, or no longer applicable" in prompt
@@ -801,6 +858,10 @@ class TestVerifier:
         assert "environment-configurable" in isolation_policy
         assert payload["policy"]["next_action_kinds"]["create_repair_node"].startswith("Use when")
         assert "same node can fix" in payload["policy"]["next_action_kinds"]["retry_same_node"]
+        feedback_policy = " ".join(payload["policy"]["feedback_routing"]["rules"])
+        assert "target_layer=planner" in feedback_policy
+        assert "obsolete_node" in feedback_policy
+        assert "failure_signature" in feedback_policy
         repair_policy = " ".join(payload["policy"]["repair_brief_contract"])
         assert "compact repair_brief object" in repair_policy
         assert "current-attempt failures" in repair_policy
@@ -967,6 +1028,53 @@ class TestVerifier:
         assert not rep.passed
         assert not rep.hard_fail
         assert "judge verdict=needs_rework" in rep.summary()
+
+    async def test_verification_judge_feedback_is_preserved_in_report_metadata(self) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+                rationale="commit evidence is missing",
+                failed_criteria=("missing_evidence",),
+                next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+                feedback_items=(
+                    WorkspaceVerificationFeedbackItem(
+                        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+                        feedback_kind=WorkspaceVerificationFeedbackKind.MISSING_EVIDENCE,
+                        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+                        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+                        summary="Report a fresh commit_ref and test output.",
+                        evidence_refs=("worker_report:missing_commit_ref",),
+                        failure_signature="missing-commit-ref",
+                    ),
+                ),
+                confidence=0.86,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node()
+
+        rep = await verifier.verify(VerificationContext(workspace_id="ws", node=node))
+
+        judge_result = next(
+            result
+            for result in rep.results
+            if result.criterion.spec.get("name") == "workspace_verification_judge"
+        )
+        assert judge_result.criterion.spec["feedback_items"] == [
+            {
+                "target_layer": "worker",
+                "feedback_kind": "missing_evidence",
+                "severity": "blocking",
+                "recommended_action": "retry_worker",
+                "summary": "Report a fresh commit_ref and test output.",
+                "evidence_refs": ["worker_report:missing_commit_ref"],
+                "failure_signature": "missing-commit-ref",
+            }
+        ]
+        evidenced = _node_with_verification_evidence(node, rep)
+        assert (
+            evidenced.metadata["last_verification_feedback_items"][0]["target_layer"] == "worker"
+        )
 
     @pytest.mark.parametrize(
         "summary",
@@ -2648,6 +2756,41 @@ class _VerificationJudgeRepairVerifier:
         )
 
 
+class _VerificationJudgeObsoleteVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "judge_verdict": "needs_rework",
+                            "failed_criteria": ["stale_or_invalid_task_target"],
+                            "required_next_action": "obsolete this stale test target",
+                            "next_action_kind": "retry_same_node",
+                            "feedback_items": [
+                                {
+                                    "target_layer": "planner",
+                                    "feedback_kind": "stale_or_invalid_task_target",
+                                    "severity": "blocking",
+                                    "recommended_action": "obsolete_node",
+                                    "failure_signature": "missing-test-target:old-e2e",
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message="judge verdict=needs_rework; planner stale target feedback",
+                ),
+            ),
+        )
+
+
 class _MixedPipelineAndCustomFailureVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -3214,13 +3357,7 @@ class TestSupervisorTick:
         events: list[tuple[str, str, dict[str, Any]]] = []
 
         async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
-            return [
-                WorkspaceAgent(
-                    agent_id="ag-search",
-                    display_name="S",
-                    capabilities=frozenset({"web_search"}),
-                )
-            ]
+            return []
 
         async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
             dispatched.append(node.id)
@@ -3289,13 +3426,7 @@ class TestSupervisorTick:
         events: list[tuple[str, str, dict[str, Any]]] = []
 
         async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
-            return [
-                WorkspaceAgent(
-                    agent_id="ag-search",
-                    display_name="S",
-                    capabilities=frozenset({"web_search"}),
-                )
-            ]
+            return []
 
         async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
             raise AssertionError("verification judge retry must not redispatch worker")
@@ -3344,6 +3475,82 @@ class TestSupervisorTick:
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_verification_only"] is True
+
+    async def test_planner_feedback_obsoletes_stale_node_without_worker_retry(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerificationJudgeObsoleteVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 1
+        assert dispatched == []
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        obsolete_node = reloaded.nodes[PlanNodeId("a")]
+        assert obsolete_node.intent is TaskIntent.DONE
+        assert obsolete_node.execution is TaskExecution.IDLE
+        assert obsolete_node.current_attempt_id == "attempt-a"
+        assert obsolete_node.metadata["obsolete_by_verifier_feedback"] is True
+        assert (
+            obsolete_node.metadata["obsolete_feedback_items"][0]["recommended_action"]
+            == "obsolete_node"
+        )
+        assert [event[0] for event in events] == [
+            "verification_completed",
+            "verification_feedback_routed",
+            "verification_feedback_disposition",
+        ]
 
     async def test_verification_judge_repair_action_dispatches_repair_node(self) -> None:
         repo = InMemoryPlanRepository()

@@ -57,6 +57,15 @@ async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -
                 "failed_items": ["failed_test_evidence"],
                 "minimum_verifications": ["npm test"],
             },
+            "feedback_items": [
+                {
+                    "target_layer": "planner",
+                    "feedback_kind": "test_policy_conflict",
+                    "severity": "blocking",
+                    "recommended_action": "create_repair_node",
+                    "failure_signature": "test-policy-conflict",
+                }
+            ],
             "confidence": 0.84,
         }
     )
@@ -86,6 +95,8 @@ async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -
         "failed_items": ["failed_test_evidence"],
         "minimum_verifications": ["npm test"],
     }
+    assert result.feedback_items[0].target_layer.value == "planner"
+    assert result.feedback_items[0].failure_signature == "test-policy-conflict"
 
 
 async def test_iteration_review_agent_provider_uses_builtin_agent_turn_runner() -> None:

@@ -1808,7 +1808,39 @@ def _repair_brief_from_node(node: PlanNode, *, previous_attempt_id: str) -> dict
     }
     if isinstance(provided, Mapping):
         base.update(dict(provided))
+    worker_feedback = _worker_feedback_items(metadata, base.get("feedback_items"))
+    if worker_feedback:
+        base["feedback_items"] = worker_feedback
+    else:
+        base.pop("feedback_items", None)
     return base
+
+
+def _worker_feedback_items(
+    metadata: Mapping[str, Any],
+    provided_items: object = None,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    raw_metadata_items = metadata.get("last_verification_feedback_items")
+    if isinstance(raw_metadata_items, list):
+        items.extend(dict(item) for item in raw_metadata_items if isinstance(item, Mapping))
+    if isinstance(provided_items, list):
+        items.extend(dict(item) for item in provided_items if isinstance(item, Mapping))
+    worker_items: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in items:
+        if item.get("target_layer") != "worker":
+            continue
+        key = (
+            str(item.get("feedback_kind") or ""),
+            str(item.get("recommended_action") or ""),
+            str(item.get("failure_signature") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        worker_items.append(item)
+    return worker_items
 
 
 def _repair_allowed_write_scope(node: PlanNode) -> list[str]:

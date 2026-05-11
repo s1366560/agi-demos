@@ -2816,7 +2816,33 @@ async def test_retry_same_node_dispatches_same_conversation_repair_turn(
                 "last_verification_judge_repair_brief": {
                     "failed_items": ["missing commit_ref"],
                     "minimum_verifications": ["npm test"],
+                    "feedback_items": [
+                        {
+                            "target_layer": "planner",
+                            "feedback_kind": "plan_scope_mismatch",
+                            "severity": "warning",
+                            "recommended_action": "revise_plan_node",
+                            "summary": "planner-only feedback must not reach worker",
+                        }
+                    ],
                 },
+                "last_verification_feedback_items": [
+                    {
+                        "target_layer": "worker",
+                        "feedback_kind": "missing_evidence",
+                        "severity": "blocking",
+                        "recommended_action": "retry_worker",
+                        "summary": "worker should report a fresh commit_ref",
+                        "failure_signature": "missing-commit-ref",
+                    },
+                    {
+                        "target_layer": "planner",
+                        "feedback_kind": "plan_scope_mismatch",
+                        "severity": "warning",
+                        "recommended_action": "revise_plan_node",
+                        "summary": "planner-only feedback must not reach worker",
+                    },
+                ],
             },
         )
     )
@@ -2917,6 +2943,8 @@ async def test_retry_same_node_dispatches_same_conversation_repair_turn(
     assert launched[0]["reuse_conversation_id"] == "conversation-reuse"
     assert "[repair-turn]" in str(launched[0]["repair_brief_prompt"])
     assert "missing commit_ref" in str(launched[0]["repair_brief_prompt"])
+    assert "worker should report a fresh commit_ref" in str(launched[0]["repair_brief_prompt"])
+    assert "planner-only feedback" not in str(launched[0]["repair_brief_prompt"])
 
     db_session.expire_all()
     attempts = list(

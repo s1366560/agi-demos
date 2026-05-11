@@ -381,6 +381,11 @@ def _ensure_repair_node_for_verification_failure(
         return None
     if node.metadata.get("last_verification_judge_next_action_kind") != "create_repair_node":
         return None
+    if _feedback_requests_upstream_plan_correction(node):
+        return None
+    failure_signature = _repair_failure_signature(node)
+    if failure_signature and _repair_signature_count(plan, failure_signature) >= 2:
+        return None
     existing = _existing_pending_repair_node(plan, node)
     if existing is not None:
         return existing.node_id
@@ -406,6 +411,8 @@ def _ensure_repair_node_for_verification_failure(
             "source_verification_judge_next_action_kind": node.metadata.get(
                 "last_verification_judge_next_action_kind"
             ),
+            "repair_failure_signature": failure_signature,
+            "source_verification_feedback_items": _verification_feedback_items(node),
         }
     )
     if node.metadata.get("allow_verification_script_changes") is True:
@@ -432,6 +439,46 @@ def _ensure_repair_node_for_verification_failure(
         )
     )
     return repair_id
+
+
+def _feedback_requests_upstream_plan_correction(node: PlanNode) -> bool:
+    for item in _verification_feedback_items(node):
+        if item.get("target_layer") not in {"planner", "reviewer", "verifier_policy"}:
+            continue
+        if item.get("recommended_action") in {
+            "obsolete_node",
+            "revise_plan_node",
+            "accept_with_disposition",
+        }:
+            return True
+    return False
+
+
+def _verification_feedback_items(node: PlanNode) -> list[dict[str, object]]:
+    raw_items = dict(node.metadata or {}).get("last_verification_feedback_items")
+    if not isinstance(raw_items, list):
+        return []
+    return [dict(item) for item in raw_items if isinstance(item, dict)]
+
+
+def _repair_failure_signature(node: PlanNode) -> str:
+    for item in _verification_feedback_items(node):
+        value = item.get("failure_signature")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    action = str(node.metadata.get("last_verification_judge_next_action_kind") or "").strip()
+    failed = node.metadata.get("last_verification_judge_failed_criteria")
+    if isinstance(failed, list) and failed:
+        return f"{action}:{','.join(str(item) for item in failed[:6] if item)}"
+    return ""
+
+
+def _repair_signature_count(plan: Plan, signature: str) -> int:
+    return sum(
+        1
+        for candidate in plan.nodes.values()
+        if candidate.metadata.get("repair_failure_signature") == signature
+    )
 
 
 def _existing_pending_repair_node(plan: Plan, node: PlanNode) -> PlanNode | None:

@@ -513,6 +513,7 @@ export interface WorkspacePlanIterationRunSnapshot {
   task_counts: Record<string, number>;
   attempt_counts: Record<string, number>;
   interaction_counts: Record<string, number>;
+  feedback_counts: Record<string, number>;
   deliverables: Record<string, string[]>;
   verification_summary: Record<string, number>;
   repair_turns: Array<Record<string, unknown>>;
@@ -529,6 +530,7 @@ export interface WorkspacePlanRunHealth {
   recovery_events: number;
   provider_error_events: number;
   repair_turns: Record<string, number>;
+  feedback_counts: Record<string, number>;
   stale_evidence_events: number;
   dirty_worktree_events: number;
   missing_report_events: number;

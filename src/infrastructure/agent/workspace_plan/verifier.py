@@ -37,10 +37,15 @@ from src.domain.ports.services.verifier_port import (
     VerifierPort,
 )
 from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationFeedbackItem,
+    WorkspaceVerificationFeedbackKind,
+    WorkspaceVerificationFeedbackSeverity,
+    WorkspaceVerificationFeedbackTargetLayer,
     WorkspaceVerificationJudgePort,
     WorkspaceVerificationJudgeRequest,
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
+    WorkspaceVerificationRecommendedAction,
 )
 
 logger = logging.getLogger(__name__)
@@ -693,6 +698,16 @@ async def _apply_verification_judge(
             rationale=f"workspace verification judge failed: {exc}",
             failed_criteria=("workspace_verification_judge",),
             required_next_action="retry verification judge",
+            feedback_items=(
+                WorkspaceVerificationFeedbackItem(
+                    target_layer=WorkspaceVerificationFeedbackTargetLayer.RUNTIME,
+                    feedback_kind=WorkspaceVerificationFeedbackKind.RUNTIME_INFRA_FAILURE,
+                    severity=WorkspaceVerificationFeedbackSeverity.WARNING,
+                    recommended_action=WorkspaceVerificationRecommendedAction.RETRY_INFRA,
+                    summary=f"workspace verification judge failed: {exc}",
+                    failure_signature="workspace_verification_judge_failed",
+                ),
+            ),
             confidence=0.5,
         )
     judge_result = _coerce_judge_result_for_required_context(ctx, judge_result, results)
@@ -892,6 +907,7 @@ def _coerce_judge_result_for_required_context(
             satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action="collect a current-attempt terminal worker report and rerun verification",
             repair_brief=result.repair_brief,
+            feedback_items=result.feedback_items,
             confidence=max(result.confidence, 0.7),
         )
     if (
@@ -912,6 +928,7 @@ def _coerce_judge_result_for_required_context(
             satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action="fix or explicitly disposition failing tests before acceptance",
             repair_brief=result.repair_brief,
+            feedback_items=result.feedback_items,
             confidence=max(result.confidence, 0.8),
         )
     if result.verdict is WorkspaceVerificationJudgeVerdict.ACCEPTED and _required_guard_failed(
@@ -928,6 +945,7 @@ def _coerce_judge_result_for_required_context(
             satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action="run the required tests in the attempt worktree or report blocked",
             repair_brief=result.repair_brief,
+            feedback_items=result.feedback_items,
             confidence=max(result.confidence, 0.8),
         )
     return result
@@ -1008,6 +1026,9 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
         message_parts.append("failed=" + ", ".join(result.failed_criteria[:8]))
     if result.satisfied_guard_failures:
         message_parts.append("satisfied_guards=" + ", ".join(result.satisfied_guard_failures[:8]))
+    if result.feedback_items:
+        targets = sorted({item.target_layer.value for item in result.feedback_items})
+        message_parts.append("feedback_targets=" + ", ".join(targets[:6]))
     return CriterionResult(
         criterion=AcceptanceCriterion(
             kind=CriterionKind.CUSTOM,
@@ -1019,6 +1040,7 @@ def _judge_criterion_result(result: WorkspaceVerificationJudgeResult) -> Criteri
                 "required_next_action": result.required_next_action,
                 "next_action_kind": result.next_action_kind.value,
                 "repair_brief": result.repair_brief,
+                "feedback_items": [item.to_payload() for item in result.feedback_items],
             },
             required=True,
             description="Agent-First workspace verification judge verdict",

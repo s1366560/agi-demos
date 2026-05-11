@@ -591,6 +591,24 @@ async def test_get_workspace_plan_snapshot_includes_iteration_runs_and_artifact_
         plan_id=plan.id,
         workspace_id=workspace_id,
         node_id="task-api",
+        attempt_id="attempt-ledger-1",
+        event_type="verification_feedback_routed",
+        source="workspace_plan_supervisor",
+        payload={
+            "feedback_items": [
+                {
+                    "target_layer": "planner",
+                    "feedback_kind": "stale_or_invalid_task_target",
+                    "severity": "blocking",
+                    "recommended_action": "obsolete_node",
+                }
+            ]
+        },
+    )
+    await SqlWorkspacePlanEventRepository(db_session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id="task-api",
         attempt_id="attempt-ledger-2",
         event_type="worker_repair_turn_dispatched",
         source="workspace_plan.repair_turn",
@@ -640,12 +658,15 @@ async def test_get_workspace_plan_snapshot_includes_iteration_runs_and_artifact_
     assert run.attempt_counts["blocked"] == 1
     assert run.verification_summary["accepted"] == 1
     assert run.verification_summary["missing_evidence"] == 1
+    assert run.feedback_counts["layer:planner"] == 1
+    assert run.feedback_counts["kind:stale_or_invalid_task_target"] == 1
     assert len(run.repair_turns) == 2
     assert run.deliverables["commit_refs"] == ["abc1234"]
     assert response.run_health is not None
     assert response.run_health.attempt_success_rate == 0.3333
     assert response.run_health.provider_error_events == 1
     assert response.run_health.repair_turns["completed"] == 1
+    assert response.run_health.feedback_counts["action:obsolete_node"] == 1
     assert response.artifact_index is not None
     assert any(item["value"] == "abc1234" for item in response.artifact_index.verified_outputs)
 

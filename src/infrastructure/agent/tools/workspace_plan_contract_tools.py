@@ -9,8 +9,12 @@ from src.domain.model.review.review_finding import ReviewSeverity
 from src.domain.ports.services.agent_decision_broker_port import AgentDecisionKind
 from src.domain.ports.services.iteration_review_port import IterationReviewDecision
 from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationFeedbackKind,
+    WorkspaceVerificationFeedbackSeverity,
+    WorkspaceVerificationFeedbackTargetLayer,
     WorkspaceVerificationJudgeVerdict,
     WorkspaceVerificationNextActionKind,
+    WorkspaceVerificationRecommendedAction,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_AGENT_DECISION_BROKER_ID,
@@ -32,6 +36,16 @@ WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME = "workspace_submit_agent_decision"
 
 _VALID_VERIFICATION_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
 _VALID_VERIFICATION_NEXT_ACTION_KINDS = {item.value for item in WorkspaceVerificationNextActionKind}
+_VALID_VERIFICATION_FEEDBACK_TARGET_LAYERS = {
+    item.value for item in WorkspaceVerificationFeedbackTargetLayer
+}
+_VALID_VERIFICATION_FEEDBACK_KINDS = {item.value for item in WorkspaceVerificationFeedbackKind}
+_VALID_VERIFICATION_FEEDBACK_SEVERITIES = {
+    item.value for item in WorkspaceVerificationFeedbackSeverity
+}
+_VALID_VERIFICATION_RECOMMENDED_ACTIONS = {
+    item.value for item in WorkspaceVerificationRecommendedAction
+}
 _VALID_DECISION_KINDS = {item.value for item in AgentDecisionKind}
 _VALID_REVIEW_VERDICTS = {"complete_goal", "continue_next_iteration", "needs_human_review"}
 _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
@@ -74,6 +88,50 @@ WORKSPACE_VERIFICATION_JUDGMENT_TOOL_PARAMETERS: dict[str, Any] = {
                 "minimum_verifications, and fresh_evidence_requirements when applicable."
             ),
             "additionalProperties": True,
+        },
+        "feedback_items": {
+            "type": "array",
+            "maxItems": 8,
+            "description": (
+                "Layer-targeted feedback items that explain who should act next. Use worker "
+                "only for failures the same worker can fix; use planner/reviewer/runtime/"
+                "verifier_policy/human when retrying the same worker would be wasteful."
+            ),
+            "items": {
+                "type": "object",
+                "properties": {
+                    "target_layer": {
+                        "type": "string",
+                        "enum": sorted(_VALID_VERIFICATION_FEEDBACK_TARGET_LAYERS),
+                    },
+                    "feedback_kind": {
+                        "type": "string",
+                        "enum": sorted(_VALID_VERIFICATION_FEEDBACK_KINDS),
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": sorted(_VALID_VERIFICATION_FEEDBACK_SEVERITIES),
+                    },
+                    "recommended_action": {
+                        "type": "string",
+                        "enum": sorted(_VALID_VERIFICATION_RECOMMENDED_ACTIONS),
+                    },
+                    "summary": {"type": "string"},
+                    "evidence_refs": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 12,
+                    },
+                    "failure_signature": {"type": "string"},
+                },
+                "required": [
+                    "target_layer",
+                    "feedback_kind",
+                    "severity",
+                    "recommended_action",
+                ],
+                "additionalProperties": False,
+            },
         },
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
@@ -221,6 +279,7 @@ async def workspace_submit_verification_judgment_tool(
     satisfied_guard_failures: list[str] | None = None,
     next_action_kind: str = "",
     repair_brief: dict[str, Any] | None = None,
+    feedback_items: list[dict[str, Any]] | None = None,
 ) -> ToolResult:
     error = _require_builtin_agent(
         ctx,
@@ -247,6 +306,9 @@ async def workspace_submit_verification_judgment_tool(
     }
     if isinstance(repair_brief, dict) and repair_brief:
         payload["repair_brief"] = repair_brief
+    normalized_feedback = _verification_feedback_items(feedback_items or [])
+    if normalized_feedback:
+        payload["feedback_items"] = normalized_feedback
     return ToolResult(
         output=json.dumps({"captured": True, "verdict": verdict}, ensure_ascii=False),
         metadata={"verification_judgment": payload},
@@ -262,6 +324,46 @@ def _verification_next_action_kind(value: str, verdict: str) -> str:
     if verdict == WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED.value:
         return WorkspaceVerificationNextActionKind.HUMAN_REQUIRED.value
     return WorkspaceVerificationNextActionKind.RETRY_SAME_NODE.value
+
+
+def _verification_feedback_items(
+    items: list[dict[str, Any]],
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for raw in items[:limit]:
+        if not isinstance(raw, dict):
+            continue
+        target_layer = str(raw.get("target_layer") or "").strip()
+        feedback_kind = str(raw.get("feedback_kind") or "").strip()
+        severity = str(raw.get("severity") or "").strip()
+        recommended_action = str(raw.get("recommended_action") or "").strip()
+        if target_layer not in _VALID_VERIFICATION_FEEDBACK_TARGET_LAYERS:
+            continue
+        if feedback_kind not in _VALID_VERIFICATION_FEEDBACK_KINDS:
+            continue
+        if severity not in _VALID_VERIFICATION_FEEDBACK_SEVERITIES:
+            continue
+        if recommended_action not in _VALID_VERIFICATION_RECOMMENDED_ACTIONS:
+            continue
+        payload: dict[str, Any] = {
+            "target_layer": target_layer,
+            "feedback_kind": feedback_kind,
+            "severity": severity,
+            "recommended_action": recommended_action,
+        }
+        summary = str(raw.get("summary") or "").strip()
+        if summary:
+            payload["summary"] = summary[:1200]
+        evidence_refs = _string_list(raw.get("evidence_refs") or [], limit=12)
+        if evidence_refs:
+            payload["evidence_refs"] = evidence_refs
+        failure_signature = str(raw.get("failure_signature") or "").strip()
+        if failure_signature:
+            payload["failure_signature"] = failure_signature[:300]
+        normalized.append(payload)
+    return normalized
 
 
 @tool_define(

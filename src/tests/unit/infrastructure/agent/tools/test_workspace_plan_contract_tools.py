@@ -58,6 +58,17 @@ async def test_verification_judgment_captures_structured_payload() -> None:
         satisfied_guard_failures=["clean_worktree_after_commit"],
         required_next_action="fix failing tests",
         next_action_kind="create_repair_node",
+        feedback_items=[
+            {
+                "target_layer": "planner",
+                "feedback_kind": "test_policy_conflict",
+                "severity": "blocking",
+                "recommended_action": "create_repair_node",
+                "summary": "Protected review script needs an authorized infra repair.",
+                "evidence_refs": ["guard:verification_script_mutation"],
+                "failure_signature": "review-script-path-guard",
+            }
+        ],
         confidence=0.82,
     )
 
@@ -70,6 +81,17 @@ async def test_verification_judgment_captures_structured_payload() -> None:
         "required_next_action": "fix failing tests",
         "next_action_kind": "create_repair_node",
         "confidence": 0.82,
+        "feedback_items": [
+            {
+                "target_layer": "planner",
+                "feedback_kind": "test_policy_conflict",
+                "severity": "blocking",
+                "recommended_action": "create_repair_node",
+                "summary": "Protected review script needs an authorized infra repair.",
+                "evidence_refs": ["guard:verification_script_mutation"],
+                "failure_signature": "review-script-path-guard",
+            }
+        ],
     }
 
 

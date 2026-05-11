@@ -18,16 +18,25 @@ from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
 if TYPE_CHECKING:
     from src.domain.model.agent.agent_definition import Agent
 from src.domain.ports.services.workspace_verification_judge_port import (
+    WorkspaceVerificationFeedbackItem,
+    WorkspaceVerificationFeedbackKind,
+    WorkspaceVerificationFeedbackSeverity,
+    WorkspaceVerificationFeedbackTargetLayer,
     WorkspaceVerificationJudgeRequest,
     WorkspaceVerificationJudgeResult,
     WorkspaceVerificationJudgeVerdict,
     WorkspaceVerificationNextActionKind,
+    WorkspaceVerificationRecommendedAction,
 )
 
 logger = logging.getLogger(__name__)
 
 _VALID_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
 _VALID_NEXT_ACTION_KINDS = {item.value for item in WorkspaceVerificationNextActionKind}
+_VALID_FEEDBACK_TARGET_LAYERS = {item.value for item in WorkspaceVerificationFeedbackTargetLayer}
+_VALID_FEEDBACK_KINDS = {item.value for item in WorkspaceVerificationFeedbackKind}
+_VALID_FEEDBACK_SEVERITIES = {item.value for item in WorkspaceVerificationFeedbackSeverity}
+_VALID_RECOMMENDED_ACTIONS = {item.value for item in WorkspaceVerificationRecommendedAction}
 
 
 class WorkspaceVerifierAgentTurnRunner(Protocol):
@@ -212,6 +221,17 @@ class UnavailableWorkspaceVerificationJudge:
             rationale=self._reason,
             failed_criteria=("workspace_verification_judge",),
             required_next_action="retry verification when judge agent is available",
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            feedback_items=(
+                WorkspaceVerificationFeedbackItem(
+                    target_layer=WorkspaceVerificationFeedbackTargetLayer.RUNTIME,
+                    feedback_kind=WorkspaceVerificationFeedbackKind.RUNTIME_INFRA_FAILURE,
+                    severity=WorkspaceVerificationFeedbackSeverity.WARNING,
+                    recommended_action=WorkspaceVerificationRecommendedAction.RETRY_INFRA,
+                    summary=self._reason,
+                    failure_signature="workspace_verification_judge_unavailable",
+                ),
+            ),
             confidence=0.5,
         )
 
@@ -277,6 +297,37 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
                     "or test-infra node before this node can be retried."
                 ),
                 "human_required": "Use only with human-only blockers.",
+            },
+            "feedback_routing": {
+                "target_layers": sorted(_VALID_FEEDBACK_TARGET_LAYERS),
+                "feedback_kinds": sorted(_VALID_FEEDBACK_KINDS),
+                "severities": sorted(_VALID_FEEDBACK_SEVERITIES),
+                "recommended_actions": sorted(_VALID_RECOMMENDED_ACTIONS),
+                "rules": [
+                    (
+                        "Emit feedback_items for every actionable non-acceptance or "
+                        "special acceptance disposition."
+                    ),
+                    (
+                        "Use target_layer=worker only when the same worker can fix the "
+                        "issue inside this node contract."
+                    ),
+                    (
+                        "Use target_layer=planner for stale, nonexistent, superseded, or "
+                        "scope-invalid task targets; recommend obsolete_node or "
+                        "revise_plan_node instead of retrying the worker."
+                    ),
+                    (
+                        "Use target_layer=verifier_policy for contradictions in "
+                        "verification policy or protected test-script guard behavior."
+                    ),
+                    (
+                        "Use target_layer=runtime for sandbox, LLM, tool, or "
+                        "infrastructure failures that should not count as product code "
+                        "quality."
+                    ),
+                    "Include stable failure_signature values so repeated loops can be deduplicated.",
+                ],
             },
             "blocked_human_required_only_for": [
                 "credentials or private access",
@@ -394,6 +445,7 @@ def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudg
         required_next_action=next_action,
         next_action_kind=next_action_kind,
         repair_brief=_repair_brief(args.get("repair_brief")),
+        feedback_items=_feedback_items(args.get("feedback_items")),
         confidence=_float_between(args.get("confidence"), default=0.0),
     )
 
@@ -466,6 +518,43 @@ def _string_tuple(value: object, *, limit: int) -> tuple[str, ...]:
 
 def _repair_brief(value: object) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _feedback_items(
+    value: object,
+    *,
+    limit: int = 8,
+) -> tuple[WorkspaceVerificationFeedbackItem, ...]:
+    if not isinstance(value, list | tuple):
+        return ()
+    items: list[WorkspaceVerificationFeedbackItem] = []
+    for raw in value[:limit]:
+        if not isinstance(raw, Mapping):
+            continue
+        target_layer = str(raw.get("target_layer") or "").strip()
+        feedback_kind = str(raw.get("feedback_kind") or "").strip()
+        severity = str(raw.get("severity") or "").strip()
+        recommended_action = str(raw.get("recommended_action") or "").strip()
+        if target_layer not in _VALID_FEEDBACK_TARGET_LAYERS:
+            continue
+        if feedback_kind not in _VALID_FEEDBACK_KINDS:
+            continue
+        if severity not in _VALID_FEEDBACK_SEVERITIES:
+            continue
+        if recommended_action not in _VALID_RECOMMENDED_ACTIONS:
+            continue
+        items.append(
+            WorkspaceVerificationFeedbackItem(
+                target_layer=WorkspaceVerificationFeedbackTargetLayer(target_layer),
+                feedback_kind=WorkspaceVerificationFeedbackKind(feedback_kind),
+                severity=WorkspaceVerificationFeedbackSeverity(severity),
+                recommended_action=WorkspaceVerificationRecommendedAction(recommended_action),
+                summary=str(raw.get("summary") or "").strip()[:1200],
+                evidence_refs=_string_tuple(raw.get("evidence_refs"), limit=12),
+                failure_signature=str(raw.get("failure_signature") or "").strip()[:300],
+            )
+        )
+    return tuple(items)
 
 
 def _float_between(value: object, *, default: float) -> float:

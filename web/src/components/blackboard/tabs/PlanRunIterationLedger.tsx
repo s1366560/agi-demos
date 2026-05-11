@@ -396,6 +396,12 @@ function IterationRunHealth({ run }: { run: WorkspacePlanIterationRun }) {
     (run.verification.infra_error ?? 0) +
     (run.verification.missing_evidence ?? 0) +
     (run.verification.dirty_worktree ?? 0);
+  const workerFeedback = run.feedback['layer:worker'] ?? 0;
+  const plannerFeedback =
+    (run.feedback['layer:planner'] ?? 0) + (run.feedback['layer:reviewer'] ?? 0);
+  const runtimeFeedback = run.feedback['layer:runtime'] ?? 0;
+  const staleTargetFeedback = run.feedback['kind:stale_or_invalid_task_target'] ?? 0;
+  const hasFeedback = workerFeedback + plannerFeedback + runtimeFeedback + staleTargetFeedback > 0;
 
   return (
     <div className="rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
@@ -428,6 +434,26 @@ function IterationRunHealth({ run }: { run: WorkspacePlanIterationRun }) {
           value={verificationFailures}
         />
       </div>
+      {hasFeedback && (
+        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border-separator pt-2 text-xs dark:border-border-dark sm:grid-cols-4">
+          <DenseCounter
+            label={t('blackboard.iterationFeedbackWorker', 'Worker retry')}
+            value={workerFeedback}
+          />
+          <DenseCounter
+            label={t('blackboard.iterationFeedbackPlanner', 'Planner fix')}
+            value={plannerFeedback}
+          />
+          <DenseCounter
+            label={t('blackboard.iterationFeedbackRuntime', 'Runtime')}
+            value={runtimeFeedback}
+          />
+          <DenseCounter
+            label={t('blackboard.iterationFeedbackStale', 'Stale target')}
+            value={staleTargetFeedback}
+          />
+        </div>
+      )}
       {run.repairTurns.length > 0 && (
         <div className="mt-3 space-y-1 border-t border-border-separator pt-2 text-[11px] dark:border-border-dark">
           {run.repairTurns.slice(-3).map((turn, index) => (

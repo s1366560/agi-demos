@@ -452,6 +452,7 @@ class WorkspacePlanIterationRunResponse(BaseModel):
     task_counts: dict[str, int] = Field(default_factory=dict)
     attempt_counts: dict[str, int] = Field(default_factory=dict)
     interaction_counts: dict[str, int] = Field(default_factory=dict)
+    feedback_counts: dict[str, int] = Field(default_factory=dict)
     deliverables: dict[str, list[str]] = Field(default_factory=dict)
     verification_summary: dict[str, int] = Field(default_factory=dict)
     repair_turns: list[dict[str, Any]] = Field(default_factory=list)
@@ -468,6 +469,7 @@ class WorkspacePlanRunHealthResponse(BaseModel):
     recovery_events: int = 0
     provider_error_events: int = 0
     repair_turns: dict[str, int] = Field(default_factory=dict)
+    feedback_counts: dict[str, int] = Field(default_factory=dict)
     stale_evidence_events: int = 0
     dirty_worktree_events: int = 0
     missing_report_events: int = 0
@@ -2175,6 +2177,42 @@ def _verification_summary(events: list[WorkspacePlanEventModel]) -> dict[str, in
     }
 
 
+def _verification_feedback_counts(events: list[WorkspacePlanEventModel]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    routed_events = [event for event in events if event.event_type == "verification_feedback_routed"]
+    source_events = routed_events or [
+        event for event in events if event.event_type == "verification_completed"
+    ]
+    for event in source_events:
+        for item in _verification_feedback_items_from_payload(dict(event.payload_json or {})):
+            for field, prefix in (
+                ("target_layer", "layer"),
+                ("feedback_kind", "kind"),
+                ("recommended_action", "action"),
+                ("severity", "severity"),
+            ):
+                value = _metadata_string(item.get(field))
+                if value:
+                    counts[f"{prefix}:{value}"] += 1
+    return dict(counts)
+
+
+def _verification_feedback_items_from_payload(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    raw_items = payload.get("feedback_items")
+    if isinstance(raw_items, list):
+        items.extend(dict(item) for item in raw_items if isinstance(item, Mapping))
+    raw_results = payload.get("results")
+    if isinstance(raw_results, list):
+        for result in raw_results:
+            if not isinstance(result, Mapping):
+                continue
+            result_items = result.get("feedback_items")
+            if isinstance(result_items, list):
+                items.extend(dict(item) for item in result_items if isinstance(item, Mapping))
+    return items
+
+
 def _repair_turns(events: list[WorkspacePlanEventModel]) -> list[dict[str, Any]]:
     turns: list[dict[str, Any]] = []
     for event in events:
@@ -2509,6 +2547,7 @@ def _iteration_runs(
                 },
                 attempt_counts=_attempt_counts(node_attempts),
                 interaction_counts=_interaction_counts(events, outbox),
+                feedback_counts=_verification_feedback_counts(events),
                 deliverables=_merge_output_lists(output_sets),
                 verification_summary=_verification_summary(events),
                 repair_turns=_repair_turns(events),
@@ -2634,6 +2673,7 @@ def _run_health(
             + _count_outbox_failure(outbox_items, _PROVIDER_ERROR_CODES)
         ),
         repair_turns=repair_counts,
+        feedback_counts=_verification_feedback_counts(event_items),
         stale_evidence_events=_count_structured_failure(
             event_items,
             {"stale_evidence", "stale_report", "old_evidence"},
