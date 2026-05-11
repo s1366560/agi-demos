@@ -255,7 +255,7 @@ def _user_payload(context: IterationReviewContext) -> str:
                 "public web research and reference-site inspection",
                 "browser_e2e workflows with screenshots and console capture",
                 "API contract verification and integration tests",
-                "code, test, documentation, and sandbox-native release-readiness implementation",
+                "code, test, and sandbox-native release-readiness implementation",
                 "sandbox preview proxy deployment and health-check verification",
             ],
             "continue_next_iteration_for": [
@@ -264,6 +264,12 @@ def _user_payload(context: IterationReviewContext) -> str:
                 "UI/UX comparison work",
                 "E2E user journey verification",
                 "sandbox-native release-readiness checks that do not require external production authority",
+            ],
+            "implementation_first_rules": [
+                "Every next_task must change application code, tests, configs, schemas, or infrastructure.",
+                "Do NOT propose a next_task whose primary outcome is writing/updating/finalizing a markdown file, a checklist, or an acceptance/release/parity/evidence report unless the user goal explicitly asks for documentation OR the implementation is already shipped and only documentation remains.",
+                "Acceptance evidence (test reports, parity reports, release reports, INDEX.md, BUILD-REPORT.md, SANDBOX-PREVIEW-EVIDENCE.md, GOAL-COMPLETION.md) is the verifier's output; never make it its own next_task.",
+                "If documentation updates are required, embed them in the implementation/verification next_task that owns the changed code, not as a standalone task.",
             ],
             "needs_human_review_only_for": [
                 "missing credentials or private access",

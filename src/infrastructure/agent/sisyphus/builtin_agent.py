@@ -51,6 +51,9 @@ Required workflow:
 Planning rules:
 - Produce a sprint DAG in task_graph.subtasks with id, description, target_agent, depends_on, and priority.
 - For software work, split separable research, planning, implementation, verification, deploy, and review work when evidence supports those phases.
+- IMPLEMENTATION FIRST: every software subtask must change application code, tests, configs, schemas, or infrastructure. Required README/CHANGELOG/architecture-doc updates MUST be embedded inside the implementation subtask that owns the changed code. Do NOT emit a subtask whose only outcome is writing/updating/finalizing a markdown file, a checklist, an acceptance/release/parity report, an INDEX.md, or a BUILD-REPORT.md unless (a) the user's goal explicitly asks for documentation as a primary deliverable, OR (b) the implementation is already shipped and the only remaining gap is documentation.
+- Acceptance evidence (test reports, parity reports, release reports, evidence indexes, sandbox preview evidence) is the verification subtask's own output; never plan it as its own task.
+- If you find yourself wanting to add tasks like "document X", "update SPEC.md", "reconcile reports", "finalize architecture documentation", "create release checklist", or "generate acceptance evidence", instead expand the implementation/verification subtask's acceptance criteria to include those artifacts.
 - Read applicable AGENTS.md or project guidance when present before shaping software tasks; cite it in evidence_refs.
 - Each software subtask description must be execution-ready: include the bounded scope, expected artifact or code area, acceptance criteria, and required verification evidence.
 - For risky changes such as database schema or migrations, dependency or lockfile changes, authentication or secrets, API contracts, shared frontend/backend logic, generated artifacts, or long-lived services, include explicit quality gates or review subtasks instead of hiding the risk inside a broad implementation task.
@@ -140,7 +143,10 @@ Review rules:
 - If continuing, return only the next sprint, not a full future backlog.
 - Each next_task must target one functional area, user journey, artifact, or evidence gap that can be verified independently.
 - Do not produce aggregate tasks such as "fix all gaps" or "complete the frontend/backend".
-- Missing evidence is normally next-sprint work, not human review.
+- IMPLEMENTATION FIRST: every next_task must change application code, tests, configs, schemas, or infrastructure. Do NOT emit a next_task whose only outcome is writing/updating/finalizing a markdown file, a checklist, or an acceptance/release/parity/evidence report unless (a) the user goal explicitly requests documentation as a deliverable, OR (b) implementation is already shipped and the only remaining gap is documentation. Embed required README/CHANGELOG/architecture-doc updates inside the implementation/verification next_task that owns the changed code.
+- Acceptance/evidence artifacts (test reports, parity reports, release reports, INDEX.md, BUILD-REPORT.md, SANDBOX-PREVIEW-EVIDENCE.md, GOAL-COMPLETION.md) are outputs of verification next_tasks, never standalone next_tasks. If they are missing, expand the relevant verification next_task's acceptance criteria; do not allocate a separate "produce evidence" task.
+- Do NOT propose "Repair verification blockers for ..." next_tasks; the planner already inserts repair nodes when needed. Instead, attach actionable feedback_items so the same node can fix-and-retry within its contract.
+- Missing evidence is normally next-sprint work (covered by the relevant verification task), not human review.
 - Use sandbox-native delivery, preview proxy, health check, and preview evidence for deploy/release gaps unless the user explicitly approved external production deployment.
 - Treat attempt worktree isolation as an intentional execution contract. Do not propose main-checkout
   execution, symlinks, or artifact copying to bypass it; if hardcoded artifact paths block verification,

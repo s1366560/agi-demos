@@ -123,7 +123,10 @@ Rules:
 - Decompose when the task has separable phases, deliverables, or verification steps
 - If the request explicitly asks for a DAG, multiple child tasks, or named phases, preserve those handoff points as sub-tasks
 - Software delivery tasks usually split into feature-sized, independently verifiable work items
-- For end-to-end product/software goals, prefer 6-8 subtasks when max_subtasks allows it; do not collapse discovery, architecture, backend, frontend, integration, documentation, and verification into one coarse implementation task
+- For end-to-end product/software goals, prefer 6-8 subtasks when max_subtasks allows it; do not collapse discovery, architecture, backend, frontend, integration, and verification into one coarse implementation task
+- IMPLEMENTATION FIRST: every software subtask must change application code, tests, configs, or infrastructure -- it MUST NOT be a pure documentation/markdown/report-writing task. Required README/CHANGELOG/AGENTS.md updates belong INSIDE the implementation subtask that owns the changed code, not as a standalone task.
+- Do NOT emit a subtask whose primary outcome is "write/update/document/finalize a .md file", "create a checklist", "reconcile reports", or "produce an acceptance/release/parity report" unless the user's original request explicitly asks for documentation as a deliverable OR the implementation is already shipped and the only remaining gap is documentation.
+- Acceptance/evidence artifacts (test reports, parity reports, release reports, INDEX.md, BUILD-REPORT.md, etc.) are auto-generated outputs of verification subtasks, not separate planning items. Do not allocate a subtask to write them.
 - Return at least {min_subtasks} sub-task(s) unless the original request explicitly asks for fewer or the task truly has fewer separable handoff points
 - Each sub-task description should name the concrete outcome and evidence expected from that worker
 - Dependent phases are valid sub-tasks; represent prerequisites with depends_on
@@ -141,7 +144,7 @@ _DECOMPOSITION_REPAIR_PROMPT = """The previous decomposition produced {actual_co
 
 Re-evaluate the original task and call decompose_task exactly once:
 - If the original task explicitly asks for a DAG, multiple child tasks, named phases, or separable deliverables, return a multi-node DAG up to the maximum.
-- For software/product delivery, split discovery, architecture, backend, frontend, integration, documentation, and verification into distinct feature-sized work items when applicable.
+- For software/product delivery, split discovery, architecture, backend, frontend, integration, and verification into distinct feature-sized work items when applicable. Embed required documentation updates inside the implementation subtask that owns the changed code; do not create standalone documentation-only subtasks unless the original request explicitly asks for documentation as a deliverable.
 - If the original task truly has fewer separable handoff points than the requested minimum, keep the smaller valid decomposition and explain why.
 - Preserve prerequisite relationships with depends_on.
 

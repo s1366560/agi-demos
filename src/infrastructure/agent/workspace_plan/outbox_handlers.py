@@ -212,7 +212,6 @@ _AUTO_TEAM_ROLES = (
         "capabilities": [
             "architecture",
             "research",
-            "documentation",
             "planning",
             "web_search",
         ],

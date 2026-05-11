@@ -423,13 +423,13 @@ def _ensure_repair_node_for_verification_failure(
             plan_id=plan.id,
             parent_id=node.parent_id,
             kind=PlanNodeKind.TASK,
-            title=_repair_title(node),
+            title=_repair_title(node, plan),
             description=description,
             depends_on=node.depends_on,
             acceptance_criteria=_default_acceptance_criteria(description, sequence=sequence),
             feature_checkpoint=_feature_checkpoint_for_task(
                 node_id=repair_id,
-                title=_repair_title(node),
+                title=_repair_title(node, plan),
                 description=description,
                 sequence=sequence,
             ),
@@ -524,15 +524,30 @@ def _positive_iteration_index(value: object) -> int | None:
     return None
 
 
-def _repair_title(node: PlanNode) -> str:
-    return f"{_REPAIR_TITLE_PREFIX}{_repair_subject_title(node)}"[:120]
+def _repair_title(node: PlanNode, plan: Plan | None = None) -> str:
+    return f"{_REPAIR_TITLE_PREFIX}{_repair_subject_title(node, plan)}"[:120]
 
 
-def _repair_subject_title(node: PlanNode) -> str:
-    title = node.title.strip()
+def _repair_subject_title(node: PlanNode, plan: Plan | None = None) -> str:
+    # If the failing node is itself a repair node, walk the chain back to the
+    # original subject so we never produce "Repair verification blockers for
+    # Repair verification blockers for ..." nested titles.
+    current: PlanNode = node
+    if plan is not None:
+        seen: set[str] = set()
+        while True:
+            parent_id = current.metadata.get("repair_for_node_id")
+            if not isinstance(parent_id, str) or parent_id in seen:
+                break
+            seen.add(parent_id)
+            parent = plan.nodes.get(PlanNodeId(parent_id))
+            if parent is None:
+                break
+            current = parent
+    title = current.title.strip()
     while title.startswith(_REPAIR_TITLE_PREFIX):
         title = title[len(_REPAIR_TITLE_PREFIX) :].strip()
-    return title or node.id
+    return title or current.id
 
 
 def _repair_description(node: PlanNode, trigger: ReplanTrigger) -> str:
