@@ -417,10 +417,25 @@ class SystemPromptManager:
                 "execution child tasks have attempt/adjudication evidence on-ledger. "
                 "Prefer delegation and evidence collection over doing the child work inline."
             )
+        # Inject persistent task-lifecycle guidance only when the todo tools
+        # are actually available in this turn's toolset. Keeping it conditional
+        # prevents leaking workspace-style Plan/Build prose into conversations
+        # that have no task-tracking capability.
+        has_todo_tool = bool(context.tool_definitions) and any(
+            (tool.get("name") if isinstance(tool, dict) else None) == "todowrite"
+            for tool in context.tool_definitions
+        )
+        if has_todo_tool:
+            task_lifecycle_section = await self._load_file("sections/task_lifecycle.txt")
+            if task_lifecycle_section:
+                sections.append(task_lifecycle_section)
         workspace_guidelines = await self._load_file("sections/workspace.txt")
         if workspace_guidelines:
             sections.append(workspace_guidelines)
-        mode_reminder = await self._load_mode_reminder(context.mode)
+        # Plan/Build mode reminders explicitly reference todowrite/todoread; only
+        # load them when the todo tools are actually available, otherwise the
+        # reminder advertises tools the agent cannot call.
+        mode_reminder = await self._load_mode_reminder(context.mode) if has_todo_tool else ""
         custom_rules = await self._load_custom_rules()
         if mode_reminder:
             sections.append(mode_reminder)

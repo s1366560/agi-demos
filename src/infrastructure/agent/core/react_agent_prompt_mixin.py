@@ -161,6 +161,7 @@ class PromptMixin:
         max_steps_override: int | None = None,
         workspace_manager: Any | None = None,
         selected_agent_name: str | None = None,
+        is_workspace_conversation: bool = False,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -185,6 +186,11 @@ class PromptMixin:
         # Convert skills to dict format for PromptContext
         skills_data = None
         effective_skills = available_skills if available_skills is not None else self.skills
+        # Strip workspace-scoped skills from non-workspace conversations.
+        if effective_skills and not is_workspace_conversation:
+            effective_skills = [
+                s for s in effective_skills if not s.name.startswith("workspace-")
+            ]
         if effective_skills:
             skills_data = [
                 {
@@ -210,6 +216,13 @@ class PromptMixin:
 
         # Convert tool definitions to dict format - use current tools (hot-plug support)
         _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
+        # Strip workspace-scoped tools from non-workspace conversations so the
+        # system prompt does not advertise tools that will be filtered out at
+        # execution time anyway.
+        if not is_workspace_conversation:
+            current_tool_definitions = [
+                t for t in current_tool_definitions if not t.name.startswith("workspace_")
+            ]
         # When a forced skill is active, exclude skill_loader from tool list
         # to prevent the LLM from calling it and loading a different skill.
         if force_execution and matched_skill:
@@ -248,9 +261,14 @@ class PromptMixin:
             except Exception as e:
                 logger.warning("Failed to load workspace persona: %s", e)
 
-        # Fetch dynamic workspace context (members, agents, messages, blackboard)
+        # Fetch dynamic workspace context (members, agents, messages, blackboard).
+        # Strict isolation: only inject into conversations that are actually
+        # bound to a workspace turn (worker dispatch or leader/worker session
+        # tagged via runtime_context). Project-scoped chats in projects that
+        # happen to host a workspace must NOT see this content.
         workspace_context: str | None = None
-        if project_id and tenant_id:
+        workspace_scope_active = bool(is_workspace_conversation or active_workspace_manager)
+        if workspace_scope_active and project_id and tenant_id:
             from src.infrastructure.agent.workspace.workspace_context_builder import (
                 build_workspace_context,
             )

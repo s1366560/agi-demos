@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Final
+from collections.abc import Mapping
+from typing import Any, Final
 
 from src.infrastructure.agent.tools.context import ToolContext
 
@@ -41,3 +42,35 @@ def require_workspace_session_role(
     if not runtime_context_string(ctx, WORKSPACE_ID_KEY):
         return "workspace_id is missing from runtime_context — is this a workspace session?"
     return None
+
+
+def is_workspace_conversation(payload: Mapping[str, Any] | None) -> bool:
+    """Authoritative predicate: is this turn bound to a workspace?
+
+    A conversation is workspace-bound iff one of:
+    - ``runtime_context.task_authority == "workspace"`` (worker dispatch path)
+    - both ``runtime_context.workspace_id`` and
+      ``runtime_context.workspace_session_role`` are present (leader or worker
+      session explicitly tagged with a workspace role)
+
+    Anything else (e.g. project-scoped chat in a project that happens to host
+    a workspace) is NOT a workspace conversation and must not receive
+    workspace-scoped prompt content, tools, or skills.
+
+    The argument may be either the raw runtime_context mapping or a payload
+    that has a nested ``runtime_context`` mapping (mirrors the dual shape
+    accepted by plugin hooks).
+    """
+    if not isinstance(payload, Mapping):
+        return False
+    nested = payload.get("runtime_context")
+    runtime_context = nested if isinstance(nested, Mapping) else payload
+    if runtime_context.get("task_authority") == "workspace":
+        return True
+    if runtime_context.get(WORKSPACE_ID_KEY) and runtime_context.get(
+        WORKSPACE_SESSION_ROLE_KEY
+    ):
+        return True
+    # Fallback: caller passed a payload (not nested runtime_context) where the
+    # top-level key carries authority. Mirrors the existing plugin behavior.
+    return isinstance(nested, Mapping) and payload.get("task_authority") == "workspace"

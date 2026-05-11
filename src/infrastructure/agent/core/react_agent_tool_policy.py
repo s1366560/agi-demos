@@ -48,6 +48,23 @@ def filter_workspace_root_tools(
     return [tool for tool in tools_to_use if tool.name not in WORKSPACE_ROOT_TOOL_BYPASS_NAMES]
 
 
+def filter_non_workspace_conversation_tools(
+    tools_to_use: list[ToolDefinition],
+    *,
+    is_workspace_conversation: bool,
+) -> list[ToolDefinition]:
+    """Strip workspace-scoped tools from non-workspace conversations.
+
+    The agent worker registers workspace_* tools at boot time so they are
+    available to every conversation handled by the worker. To keep workspace
+    semantics strictly isolated we filter them out at request time when the
+    current conversation is not bound to a workspace turn.
+    """
+    if is_workspace_conversation:
+        return tools_to_use
+    return [tool for tool in tools_to_use if not tool.name.startswith("workspace_")]
+
+
 def filter_tools_by_name_policy(
     tools_to_use: list[ToolDefinition],
     *,

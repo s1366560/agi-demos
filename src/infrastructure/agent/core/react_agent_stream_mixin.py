@@ -1557,6 +1557,11 @@ class StreamMixin:
         )
 
         # Phase 8: System prompt building
+        from src.infrastructure.agent.workspace.runtime_role_contract import (
+            is_workspace_conversation as _is_workspace_conversation,
+        )
+
+        workspace_conversation_flag = _is_workspace_conversation(workspace_runtime_payload)
         system_prompt = await self._build_system_prompt(
             processed_user_message,
             conversation_context,
@@ -1577,6 +1582,7 @@ class StreamMixin:
             max_steps_override=runtime_profile.effective_max_steps,
             workspace_manager=runtime_workspace_manager,
             selected_agent_name=selected_agent.name,
+            is_workspace_conversation=workspace_conversation_flag,
         )
 
         # Phase 9: Context building
@@ -1600,6 +1606,14 @@ class StreamMixin:
         tools_to_use = self._filter_workspace_root_tools(
             self._stream_tools_to_use,
             workspace_root_task,
+        )
+        from src.infrastructure.agent.core.react_agent_tool_policy import (
+            filter_non_workspace_conversation_tools,
+        )
+
+        tools_to_use = filter_non_workspace_conversation_tools(
+            tools_to_use,
+            is_workspace_conversation=workspace_conversation_flag,
         )
 
         # Phase 10b: Inject skill-embedded MCP tools

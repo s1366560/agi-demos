@@ -11,6 +11,7 @@ from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
 from src.infrastructure.agent.workspace.runtime_role_contract import (
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
+    is_workspace_conversation,
 )
 
 PLUGIN_NAME = "workspace-runtime"
@@ -128,13 +129,8 @@ def _build_workspace_task_harness_skills(
 
 
 def _is_workspace_runtime(payload: Mapping[str, Any]) -> bool:
-    runtime_context = payload.get("runtime_context")
-    if isinstance(runtime_context, Mapping):
-        if runtime_context.get("task_authority") == "workspace":
-            return True
-        if runtime_context.get("workspace_id") and runtime_context.get("workspace_session_role"):
-            return True
-    return payload.get("task_authority") == "workspace"
+    """Backward-compat wrapper around :func:`is_workspace_conversation`."""
+    return is_workspace_conversation(payload)
 
 
 def _append_instruction(
