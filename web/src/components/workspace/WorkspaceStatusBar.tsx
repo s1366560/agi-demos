@@ -20,9 +20,12 @@ export interface StatusSlotData {
   value: string;
   tone?: StatusTone;
   hint?: string;
+  progressPercent?: number;
 }
 
 export interface WorkspaceStatusBarProps {
+  /** Current task plan progress, e.g. "2/7 · 36%". */
+  task?: StatusSlotData;
   /** Currently active SubAgent, e.g. "@executor". */
   subAgent?: StatusSlotData;
   /** LLM provider + token usage summary, e.g. "gemini-2.5 · 12.4k". */
@@ -44,6 +47,11 @@ interface SlotProps {
 
 const Slot: React.FC<SlotProps> = ({ data }) => {
   const tone = data.tone ?? 'idle';
+  const progressPercent =
+    typeof data.progressPercent === 'number'
+      ? Math.max(0, Math.min(100, data.progressPercent))
+      : null;
+
   return (
     <div
       className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] text-[#171717] dark:text-slate-200"
@@ -52,6 +60,17 @@ const Slot: React.FC<SlotProps> = ({ data }) => {
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${TONE_DOT[tone]}`} />
       <span className="text-[#666] dark:text-slate-400">{data.label}</span>
       <span className="font-medium tabular-nums">{data.value}</span>
+      {progressPercent !== null && (
+        <span
+          aria-hidden="true"
+          className="ml-1 h-1.5 w-16 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        >
+          <span
+            className="block h-full rounded-full bg-emerald-500 transition-[width] duration-300 motion-reduce:transition-none"
+            style={{ width: `${String(progressPercent)}%` }}
+          />
+        </span>
+      )}
     </div>
   );
 };
@@ -62,6 +81,7 @@ const Slot: React.FC<SlotProps> = ({ data }) => {
  * collapse silently.
  */
 export const WorkspaceStatusBar: React.FC<WorkspaceStatusBarProps> = ({
+  task,
   subAgent,
   llm,
   sandbox,
@@ -70,13 +90,9 @@ export const WorkspaceStatusBar: React.FC<WorkspaceStatusBarProps> = ({
   friction,
   className,
 }) => {
-  const slots: StatusSlotData[] = [];
-  if (subAgent) slots.push(subAgent);
-  if (llm) slots.push(llm);
-  if (sandbox) slots.push(sandbox);
-  if (hitl) slots.push(hitl);
-  if (skills) slots.push(skills);
-  if (friction) slots.push(friction);
+  const slots = [task, subAgent, llm, sandbox, hitl, skills, friction].filter(
+    (slot): slot is StatusSlotData => Boolean(slot)
+  );
 
   if (slots.length === 0) return null;
 
@@ -96,7 +112,7 @@ export const WorkspaceStatusBar: React.FC<WorkspaceStatusBarProps> = ({
         .trim()}
     >
       {slots.map((slot, idx) => (
-        <React.Fragment key={`${slot.label}-${idx}`}>
+        <React.Fragment key={slot.label}>
           {idx > 0 && (
             <span aria-hidden="true" className="mx-1 text-[#cccccc] dark:text-slate-700">
               ·

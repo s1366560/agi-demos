@@ -9,21 +9,7 @@
 import { useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Button,
-  Card,
-  Empty,
-  Input,
-  List,
-  Modal,
-  Radio,
-  Skeleton,
-  Space,
-  Tabs,
-  Tag,
-  Typography,
-  message,
-} from 'antd';
+import { Button, Empty, Input, Modal, Radio, Skeleton, Tabs, Tag, Typography, message } from 'antd';
 import { Check, X } from 'lucide-react';
 
 import {
@@ -37,6 +23,26 @@ const { TextArea } = Input;
 
 type StatusFilter = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 
+const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
+const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
+const surface =
+  'border border-[oklch(0.9_0.006_255)] bg-[oklch(0.99_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.18_0.006_255)]';
+
+function statusTagColor(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'orange';
+    case 'approved':
+      return 'green';
+    case 'rejected':
+      return 'red';
+    case 'withdrawn':
+      return 'default';
+    default:
+      return 'default';
+  }
+}
+
 /** Preview next semver without contacting the server. Backend is the
  *  source of truth; this keeps the dialog snappy. */
 function previewNextSemver(prior: string | null, bump: SemverBump): string {
@@ -45,9 +51,9 @@ function previewNextSemver(prior: string | null, bump: SemverBump): string {
   const ma = parts[0] ?? 0;
   const mi = parts[1] ?? 0;
   const pa = parts[2] ?? 0;
-  if (bump === 'major') return `${ma + 1}.0.0`;
-  if (bump === 'minor') return `${ma}.${mi + 1}.0`;
-  return `${ma}.${mi}.${pa + 1}`;
+  if (bump === 'major') return `${String(ma + 1)}.0.0`;
+  if (bump === 'minor') return `${String(ma)}.${String(mi + 1)}.0`;
+  return `${String(ma)}.${String(mi)}.${String(pa + 1)}`;
 }
 
 function ReviewDialog({
@@ -112,14 +118,14 @@ function ReviewDialog({
       okButtonProps={{ danger: mode === 'reject' }}
       confirmLoading={mutation.isPending}
     >
-      <Space direction="vertical" className="w-full" size="middle">
+      <div className="space-y-4">
         <Text type="secondary">
           {mode === 'approve'
             ? '审核通过将把此 Skill 快照发布到精选库。'
             : '驳回提交将关闭此记录并记录你的审核意见。'}
         </Text>
         {mode === 'approve' ? (
-          <Space direction="vertical" size={4} className="w-full">
+          <div className={`space-y-2 rounded-[6px] p-3 ${surface}`}>
             <Text strong>发布版本号</Text>
             <Radio.Group
               value={bump}
@@ -127,9 +133,7 @@ function ReviewDialog({
                 setBump(e.target.value as SemverBump | 'trust');
               }}
             >
-              <Radio value="trust">
-                沿用提交者版本 (v{submission?.proposed_semver ?? '-'})
-              </Radio>
+              <Radio value="trust">沿用提交者版本 (v{submission?.proposed_semver ?? '-'})</Radio>
               <Radio value="patch">覆盖为 patch</Radio>
               <Radio value="minor">覆盖为 minor</Radio>
               <Radio value="major">覆盖为 major</Radio>
@@ -140,7 +144,7 @@ function ReviewDialog({
                 （若同一来源已有激活版本，旧版本会自动标记为 deprecated）
               </span>
             </Text>
-          </Space>
+          </div>
         ) : null}
         <TextArea
           rows={4}
@@ -152,7 +156,7 @@ function ReviewDialog({
           maxLength={2000}
           showCount
         />
-      </Space>
+      </div>
     </Modal>
   );
 }
@@ -164,70 +168,63 @@ function SubmissionRow({
   submission: SkillSubmission;
   onReview: (s: SkillSubmission, mode: 'approve' | 'reject') => void;
 }) {
-  const name = (submission.skill_snapshot.name as string) ?? 'Unnamed';
-  const description = (submission.skill_snapshot.description as string) ?? '';
+  const name = submission.skill_snapshot.name as string;
+  const description = submission.skill_snapshot.description as string;
   const isPending = submission.status === 'pending';
 
   return (
-    <List.Item
-      actions={
-        isPending
-          ? [
-              <Button
-                key="approve"
-                type="primary"
-                icon={<Check size={14} />}
-                onClick={() => {
-                  onReview(submission, 'approve');
-                }}
-              >
-                Approve
-              </Button>,
-              <Button
-                key="reject"
-                danger
-                icon={<X size={14} />}
-                onClick={() => {
-                  onReview(submission, 'reject');
-                }}
-              >
-                Reject
-              </Button>,
-            ]
-          : []
-      }
-    >
-      <List.Item.Meta
-        title={
-          <Space>
-            <span>{name}</span>
-            <Tag color="blue">v{submission.proposed_semver}</Tag>
-            <Tag color={isPending ? 'orange' : submission.status === 'approved' ? 'green' : 'red'}>
-              {submission.status}
-            </Tag>
-          </Space>
-        }
-        description={
-          <Space direction="vertical" size={2}>
-            <Paragraph type="secondary" ellipsis={{ rows: 2 }} className="!mb-0">
-              {description}
-            </Paragraph>
-            <Text type="secondary" className="text-xs">
-              tenant <code>{submission.submitter_tenant_id}</code> · submitted{' '}
-              {new Date(submission.created_at).toLocaleString()}
-            </Text>
-            {submission.submission_note ? (
-              <Text type="secondary">提交备注：{submission.submission_note}</Text>
-            ) : null}
-            {submission.review_note ? (
-              <Text type={submission.status === 'rejected' ? 'danger' : 'secondary'}>
-                审核意见：{submission.review_note}
-              </Text>
-            ) : null}
-          </Space>
-        }
-      />
-    </List.Item>
+    <div className="grid gap-4 border-b border-[oklch(0.9_0.006_255)] px-4 py-4 last:border-b-0 dark:border-[oklch(0.28_0.006_255)] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-sm font-semibold ${pageText}`}>{name}</span>
+          <Tag color="blue">v{submission.proposed_semver}</Tag>
+          <Tag color={statusTagColor(submission.status)}>{submission.status}</Tag>
+        </div>
+        <Paragraph type="secondary" ellipsis={{ rows: 2 }} className="!mb-0 !mt-2">
+          {description}
+        </Paragraph>
+        <div className={`mt-2 text-xs ${mutedText}`}>
+          tenant <code>{submission.submitter_tenant_id}</code> · submitted{' '}
+          {new Date(submission.created_at).toLocaleString()}
+        </div>
+        {submission.submission_note ? (
+          <div className={`mt-2 text-sm ${mutedText}`}>提交备注：{submission.submission_note}</div>
+        ) : null}
+        {submission.review_note ? (
+          <div
+            className={
+              submission.status === 'rejected'
+                ? 'mt-2 text-sm text-[oklch(0.55_0.18_25)]'
+                : `mt-2 text-sm ${mutedText}`
+            }
+          >
+            审核意见：{submission.review_note}
+          </div>
+        ) : null}
+      </div>
+      {isPending ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="primary"
+            icon={<Check size={14} />}
+            onClick={() => {
+              onReview(submission, 'approve');
+            }}
+          >
+            Approve
+          </Button>
+          <Button
+            danger
+            icon={<X size={14} />}
+            onClick={() => {
+              onReview(submission, 'reject');
+            }}
+          >
+            Reject
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -246,22 +243,26 @@ function SubmissionsList({ status }: { status: StatusFilter }) {
 
   const items = data ?? [];
   if (items.length === 0) {
-    return <Empty description={`暂无 ${status} 的提交`} />;
+    return (
+      <div className={`rounded-[6px] py-12 ${surface}`}>
+        <Empty description={`暂无 ${status} 的提交`} />
+      </div>
+    );
   }
 
   return (
     <>
-      <List
-        dataSource={items}
-        renderItem={(s) => (
+      <div className={`overflow-hidden rounded-[6px] ${surface}`}>
+        {items.map((s) => (
           <SubmissionRow
+            key={s.id}
             submission={s}
             onReview={(sub, mode) => {
               setActive({ submission: sub, mode });
             }}
           />
-        )}
-      />
+        ))}
+      </div>
       <ReviewDialog
         submission={active?.submission ?? null}
         mode={active?.mode ?? 'approve'}
@@ -276,20 +277,29 @@ function SubmissionsList({ status }: { status: StatusFilter }) {
 
 export default function AdminSkillReview() {
   return (
-    <Card className="max-w-5xl mx-auto">
-      <Title level={3}>Skill 审核（管理员）</Title>
-      <Paragraph type="secondary">
-        审核由租户提交的 Skill 候选。通过后会以当前版本号发布到精选库；驳回会记录审核意见。
-      </Paragraph>
-      <Tabs
-        defaultActiveKey="pending"
-        items={[
-          { key: 'pending', label: '待审核', children: <SubmissionsList status="pending" /> },
-          { key: 'approved', label: '已通过', children: <SubmissionsList status="approved" /> },
-          { key: 'rejected', label: '已驳回', children: <SubmissionsList status="rejected" /> },
-          { key: 'withdrawn', label: '已撤回', children: <SubmissionsList status="withdrawn" /> },
-        ]}
-      />
-    </Card>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <div>
+        <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>
+          Admin Review
+        </div>
+        <Title level={3} className={`!mb-1 !mt-2 ${pageText}`}>
+          Skill 审核（管理员）
+        </Title>
+        <Paragraph type="secondary" className="!mb-0 max-w-3xl">
+          审核由租户提交的 Skill 候选。通过后会以当前版本号发布到精选库；驳回会记录审核意见。
+        </Paragraph>
+      </div>
+      <div className={`rounded-[6px] p-3 ${surface}`}>
+        <Tabs
+          defaultActiveKey="pending"
+          items={[
+            { key: 'pending', label: '待审核', children: <SubmissionsList status="pending" /> },
+            { key: 'approved', label: '已通过', children: <SubmissionsList status="approved" /> },
+            { key: 'rejected', label: '已驳回', children: <SubmissionsList status="rejected" /> },
+            { key: 'withdrawn', label: '已撤回', children: <SubmissionsList status="withdrawn" /> },
+          ]}
+        />
+      </div>
+    </div>
   );
 }

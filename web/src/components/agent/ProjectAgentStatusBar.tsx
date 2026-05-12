@@ -86,6 +86,10 @@ interface ProjectAgentStatusBarProps {
   messageCount?: number | undefined;
   /** Enable pool management integration */
   enablePoolManagement?: boolean | undefined;
+  /** Show the embedded sandbox lifecycle indicator */
+  showSandboxStatus?: boolean | undefined;
+  /** Show the embedded task progress indicator */
+  showTaskProgress?: boolean | undefined;
 }
 
 /**
@@ -337,6 +341,8 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   tenantId,
   messageCount = 0,
   enablePoolManagement = false,
+  showSandboxStatus = true,
+  showTaskProgress = true,
 }) => {
   const { t } = useTranslation();
 
@@ -346,12 +352,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const pendingToolsStack = usePendingToolsStack();
 
   // Conversation-scoped state (stays on agentV3 — reads from conversationStates Map)
-  const {
-    tasks,
-    executionPathDecision,
-    selectionTrace,
-    policyFiltered,
-  } = useAgentV3Store(
+  const { tasks, executionPathDecision, selectionTrace, policyFiltered } = useAgentV3Store(
     useShallow((s) => {
       const convId = s.activeConversationId;
       const convState = convId ? s.conversationStates.get(convId) : null;
@@ -381,10 +382,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
   // Determine if we should show agent execution state (pill) vs lifecycle state
   const showExecState = (isStreaming || storeIsStreaming) && agentState !== 'idle';
-  const execConfig = useMemo(
-    () => execStateConfig[agentState],
-    [agentState]
-  );
+  const execConfig = useMemo(() => execStateConfig[agentState], [agentState]);
   const currentTool =
     pendingToolsStack.length > 0 ? pendingToolsStack[pendingToolsStack.length - 1] : null;
   const isActingPhase = agentState === 'acting' || agentState === 'preparing';
@@ -720,11 +718,15 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           </>
         )}
 
-        {/* Sandbox Status Indicator */}
-        <SandboxStatusIndicator projectId={projectId} tenantId={tenantId} />
+        {showSandboxStatus && (
+          <>
+            {/* Sandbox Status Indicator */}
+            <SandboxStatusIndicator projectId={projectId} tenantId={tenantId} />
 
-        {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+            {/* Separator */}
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+          </>
+        )}
 
         {/* Agent Status - Shows execution state when streaming, lifecycle state otherwise */}
         {showExecState ? (
@@ -844,7 +846,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         </LazyTooltip>
 
         {/* Task Progress */}
-        {tasks.length > 0 && (
+        {showTaskProgress && tasks.length > 0 && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
             <LazyTooltip
@@ -968,7 +970,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip title="暂停 Agent (停止接收新请求)">
               <button
                 type="button"
-                onClick={() => { void handlePauseAgent(); }}
+                onClick={() => {
+                  void handlePauseAgent();
+                }}
                 disabled={isActionPending}
                 className={`
                   p-1 rounded transition-colors
@@ -993,7 +997,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip title="恢复 Agent">
               <button
                 type="button"
-                onClick={() => { void handleResumeAgent(); }}
+                onClick={() => {
+                  void handleResumeAgent();
+                }}
                 disabled={isActionPending}
                 className={`
                   p-1 rounded transition-colors

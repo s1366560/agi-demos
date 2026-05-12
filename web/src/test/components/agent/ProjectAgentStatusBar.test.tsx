@@ -1,6 +1,4 @@
-import React from 'react';
-
-import { render, act, cleanup } from '@testing-library/react';
+import { render, act, cleanup, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useUnifiedAgentStatus } from '../../../hooks/useUnifiedAgentStatus';
@@ -238,5 +236,67 @@ describe('ProjectAgentStatusBar polling behavior', () => {
 
     // New mount should use short-lived cache and avoid immediate network refetch.
     expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('can hide the embedded sandbox indicator when sandbox is rendered in the merged status bar', () => {
+    render(
+      <ProjectAgentStatusBar
+        projectId="proj-no-sandbox-chip"
+        tenantId="tenant-1"
+        messageCount={0}
+        showSandboxStatus={false}
+      />
+    );
+
+    expect(screen.queryByTestId('sandbox-indicator')).not.toBeInTheDocument();
+  });
+
+  it('can hide the embedded task progress when task is rendered in the merged status bar', () => {
+    mockedUseAgentV3Store.mockImplementation(
+      (selector: (state: Record<string, unknown>) => unknown) => {
+        const state = {
+          activeConversationId: 'conv-with-tasks',
+          conversationStates: new Map([
+            [
+              'conv-with-tasks',
+              {
+                tasks: [
+                  {
+                    id: 'task-1',
+                    content: 'Analyze input',
+                    status: 'completed',
+                    order_index: 0,
+                  },
+                  {
+                    id: 'task-2',
+                    content: 'Run checks',
+                    status: 'in_progress',
+                    order_index: 1,
+                  },
+                ],
+                executionPathDecision: null,
+                selectionTrace: null,
+                policyFiltered: null,
+              },
+            ],
+          ]),
+          agentState: 'idle',
+          isStreaming: false,
+          pendingToolsStack: [],
+        };
+        return selector(state);
+      }
+    );
+
+    render(
+      <ProjectAgentStatusBar
+        projectId="proj-no-task-chip"
+        tenantId="tenant-1"
+        messageCount={0}
+        showTaskProgress={false}
+      />
+    );
+
+    expect(screen.queryByText('1/2')).not.toBeInTheDocument();
   });
 });

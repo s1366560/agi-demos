@@ -5,10 +5,11 @@
  * with project selector for choosing which project's context to use.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Empty as AntEmpty } from 'antd';
 
@@ -28,10 +29,10 @@ import type { Project } from '../../types/memory';
 /**
  * AgentWorkspace - Main component for tenant-level agent access
  */
-export const AgentWorkspace: React.FC = () => {
+export const AgentWorkspace: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { tenantId: urlTenantId, conversation: conversationParam } = useParams<{
+  const { tenantId: urlTenantId } = useParams<{
     tenantId?: string | undefined;
     conversation?: string | undefined;
   }>();
@@ -200,19 +201,6 @@ export const AgentWorkspace: React.FC = () => {
             navigationQuery={navigationQuery}
           />
           <ContextDetailPanel />
-          {conversationParam ? (
-            <BlackboardRailLink
-              tenantId={urlTenantId ?? null}
-              projectId={effectiveProjectId}
-              conversationId={conversationParam}
-              workspaceId={effectiveWorkspaceId ?? null}
-              label={t('agent.workspace.openInBlackboard', 'Open in Blackboard')}
-              ariaLabel={t(
-                'agent.workspace.openMultiAgentRail',
-                'Open conversation controls in Blackboard'
-              )}
-            />
-          ) : null}
         </>
       ) : (
         <div className="h-full flex items-center justify-center">
@@ -227,44 +215,3 @@ export const AgentWorkspace: React.FC = () => {
 };
 
 export default AgentWorkspace;
-
-interface BlackboardRailLinkProps {
-  tenantId: string | null;
-  projectId: string;
-  conversationId: string;
-  workspaceId: string | null;
-  label: string;
-  ariaLabel: string;
-}
-
-const BlackboardRailLink: React.FC<BlackboardRailLinkProps> = ({
-  tenantId,
-  projectId,
-  conversationId,
-  workspaceId,
-  label,
-  ariaLabel,
-}) => {
-  const href = useMemo(() => {
-    if (!tenantId) return null;
-    const params = new URLSearchParams({ tab: 'members', conversationId });
-    if (workspaceId) params.set('workspaceId', workspaceId);
-    return `/tenant/${tenantId}/projects/${projectId}/blackboard?${params.toString()}`;
-  }, [tenantId, projectId, conversationId, workspaceId]);
-
-  if (!href) return null;
-
-  return (
-    <Link
-      to={href}
-      data-testid="blackboard-rail-link"
-      aria-label={ariaLabel}
-      className="fixed right-4 top-1/2 -translate-y-1/2 z-20 flex h-10 items-center gap-1 rounded-full border border-[rgba(0,0,0,0.08)] bg-white px-3 text-[12px] font-medium text-[#171717] shadow-sm hover:bg-[#fafafa] dark:bg-surface-dark dark:text-white dark:border-slate-700"
-    >
-      <span aria-hidden="true" className="text-base leading-none">
-        &#x2261;
-      </span>
-      <span className="hidden sm:inline">{label}</span>
-    </Link>
-  );
-};

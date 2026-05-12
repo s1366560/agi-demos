@@ -18,6 +18,9 @@ import type { SkillResponse } from '@/types/agent';
 const { Text } = Typography;
 const { TextArea } = Input;
 
+const surface =
+  'border border-[oklch(0.9_0.006_255)] bg-[oklch(0.99_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.18_0.006_255)]';
+
 interface SubmitSkillDialogProps {
   skill: SkillResponse | null;
   open: boolean;
@@ -31,10 +34,18 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
   const [note, setNote] = useState('');
 
   useEffect(() => {
-    if (open) {
+    if (!open) {
+      return;
+    }
+
+    const resetTimer = window.setTimeout(() => {
       setSemver('0.1.0');
       setNote('');
-    }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+    };
   }, [open]);
 
   const mutation = useMutation({
@@ -68,13 +79,19 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
       okButtonProps={{ disabled: invalidSemver }}
       confirmLoading={mutation.isPending}
     >
-      <Space direction="vertical" className="w-full" size="middle">
-        <Text type="secondary">
-          提交后管理员会审核此 Skill 的内容；通过后将发布到精选库，所有租户都可以 fork。
-        </Text>
+      <Space orientation="vertical" className="w-full" size="middle">
+        <div className={`rounded-[6px] p-3 ${surface}`}>
+          <Text type="secondary">
+            提交后管理员会审核此 Skill 的内容；通过后将发布到精选库，所有租户都可以 fork。
+          </Text>
+        </div>
         <div>
-          <Text strong>版本号（semver）</Text>
+          <label htmlFor="skill-submit-semver" className="font-medium">
+            版本号（semver）
+          </label>
           <Input
+            id="skill-submit-semver"
+            className="mt-2"
             value={semver}
             onChange={(e) => {
               setSemver(e.target.value);
@@ -89,8 +106,12 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
           ) : null}
         </div>
         <div>
-          <Text strong>提交备注（可选）</Text>
+          <label htmlFor="skill-submit-note" className="font-medium">
+            提交备注（可选）
+          </label>
           <TextArea
+            id="skill-submit-note"
+            className="mt-2"
             rows={4}
             value={note}
             onChange={(e) => {

@@ -4,12 +4,22 @@
  * Management page for Skills with CRUD operations and filtering/search functionality.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Input } from 'antd';
-import { CheckCircle, Copy, GraduationCap, Pencil, Plus, RefreshCw, Send, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  FileText,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search as SearchIcon,
+  Send,
+  Trash2,
+} from 'lucide-react';
 
 import {
   useLazyMessage,
@@ -19,9 +29,8 @@ import {
   LazySpin,
 } from '@/components/ui/lazyAntd';
 
-import { SubmitSkillDialog } from '../../components/skill/SubmitSkillDialog';
-
 import { SkillModal } from '../../components/skill/SkillModal';
+import { SubmitSkillDialog } from '../../components/skill/SubmitSkillDialog';
 import {
   useSkillStore,
   useSkillLoading,
@@ -34,13 +43,61 @@ import type { SkillResponse } from '../../types/agent';
 
 const { Search } = Input;
 
-export const SkillList: React.FC = () => {
+type SkillStatus = 'active' | 'disabled' | 'deprecated';
+
+const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
+const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
+const surface =
+  'border border-[oklch(0.9_0.006_255)] bg-[oklch(0.99_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.18_0.006_255)]';
+const iconButton =
+  'inline-flex h-8 w-8 items-center justify-center rounded-[4px] text-[oklch(0.48_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] hover:text-[oklch(0.26_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:text-[oklch(0.7_0.008_255)] dark:hover:bg-[oklch(0.24_0.006_255)] dark:hover:text-[oklch(0.94_0.006_255)]';
+
+function StatusBadge({ status, label }: { status: SkillStatus; label: string }) {
+  const config: Record<SkillStatus, { shell: string; dot: string }> = {
+    active: {
+      shell:
+        'border-[oklch(0.78_0.08_155)] bg-[oklch(0.96_0.035_155)] text-[oklch(0.38_0.11_155)] dark:border-[oklch(0.44_0.08_155)] dark:bg-[oklch(0.24_0.04_155)] dark:text-[oklch(0.76_0.09_155)]',
+      dot: 'bg-[oklch(0.58_0.14_155)]',
+    },
+    disabled: {
+      shell:
+        'border-[oklch(0.86_0.006_255)] bg-[oklch(0.96_0.004_255)] text-[oklch(0.46_0.008_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.23_0.005_255)] dark:text-[oklch(0.72_0.006_255)]',
+      dot: 'bg-[oklch(0.62_0.006_255)]',
+    },
+    deprecated: {
+      shell:
+        'border-[oklch(0.82_0.08_68)] bg-[oklch(0.97_0.035_68)] text-[oklch(0.48_0.1_68)] dark:border-[oklch(0.44_0.07_68)] dark:bg-[oklch(0.25_0.04_68)] dark:text-[oklch(0.8_0.09_68)]',
+      dot: 'bg-[oklch(0.68_0.15_68)]',
+    },
+  };
+  const { shell, dot } = config[status];
+
+  return (
+    <span
+      className={`inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-[11px] font-medium ${shell}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+    </span>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className={`rounded-[6px] px-4 py-3 ${surface}`}>
+      <div className={`text-[11px] font-medium uppercase tracking-normal ${mutedText}`}>
+        {label}
+      </div>
+      <div className={`mt-1 text-xl font-semibold leading-none ${pageText}`}>{value}</div>
+    </div>
+  );
+}
+
+export const SkillList: FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deprecated'>(
-    'all'
-  );
+  const [statusFilter, setStatusFilter] = useState<'all' | SkillStatus>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillResponse | null>(null);
   const [submittingSkill, setSubmittingSkill] = useState<SkillResponse | null>(null);
@@ -53,9 +110,8 @@ export const SkillList: React.FC = () => {
   const total = useSkillTotal();
 
   // Filter skills locally with useMemo to prevent infinite loops
-  const filteredSkills = React.useMemo(() => {
+  const filteredSkills = useMemo(() => {
     return skills.filter((skill) => {
-      // Search filter
       if (search) {
         const searchLower = search.toLowerCase();
         const matchesName = skill.name.toLowerCase().includes(searchLower);
@@ -65,7 +121,6 @@ export const SkillList: React.FC = () => {
         }
       }
 
-      // Status filter
       if (statusFilter !== 'all' && skill.status !== statusFilter) {
         return false;
       }
@@ -74,11 +129,12 @@ export const SkillList: React.FC = () => {
     });
   }, [skills, search, statusFilter]);
 
+  const visibleCount = filteredSkills.length;
   const { listSkills, deleteSkill, updateSkillStatus, clearError } = useSkillStore();
 
   // Load data on mount
   useEffect(() => {
-    listSkills();
+    void listSkills();
   }, [listSkills]);
 
   // Clear error on unmount
@@ -107,7 +163,7 @@ export const SkillList: React.FC = () => {
   }, []);
 
   const handleStatusChange = useCallback(
-    async (id: string, status: 'active' | 'disabled' | 'deprecated') => {
+    async (id: string, status: SkillStatus) => {
       try {
         await updateSkillStatus(id, status);
         message?.success(t('tenant.skills.statusUpdateSuccess'));
@@ -139,11 +195,11 @@ export const SkillList: React.FC = () => {
         await createSkill({
           name: `${skill.name} (copy)`,
           description: skill.description,
-          tools: skill.tools ?? [],
+          tools: skill.tools,
           ...(skill.full_content ? { full_content: skill.full_content } : {}),
-          metadata: { ...(skill.metadata ?? {}), duplicated_from: skill.id },
+          metadata: { ...skill.metadata, duplicated_from: skill.id },
         });
-        message?.success(t('common.success') ?? 'Duplicated');
+        message?.success(t('common.success'));
       } catch {
         // Error handled by store
       }
@@ -159,95 +215,45 @@ export const SkillList: React.FC = () => {
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingSkill(null);
-    listSkills();
+    void listSkills();
   }, [listSkills]);
 
   const handleRefresh = useCallback(() => {
-    listSkills();
+    void listSkills();
   }, [listSkills]);
 
-  // Status badge component
-  const StatusBadge = ({ status }: { status: 'active' | 'disabled' | 'deprecated' }) => {
-    const config = {
-      active: {
-        bg: 'bg-green-100 dark:bg-green-900/30',
-        text: 'text-green-800 dark:text-green-300',
-        dot: 'bg-green-500',
-      },
-      disabled: {
-        bg: 'bg-slate-100 dark:bg-slate-700',
-        text: 'text-slate-800 dark:text-slate-300',
-        dot: 'bg-slate-400',
-      },
-      deprecated: {
-        bg: 'bg-orange-100 dark:bg-orange-900/30',
-        text: 'text-orange-800 dark:text-orange-300',
-        dot: 'bg-orange-500',
-      },
-    };
-    const { bg, text, dot } = config[status];
-    return (
-      <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${dot}`}></span>
-        {t(`common.status.${status}`)}
-      </span>
-    );
-  };
-
   return (
-    <div className="max-w-full mx-auto w-full flex flex-col gap-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>
+            Skill Registry
+          </div>
+          <h1 className={`mt-2 text-2xl font-semibold leading-8 tracking-normal ${pageText}`}>
             {t('tenant.skills.title')}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">{t('tenant.skills.subtitle')}</p>
+          <p className={`mt-1 max-w-2xl text-sm ${mutedText}`}>{t('tenant.skills.subtitle')}</p>
         </div>
         <button
+          type="button"
           onClick={handleCreate}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] bg-[oklch(0.24_0.01_255)] px-4 text-sm font-medium text-[oklch(0.98_0.004_255)] transition-colors hover:bg-[oklch(0.31_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:bg-[oklch(0.9_0.006_255)] dark:text-[oklch(0.17_0.006_255)] dark:hover:bg-[oklch(0.98_0.004_255)]"
         >
           <Plus size={16} />
           {t('tenant.skills.createNew')}
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t('tenant.skills.stats.total')}
-              </p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{total}</p>
-            </div>
-            <GraduationCap size={16} className="text-4xl text-primary-500" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t('tenant.skills.stats.active')}
-              </p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                {activeCount}
-              </p>
-            </div>
-            <CheckCircle size={16} className="text-4xl text-green-500" />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <SummaryStat label={t('tenant.skills.stats.total')} value={total} />
+        <SummaryStat label={t('tenant.skills.stats.active')} value={activeCount} />
+        <SummaryStat label="当前可见" value={visibleCount} />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
+      <div className={`rounded-[6px] p-3 ${surface}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <SearchIcon size={16} className={mutedText} />
             <Search
               placeholder={t('tenant.skills.searchPlaceholder')}
               value={search}
@@ -255,12 +261,13 @@ export const SkillList: React.FC = () => {
                 setSearch(e.target.value);
               }}
               allowClear
+              className="min-w-0 flex-1"
             />
           </div>
           <LazySelect
             value={statusFilter}
             onChange={setStatusFilter}
-            className="w-full sm:w-40"
+            className="w-full md:w-44"
             options={[
               { label: t('common.status.all'), value: 'all' },
               { label: t('common.status.active'), value: 'active' },
@@ -269,56 +276,51 @@ export const SkillList: React.FC = () => {
             ]}
           />
           <button
+            type="button"
             onClick={handleRefresh}
-            className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
           >
             <RefreshCw size={16} />
+            <span>刷新</span>
           </button>
         </div>
       </div>
 
-      {/* Content */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
+        <div className={`flex justify-center rounded-[6px] py-12 ${surface}`}>
           <LazySpin size="large" />
         </div>
       ) : skills.length === 0 ? (
-        <LazyEmpty description={t('tenant.skills.empty')} className="py-12" />
+        <div className={`rounded-[6px] py-12 ${surface}`}>
+          <LazyEmpty description={t('tenant.skills.empty')} />
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className={`overflow-hidden rounded-[6px] ${surface}`}>
           {filteredSkills.map((skill) => (
             <div
               key={skill.id}
-              className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow"
+              className="grid gap-4 border-b border-[oklch(0.9_0.006_255)] px-4 py-4 last:border-b-0 hover:bg-[oklch(0.97_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:hover:bg-[oklch(0.21_0.006_255)] lg:grid-cols-[minmax(0,1fr)_140px_260px] lg:items-center"
             >
-              {/* Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
-                    {skill.name}
-                  </h3>
-                  <StatusBadge status={skill.status} />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className={`truncate text-sm font-semibold ${pageText}`}>{skill.name}</h3>
+                  <StatusBadge status={skill.status} label={t(`common.status.${skill.status}`)} />
                 </div>
+                <p className={`mt-2 line-clamp-2 text-sm ${mutedText}`}>{skill.description}</p>
               </div>
 
-              {/* Description */}
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-2">
-                {skill.description}
-              </p>
-
-              {/* Tools */}
-              <div className="mb-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+              <div className={`flex items-center gap-2 text-xs ${mutedText}`}>
+                <FileText size={14} />
+                <span>
                   {t('tenant.skills.tools')}: {skill.tools.length}
-                </p>
+                </span>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
                 <LazySelect
                   value={skill.status}
-                  onChange={(status: any) => handleStatusChange(skill.id, status)}
-                  className="w-32"
+                  onChange={(status: SkillStatus) => handleStatusChange(skill.id, status)}
+                  className="w-full sm:w-36"
                   size="small"
                   options={[
                     { label: t('common.status.active'), value: 'active' },
@@ -328,29 +330,33 @@ export const SkillList: React.FC = () => {
                 />
                 <div className="flex items-center gap-2">
                   <button
+                    type="button"
                     onClick={() => {
                       handleEdit(skill);
                     }}
-                    className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                    className={iconButton}
                     title="Edit"
+                    aria-label="Edit skill"
                   >
                     <Pencil size={16} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       void handleDuplicate(skill);
                     }}
-                    className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                    className={iconButton}
                     title="Duplicate"
                     aria-label="Duplicate skill"
                   >
                     <Copy size={16} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setSubmittingSkill(skill);
                     }}
-                    className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                    className={iconButton}
                     title="提交到精选库"
                     aria-label="Submit skill to curated library"
                   >
@@ -362,7 +368,10 @@ export const SkillList: React.FC = () => {
                     okText={t('common.confirm')}
                     cancelText={t('common.cancel')}
                   >
-                    <button className="p-2 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                    <button
+                      type="button"
+                      className={`${iconButton} hover:text-[oklch(0.55_0.18_25)]`}
+                    >
                       <Trash2 size={16} />
                     </button>
                   </LazyPopconfirm>
@@ -373,7 +382,6 @@ export const SkillList: React.FC = () => {
         </div>
       )}
 
-      {/* Modal */}
       {isModalOpen && (
         <SkillModal
           isOpen={isModalOpen}
@@ -382,7 +390,6 @@ export const SkillList: React.FC = () => {
           onSuccess={handleModalSuccess}
         />
       )}
-      {/* Submit to curated library */}
       <SubmitSkillDialog
         skill={submittingSkill}
         open={submittingSkill !== null}

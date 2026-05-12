@@ -54,7 +54,6 @@ import {
 } from '../../utils/exportConversation';
 import { WorkspaceGroupChatPanel } from '../workspace/chat/WorkspaceGroupChatPanel';
 
-import { AgentProgressBar } from './AgentProgressBar';
 import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
@@ -185,9 +184,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const error = useAgentError();
 
     const conversations = useConversationsStore((state) => state.conversations);
-    const currentConversation = useConversationsStore(
-      (state) => state.currentConversation
-    );
+    const currentConversation = useConversationsStore((state) => state.currentConversation);
 
     const doomLoopDetected = useDoomLoopDetected();
     const suggestions = useSuggestions();
@@ -404,7 +401,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         // yet so closure-captured activeConversationId/isStreaming may be stale.
         const freshState = useAgentV3Store.getState();
         const alreadyStreaming =
-          freshState.activeConversationId === conversationId && useStreamingStore.getState().agentIsStreaming;
+          freshState.activeConversationId === conversationId &&
+          useStreamingStore.getState().agentIsStreaming;
         if (!alreadyStreaming) {
           void loadMessages(conversationId, projectId);
         }
@@ -578,14 +576,21 @@ ${content}`;
           tenantId={tenantId}
           messageCount={timeline.length}
           enablePoolManagement
+          showSandboxStatus={false}
+          showTaskProgress={false}
         />
       ),
       [projectId, tenantId, timeline.length]
     );
 
+    const taskProgress = useMemo(
+      () => deriveTaskProgress(tasks, isStreaming),
+      [tasks, isStreaming]
+    );
+
     // Split mode drag handler
-		// Plan Mode toggle
-		const isPlanMode = useIsPlanMode();
+    // Plan Mode toggle
+    const isPlanMode = useIsPlanMode();
 
     const groupedTimeline = useMemo(() => groupTimelineEvents(timeline), [timeline]);
     const subagentSummaries = useMemo(
@@ -617,9 +622,7 @@ ${content}`;
         });
         useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
       } catch (err) {
-        void message.error(
-          err instanceof Error ? err.message : 'Failed to switch plan mode'
-        );
+        void message.error(err instanceof Error ? err.message : 'Failed to switch plan mode');
         console.error('Failed to switch plan mode:', err);
       }
     }, [activeConversationId, isPlanMode]);
@@ -672,25 +675,6 @@ ${content}`;
               <GripHorizontal size={12} />
             </div>
           </div>
-          {(() => {
-            const progress = deriveTaskProgress(tasks, isStreaming);
-            if (!progress.hasTasks) return null;
-            return (
-              <div
-                className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 px-4 py-2"
-                data-testid="agent-task-progress-strip"
-              >
-                <AgentProgressBar
-                  current={progress.current}
-                  total={progress.total}
-                  status={progress.status}
-                  label={progress.label}
-                  compact
-                  animate={progress.status === 'step_executing'}
-                />
-              </div>
-            );
-          })()}
           <InputBar
             ref={inputBarRef}
             onSend={(...args) => {
@@ -761,6 +745,24 @@ ${content}`;
 
     const workspaceStatusSlots = useMemo(() => {
       const slots: Parameters<typeof WorkspaceStatusBar>[0] = {};
+      if (taskProgress.hasTasks) {
+        const taskPercent =
+          taskProgress.total > 0
+            ? Math.round((taskProgress.current / taskProgress.total) * 100)
+            : 0;
+        slots.task = {
+          label: 'Task',
+          value: `${taskProgress.current}/${taskProgress.total} · ${taskPercent}%`,
+          tone:
+            taskProgress.status === 'failed'
+              ? 'error'
+              : taskProgress.status === 'completed'
+                ? 'ok'
+                : 'running',
+          hint: taskProgress.label ?? 'Task progress',
+          progressPercent: taskPercent,
+        };
+      }
       if (isStreaming) {
         slots.llm = { label: 'LLM', value: 'streaming', tone: 'running' };
       }
@@ -800,6 +802,7 @@ ${content}`;
       }
       return slots;
     }, [
+      taskProgress,
       isStreaming,
       sandboxConnectionStatus,
       currentTool,
@@ -810,8 +813,11 @@ ${content}`;
 
     const statusBarWithLayout = (
       <div className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50 dark:bg-slate-800/80 min-w-0">
-        <WorkspaceStatusBar {...workspaceStatusSlots} />
         <div className="flex items-center min-w-0">
+          <WorkspaceStatusBar
+            {...workspaceStatusSlots}
+            className="min-w-0 flex-shrink border-0 bg-transparent px-2 py-0"
+          />
           <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
           <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
             {conversationArtifacts.length > 0 && (
@@ -827,66 +833,66 @@ ${content}`;
               </button>
             )}
             {activeConversationId && timeline.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setCompareMode(true);
-                setShowComparePicker(true);
-              }}
-              className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-              title={t('comparison.compare', 'Compare')}
-              aria-label={t('comparison.compare', 'Compare')}
-            >
-              <GitCompareArrows size={14} />
-            </button>
-          )}
-          {timeline.length > 0 && (
-            <div className="relative">
               <button
                 type="button"
                 onClick={() => {
-                  setShowExportMenu((v) => !v);
+                  setCompareMode(true);
+                  setShowComparePicker(true);
                 }}
-                onBlur={() =>
-                  setTimeout(() => {
-                    setShowExportMenu(false);
-                  }, 150)
-                }
-                className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                title={t('agent.actions.export', 'Export')}
-                aria-label={t('agent.actions.export', 'Export')}
+                className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                title={t('comparison.compare', 'Compare')}
+                aria-label={t('comparison.compare', 'Compare')}
               >
-                <Download size={14} />
-                <ChevronDown size={10} />
+                <GitCompareArrows size={14} />
               </button>
-              {showExportMenu && (
-                <div className="absolute bottom-full right-0 mb-1 w-48 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg z-50 py-1">
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleExportMarkdown();
+            )}
+            {timeline.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExportMenu((v) => !v);
+                  }}
+                  onBlur={() =>
+                    setTimeout(() => {
                       setShowExportMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  >
-                    {t('agent.actions.exportMarkdown', 'Export as Markdown')}
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleExportPdf();
-                      setShowExportMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  >
-                    {t('agent.actions.exportPdf', 'Export as PDF')}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                    }, 150)
+                  }
+                  className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  title={t('agent.actions.export', 'Export')}
+                  aria-label={t('agent.actions.export', 'Export')}
+                >
+                  <Download size={14} />
+                  <ChevronDown size={10} />
+                </button>
+                {showExportMenu && (
+                  <div className="absolute bottom-full right-0 mb-1 w-48 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg z-50 py-1">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleExportMarkdown();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    >
+                      {t('agent.actions.exportMarkdown', 'Export as Markdown')}
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleExportPdf();
+                        setShowExportMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    >
+                      {t('agent.actions.exportPdf', 'Export as PDF')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />
           </div>
         </div>

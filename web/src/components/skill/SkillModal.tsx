@@ -4,7 +4,7 @@
  * Modal for creating and editing Skills with tabbed form layout.
  */
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -17,6 +17,9 @@ import { useSkillStore, useSkillSubmitting } from '../../stores/skill';
 import type { SkillResponse, SkillCreate, SkillUpdate } from '../../types/agent';
 
 const { TextArea } = Input;
+
+const surface =
+  'border border-[oklch(0.9_0.006_255)] bg-[oklch(0.99_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.18_0.006_255)]';
 
 interface SkillModalProps {
   isOpen: boolean;
@@ -37,60 +40,35 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
 
   const isEditMode = !!skill;
 
-  // Track previous state to only update when values actually change
-  const prevSkillRef = useRef<SkillResponse | null>(null);
-  const prevIsOpenRef = useRef(false);
-
-  // Reset form when modal opens/closes or skill changes
   useEffect(() => {
-    const skillChanged = prevSkillRef.current?.id !== skill?.id;
-    const openStateChanged = prevIsOpenRef.current !== isOpen;
-
-    if (isOpen && (skillChanged || openStateChanged)) {
-      if (skill) {
-        // Edit mode - populate form
-        form.setFieldsValue({
-          name: skill.name,
-          description: skill.description,
-        });
-      } else {
-        // Create mode - reset form
-        form.resetFields();
-      }
-      // Defer tab update to avoid synchronous setState in effect
-      if (openStateChanged) {
-        setTimeout(() => {
-          setActiveTab('basic');
-        }, 0);
-      }
+    if (!isOpen) {
+      return;
     }
 
-    prevSkillRef.current = skill || null;
-    prevIsOpenRef.current = isOpen;
+    if (skill) {
+      form.setFieldsValue({
+        name: skill.name,
+        description: skill.description,
+      });
+    } else {
+      form.resetFields();
+    }
+
+    const resetTimer = window.setTimeout(() => {
+      setActiveTab('basic');
+      setToolInput('');
+      setTools(skill?.tools ?? []);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+    };
   }, [isOpen, skill, form]);
-
-  // Update tools when skill changes (separate effect)
-  useEffect(() => {
-    const skillChanged = prevSkillRef.current?.id !== skill?.id;
-
-    if (isOpen && skill && skillChanged) {
-      // Defer all state updates to avoid synchronous setState in effect
-      setTimeout(() => {
-        setTools(skill.tools);
-        setToolInput('');
-      }, 0);
-    } else if (isOpen && !skill && skillChanged) {
-      setTimeout(() => {
-        setTools([]);
-        setToolInput('');
-      }, 0);
-    }
-  }, [isOpen, skill]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     try {
-      const values = await form.validateFields();
+      const values = (await form.validateFields()) as { name: string; description: string };
 
       // Validate that at least one tool exists
       if (tools.length === 0) {
@@ -102,10 +80,10 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
       const data: SkillCreate | SkillUpdate = {
         name: values.name,
         description: values.description,
-        tools: tools,
+        tools,
       };
 
-      if (isEditMode && skill) {
+      if (skill) {
         await updateSkill(skill.id, data);
         message.success(t('tenant.skills.updateSuccess'));
       } else {
@@ -125,23 +103,23 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
       }
       // API errors handled by store
     }
-  }, [form, isEditMode, skill, tools, createSkill, updateSkill, onSuccess, t]);
+  }, [form, skill, tools, createSkill, updateSkill, onSuccess, t]);
 
   // Handle tool addition
   const handleAddTool = useCallback(() => {
-    if (toolInput.trim() && !tools.includes(toolInput.trim())) {
-      setTools([...tools, toolInput.trim()]);
+    const normalizedTool = toolInput.trim();
+    if (normalizedTool) {
+      setTools((currentTools) =>
+        currentTools.includes(normalizedTool) ? currentTools : [...currentTools, normalizedTool]
+      );
       setToolInput('');
     }
-  }, [toolInput, tools]);
+  }, [toolInput]);
 
   // Handle tool removal
-  const handleRemoveTool = useCallback(
-    (tool: string) => {
-      setTools(tools.filter((t) => t !== tool));
-    },
-    [tools]
-  );
+  const handleRemoveTool = useCallback((tool: string) => {
+    setTools((currentTools) => currentTools.filter((item) => item !== tool));
+  }, []);
 
   // Tab items
   const tabItems = [
@@ -188,12 +166,16 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
       children: (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="skill-tool-input"
+              className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.skills.modal.allowedTools')}
               <span className="text-red-500 ml-1">*</span>
             </label>
-            <div className="flex gap-2 mb-3">
+            <div className="mb-3 flex gap-2">
               <Input
+                id="skill-tool-input"
                 placeholder={t('tenant.skills.modal.addTool')}
                 value={toolInput}
                 onChange={(e) => {
@@ -204,36 +186,41 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
               <button
                 type="button"
                 onClick={handleAddTool}
-                className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap"
+                className="inline-flex h-8 items-center justify-center rounded-[4px] bg-[oklch(0.24_0.01_255)] px-3 text-sm font-medium text-[oklch(0.98_0.004_255)] transition-colors hover:bg-[oklch(0.31_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:bg-[oklch(0.9_0.006_255)] dark:text-[oklch(0.17_0.006_255)] dark:hover:bg-[oklch(0.98_0.004_255)]"
               >
                 {t('common.add')}
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {tools.map((tool, idx) => (
-                <Tag
-                  key={idx}
-                  closable
-                  onClose={() => {
-                    handleRemoveTool(tool);
-                  }}
-                  className="px-3 py-1.5 text-sm"
-                >
-                  {tool}
-                </Tag>
-              ))}
-              {tools.length === 0 && (
-                <div className="text-center w-full py-8 text-slate-400">
-                  {t('tenant.skills.modal.noTools')}
-                </div>
-              )}
+            <div className={`min-h-24 rounded-[6px] p-3 ${surface}`}>
+              <div className="flex flex-wrap gap-2">
+                {tools.map((tool) => (
+                  <Tag
+                    key={tool}
+                    closable
+                    onClose={() => {
+                      handleRemoveTool(tool);
+                    }}
+                    className="px-3 py-1.5 text-sm"
+                  >
+                    {tool}
+                  </Tag>
+                ))}
+                {tools.length === 0 && (
+                  <div className="w-full py-6 text-center text-sm text-slate-400">
+                    {t('tenant.skills.modal.noTools')}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="rounded-[6px] border border-[oklch(0.82_0.05_250)] bg-[oklch(0.97_0.018_250)] p-4 dark:border-[oklch(0.38_0.06_250)] dark:bg-[oklch(0.22_0.03_250)]">
             <div className="flex items-start gap-2">
-              <Info size={18} className="text-blue-600 dark:text-blue-400 mt-0.5" />
-              <div className="text-sm text-blue-700 dark:text-blue-300">
+              <Info
+                size={18}
+                className="mt-0.5 text-[oklch(0.48_0.16_250)] dark:text-[oklch(0.72_0.12_250)]"
+              />
+              <div className="text-sm text-[oklch(0.4_0.11_250)] dark:text-[oklch(0.78_0.08_250)]">
                 {t('tenant.skills.modal.toolsHint')}
               </div>
             </div>
@@ -248,7 +235,9 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
       title={isEditMode ? t('tenant.skills.modal.editTitle') : t('tenant.skills.modal.createTitle')}
       open={isOpen}
       onCancel={onClose}
-      onOk={handleSubmit}
+      onOk={() => {
+        void handleSubmit();
+      }}
       okText={isEditMode ? t('common.save') : t('common.create')}
       cancelText={t('common.cancel')}
       confirmLoading={isSubmitting}
