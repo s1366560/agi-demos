@@ -233,7 +233,7 @@ class LifecycleMixin:
         self._filesystem_skills_loaded = True
 
         # Lazy import to avoid circular deps and basedpyright indexing issues
-        from src.infrastructure.agent.skill.filesystem_loader import FileSystemSkillLoader
+        from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
 
         try:
             loader = FileSystemSkillLoader(

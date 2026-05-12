@@ -139,49 +139,6 @@ class SkillRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def find_matching_skills(
-        self,
-        tenant_id: str,
-        query: str,
-        threshold: float = 0.5,
-        limit: int = 5,
-    ) -> list[Skill]:
-        """
-        Find skills that match a query.
-
-        Uses trigger patterns to find matching skills.
-
-        Args:
-            tenant_id: Tenant ID
-            query: Query string to match
-            threshold: Minimum match score (0-1)
-            limit: Maximum number of results
-
-        Returns:
-            List of matching skills, sorted by match score
-        """
-
-    @abstractmethod
-    async def increment_usage(
-        self,
-        skill_id: str,
-        success: bool,
-    ) -> Skill:
-        """
-        Increment usage statistics for a skill.
-
-        Args:
-            skill_id: Skill ID
-            success: Whether the execution was successful
-
-        Returns:
-            Updated skill
-
-        Raises:
-            ValueError: If skill not found
-        """
-
-    @abstractmethod
     async def count_by_tenant(
         self,
         tenant_id: str,

@@ -78,7 +78,7 @@ class TestRevisionHashStability:
 
     def test_substantive_field_changes_hash(self):
         a = self._base()
-        b = dict(self._base(), prompt_template="Say it back twice.")
+        b = dict(self._base(), description="A different description")
         assert revision_hash_of(a) != revision_hash_of(b)
 
     def test_canonical_dict_strips_volatile(self):

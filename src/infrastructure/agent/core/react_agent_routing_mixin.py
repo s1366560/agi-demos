@@ -13,7 +13,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ..routing import ExecutionPath, IntentGate, RoutingDecision
-from ..skill import SkillProtocol
 
 if TYPE_CHECKING:
     from src.domain.model.agent.skill import Skill
@@ -141,24 +140,3 @@ class RoutingMixin:
                     "Failed to fetch dynamic tools for router threshold check", exc_info=True
                 )
         return len(self.raw_tools)
-
-    def _match_skill(
-        self: _RoutingAgent,
-        query: str,
-        available_skills: list[SkillProtocol] | None = None,
-    ) -> tuple[SkillProtocol | None, float]:
-        """Return no implicit skill match.
-
-        Forced skill execution remains structural. Natural-language skill
-        activation must be decided by an agent-backed broker, not by local
-        pattern scoring.
-
-        Args:
-            query: User query
-
-        Returns:
-            Tuple of (best matching skill or None, match score)
-        """
-        _ = (query, available_skills)
-        logger.debug("[ReActAgent] Implicit skill matching requires agent decision broker")
-        return None, 0.0

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.application.services.skill_service import SkillService
-from src.domain.model.agent.skill import Skill, SkillScope, SkillSource, SkillStatus, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope, SkillSource, SkillStatus
 from src.domain.model.agent.tenant_skill_config import TenantSkillConfig
 
 
@@ -53,8 +53,6 @@ def sample_skill():
         tenant_id="tenant-1",
         project_id=None,
         source=SkillSource.DATABASE,
-        trigger_type=TriggerType.KEYWORD,
-        trigger_patterns=[],
         tools=["read", "write"],
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -73,8 +71,6 @@ def sample_system_skill():
         tenant_id="system",
         project_id=None,
         source=SkillSource.FILESYSTEM,
-        trigger_type=TriggerType.KEYWORD,
-        trigger_patterns=[],
         tools=["read"],
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -137,8 +133,6 @@ class TestSkillService:
             tenant_id="tenant-1",
             project_id="project-1",
             source=SkillSource.DATABASE,
-            trigger_type=TriggerType.KEYWORD,
-            trigger_patterns=[],
             tools=["read"],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
@@ -254,8 +248,6 @@ class TestSkillService:
             status=SkillStatus.ACTIVE,
             tenant_id="tenant-1",
             source=SkillSource.DATABASE,
-            trigger_type=TriggerType.KEYWORD,
-            trigger_patterns=[],
             tools=["read"],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
@@ -269,8 +261,6 @@ class TestSkillService:
             tenant_id="tenant-1",
             project_id="project-1",
             source=SkillSource.DATABASE,
-            trigger_type=TriggerType.KEYWORD,
-            trigger_patterns=[],
             tools=["read", "write"],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),

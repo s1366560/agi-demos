@@ -44,10 +44,7 @@ _VOLATILE_FIELDS: frozenset[str] = frozenset(
 _CANONICAL_FIELDS: tuple[str, ...] = (
     "name",
     "description",
-    "trigger_type",
-    "trigger_patterns",
     "tools",
-    "prompt_template",
     "full_content",
     "metadata",
     "scope",
@@ -77,8 +74,8 @@ def revision_hash_of(payload: dict[str, Any]) -> str:
 
 # --- Semver helper (P2-4 Track D) -----------------------------------------
 
-from typing import Literal  # noqa: E402
 import re  # noqa: E402
+from typing import Literal  # noqa: E402
 
 _SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 

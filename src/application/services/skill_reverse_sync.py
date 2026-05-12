@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.domain.model.agent.skill import Skill, SkillScope, TriggerPattern, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope
 from src.domain.model.agent.skill.skill_source import SkillSource
 from src.domain.model.agent.skill.skill_version import SkillVersion
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
@@ -185,7 +185,6 @@ class SkillReverseSync:
 
         # Update skill fields from parsed content
         skill.description = parsed.description
-        skill.trigger_patterns = [TriggerPattern(pattern=p) for p in parsed.trigger_patterns]
         skill.tools = parsed.tools
         skill.full_content = target_version.skill_md_content
 
@@ -325,7 +324,6 @@ class SkillReverseSync:
         if existing:
             # Update existing skill
             existing.description = parsed.description
-            existing.trigger_patterns = [TriggerPattern(pattern=p) for p in parsed.trigger_patterns]
             existing.tools = parsed.tools
             existing.full_content = skill_md_content
             existing.updated_at = datetime.now(UTC)
@@ -341,8 +339,6 @@ class SkillReverseSync:
                 name=skill_name,
                 description=parsed.description,
                 tools=parsed.tools or ["terminal"],
-                trigger_type=TriggerType(parsed.frontmatter.get("trigger_type", "keyword")),
-                trigger_patterns=[TriggerPattern(pattern=p) for p in parsed.trigger_patterns],
                 project_id=project_id,
                 scope=scope,
                 full_content=skill_md_content,

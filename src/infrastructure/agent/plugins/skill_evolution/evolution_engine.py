@@ -129,7 +129,7 @@ class EvolutionEngine:
         tenant_id: str,
     ) -> SkillEvolutionJob | None:
         skill = await self._load_skill(group.skill_name, tenant_id=tenant_id)
-        current_content = skill.full_content or skill.prompt_template or ""
+        current_content = skill.full_content or ""
 
         evidence = self._build_evidence_text(group)
         existing_list = "\n".join(

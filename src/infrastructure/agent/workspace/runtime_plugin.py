@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
-from src.domain.model.agent.skill.skill import TriggerPattern
 from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, PluginSkillBuildContext
 from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
 from src.infrastructure.agent.workspace.runtime_role_contract import (
@@ -102,16 +101,6 @@ def _build_workspace_task_harness_skills(
                 "workspace_report_blocked",
                 "workspace_request_clarification",
             ],
-            "trigger_type": "hybrid",
-            "trigger_patterns": [
-                TriggerPattern("workspace task", weight=0.9),
-                TriggerPattern("durable handoff", weight=0.9),
-                TriggerPattern("collaboration tracking", weight=0.85),
-                TriggerPattern("任务分解", weight=0.85),
-                TriggerPattern("协作跟踪", weight=0.85),
-                TriggerPattern("验收证据", weight=0.8),
-            ],
-            "prompt_template": _WORKSPACE_TASK_HARNESS_FULL_CONTENT,
             "full_content": _WORKSPACE_TASK_HARNESS_FULL_CONTENT,
             "agent_modes": ["*"],
             "scope": "tenant",

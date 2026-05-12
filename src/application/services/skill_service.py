@@ -379,11 +379,10 @@ class SkillService:
                 logger.warning(f"Failed to load project skills from database: {e}")
 
     def _apply_tier(self, skill: Skill, tier: int) -> Skill:
-        """
-        Apply tier-based content filtering.
+        """Apply tier-based content filtering.
 
         Tier 1: Name, description, and tools only (for tool description)
-        Tier 2: Include triggers and metadata (for matching)
+        Tier 2: Include metadata (for selection)
         Tier 3: Full content (for execution)
 
         Note: tools are always included as they are required by the Skill domain model.
@@ -391,28 +390,21 @@ class SkillService:
         if tier >= 3:
             return skill
 
-        # Create a copy with limited content
-        # Note: tools are always included (required by domain model validation)
         return Skill(
             id=skill.id,
             tenant_id=skill.tenant_id,
             project_id=skill.project_id,
             name=skill.name,
             description=skill.description,
-            trigger_type=skill.trigger_type,
-            trigger_patterns=skill.trigger_patterns if tier >= 2 else [],
-            tools=skill.tools,  # Always include tools (required field)
-            prompt_template=None if tier < 3 else skill.prompt_template,
+            tools=skill.tools,
             status=skill.status,
-            success_count=skill.success_count,
-            failure_count=skill.failure_count,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             metadata=skill.metadata if tier >= 2 else None,
             source=skill.source,
             file_path=skill.file_path if tier >= 2 else None,
             full_content=None if tier < 3 else skill.full_content,
-            agent_modes=skill.agent_modes,  # Always include agent_modes
+            agent_modes=skill.agent_modes,
             scope=skill.scope,
             is_system_skill=skill.is_system_skill,
         )
@@ -468,8 +460,7 @@ class SkillService:
         # Fall back to database
         skill = await self._skill_repo.get_by_name(tenant_id, skill_name)
         if skill:
-            # Use full_content if available, otherwise prompt_template
-            return skill.full_content or skill.prompt_template
+            return skill.full_content
 
         return None
 
@@ -503,20 +494,15 @@ class SkillService:
             existing = await self._skill_repo.get_by_name(tenant_id, skill.name)
 
             if existing:
-                # Update existing (preserve usage stats)
+                # Update existing
                 updated_skill = Skill(
                     id=existing.id,
                     tenant_id=existing.tenant_id,
                     project_id=skill.project_id or existing.project_id,
                     name=skill.name,
                     description=skill.description,
-                    trigger_type=skill.trigger_type,
-                    trigger_patterns=skill.trigger_patterns,
                     tools=skill.tools,
-                    prompt_template=skill.prompt_template,
                     status=skill.status,
-                    success_count=existing.success_count,  # Preserve
-                    failure_count=existing.failure_count,  # Preserve
                     created_at=existing.created_at,
                     updated_at=skill.updated_at,
                     metadata={
@@ -540,13 +526,8 @@ class SkillService:
                     project_id=skill.project_id,
                     name=skill.name,
                     description=skill.description,
-                    trigger_type=skill.trigger_type,
-                    trigger_patterns=skill.trigger_patterns,
                     tools=skill.tools,
-                    prompt_template=skill.prompt_template,
                     status=skill.status,
-                    success_count=0,
-                    failure_count=0,
                     metadata={
                         **(skill.metadata or {}),
                         "synced_from_filesystem": True,
@@ -564,77 +545,6 @@ class SkillService:
 
         logger.info(f"Synced {synced_count} skills from filesystem to database")
         return synced_count
-
-    async def find_matching_skills(
-        self,
-        tenant_id: str,
-        query: str,
-        threshold: float = 0.5,
-        limit: int = 5,
-    ) -> list[Skill]:
-        """
-        Find skills that match a query.
-
-        Searches both file system and database skills.
-
-        Args:
-            tenant_id: Tenant ID
-            query: Query string to match
-            threshold: Minimum match score (0-1)
-            limit: Maximum number of results
-
-        Returns:
-            List of matching skills sorted by score
-        """
-        all_skills = await self.list_available_skills(
-            tenant_id=tenant_id,
-            tier=2,  # Need triggers for matching
-            status=SkillStatus.ACTIVE,
-        )
-
-        # Score and filter skills
-        scored_skills = []
-        for skill in all_skills:
-            score = skill.matches_query(query)
-            if score >= threshold:
-                scored_skills.append((score, skill))
-
-        # Sort by score descending
-        scored_skills.sort(key=lambda x: x[0], reverse=True)
-
-        return [skill for _, skill in scored_skills[:limit]]
-
-    async def record_skill_usage(
-        self,
-        tenant_id: str,
-        skill_name: str,
-        success: bool,
-    ) -> Skill | None:
-        """
-        Record usage of a skill.
-
-        Args:
-            tenant_id: Tenant ID
-            skill_name: Name of the skill
-            success: Whether the execution was successful
-
-        Returns:
-            Updated skill or None if not found
-        """
-        skill = await self._skill_repo.get_by_name(tenant_id, skill_name)
-        if not skill:
-            # Try to sync from filesystem first
-            if self._fs_loader:
-                fs_result = await self._fs_loader.load_all()
-                loaded = fs_result.get_skill_by_name(skill_name)
-                if loaded:
-                    await self._skill_repo.create(loaded.skill)
-                    skill = loaded.skill
-
-        if skill:
-            return await self._skill_repo.increment_usage(skill.id, success)
-
-        return None
 
     def invalidate_cache(self) -> None:
         """Invalidate caches, forcing reload on next access."""
@@ -860,7 +770,6 @@ class SkillService:
         description: str,
         tools: list[str],
         project_id: str | None = None,
-        prompt_template: str | None = None,
         full_content: str | None = None,
         scope: SkillScope = SkillScope.TENANT,
     ) -> Skill:
@@ -873,7 +782,6 @@ class SkillService:
             description: Skill description
             tools: List of tool names
             project_id: Optional project ID (required for PROJECT scope)
-            prompt_template: Optional prompt template
             full_content: Optional full SKILL.md content
             scope: Skill scope (TENANT or PROJECT, cannot create SYSTEM)
 
@@ -895,7 +803,6 @@ class SkillService:
             description=description,
             tools=tools,
             project_id=project_id,
-            prompt_template=prompt_template,
             full_content=full_content,
             scope=scope,
             is_system_skill=False,
@@ -929,7 +836,6 @@ class SkillService:
             raise ValueError("Cannot modify system skills")
 
         skill.full_content = full_content
-        skill.prompt_template = full_content  # Keep in sync
 
         return await self._skill_repo.update(skill)
 

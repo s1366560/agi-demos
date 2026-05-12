@@ -28,7 +28,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill_source import SkillSource
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.infrastructure.adapters.secondary.common.base_repository import (
@@ -70,13 +70,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             project_id=skill.project_id,
             name=skill.name,
             description=skill.description,
-            trigger_type=skill.trigger_type.value,
-            trigger_patterns=[p.to_dict() for p in skill.trigger_patterns],
             tools=list(skill.tools),
-            prompt_template=skill.prompt_template,
             status=skill.status.value,
-            success_count=skill.success_count,
-            failure_count=skill.failure_count,
             metadata_json=skill.metadata,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
@@ -144,13 +139,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         # Update fields
         db_skill.name = skill.name
         db_skill.description = skill.description
-        db_skill.trigger_type = skill.trigger_type.value
-        db_skill.trigger_patterns = [p.to_dict() for p in skill.trigger_patterns]
         db_skill.tools = list(skill.tools)
-        db_skill.prompt_template = skill.prompt_template
         db_skill.status = skill.status.value
-        db_skill.success_count = skill.success_count
-        db_skill.failure_count = skill.failure_count
         db_skill.metadata_json = skill.metadata
         db_skill.updated_at = skill.updated_at
         db_skill.scope = skill.scope.value
@@ -227,41 +217,6 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
 
         return [d for s in db_skills if (d := self._to_domain(s)) is not None]
 
-    async def find_matching_skills(
-        self,
-        tenant_id: str,
-        query: str,
-        threshold: float = 0.5,
-        limit: int = 5,
-    ) -> list[Skill]:
-        """Find skills that match a query."""
-        # Get all active skills for the tenant
-        skills = await self.list_by_tenant(tenant_id, status=SkillStatus.ACTIVE, limit=100)
-
-        # Calculate match scores
-        scored_skills = []
-        for skill in skills:
-            score = skill.matches_query(query)
-            if score >= threshold:
-                scored_skills.append((skill, score))
-
-        # Sort by score descending and limit
-        scored_skills.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in scored_skills[:limit]]
-
-    async def increment_usage(
-        self,
-        skill_id: str,
-        success: bool,
-    ) -> Skill:
-        """Increment usage statistics for a skill."""
-        skill = await self.get_by_id(skill_id)
-        if not skill:
-            raise ValueError(f"Skill not found: {skill_id}")
-
-        updated_skill = skill.record_usage(success)
-        return await self.update(updated_skill)
-
     async def count_by_tenant(
         self,
         tenant_id: str,
@@ -286,8 +241,6 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         """Convert database model to domain entity."""
         if db_skill is None:
             return None
-
-        trigger_patterns = [TriggerPattern.from_dict(p) for p in (db_skill.trigger_patterns or [])]
 
         # Handle scope field (may not exist in old records)
         scope = SkillScope.TENANT
@@ -324,13 +277,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             project_id=db_skill.project_id,
             name=db_skill.name,
             description=db_skill.description,
-            trigger_type=TriggerType(db_skill.trigger_type),
-            trigger_patterns=trigger_patterns,
             tools=list(db_skill.tools or []) or ["terminal"],
-            prompt_template=db_skill.prompt_template,
             status=SkillStatus(db_skill.status),
-            success_count=db_skill.success_count,
-            failure_count=db_skill.failure_count,
             created_at=db_skill.created_at,
             updated_at=db_skill.updated_at or db_skill.created_at,
             metadata=db_skill.metadata_json,
@@ -353,13 +301,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             project_id=domain_entity.project_id,
             name=domain_entity.name,
             description=domain_entity.description,
-            trigger_type=domain_entity.trigger_type.value,
-            trigger_patterns=[p.to_dict() for p in domain_entity.trigger_patterns],
             tools=list(domain_entity.tools),
-            prompt_template=domain_entity.prompt_template,
             status=domain_entity.status.value,
-            success_count=domain_entity.success_count,
-            failure_count=domain_entity.failure_count,
             metadata_json=domain_entity.metadata,
             created_at=domain_entity.created_at,
             updated_at=domain_entity.updated_at,

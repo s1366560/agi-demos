@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.domain.model.agent.skill import Skill, SkillStatus, TriggerType
+from src.domain.model.agent.skill import Skill, SkillStatus
 from src.domain.model.agent.skill_source import SkillSource
 from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
@@ -473,17 +473,14 @@ Complete content here.
                 tier=1,
             )
             assert len(tier1_skills) == 1
-            assert tier1_skills[0].trigger_patterns == []  # Hidden in tier 1
             assert tier1_skills[0].full_content is None
 
-            # Tier 2: include triggers
+            # Tier 2: include metadata
             tier2_skills = await service.list_available_skills(
                 tenant_id="test-tenant",
                 tier=2,
             )
-            # trigger_patterns contains TriggerPattern objects
-            assert len(tier2_skills[0].trigger_patterns) == 1
-            assert tier2_skills[0].trigger_patterns[0].pattern == "tier test"
+            assert len(tier2_skills) == 1
             assert tier2_skills[0].full_content is None
 
             # Tier 3: full content
@@ -519,8 +516,6 @@ FS Content.
                 tenant_id="test-tenant",
                 name="duplicate-skill",
                 description="Database version",
-                trigger_type=TriggerType.KEYWORD,
-                trigger_patterns=[],
                 tools=["memory_search"],
                 status=SkillStatus.ACTIVE,
             )
@@ -563,8 +558,6 @@ FS Content.
                 tenant_id="t1",
                 name="skill-one",
                 description="First skill",
-                trigger_type=TriggerType.KEYWORD,
-                trigger_patterns=[],
                 tools=["memory_search"],
                 status=SkillStatus.ACTIVE,
             ),
@@ -573,8 +566,6 @@ FS Content.
                 tenant_id="t1",
                 name="skill-two",
                 description="Second skill",
-                trigger_type=TriggerType.KEYWORD,
-                trigger_patterns=[],
                 tools=["entity_lookup"],
                 status=SkillStatus.ACTIVE,
             ),
@@ -644,8 +635,6 @@ class TestSkillLoaderTool:
                 tenant_id="t1",
                 name="test-skill",
                 description="A test skill",
-                trigger_type=TriggerType.KEYWORD,
-                trigger_patterns=[],
                 tools=["memory_search"],
                 status=SkillStatus.ACTIVE,
             ),
@@ -699,8 +688,6 @@ class TestSkillLoaderTool:
                     tenant_id="t1",
                     name="other-skill",
                     description="Other",
-                    trigger_type=TriggerType.KEYWORD,
-                    trigger_patterns=[],
                     tools=["memory_search"],
                     status=SkillStatus.ACTIVE,
                 ),

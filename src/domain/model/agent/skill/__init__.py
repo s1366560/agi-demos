@@ -4,8 +4,6 @@ from src.domain.model.agent.skill.skill import (
     Skill,
     SkillScope,
     SkillStatus,
-    TriggerPattern,
-    TriggerType,
 )
 from src.domain.model.agent.skill.skill_permission import (
     SkillPermissionAction,
@@ -38,8 +36,6 @@ __all__ = [
     "ToolComposition",
     "ToolEnvironmentVariable",
     "ToolExecutionRecord",
-    "TriggerPattern",
-    "TriggerType",
     "default_skill_ruleset",
     "evaluate_skill_permission",
     "merge_rulesets",

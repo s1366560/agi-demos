@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
-from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 
@@ -44,25 +44,12 @@ router = APIRouter(prefix="/api/v1/skills", tags=["Skills"])
 # === Pydantic Models ===
 
 
-class TriggerPatternCreate(BaseModel):
-    """Schema for creating a trigger pattern."""
-
-    pattern: str = Field(..., description="The trigger pattern")
-    weight: float = Field(1.0, ge=0.0, le=1.0, description="Pattern weight (0-1)")
-    examples: list[str] = Field(default_factory=list, description="Example queries")
-
-
 class SkillCreate(BaseModel):
     """Schema for creating a new skill."""
 
     name: str = Field(..., min_length=1, max_length=200, description="Skill name")
     description: str = Field(..., min_length=1, description="Skill description")
-    trigger_type: str = Field("keyword", description="Trigger type: keyword, semantic, hybrid")
-    trigger_patterns: list[TriggerPatternCreate] = Field(
-        default_factory=list, description="Trigger patterns"
-    )
     tools: list[str] = Field(..., min_length=1, description="List of tool names")
-    prompt_template: str | None = Field(None, description="Optional prompt template")
     full_content: str | None = Field(None, description="Full SKILL.md content")
     project_id: str | None = Field(
         None, description="Optional project ID (required for PROJECT scope)"
@@ -78,10 +65,7 @@ class SkillUpdate(BaseModel):
 
     name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, min_length=1)
-    trigger_type: str | None = Field(None)
-    trigger_patterns: list[TriggerPatternCreate] | None = Field(None)
     tools: list[str] | None = Field(None, min_length=1)
-    prompt_template: str | None = Field(None)
     full_content: str | None = Field(None, description="Full SKILL.md content")
     status: str | None = Field(None)
     metadata: dict[str, Any] | None = Field(None)
@@ -95,18 +79,11 @@ class SkillResponse(BaseModel):
     project_id: str | None
     name: str
     description: str
-    trigger_type: str
-    trigger_patterns: list[dict[str, Any]]
     tools: list[str]
-    prompt_template: str | None
     full_content: str | None = None
     status: str
     scope: str
     is_system_skill: bool = False
-    success_rate: float
-    success_count: int
-    failure_count: int
-    usage_count: int
     created_at: str
     updated_at: str
     metadata: dict[str, Any] | None
@@ -116,14 +93,6 @@ class SkillResponse(BaseModel):
     parent_curated_id: str | None = None
     semver: str | None = None
     revision_hash: str | None = None
-
-
-class SkillMatchRequest(BaseModel):
-    """Schema for skill matching request."""
-
-    query: str = Field(..., min_length=1, description="Query to match against skills")
-    threshold: float = Field(0.5, ge=0.0, le=1.0, description="Match threshold")
-    limit: int = Field(5, ge=1, le=20, description="Maximum results")
 
 
 class SkillListResponse(BaseModel):
@@ -144,18 +113,11 @@ def skill_to_response(skill: Skill) -> SkillResponse:
         project_id=skill.project_id,
         name=skill.name,
         description=skill.description,
-        trigger_type=skill.trigger_type.value,
-        trigger_patterns=[p.to_dict() for p in skill.trigger_patterns],
         tools=list(skill.tools),
-        prompt_template=skill.prompt_template,
         full_content=skill.full_content,
         status=skill.status.value,
         scope=skill.scope.value,
         is_system_skill=skill.is_system_skill,
-        success_rate=skill.success_rate,
-        success_count=skill.success_count,
-        failure_count=skill.failure_count,
-        usage_count=skill.usage_count,
         created_at=skill.created_at.isoformat(),
         updated_at=skill.updated_at.isoformat(),
         metadata=skill.metadata,
@@ -207,26 +169,13 @@ async def create_skill(
 
         container = get_container_with_db(request, db)
 
-        # Convert trigger patterns
-        trigger_patterns = [
-            TriggerPattern(
-                pattern=p.pattern,
-                weight=p.weight,
-                examples=p.examples,
-            )
-            for p in data.trigger_patterns
-        ]
-
         # Create skill
         skill = Skill.create(
             tenant_id=tenant_id,
             name=data.name,
             description=data.description,
             tools=data.tools,
-            trigger_type=TriggerType(data.trigger_type),
-            trigger_patterns=trigger_patterns,
             project_id=data.project_id,
-            prompt_template=data.prompt_template,
             full_content=data.full_content,
             metadata=data.metadata,
             scope=scope,
@@ -362,31 +311,20 @@ async def update_skill(
     # Update fields
     from datetime import datetime
 
-    trigger_patterns = skill.trigger_patterns
-    if data.trigger_patterns is not None:
-        trigger_patterns = [
-            TriggerPattern(pattern=p.pattern, weight=p.weight, examples=p.examples)
-            for p in data.trigger_patterns
-        ]
-
     updated_skill = Skill(
         id=skill.id,
         tenant_id=skill.tenant_id,
         project_id=skill.project_id,  # project_id cannot be changed
         name=data.name if data.name else skill.name,
         description=data.description if data.description else skill.description,
-        trigger_type=TriggerType(data.trigger_type) if data.trigger_type else skill.trigger_type,
-        trigger_patterns=trigger_patterns,
         tools=data.tools if data.tools else skill.tools,
-        prompt_template=data.prompt_template
-        if data.prompt_template is not None
-        else skill.prompt_template,
         status=SkillStatus(data.status) if data.status else skill.status,
-        success_count=skill.success_count,
-        failure_count=skill.failure_count,
         created_at=skill.created_at,
         updated_at=datetime.now(UTC),
         metadata=data.metadata if data.metadata is not None else skill.metadata,
+        full_content=data.full_content if data.full_content is not None else skill.full_content,
+        scope=skill.scope,
+        is_system_skill=skill.is_system_skill,
     )
 
     result = await repo.update(updated_skill)
@@ -427,30 +365,6 @@ async def delete_skill(
     await db.commit()
 
     logger.info(f"Skill deleted: {skill_id}")
-
-
-@router.post("/match", response_model=list[SkillResponse])
-async def match_skills(
-    request: Request,
-    data: SkillMatchRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
-) -> list[Any]:
-    """
-    Find skills that match a query.
-
-    Uses trigger patterns to find matching skills.
-    """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
-    skills = await repo.find_matching_skills(
-        tenant_id=tenant_id,
-        query=data.query,
-        threshold=data.threshold,
-        limit=data.limit,
-    )
-
-    return [skill_to_response(s) for s in skills]
 
 
 @router.patch("/{skill_id}/status")
@@ -497,14 +411,9 @@ async def update_skill_status(
         project_id=skill.project_id,
         name=skill.name,
         description=skill.description,
-        trigger_type=skill.trigger_type,
-        trigger_patterns=skill.trigger_patterns,
         tools=skill.tools,
-        prompt_template=skill.prompt_template,
         full_content=skill.full_content,
         status=new_status,
-        success_count=skill.success_count,
-        failure_count=skill.failure_count,
         created_at=skill.created_at,
         updated_at=datetime.now(UTC),
         metadata=skill.metadata,
@@ -517,43 +426,6 @@ async def update_skill_status(
 
     logger.info(f"Skill status updated: {skill_id} -> {status_value}")
     return skill_to_response(result)
-
-
-@router.get("/{skill_id}/stats")
-async def get_skill_stats(
-    request: Request,
-    skill_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """
-    Get usage statistics for a skill.
-    """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
-    skill = await repo.get_by_id(skill_id)
-
-    if not skill:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
-        )
-
-    # Verify tenant access
-    if skill.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
-        )
-
-    return {
-        "skill_id": skill.id,
-        "name": skill.name,
-        "success_count": skill.success_count,
-        "failure_count": skill.failure_count,
-        "usage_count": skill.usage_count,
-        "success_rate": skill.success_rate,
-    }
 
 
 # === System Skills Endpoints ===
@@ -651,7 +523,7 @@ async def get_skill_content(
     return SkillContentResponse(
         skill_id=skill.id,
         name=skill.name,
-        full_content=skill.full_content or skill.prompt_template,
+        full_content=skill.full_content,
         scope=skill.scope.value,
         is_system_skill=skill.is_system_skill,
     )
@@ -704,14 +576,9 @@ async def update_skill_content(
         project_id=skill.project_id,
         name=skill.name,
         description=skill.description,
-        trigger_type=skill.trigger_type,
-        trigger_patterns=skill.trigger_patterns,
         tools=skill.tools,
-        prompt_template=data.full_content,  # Keep in sync
         full_content=data.full_content,
         status=skill.status,
-        success_count=skill.success_count,
-        failure_count=skill.failure_count,
         created_at=skill.created_at,
         updated_at=datetime.now(UTC),
         metadata=skill.metadata,

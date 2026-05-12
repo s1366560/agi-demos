@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill_source import SkillSource
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
     SqlSkillRepository,
@@ -48,18 +48,8 @@ def create_test_skill(
         project_id=project_id,
         name=name,
         description="Test description",
-        trigger_type=TriggerType.KEYWORD,
-        trigger_patterns=[
-            TriggerPattern(
-                pattern="test",
-                weight=0.8,
-            ),
-        ],
         tools=["search", "analyze"],
-        prompt_template="Test prompt template",
         status=status,
-        success_count=10,
-        failure_count=2,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         metadata={"key": "value"},
@@ -202,13 +192,8 @@ class TestSqlSkillRepositoryUpdate:
             project_id=None,
             name="updated-name",
             description="Updated description",
-            trigger_type=TriggerType.SEMANTIC,
-            trigger_patterns=[],
             tools=["new_tool"],
-            prompt_template="New prompt",
             status=SkillStatus.DISABLED,
-            success_count=15,
-            failure_count=3,
             created_at=skill.created_at,
             updated_at=datetime.now(UTC),
             metadata={"updated": True},
@@ -367,69 +352,6 @@ class TestSqlSkillRepositoryDelete:
             await v2_skill_repo.delete("non-existent")
 
 
-class TestSqlSkillRepositoryFindMatching:
-    """Tests for finding matching skills."""
-
-    @pytest.mark.asyncio
-    async def test_find_matching_skills(self, v2_skill_repo: SqlSkillRepository):
-        """Test finding skills that match a query."""
-        # Create skills with different patterns
-        search_skill = create_test_skill("skill-search", name="search-skill")
-        search_skill.trigger_patterns = [TriggerPattern(pattern="search", weight=0.8)]
-        await v2_skill_repo.create(search_skill)
-
-        analyze_skill = create_test_skill("skill-analyze", name="analyze-skill")
-        analyze_skill.trigger_patterns = [TriggerPattern(pattern="analyze", weight=0.8)]
-        await v2_skill_repo.create(analyze_skill)
-
-        # Find skills matching "search"
-        matching = await v2_skill_repo.find_matching_skills("tenant-1", "search")
-        assert len(matching) >= 1
-        assert any(s.name == "search-skill" for s in matching)
-
-
-class TestSqlSkillRepositoryIncrementUsage:
-    """Tests for incrementing usage statistics."""
-
-    @pytest.mark.asyncio
-    async def test_increment_usage_success(self, v2_skill_repo: SqlSkillRepository):
-        """Test incrementing usage after successful execution."""
-        skill = create_test_skill("skill-inc-success")
-        await v2_skill_repo.create(skill)
-
-        # Increment success
-        result = await v2_skill_repo.increment_usage("skill-inc-success", success=True)
-
-        assert result.success_count == 11
-        assert result.failure_count == 2
-
-        # Verify in DB
-        retrieved = await v2_skill_repo.get_by_id("skill-inc-success")
-        assert retrieved.success_count == 11
-
-    @pytest.mark.asyncio
-    async def test_increment_usage_failure(self, v2_skill_repo: SqlSkillRepository):
-        """Test incrementing usage after failed execution."""
-        skill = create_test_skill("skill-inc-failure")
-        await v2_skill_repo.create(skill)
-
-        # Increment failure
-        result = await v2_skill_repo.increment_usage("skill-inc-failure", success=False)
-
-        assert result.success_count == 10
-        assert result.failure_count == 3
-
-        # Verify in DB
-        retrieved = await v2_skill_repo.get_by_id("skill-inc-failure")
-        assert retrieved.failure_count == 3
-
-    @pytest.mark.asyncio
-    async def test_increment_nonexistent_raises_error(self, v2_skill_repo: SqlSkillRepository):
-        """Test incrementing a non-existent skill raises ValueError."""
-        with pytest.raises(ValueError, match="Skill not found"):
-            await v2_skill_repo.increment_usage("non-existent", success=True)
-
-
 class TestSqlSkillRepositoryCount:
     """Tests for counting skills."""
 
@@ -487,10 +409,7 @@ class TestSqlSkillRepositoryToDomain:
         assert retrieved.tenant_id == "tenant-1"
         assert retrieved.name == "test-skill"
         assert retrieved.description == "Test description"
-        assert retrieved.trigger_type == TriggerType.KEYWORD
         assert retrieved.status == SkillStatus.ACTIVE
-        assert retrieved.success_count == 10
-        assert retrieved.failure_count == 2
         assert retrieved.scope == SkillScope.TENANT
         assert retrieved.is_system_skill is False
 

@@ -5,13 +5,12 @@ Loads skills from the file system by scanning directories and parsing
 SKILL.md files. Combines scanning and parsing functionality.
 """
 
-import contextlib
 import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill_source import SkillSource
 from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner, SkillFileInfo
 from src.infrastructure.skill.markdown_parser import (
@@ -316,23 +315,6 @@ class FileSystemSkillLoader:
         Returns:
             Skill domain entity
         """
-        # Create trigger patterns from frontmatter
-        trigger_patterns = []
-        for pattern_str in markdown.trigger_patterns:
-            trigger_patterns.append(
-                TriggerPattern(
-                    pattern=pattern_str,
-                    weight=1.0,
-                    examples=[],
-                )
-            )
-
-        # Determine trigger type
-        trigger_type = TriggerType.HYBRID
-        if markdown.frontmatter.get("trigger_type"):
-            with contextlib.suppress(ValueError):
-                trigger_type = TriggerType(markdown.frontmatter["trigger_type"])
-
         # Use tools from frontmatter, or allowed-tools as fallback
         tools = markdown.tools or markdown.allowed_tools or ["*"]
 
@@ -358,13 +340,8 @@ class FileSystemSkillLoader:
             project_id=self.project_id,
             name=markdown.name,
             description=markdown.description,
-            trigger_type=trigger_type,
-            trigger_patterns=trigger_patterns,
             tools=tools,
-            prompt_template=markdown.content,
             status=SkillStatus.ACTIVE,
-            success_count=0,
-            failure_count=0,
             metadata={
                 "source_type": file_info.source_type,
                 "context": markdown.context,
@@ -444,28 +421,15 @@ class FileSystemSkillLoader:
         return None
 
     def _create_metadata_only_skill(self, skill: Skill) -> Skill:
-        """
-        Create a copy of skill without full content (Tier 1).
-
-        Args:
-            skill: Original skill with full content
-
-        Returns:
-            Skill entity without prompt_template and full_content
-        """
+        """Create a copy of skill without full content (Tier 1)."""
         return Skill(
             id=skill.id,
             tenant_id=skill.tenant_id,
             project_id=skill.project_id,
             name=skill.name,
             description=skill.description,
-            trigger_type=skill.trigger_type,
-            trigger_patterns=skill.trigger_patterns,
             tools=skill.tools,
-            prompt_template=None,  # Tier 1: no template
             status=skill.status,
-            success_count=skill.success_count,
-            failure_count=skill.failure_count,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             metadata=skill.metadata,

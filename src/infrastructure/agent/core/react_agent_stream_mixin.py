@@ -391,63 +391,46 @@ class StreamMixin:
         forced_skill_name: str | None,
         available_skills: list[SkillProtocol] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """Match skill and yield skill_matched event.
+        """Match skill by forced slash command, else no match.
+
+        Implicit / semantic skill matching has been removed. The only
+        activation paths are:
+          - Forced via slash command (this method)
+          - LLM-invoked ``skill_loader`` tool (not handled here)
 
         Sets self._stream_skill_state with matched_skill info.
         """
-        is_forced = False
-        matched_skill = None
+        _ = processed_user_message  # no longer used for matching
+        matched_skill: SkillProtocol | None = None
         skill_score = 0.0
+        is_forced = False
         should_inject_prompt = False
 
         if forced_skill_name:
-            # Inline find_by_name: case-insensitive name lookup (Wave 5.1)
             name_lower = forced_skill_name.strip().lower()
-            found_skill: SkillProtocol | None = None
             for skill in available_skills or cast("list[SkillProtocol]", self.skills or []):
                 if skill.name.lower() == name_lower and skill.status.value == "active":
-                    found_skill = skill
+                    matched_skill = skill
+                    skill_score = 1.0
+                    is_forced = True
+                    should_inject_prompt = True
+                    logger.info(f"[ReActAgent] Forced skill found: {skill.name}")
                     break
-            if found_skill is not None:
-                matched_skill = found_skill
-                skill_score = 1.0
-                is_forced = True
-                logger.info(f"[ReActAgent] Forced skill found: {found_skill.name}")
-            else:
+            if matched_skill is None:
                 yield cast(
                     dict[str, Any],
                     AgentThoughtEvent(
                         content=(
-                            f"Forced skill '{forced_skill_name}'"
-                            f" not found, falling back to"
-                            f" normal matching"
+                            f"Forced skill '{forced_skill_name}' not found; "
+                            "ignoring slash command."
                         ),
                     ).to_event_dict(),
                 )
-                matched_skill, skill_score = self._match_skill(
-                    processed_user_message,
-                    available_skills=available_skills,
-                )
-        else:
-            matched_skill, skill_score = self._match_skill(
-                processed_user_message,
-                available_skills=available_skills,
-            )
-
-        should_inject_prompt = matched_skill is not None and (
-            is_forced or skill_score >= self.skill_match_threshold
-        )
-
-        if not is_forced and matched_skill and skill_score < self.skill_match_threshold:
-            matched_skill = None
-            skill_score = 0.0
 
         if matched_skill:
-            execution_mode = "forced" if is_forced else "prompt"
             logger.info(
-                f"[ReActAgent] Skill matched: name={matched_skill.name}, "
-                f"mode={execution_mode}, score={skill_score}, "
-                f"prompt_len={len(matched_skill.prompt_template or '')}, "
+                f"[ReActAgent] Skill matched: name={matched_skill.name}, mode=forced, "
+                f"prompt_len={len(matched_skill.full_content or '')}, "
                 f"tools={list(matched_skill.tools)}"
             )
             yield cast(
@@ -457,7 +440,7 @@ class StreamMixin:
                     skill_name=matched_skill.name,
                     tools=list(matched_skill.tools),
                     match_score=skill_score,
-                    execution_mode=execution_mode,
+                    execution_mode="forced",
                 ).to_event_dict(),
             )
 
@@ -482,7 +465,7 @@ class StreamMixin:
             await self._resource_sync_service.sync_for_skill(
                 skill_name=matched_skill.name,
                 sandbox_id=sandbox_id,
-                skill_content=matched_skill.prompt_template,
+                skill_content=matched_skill.full_content,
             )
         except Exception as e:
             logger.warning(
@@ -669,18 +652,33 @@ class StreamMixin:
                 )
         tools_to_use = list(current_tool_definitions)
 
-        # When a forced skill is active, keep all core tools available
-        # but remove skill_loader to prevent loading other skills.
-        # The skill's prompt template is already injected into the system prompt,
-        # so the agent can use any core tool to fulfill the skill's instructions.
+        # When a forced skill is active, narrow the tool surface to what the
+        # skill explicitly declares plus a small set of always-allowed planning
+        # tools. ``skill_loader`` is removed unconditionally to prevent the
+        # agent from side-loading a different skill mid-execution.
         if is_forced and matched_skill:
-            tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
             skill_tools = set(matched_skill.tools) if matched_skill.tools else set()
-            logger.info(
-                f"[ReActAgent] Forced skill '{matched_skill.name}' active: "
-                f"removed skill_loader, keeping {len(tools_to_use)} tools. "
-                f"Skill declared tools={list(skill_tools)}"
-            )
+            if skill_tools:
+                # Strict whitelist: only the skill's declared tools plus the
+                # two planning helpers the agent always needs to make progress.
+                allowed = skill_tools | {"todowrite", "todoread"}
+                before = len(tools_to_use)
+                tools_to_use = [t for t in tools_to_use if t.name in allowed]
+                logger.info(
+                    f"[ReActAgent] Forced skill '{matched_skill.name}' active: "
+                    f"whitelisted to skill tools {sorted(skill_tools)} + "
+                    f"{{todowrite, todoread}} "
+                    f"({before} -> {len(tools_to_use)})"
+                )
+            else:
+                # No declared tools — fall back to keeping everything except
+                # skill_loader so the agent has full freedom under the skill prompt.
+                tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
+                logger.info(
+                    f"[ReActAgent] Forced skill '{matched_skill.name}' active "
+                    f"with no declared tools: kept {len(tools_to_use)} tools "
+                    f"(skill_loader removed)"
+                )
 
         self._stream_tools_to_use = tools_to_use
 
@@ -953,12 +951,9 @@ class StreamMixin:
         return effective_mode
 
     def _stream_record_skill_usage(self: _StreamAgent, matched_skill: Any, success: bool) -> None:
-        """Record skill usage statistics after stream completion."""
-        if matched_skill:
-            matched_skill.record_usage(success)
-            logger.info(
-                f"[ReActAgent] Skill {matched_skill.name} usage recorded: success={success}"
-            )
+        """Skill usage tracking was removed; method kept as a no-op hook."""
+        _ = (matched_skill, success)
+        return None
 
     def _stream_inject_subagent_tools(  # noqa: PLR0915
         self: _StreamAgent,

@@ -11,8 +11,7 @@ Plugin skills are loaded from two sources (in order of preference):
    factory returns ``list[dict[str, Any]]`` with at minimum: ``name``,
    ``description``, ``tools``.
 
-Optional factory dict fields: ``trigger_type``, ``trigger_patterns``,
-``prompt_template``, ``agent_modes``, ``scope``, ``metadata``, ``full_content``.
+Optional factory dict fields: ``agent_modes``, ``scope``, ``metadata``, ``full_content``.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.domain.model.agent.skill.skill import Skill, SkillScope, TriggerType
+from src.domain.model.agent.skill.skill import Skill, SkillScope
 from src.domain.model.agent.skill.skill_source import SkillSource
 from src.infrastructure.agent.plugins.discovery import DiscoveredPlugin
 from src.infrastructure.agent.plugins.plugin_skill_loader import (
@@ -65,13 +64,6 @@ def _skill_dict_to_domain(
             logger.warning("Plugin skill '%s' missing required 'tools' field, skipping", name)
             return None
 
-        # Parse optional trigger_type
-        raw_trigger_type = skill_dict.get("trigger_type", "keyword")
-        try:
-            trigger_type = TriggerType(raw_trigger_type)
-        except ValueError:
-            trigger_type = TriggerType.KEYWORD
-
         # Parse optional scope
         raw_scope = skill_dict.get("scope", "tenant")
         try:
@@ -84,10 +76,7 @@ def _skill_dict_to_domain(
             name=name,
             description=description,
             tools=tools,
-            trigger_type=trigger_type,
-            trigger_patterns=skill_dict.get("trigger_patterns"),
             project_id=project_id,
-            prompt_template=skill_dict.get("prompt_template"),
             metadata=skill_dict.get("metadata"),
             agent_modes=skill_dict.get("agent_modes"),
             scope=scope,

@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from src.domain.model.agent.skill import Skill, SkillScope, SkillSource, TriggerPattern, TriggerType
+from src.domain.model.agent.skill import Skill, SkillScope, SkillSource
 from src.infrastructure.agent.plugins.discovery import DiscoveredPlugin
 from src.infrastructure.agent.plugins.registry import PluginDiagnostic
 from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner, SkillFileInfo
@@ -201,12 +201,6 @@ def _create_plugin_skill(
     ``FileSystemSkillLoader._create_skill_from_markdown`` but sets
     ``source=SkillSource.PLUGIN`` and uses a plugin-scoped ID.
     """
-    trigger_patterns = (
-        [TriggerPattern(pattern=p) for p in markdown.trigger_patterns]
-        if markdown.trigger_patterns
-        else []
-    )
-
     tools = [t.lower() for t in markdown.tools] if markdown.tools else ["*"]
 
     return Skill(
@@ -215,10 +209,7 @@ def _create_plugin_skill(
         project_id=project_id,
         name=markdown.name,
         description=markdown.description,
-        trigger_type=TriggerType.HYBRID,
-        trigger_patterns=trigger_patterns,
         tools=tools,
-        prompt_template=markdown.content,
         source=SkillSource.PLUGIN,
         file_path=str(file_info.file_path),
         full_content=markdown.full_content,

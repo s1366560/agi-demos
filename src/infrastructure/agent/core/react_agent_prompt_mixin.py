@@ -198,7 +198,7 @@ class PromptMixin:
                     "description": s.description,
                     "tools": s.tools,
                     "status": s.status.value,
-                    "prompt_template": s.prompt_template,
+                    "prompt_template": s.full_content,
                 }
                 for s in effective_skills
             ]
@@ -210,7 +210,7 @@ class PromptMixin:
                 "name": matched_skill.name,
                 "description": matched_skill.description,
                 "tools": matched_skill.tools,
-                "prompt_template": matched_skill.prompt_template,
+                "prompt_template": matched_skill.full_content,
                 "force_execution": force_execution,
             }
 

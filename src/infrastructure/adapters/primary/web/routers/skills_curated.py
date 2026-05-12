@@ -62,8 +62,7 @@ class CuratedSkillResponse(BaseModel):
 
 
 class CuratedForkRequest(BaseModel):
-    include_triggers: bool = Field(default=True)
-    include_executor: bool = Field(default=True, description="Include tools + prompt_template")
+    include_executor: bool = Field(default=True, description="Include tools")
     include_metadata: bool = Field(default=True)
     project_id: str | None = None
 
@@ -145,10 +144,7 @@ def _skill_to_snapshot(skill: SkillModel, proposed_semver: str) -> dict[str, Any
     return {
         "name": skill.name,
         "description": skill.description,
-        "trigger_type": skill.trigger_type,
-        "trigger_patterns": skill.trigger_patterns,
         "tools": skill.tools,
-        "prompt_template": skill.prompt_template,
         "full_content": skill.full_content,
         "metadata": skill.metadata_json or {},
         "scope": skill.scope,
@@ -200,10 +196,7 @@ async def fork_curated_skill(
     payload = dict(curated.payload)
     name = str(payload.get("name") or "forked_skill")
     description = str(payload.get("description") or "")
-    trigger_type = str(payload.get("trigger_type") or "keyword")
-    trigger_patterns = payload.get("trigger_patterns") if data.include_triggers else []
     tools = payload.get("tools") if data.include_executor else []
-    prompt_template = payload.get("prompt_template") if data.include_executor else None
     full_content = payload.get("full_content") if data.include_executor else None
     metadata_json = payload.get("metadata") if data.include_metadata else None
 
@@ -214,10 +207,7 @@ async def fork_curated_skill(
         project_id=data.project_id,
         name=name,
         description=description,
-        trigger_type=trigger_type,
-        trigger_patterns=trigger_patterns or [],
         tools=tools or [],
-        prompt_template=prompt_template,
         full_content=full_content,
         metadata_json=metadata_json,
         scope="project" if data.project_id else "tenant",

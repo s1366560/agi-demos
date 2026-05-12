@@ -80,8 +80,6 @@ from src.domain.model.agent.skill import (
     ToolComposition,
     ToolEnvironmentVariable,
     ToolExecutionRecord,
-    TriggerPattern,
-    TriggerType,
 )
 from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.model.agent.spawn_record import SpawnRecord
@@ -156,8 +154,6 @@ __all__ = [
     "ToolEnvironmentVariable",
     "ToolExecutionRecord",
     "ToolResult",
-    "TriggerPattern",
-    "TriggerType",
     "WorkflowPattern",
     "WorkspaceConfig",
 ]
