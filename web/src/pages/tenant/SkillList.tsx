@@ -9,7 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input } from 'antd';
-import { BarChart, CheckCircle, Copy, GraduationCap, Pencil, Plus, RefreshCw, Send, Trash2, TrendingUp } from 'lucide-react';
+import { CheckCircle, Copy, GraduationCap, Pencil, Plus, RefreshCw, Send, Trash2 } from 'lucide-react';
 
 import {
   useLazyMessage,
@@ -27,8 +27,6 @@ import {
   useSkillLoading,
   useSkillError,
   useActiveSkillsCount,
-  useAverageSuccessRate,
-  useTotalUsageCount,
   useSkillTotal,
 } from '../../stores/skill';
 
@@ -43,9 +41,6 @@ export const SkillList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deprecated'>(
     'all'
   );
-  const [triggerTypeFilter, setTriggerTypeFilter] = useState<
-    'all' | 'keyword' | 'semantic' | 'hybrid'
-  >('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillResponse | null>(null);
   const [submittingSkill, setSubmittingSkill] = useState<SkillResponse | null>(null);
@@ -55,8 +50,6 @@ export const SkillList: React.FC = () => {
   const isLoading = useSkillLoading();
   const error = useSkillError();
   const activeCount = useActiveSkillsCount();
-  const avgSuccessRate = useAverageSuccessRate();
-  const totalUsageCount = useTotalUsageCount();
   const total = useSkillTotal();
 
   // Filter skills locally with useMemo to prevent infinite loops
@@ -77,14 +70,9 @@ export const SkillList: React.FC = () => {
         return false;
       }
 
-      // Trigger type filter
-      if (triggerTypeFilter !== 'all' && skill.trigger_type !== triggerTypeFilter) {
-        return false;
-      }
-
       return true;
     });
-  }, [skills, search, statusFilter, triggerTypeFilter]);
+  }, [skills, search, statusFilter]);
 
   const { listSkills, deleteSkill, updateSkillStatus, clearError } = useSkillStore();
 
@@ -147,14 +135,11 @@ export const SkillList: React.FC = () => {
       const { createSkill } = useSkillStore.getState();
       try {
         // Build a SkillCreate payload from the source skill. We deliberately
-        // ignore success_rate / usage_count / status so the copy starts fresh.
+        // ignore status so the copy starts fresh.
         await createSkill({
           name: `${skill.name} (copy)`,
           description: skill.description,
-          trigger_type: skill.trigger_type,
-          trigger_patterns: skill.trigger_patterns ?? [],
           tools: skill.tools ?? [],
-          ...(skill.prompt_template ? { prompt_template: skill.prompt_template } : {}),
           ...(skill.full_content ? { full_content: skill.full_content } : {}),
           metadata: { ...(skill.metadata ?? {}), duplicated_from: skill.id },
         });
@@ -231,7 +216,7 @@ export const SkillList: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div>
@@ -255,34 +240,6 @@ export const SkillList: React.FC = () => {
               </p>
             </div>
             <CheckCircle size={16} className="text-4xl text-green-500" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t('tenant.skills.stats.successRate')}
-              </p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                {(avgSuccessRate * 100).toFixed(1)}%
-              </p>
-            </div>
-            <TrendingUp size={16} className="text-4xl text-blue-500" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t('tenant.skills.stats.totalUsage')}
-              </p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                {totalUsageCount}
-              </p>
-            </div>
-            <BarChart size={16} className="text-4xl text-purple-500" />
           </div>
         </div>
       </div>
@@ -309,17 +266,6 @@ export const SkillList: React.FC = () => {
               { label: t('common.status.active'), value: 'active' },
               { label: t('common.status.disabled'), value: 'disabled' },
               { label: t('common.status.deprecated'), value: 'deprecated' },
-            ]}
-          />
-          <LazySelect
-            value={triggerTypeFilter}
-            onChange={setTriggerTypeFilter}
-            className="w-full sm:w-40"
-            options={[
-              { label: t('tenant.skills.triggerTypes.all'), value: 'all' },
-              { label: t('tenant.skills.triggerTypes.keyword'), value: 'keyword' },
-              { label: t('tenant.skills.triggerTypes.semantic'), value: 'semantic' },
-              { label: t('tenant.skills.triggerTypes.hybrid'), value: 'hybrid' },
             ]}
           />
           <button
@@ -360,71 +306,11 @@ export const SkillList: React.FC = () => {
                 {skill.description}
               </p>
 
-              {/* Trigger Type */}
-              <div className="mb-4">
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('tenant.skills.triggerType')}:
-                </span>
-                <span className="ml-2 text-xs font-medium text-primary-600 dark:text-primary-400">
-                  {skill.trigger_type}
-                </span>
-              </div>
-
-              {/* Trigger Patterns */}
-              <div className="mb-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                  {t('tenant.skills.triggerPatterns')} ({skill.trigger_patterns.length})
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {skill.trigger_patterns.slice(0, 4).map((pattern, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-300 rounded"
-                    >
-                      {pattern.pattern}
-                    </span>
-                  ))}
-                  {skill.trigger_patterns.length > 4 && (
-                    <span className="inline-flex px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-300 rounded">
-                      +{skill.trigger_patterns.length - 4}
-                    </span>
-                  )}
-                </div>
-              </div>
-
               {/* Tools */}
               <div className="mb-4">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {t('tenant.skills.tools')}: {skill.tools.length}
                 </p>
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-4 mb-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {t('common.stats.usage')}
-                  </p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {skill.usage_count}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {t('common.stats.successRate')}
-                  </p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {(skill.success_rate * 100).toFixed(0)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {t('common.stats.success')}
-                  </p>
-                  <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                    {skill.success_count}
-                  </p>
-                </div>
               </div>
 
               {/* Actions */}

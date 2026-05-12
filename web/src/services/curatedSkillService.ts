@@ -21,7 +21,6 @@ export interface CuratedSkill {
 }
 
 export interface CuratedForkRequest {
-  include_triggers?: boolean;
   include_executor?: boolean;
   include_metadata?: boolean;
   project_id?: string | null;

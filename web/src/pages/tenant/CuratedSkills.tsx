@@ -109,7 +109,6 @@ function ForkDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [includeTriggers, setIncludeTriggers] = useState(true);
   const [includeExecutor, setIncludeExecutor] = useState(true);
   const [includeMetadata, setIncludeMetadata] = useState(true);
 
@@ -117,7 +116,6 @@ function ForkDialog({
     mutationFn: () => {
       if (!curated) throw new Error('no curated skill');
       return curatedSkillAPI.fork(curated.id, {
-        include_triggers: includeTriggers,
         include_executor: includeExecutor,
         include_metadata: includeMetadata,
       });
@@ -146,20 +144,12 @@ function ForkDialog({
       <Space direction="vertical" className="w-full">
         <Text type="secondary">选择复制到私有库时要包含的内容：</Text>
         <Checkbox
-          checked={includeTriggers}
-          onChange={(e) => {
-            setIncludeTriggers(e.target.checked);
-          }}
-        >
-          触发模式 (trigger patterns)
-        </Checkbox>
-        <Checkbox
           checked={includeExecutor}
           onChange={(e) => {
             setIncludeExecutor(e.target.checked);
           }}
         >
-          执行器（tools + prompt_template + full_content）
+          执行器（tools + full_content）
         </Checkbox>
         <Checkbox
           checked={includeMetadata}

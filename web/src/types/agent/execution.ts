@@ -192,12 +192,6 @@ export interface SubAgentMatchResponse {
 /**
  * Trigger pattern for skill matching
  */
-export interface TriggerPattern {
-  pattern: string;
-  weight: number;
-  examples?: string[] | undefined;
-}
-
 /**
  * Skill response from API
  */
@@ -207,18 +201,11 @@ export interface SkillResponse {
   project_id: string | null;
   name: string;
   description: string;
-  trigger_type: 'keyword' | 'semantic' | 'hybrid';
-  trigger_patterns: TriggerPattern[];
   tools: string[];
-  prompt_template: string | null;
   full_content: string | null;
   status: 'active' | 'disabled' | 'deprecated';
   scope: 'system' | 'tenant' | 'project';
   is_system_skill: boolean;
-  success_rate: number;
-  success_count: number;
-  failure_count: number;
-  usage_count: number;
   created_at: string;
   updated_at: string;
   metadata?: Record<string, unknown> | undefined;
@@ -232,10 +219,7 @@ export interface SkillResponse {
 export interface SkillCreate {
   name: string;
   description: string;
-  trigger_type: 'keyword' | 'semantic' | 'hybrid';
-  trigger_patterns: TriggerPattern[];
   tools: string[];
-  prompt_template?: string | undefined;
   full_content?: string | undefined;
   project_id?: string | undefined;
   scope?: 'tenant' | 'project' | undefined;
@@ -248,10 +232,7 @@ export interface SkillCreate {
 export interface SkillUpdate {
   name?: string | undefined;
   description?: string | undefined;
-  trigger_type?: 'keyword' | 'semantic' | 'hybrid' | undefined;
-  trigger_patterns?: TriggerPattern[] | undefined;
   tools?: string[] | undefined;
-  prompt_template?: string | undefined;
   full_content?: string | undefined;
   status?: 'active' | 'disabled' | 'deprecated' | undefined;
   metadata?: Record<string, unknown> | undefined;
@@ -263,13 +244,6 @@ export interface SkillUpdate {
 export interface SkillsListResponse {
   skills: SkillResponse[];
   total: number;
-}
-
-/**
- * Skill match response
- */
-export interface SkillMatchResponse {
-  skills: SkillResponse[];
 }
 
 /**

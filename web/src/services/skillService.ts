@@ -12,7 +12,6 @@ import type {
   SkillCreate,
   SkillUpdate,
   SkillsListResponse,
-  SkillMatchResponse,
   SkillContentResponse,
   TenantSkillConfigResponse,
   TenantSkillConfigListResponse,
@@ -25,14 +24,7 @@ const api = httpClient;
 export interface SkillListParams {
   status?: 'active' | 'disabled' | 'deprecated' | null | undefined;
   scope?: 'system' | 'tenant' | 'project' | null | undefined;
-  trigger_type?: 'keyword' | 'semantic' | 'hybrid' | null | undefined;
   skip?: number | undefined;
-  limit?: number | undefined;
-}
-
-export interface SkillMatchParams {
-  query: string;
-  threshold?: number | undefined;
   limit?: number | undefined;
 }
 
@@ -91,13 +83,6 @@ export const skillAPI = {
     return await api.patch<SkillResponse>(`/skills/${skillId}/status`, null, {
       params: { status },
     });
-  },
-
-  /**
-   * Match skills based on query
-   */
-  match: async (params: SkillMatchParams): Promise<SkillMatchResponse> => {
-    return await api.post<SkillMatchResponse>('/skills/match', params);
   },
 
   /**

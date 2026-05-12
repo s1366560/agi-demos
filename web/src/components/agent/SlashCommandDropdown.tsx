@@ -19,7 +19,7 @@ import {
 
 import { useTranslation } from 'react-i18next';
 
-import { Zap, Hash, Brain, Terminal } from 'lucide-react';
+import { Zap, Terminal } from 'lucide-react';
 
 import { commandAPI } from '@/services/commandService';
 import { skillAPI } from '@/services/skillService';
@@ -38,19 +38,6 @@ interface SlashCommandDropdownProps {
   selectedIndex: number;
   onSelectedIndexChange: (index: number) => void;
 }
-
-const triggerTypeIcon = (type: string) => {
-  switch (type) {
-    case 'keyword':
-      return <Hash size={12} className="text-blue-500" />;
-    case 'semantic':
-      return <Brain size={12} className="text-purple-500" />;
-    case 'hybrid':
-      return <Zap size={12} className="text-amber-500" />;
-    default:
-      return <Zap size={12} className="text-slate-400" />;
-  }
-};
 
 export const SlashCommandDropdown = memo(
   forwardRef<SlashCommandDropdownHandle, SlashCommandDropdownProps>(
@@ -271,10 +258,6 @@ export const SlashCommandDropdown = memo(
                               <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
                                 /{item.data.name}
                               </span>
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-                                {triggerTypeIcon(item.data.trigger_type)}
-                                {item.data.trigger_type}
-                               </span>
                                {item.data.scope !== 'project' && (
                                  <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
                                    {item.data.scope}
@@ -285,12 +268,6 @@ export const SlashCommandDropdown = memo(
                               {item.data.description}
                             </p>
                           </div>
-                           {/* Usage count */}
-                           {item.data.usage_count > 0 && (
-                             <span className="flex-shrink-0 text-2xs text-slate-400 mt-1">
-                               {item.data.usage_count} uses
-                             </span>
-                           )}
                         </>
                       )}
                     </div>

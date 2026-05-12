@@ -41,7 +41,6 @@ interface SkillFilters {
   search: string;
   status: 'active' | 'disabled' | 'deprecated' | null;
   scope: 'system' | 'tenant' | 'project' | null;
-  trigger_type: 'keyword' | 'semantic' | 'hybrid' | null;
 }
 
 interface SkillState {
@@ -70,7 +69,6 @@ interface SkillState {
   listSkills: (params?: {
     status?: string | undefined;
     scope?: string | undefined;
-    trigger_type?: string | undefined;
     skip?: number | undefined;
     limit?: number | undefined;
   }) => Promise<void>;
@@ -106,7 +104,6 @@ const initialFilters: SkillFilters = {
   search: '',
   status: null,
   scope: null,
-  trigger_type: null,
 };
 
 const initialState = {
@@ -142,7 +139,6 @@ export const useSkillStore = create<SkillState>()(
             ...params,
             status: filters.status || undefined,
             scope: filters.scope || undefined,
-            trigger_type: filters.trigger_type || undefined,
           };
           const response = await skillAPI.list(queryParams);
           set({
@@ -431,11 +427,6 @@ export const useFilteredSkills = () =>
         return false;
       }
 
-      // Trigger type filter
-      if (filters.trigger_type && skill.trigger_type !== filters.trigger_type) {
-        return false;
-      }
-
       return true;
     });
   });
@@ -491,22 +482,5 @@ export const useSkillFilters = () => useSkillStore((state) => state.filters);
  */
 export const useActiveSkillsCount = () =>
   useSkillStore((state) => state.skills.filter((s) => s.status === 'active').length);
-
-/**
- * Get average success rate
- */
-export const useAverageSuccessRate = () =>
-  useSkillStore((state) => {
-    const { skills } = state;
-    if (skills.length === 0) return 0;
-    const totalSuccessRate = skills.reduce((sum, s) => sum + s.success_rate, 0);
-    return totalSuccessRate / skills.length;
-  });
-
-/**
- * Get total usage count
- */
-export const useTotalUsageCount = () =>
-  useSkillStore((state) => state.skills.reduce((sum, s) => sum + s.usage_count, 0));
 
 export default useSkillStore;
