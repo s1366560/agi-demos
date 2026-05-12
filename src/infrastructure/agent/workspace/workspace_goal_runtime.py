@@ -339,7 +339,7 @@ async def _ensure_root_goal_evidence(
     root_task: WorkspaceTask,
     task_repo: SqlWorkspaceTaskRepository,
     generated_by_agent_id: str,
-) -> None:
+) -> tuple[bool, str | None]:
     metadata = dict(getattr(root_task, "metadata", {}) or {})
     workspace_metadata = await _load_workspace_metadata_for_task(
         task_repo=task_repo,
@@ -352,14 +352,14 @@ async def _ensure_root_goal_evidence(
             evidence=existing,
             workspace_metadata=workspace_metadata,
         ):
-            return
+            return True, None
         # Stale or insufficient evidence: fall through and re-synthesize so
         # accepted child attempts can clear old blocked/failed metadata.
 
     root_task_id = getattr(root_task, "id", None)
     workspace_id = getattr(root_task, "workspace_id", None)
     if not isinstance(root_task_id, str) or not isinstance(workspace_id, str):
-        return
+        return False, "root auto-complete cannot resolve root task/workspace id"
 
     child_tasks = select_root_progress_child_tasks(
         await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
@@ -371,11 +371,19 @@ async def _ensure_root_goal_evidence(
         workspace_metadata=workspace_metadata,
     )
     if synthesized is None:
-        return
+        return False, "root auto-complete evidence synthesis did not produce evidence"
 
     metadata["goal_evidence"] = synthesized
     root_task.metadata = validate_autonomy_metadata(metadata)
     _ = await task_repo.save(root_task)
+    evaluation = evaluate_completion_evidence(
+        root_metadata=getattr(root_task, "metadata", {}) or {},
+        evidence=synthesized,
+        workspace_metadata=workspace_metadata,
+    )
+    if not evaluation.allowed:
+        return False, evaluation.reason or "root auto-complete evidence is insufficient"
+    return True, None
 
 
 def _existing_goal_evidence_allows_completion(
@@ -502,7 +510,7 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     # Synthesize it from the done children so the completion guardrail accepts
     # the transition. Mirrors _handle_remediation_complete_root_goal.
     try:
-        await _ensure_root_goal_evidence(
+        evidence_allows_completion, evidence_block_reason = await _ensure_root_goal_evidence(
             root_task=root_task,
             task_repo=task_repo,
             generated_by_agent_id=leader_agent_id or str(actor_user_id),
@@ -513,6 +521,13 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
             root_task=root_task,
             task_repo=task_repo,
             reason=f"root auto-complete evidence synthesis failed: {exc}",
+        )
+        return None
+    if not evidence_allows_completion:
+        await _record_root_auto_complete_failure(
+            root_task=root_task,
+            task_repo=task_repo,
+            reason=evidence_block_reason or "root auto-complete evidence is insufficient",
         )
         return None
 

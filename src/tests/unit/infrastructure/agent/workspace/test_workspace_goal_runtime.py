@@ -1508,3 +1508,63 @@ class TestWorkspaceGoalRuntime:
             saved_root.metadata["goal_evidence"]["verifications"]
         )
         command_service.complete_task.assert_awaited_once()
+
+    async def test_auto_complete_skips_completion_when_synthesized_evidence_fails_policy(
+        self,
+    ) -> None:
+        root_task = MagicMock()
+        root_task.id = "root-software"
+        root_task.workspace_id = "ws-1"
+        root_task.title = "Ship software work"
+        root_task.status = MagicMock(value="in_progress")
+        root_task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "workspace_type": "software_development",
+            "sandbox_code_root": "/workspace/project-a",
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+
+        child = MagicMock()
+        child.id = "child-no-tests"
+        child.title = "Implement without verification"
+        child.status = WorkspaceTaskStatus.DONE
+        child.completed_at = datetime.fromisoformat("2026-04-16T03:40:00+00:00")
+        child.updated_at = child.completed_at
+        child.created_at = child.completed_at
+        child.metadata = {
+            "task_role": "execution_task",
+            "evidence_refs": ["file_snapshot:/workspace/project-a/src/app.py"],
+            "execution_verifications": ["implementation_finished"],
+        }
+
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        task_repo.find_by_id = AsyncMock(return_value=root_task)
+        task_repo.save = AsyncMock(side_effect=lambda task: task)
+        command_service = MagicMock()
+        command_service.complete_task = AsyncMock(return_value=MagicMock(id="root-software"))
+
+        result = await auto_complete_ready_root(
+            workspace_id="ws-1",
+            actor_user_id="user-1",
+            root_task=root_task,
+            task_repo=task_repo,
+            command_service=command_service,
+            leader_agent_id="leader-1",
+        )
+
+        assert result is None
+        command_service.complete_task.assert_not_awaited()
+        assert task_repo.save.await_count >= 2
+        saved_root = task_repo.save.await_args.args[0]
+        assert saved_root.metadata["goal_evidence"]["verification_grade"] == "fail"
+        assert saved_root.metadata["remediation_status"] == "ready_for_completion"
+        assert "verification_grade must be at least pass" in saved_root.metadata[
+            "remediation_summary"
+        ]
