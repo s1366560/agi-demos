@@ -1,11 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import type React from 'react';
+import { useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Button, Empty, Skeleton, Typography, Segmented } from 'antd';
-import { Plus } from 'lucide-react';
-
-import { HostedProjectionBadge } from '@/components/blackboard/HostedProjectionBadge';
+import { Button, Empty, Skeleton, Segmented } from 'antd';
 
 import { GeneCard } from './GeneCard';
 
@@ -52,22 +50,6 @@ export const GeneList: React.FC<GeneListProps> = ({
 
   return (
     <div className="flex flex-col h-full w-full">
-      <HostedProjectionBadge
-        labelKey="blackboard.genesSurfaceHint"
-        fallbackLabel="workspace gene projection"
-      />
-
-      <div className="mt-4 mb-4 flex items-center justify-between">
-        <Typography.Title level={4} className="m-0">
-          {t('workspaceDetail.genes.title')}
-        </Typography.Title>
-        {onCreate && (
-          <Button type="primary" icon={<Plus size={16} />} onClick={onCreate}>
-            {t('workspaceDetail.genes.createGene')}
-          </Button>
-        )}
-      </div>
-
       <div className="mb-4">
         <Segmented
           options={[

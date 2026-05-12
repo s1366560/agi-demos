@@ -576,7 +576,8 @@
       "createObjective": "Failed to create objective",
       "deleteObjective": "Failed to delete objective",
       "deleteGene": "Failed to delete gene",
-      "updateGene": "Failed to update gene"
+      "updateGene": "Failed to update gene",
+      "createGene": "Failed to create gene"
     },
     "arrangement": {
       "eyebrow": "Workstation arrangement",
@@ -4338,6 +4339,54 @@
     "genes": {
       "title": "Cyber Genes",
       "createGene": "Create Gene",
+      "editGene": "Edit Gene",
+      "create": "Create",
+      "save": "Save",
+      "name": "Name",
+      "categoryLabel": "Category",
+      "description": "Description",
+      "version": "Version",
+      "active": "Active",
+      "createSuccess": "Gene created",
+      "updateSuccess": "Gene updated",
+      "importFromMarketplace": "Import from Marketplace",
+      "marketplaceSearchPlaceholder": "Search marketplace genes...",
+      "noMarketplaceResults": "No marketplace genes found",
+      "errors": {
+        "nameRequired": "Name is required"
+      },
+      "config": {
+        "title": "Configuration",
+        "structured": "Structured",
+        "json": "JSON",
+        "invalidJson": "Invalid JSON",
+        "preservedKeys": "Extra keys preserved from JSON (edit them in the JSON tab):",
+        "errors": {
+          "required": "This field is required",
+          "min": "Value is below the allowed minimum",
+          "max": "Value is above the allowed maximum"
+        },
+        "skill": {
+          "systemPrompt": "System prompt",
+          "triggerKeywords": "Trigger keywords",
+          "model": "Preferred model",
+          "temperature": "Temperature"
+        },
+        "knowledge": {
+          "sources": "Knowledge sources",
+          "topK": "Top K",
+          "embeddingStrategy": "Embedding strategy"
+        },
+        "tool": {
+          "toolId": "Tool id",
+          "parameters": "Default parameters"
+        },
+        "workflow": {
+          "steps": "Steps",
+          "inputs": "Inputs",
+          "outputs": "Outputs"
+        }
+      },
       "all": "All",
       "skill": "Skill",
       "knowledge": "Knowledge",

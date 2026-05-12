@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { GeneList } from '@/components/workspace/genes/GeneList';
 import { render, screen } from '@/test/utils';
 
 describe('GeneList', () => {
-  it('marks gene list as a hosted non-authoritative projection', () => {
-    render(<GeneList genes={[]} />);
+  it('renders an empty state with a create CTA when no genes exist', () => {
+    const onCreate = vi.fn();
+    render(<GeneList genes={[]} onCreate={onCreate} />);
 
-    const boundaryBadge = screen.getByText('blackboard.genesSurfaceHint').closest('div');
-    expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
-    expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
+    expect(screen.getByText('workspaceDetail.genes.noGenes')).toBeInTheDocument();
+    expect(screen.getByText('workspaceDetail.genes.createFirst')).toBeInTheDocument();
   });
 });

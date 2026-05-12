@@ -201,7 +201,14 @@ interface WorkspaceState {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    data: { name: string; category?: CyberGeneCategory; description?: string; config_json?: string }
+    data: {
+      name: string;
+      category?: CyberGeneCategory;
+      description?: string;
+      config_json?: string;
+      version?: string;
+      is_active?: boolean;
+    }
   ) => Promise<void>;
   updateGene: (
     tenantId: string,
@@ -212,6 +219,7 @@ interface WorkspaceState {
       name: string;
       category: CyberGeneCategory;
       description: string;
+      config_json: string;
       is_active: boolean;
       version: string;
     }>

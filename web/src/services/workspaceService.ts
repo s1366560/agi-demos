@@ -810,6 +810,8 @@ export const workspaceGeneService = {
       category?: import('@/types/workspace').CyberGeneCategory;
       description?: string;
       config_json?: string;
+      version?: string;
+      is_active?: boolean;
     }
   ): Promise<import('@/types/workspace').CyberGene> => {
     const response = await apiFetch.post(
@@ -828,6 +830,7 @@ export const workspaceGeneService = {
       name: string;
       category: import('@/types/workspace').CyberGeneCategory;
       description: string;
+      config_json: string;
       is_active: boolean;
       version: string;
     }>

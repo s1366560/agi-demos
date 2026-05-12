@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -26,6 +27,30 @@ router = APIRouter(
     prefix=("/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes"),
     tags=["cyber-genes"],
 )
+
+
+def _validate_config_json(config_json: str | None) -> None:
+    """Reject config_json strings that are not JSON objects.
+
+    Empty / None values are allowed (config is optional). Anything else must
+    parse as a JSON object (dict). Arrays, primitives, or malformed text are
+    rejected with 422 so the structured editor on the front-end does not have
+    to compensate after the fact.
+    """
+    if config_json is None or config_json == "":
+        return
+    try:
+        parsed = json.loads(config_json)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"config_json is not valid JSON: {exc.msg}",
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="config_json must be a JSON object",
+        )
 
 
 def _to_response(gene: CyberGene) -> CyberGeneResponse:
@@ -58,6 +83,7 @@ async def create_gene(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
+    _validate_config_json(payload.config_json)
     container = get_container_with_db(request, db)
     repo = container.cyber_gene_repository()
     gene = CyberGene(
@@ -151,6 +177,7 @@ async def update_gene(
     if payload.description is not None:
         gene.description = payload.description
     if payload.config_json is not None:
+        _validate_config_json(payload.config_json)
         gene.config_json = payload.config_json
     if payload.version is not None:
         gene.version = payload.version

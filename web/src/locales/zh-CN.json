@@ -576,7 +576,8 @@
       "createObjective": "创建目标失败",
       "deleteObjective": "删除目标失败",
       "deleteGene": "删除基因失败",
-      "updateGene": "更新基因失败"
+      "updateGene": "更新基因失败",
+      "createGene": "创建基因失败"
     },
     "arrangement": {
       "eyebrow": "工位编排",
@@ -4478,6 +4479,54 @@
     "genes": {
       "title": "赛博基因",
       "createGene": "创建基因",
+      "editGene": "编辑基因",
+      "create": "创建",
+      "save": "保存",
+      "name": "名称",
+      "categoryLabel": "分类",
+      "description": "描述",
+      "version": "版本",
+      "active": "启用",
+      "createSuccess": "基因已创建",
+      "updateSuccess": "基因已更新",
+      "importFromMarketplace": "从基因市场导入",
+      "marketplaceSearchPlaceholder": "搜索基因市场...",
+      "noMarketplaceResults": "未找到基因市场结果",
+      "errors": {
+        "nameRequired": "名称为必填项"
+      },
+      "config": {
+        "title": "配置",
+        "structured": "结构化",
+        "json": "JSON",
+        "invalidJson": "JSON 格式不合法",
+        "preservedKeys": "以下额外字段已从 JSON 中保留（请在 JSON 标签页内编辑）：",
+        "errors": {
+          "required": "该字段为必填项",
+          "min": "低于允许的最小值",
+          "max": "超过允许的最大值"
+        },
+        "skill": {
+          "systemPrompt": "系统提示词",
+          "triggerKeywords": "触发关键词",
+          "model": "首选模型",
+          "temperature": "温度"
+        },
+        "knowledge": {
+          "sources": "知识源",
+          "topK": "Top K",
+          "embeddingStrategy": "检索策略"
+        },
+        "tool": {
+          "toolId": "工具 ID",
+          "parameters": "默认参数"
+        },
+        "workflow": {
+          "steps": "步骤",
+          "inputs": "输入",
+          "outputs": "输出"
+        }
+      },
       "all": "全部",
       "skill": "技能",
       "knowledge": "知识",

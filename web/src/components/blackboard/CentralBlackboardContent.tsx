@@ -1,12 +1,17 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+
+import { Button } from 'antd';
+import { DownloadCloud, Plus } from 'lucide-react';
 
 import { useWorkspaceActions } from '@/stores/workspace';
 
 import { WorkspaceSettingsPanel } from '@/pages/tenant/WorkspaceSettings';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
+import { GeneEditorModal, type GenePayload } from '@/components/workspace/genes/GeneEditorModal';
+import { GeneImportModal } from '@/components/workspace/genes/GeneImportModal';
 import { GeneList } from '@/components/workspace/genes/GeneList';
 import { MemberPanel } from '@/components/workspace/MemberPanel';
 import { ObjectiveCreateModal } from '@/components/workspace/objectives/ObjectiveCreateModal';
@@ -97,6 +102,71 @@ export function CentralBlackboardContent({
   const workspaceActions = useWorkspaceActions();
   const tabListRef = useRef<HTMLDivElement | null>(null);
   const verticalTabListRef = useRef<HTMLDivElement | null>(null);
+
+  const [geneEditorState, setGeneEditorState] = useState<{
+    open: boolean;
+    mode: 'create' | 'edit';
+    initialGene: CyberGene | null;
+    initialDraft: Partial<GenePayload> | null;
+  }>({ open: false, mode: 'create', initialGene: null, initialDraft: null });
+  const [geneEditorSubmitting, setGeneEditorSubmitting] = useState(false);
+  const [geneImportOpen, setGeneImportOpen] = useState(false);
+
+  const openCreateGene = () => {
+    setGeneEditorState({ open: true, mode: 'create', initialGene: null, initialDraft: null });
+  };
+  const openEditGene = (gene: CyberGene) => {
+    setGeneEditorState({ open: true, mode: 'edit', initialGene: gene, initialDraft: null });
+  };
+  const closeGeneEditor = () => {
+    setGeneEditorState((s) => ({ ...s, open: false }));
+  };
+
+  const handleGeneEditorSubmit = async (payload: GenePayload) => {
+    setGeneEditorSubmitting(true);
+    try {
+      if (geneEditorState.mode === 'edit' && geneEditorState.initialGene) {
+        await workspaceActions.updateGene(
+          tenantId,
+          projectId,
+          workspaceId,
+          geneEditorState.initialGene.id,
+          {
+            name: payload.name,
+            category: payload.category,
+            description: payload.description ?? '',
+            config_json: payload.config_json,
+            version: payload.version,
+            is_active: payload.is_active,
+          }
+        );
+        message?.success(
+          t('workspaceDetail.genes.updateSuccess', 'Gene updated')
+        );
+      } else {
+        await workspaceActions.createGene(tenantId, projectId, workspaceId, {
+          name: payload.name,
+          category: payload.category,
+          ...(payload.description != null ? { description: payload.description } : {}),
+          config_json: payload.config_json,
+          version: payload.version,
+          is_active: payload.is_active,
+        });
+        message?.success(
+          t('workspaceDetail.genes.createSuccess', 'Gene created')
+        );
+      }
+      closeGeneEditor();
+    } catch {
+      message?.error(
+        geneEditorState.mode === 'edit'
+          ? t('blackboard.errors.updateGene', 'Failed to update gene')
+          : t('blackboard.errors.createGene', 'Failed to create gene')
+      );
+    } finally {
+      setGeneEditorSubmitting(false);
+    }
+  };
 
   const actions = useBlackboardActions({
     tenantId,
@@ -262,8 +332,23 @@ export function CentralBlackboardContent({
 
           {activeTab === 'genes' && (
             <div className="rounded-lg border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+              <div className="mb-3 flex items-center justify-end gap-2">
+                <Button
+                  icon={<DownloadCloud size={14} />}
+                  onClick={() => {
+                    setGeneImportOpen(true);
+                  }}
+                >
+                  {t('workspaceDetail.genes.importFromMarketplace', 'Import from Marketplace')}
+                </Button>
+                <Button type="primary" icon={<Plus size={14} />} onClick={openCreateGene}>
+                  {t('workspaceDetail.genes.createGene', 'Create Gene')}
+                </Button>
+              </div>
               <GeneList
                 genes={genes}
+                onCreate={openCreateGene}
+                onEdit={openEditGene}
                 onDelete={(geneId) => {
                   void actions.handleDeleteGene(geneId);
                 }}
@@ -342,6 +427,32 @@ export function CentralBlackboardContent({
         }}
         parentObjectives={objectives}
         loading={actions.creatingObjective}
+      />
+
+      <GeneEditorModal
+        open={geneEditorState.open}
+        mode={geneEditorState.mode}
+        initialGene={geneEditorState.initialGene}
+        initialDraft={geneEditorState.initialDraft}
+        submitting={geneEditorSubmitting}
+        onSubmit={handleGeneEditorSubmit}
+        onCancel={closeGeneEditor}
+      />
+
+      <GeneImportModal
+        open={geneImportOpen}
+        onCancel={() => {
+          setGeneImportOpen(false);
+        }}
+        onSelect={(draft) => {
+          setGeneImportOpen(false);
+          setGeneEditorState({
+            open: true,
+            mode: 'create',
+            initialGene: null,
+            initialDraft: draft,
+          });
+        }}
       />
     </>
   );
