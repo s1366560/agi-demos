@@ -96,6 +96,7 @@ from src.infrastructure.adapters.primary.web.routers.agent import (
 from src.infrastructure.adapters.primary.web.startup import (
     initialize_attempt_recovery,
     initialize_autonomy_idle_waker,
+    initialize_blackboard_outbox_dispatcher,
     initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
@@ -111,6 +112,7 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_workspace_plan_outbox_worker,
     shutdown_attempt_recovery,
     shutdown_autonomy_idle_waker,
+    shutdown_blackboard_outbox_dispatcher,
     shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_sandbox_idle_reaper,
@@ -240,6 +242,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Start Workspace Plan V2 durable outbox worker
     await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
+
+    # Start Blackboard transactional outbox dispatcher
+    await initialize_blackboard_outbox_dispatcher(
+        redis_client=cast(Redis | None, redis_client)
+    )
 
     # Start task/conversation execution-session recovery after the outbox worker
     # is available to drain any queued retry launches from the startup sweep.
@@ -419,6 +426,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Stop Workspace Plan V2 durable outbox worker
     await shutdown_workspace_plan_outbox_worker()
+
+    # Stop Blackboard transactional outbox dispatcher
+    await shutdown_blackboard_outbox_dispatcher()
 
     # Stop attempt recovery service
     await shutdown_attempt_recovery()

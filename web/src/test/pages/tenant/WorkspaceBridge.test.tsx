@@ -25,10 +25,6 @@ vi.mock('../../../components/agent/context/ContextDetailPanel', () => ({
   ContextDetailPanel: () => <div data-testid="context-detail-panel" />,
 }));
 
-vi.mock('../../../components/workspace/BlackboardPanel', () => ({
-  BlackboardPanel: () => <div data-testid="blackboard-panel" />,
-}));
-
 vi.mock('../../../components/workspace/TaskBoard', () => ({
   TaskBoard: () => <div data-testid="task-board" />,
 }));

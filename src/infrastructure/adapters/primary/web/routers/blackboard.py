@@ -17,7 +17,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,15 +33,19 @@ from src.application.services.workspace_surface_contract import (
 )
 from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
+from src.domain.model.workspace.actor_identity import ActorIdentity
 from src.domain.model.workspace.blackboard_file import BlackboardFile
 from src.domain.model.workspace.blackboard_post import BlackboardPost, BlackboardPostStatus
 from src.domain.model.workspace.blackboard_reply import BlackboardReply
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-    publish_workspace_event_with_retry,
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_actor,
+    get_current_user,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.sql_blackboard_outbox_repository import (
+    SqlBlackboardOutboxRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
@@ -90,51 +94,45 @@ def _blackboard_event_metadata(tenant_id: str, project_id: str) -> dict[str, Any
     }
 
 
-# TODO(P0-3 outbox): The pattern below is best-effort: DB commit happens
-# inside the request handler, then we publish to Redis here. If Redis is
-# down or the publish fails after retries, the event is permanently lost
-# and subscribers (UI, agents) will see DB state without the corresponding
-# event. The robust fix is a transactional outbox (write event row in the
-# same DB transaction; a dispatcher relays to Redis). Tracking issue:
-# blackboard event-bus consistency.
+# Blackboard event publishing — transactional outbox.
+#
+# The router enqueues a row to ``workspace_blackboard_outbox`` inside the
+# same DB transaction as the originating mutation (post/reply/file
+# create/update/delete). A background dispatcher (started by
+# ``initialize_blackboard_outbox_dispatcher``) drains the table and
+# publishes events to the Redis workspace bus, guaranteeing that the
+# persisted state and the published event stay consistent even when
+# Redis is unavailable at request time.
+#
+# Callers MUST invoke this BEFORE ``db.commit()``. The
+# ``BLACKBOARD_OUTBOX_ENABLED`` env flag controls the *dispatcher*; when
+# off, outbox rows accumulate until the dispatcher is re-enabled (still
+# no data loss).
 async def _publish_blackboard_event(
-    redis_client: Any,  # noqa: ANN401 -- redis client type varies; structural duck-typing
+    db: AsyncSession,
     *,
+    tenant_id: str,
+    project_id: str,
     workspace_id: str,
     event_type: AgentEventType,
     payload: dict[str, Any],
     metadata: dict[str, Any],
+    correlation_id: str | None = None,
 ) -> None:
-    """Publish a blackboard workspace event with retries; never raise.
-
-    The caller has already committed the DB transaction; raising here
-    would surface as a 500 to the client even though their write
-    succeeded. We retry transient broker failures and log loudly on
-    permanent failure so the gap is observable.
-    """
-    try:
-        await publish_workspace_event_with_retry(
-            redis_client,
-            workspace_id=workspace_id,
-            event_type=event_type,
-            payload=payload,
-            metadata=metadata,
-        )
-    except Exception:
-        # Logged with stack so ops can correlate to dropped event metric.
-        import logging as _logging
-
-        _logging.getLogger(__name__).exception(
-            "[Blackboard] event publish failed after retries; event dropped",
-            extra={
-                "workspace_id": workspace_id,
-                "event_type": event_type.value,
-            },
-        )
+    """Enqueue a blackboard SSE event in the outbox within the current tx."""
+    repo = SqlBlackboardOutboxRepository(db)
+    _ = await repo.enqueue(
+        workspace_id=workspace_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        event_type=event_type.value,
+        payload=payload,
+        metadata=metadata,
+        correlation_id=correlation_id,
+    )
 
 
-# Alias used by the existing call sites in this router. Routes to
-# the with-retry, never-raise helper above.
+# Backwards-compat alias retained for tests that monkeypatch this symbol.
 publish_workspace_event = _publish_blackboard_event
 
 
@@ -305,9 +303,10 @@ async def create_post(
             is_pinned=payload.is_pinned,
             metadata=payload.metadata,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_CREATED,
             payload=_blackboard_event_payload(
@@ -323,6 +322,7 @@ async def create_post(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return _to_post_response(post)
     except Exception as exc:
         await db.rollback()
@@ -404,9 +404,10 @@ async def update_post(
             is_pinned=payload.is_pinned,
             metadata=payload.metadata,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
             payload=_blackboard_event_payload(
@@ -416,6 +417,7 @@ async def update_post(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return _to_post_response(post)
     except Exception as exc:
         await db.rollback()
@@ -441,14 +443,16 @@ async def delete_post(
             post_id=post_id,
             actor_user_id=current_user.id,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_DELETED,
             payload=_blackboard_event_payload({"post_id": post_id}),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return {"success": deleted}
     except Exception as exc:
         await db.rollback()
@@ -479,6 +483,23 @@ class BlackboardFileListResponse(BaseModel):
 class MkdirRequest(BaseModel):
     parent_path: str = Field("/", description="Parent directory path")
     name: str = Field(..., min_length=1, max_length=255)
+
+
+class RenameOrMoveFileRequest(BaseModel):
+    """Patch payload for renaming and/or moving a blackboard file or directory.
+
+    At least one of ``name`` / ``parent_path`` must be provided. Both fields
+    may be supplied together to rename-and-move atomically (handled as
+    move-then-rename on the service side).
+    """
+
+    name: str | None = Field(None, min_length=1, max_length=255)
+    parent_path: str | None = Field(None, description="New parent directory path")
+
+
+class CopyFileRequest(BaseModel):
+    target_parent_path: str = Field(..., description="Destination directory path")
+    name: str | None = Field(None, min_length=1, max_length=255)
 
 
 def _file_service_from_request(request: Request, db: AsyncSession) -> BlackboardFileService:
@@ -557,10 +578,11 @@ async def create_directory(
             parent_path=payload.parent_path,
             name=payload.name,
         )
-        await db.commit()
         response = _to_file_response(directory)
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_FILE_CREATED,
             payload=_blackboard_event_payload(
@@ -574,6 +596,7 @@ async def create_directory(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return response
     except Exception as exc:
         await db.rollback()
@@ -593,6 +616,7 @@ async def upload_file(
     file: UploadFile = File(...),
     parent_path: str = Form("/"),
     current_user: User = Depends(get_current_user),
+    current_actor: ActorIdentity = Depends(get_current_actor),
     db: AsyncSession = Depends(get_db),
 ) -> BlackboardFileResponse:
     service = _file_service_from_request(request, db)
@@ -607,11 +631,13 @@ async def upload_file(
             parent_path=parent_path,
             filename=file.filename or "unnamed",
             content=content,
+            actor=current_actor,
         )
-        await db.commit()
         response = _to_file_response(bb_file)
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_FILE_CREATED,
             payload=_blackboard_event_payload(
@@ -625,6 +651,7 @@ async def upload_file(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return response
     except Exception as exc:
         await db.rollback()
@@ -643,17 +670,46 @@ async def download_file(
 ) -> Response:
     service = _file_service_from_request(request, db)
     try:
-        content, content_type, filename = await service.read_file(
+        stream = await service.open_file_stream(
             tenant_id=tenant_id,
             project_id=project_id,
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
             file_id=file_id,
         )
-        return Response(
-            content=content,
-            media_type=content_type,
-            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        # Strong ETag when SHA-256 is known, otherwise a weak fallback so
+        # conditional GET still works for large or not-yet-hashed files.
+        if stream.checksum_sha256:
+            etag = f'"{stream.checksum_sha256}"'
+        else:
+            etag = f'W/"sz-{stream.file_size}-id-{stream.file_id}"'
+
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match:
+            # Quote-insensitive compare: clients may send the literal value back.
+            candidates = {value.strip() for value in if_none_match.split(",")}
+            if etag in candidates or if_none_match.strip() == etag:
+                # Consume the iterator to release file handle before short-circuit.
+                async for _ in stream.iterator:
+                    break
+                return Response(
+                    status_code=status.HTTP_304_NOT_MODIFIED,
+                    headers={"ETag": etag, "Cache-Control": "private, no-cache"},
+                )
+
+        headers = {
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{quote(stream.filename)}"
+            ),
+            "Content-Length": str(stream.file_size),
+            "Cache-Control": "private, no-cache",
+            "ETag": etag,
+            "Accept-Ranges": "bytes",
+        }
+        return StreamingResponse(
+            stream.iterator,
+            media_type=stream.content_type,
+            headers=headers,
         )
     except Exception as exc:
         raise _map_error(exc) from exc
@@ -666,17 +722,41 @@ async def delete_file(
     workspace_id: str,
     file_id: str,
     request: Request,
+    recursive: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, bool]:
     service = _file_service_from_request(request, db)
     try:
-        deleted = await service.delete_file(
+        deleted, was_directory = await service.delete_file(
             tenant_id=tenant_id,
             project_id=project_id,
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
             file_id=file_id,
+            recursive=recursive,
+        )
+        event_type = (
+            AgentEventType.BLACKBOARD_DIRECTORY_DELETED
+            if was_directory
+            else AgentEventType.BLACKBOARD_FILE_DELETED
+        )
+        await publish_workspace_event(
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_type=event_type,
+            payload=_blackboard_event_payload(
+                {
+                    "workspace_id": workspace_id,
+                    "file_id": file_id,
+                    "deleted": deleted,
+                    "recursive": recursive,
+                    "is_directory": was_directory,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         await db.commit()
         await publish_workspace_event(
@@ -689,6 +769,116 @@ async def delete_file(
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         return {"deleted": deleted}
+    except Exception as exc:
+        await db.rollback()
+        raise _map_error(exc) from exc
+
+
+@router.patch("/files/{file_id}", response_model=BlackboardFileResponse)
+async def rename_or_move_file(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    file_id: str,
+    payload: RenameOrMoveFileRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BlackboardFileResponse:
+    service = _file_service_from_request(request, db)
+    if payload.name is None and payload.parent_path is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one of 'name' or 'parent_path'",
+        )
+    try:
+        updated: BlackboardFile | None = None
+        if payload.parent_path is not None:
+            updated = await service.move_file(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                actor_user_id=current_user.id,
+                file_id=file_id,
+                new_parent_path=payload.parent_path,
+            )
+        if payload.name is not None:
+            updated = await service.rename_file(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                actor_user_id=current_user.id,
+                file_id=file_id,
+                new_name=payload.name,
+            )
+        assert updated is not None  # one branch must have run
+        response = _to_file_response(updated)
+        await publish_workspace_event(
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_type=AgentEventType.BLACKBOARD_FILE_UPDATED,
+            payload=_blackboard_event_payload(
+                {"file": response.model_dump(mode="json"), "file_id": response.id}
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
+        )
+        await db.commit()
+        return response
+    except Exception as exc:
+        await db.rollback()
+        raise _map_error(exc) from exc
+
+
+@router.post(
+    "/files/{file_id}/copy",
+    response_model=BlackboardFileResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def copy_file(
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+    file_id: str,
+    payload: CopyFileRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BlackboardFileResponse:
+    service = _file_service_from_request(request, db)
+    try:
+        copy = await service.copy_file(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            actor_user_id=current_user.id,
+            actor_user_name=_current_user_label(current_user),
+            file_id=file_id,
+            target_parent_path=payload.target_parent_path,
+            new_name=payload.name,
+        )
+        response = _to_file_response(copy)
+        await publish_workspace_event(
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            event_type=AgentEventType.BLACKBOARD_FILE_CREATED,
+            payload=_blackboard_event_payload(
+                {
+                    "file": response.model_dump(mode="json"),
+                    "file_id": response.id,
+                    "parent_path": response.parent_path,
+                    "name": response.name,
+                    "is_directory": response.is_directory,
+                    "copied_from": file_id,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
+        )
+        await db.commit()
+        return response
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
@@ -713,9 +903,10 @@ async def pin_post(
             post_id=post_id,
             actor_user_id=current_user.id,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
             payload=_blackboard_event_payload(
@@ -726,6 +917,7 @@ async def pin_post(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return _to_post_response(post)
     except Exception as exc:
         await db.rollback()
@@ -751,9 +943,10 @@ async def unpin_post(
             post_id=post_id,
             actor_user_id=current_user.id,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
             payload=_blackboard_event_payload(
@@ -764,6 +957,7 @@ async def unpin_post(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return _to_post_response(post)
     except Exception as exc:
         await db.rollback()
@@ -796,9 +990,10 @@ async def create_reply(
             content=payload.content,
             metadata=payload.metadata,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_REPLY_CREATED,
             payload=_blackboard_event_payload(
@@ -809,6 +1004,7 @@ async def create_reply(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return _to_reply_response(reply)
     except Exception as exc:
         await db.rollback()
@@ -867,9 +1063,10 @@ async def update_reply(
             content=payload.content,
             metadata=payload.metadata,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_REPLY_UPDATED,
             payload=_blackboard_event_payload(
@@ -880,6 +1077,7 @@ async def update_reply(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return _to_reply_response(reply)
     except Exception as exc:
         await db.rollback()
@@ -907,9 +1105,10 @@ async def delete_reply(
             reply_id=reply_id,
             actor_user_id=current_user.id,
         )
-        await db.commit()
         await publish_workspace_event(
-            request.app.state.container.redis(),
+            db,
+            tenant_id=tenant_id,
+            project_id=project_id,
             workspace_id=workspace_id,
             event_type=AgentEventType.BLACKBOARD_REPLY_DELETED,
             payload=_blackboard_event_payload(
@@ -920,6 +1119,7 @@ async def delete_reply(
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
+        await db.commit()
         return {"success": deleted}
     except Exception as exc:
         await db.rollback()

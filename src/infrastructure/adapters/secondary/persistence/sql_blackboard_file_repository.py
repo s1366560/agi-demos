@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from typing import Any, cast
+
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.blackboard_file import BlackboardFile
@@ -46,6 +49,91 @@ class SqlBlackboardFileRepository(
         rows = result.scalars().all()
         return [f for row in rows if (f := self._to_domain(row)) is not None]
 
+    async def find_descendants(
+        self,
+        workspace_id: str,
+        path_prefix: str,
+    ) -> list[BlackboardFile]:
+        """Return every file whose ``parent_path`` starts with ``path_prefix``.
+
+        ``path_prefix`` is expected to end with ``/`` (matches our canonical
+        directory representation), so a directory at ``/docs/`` matches descendants
+        with ``parent_path`` like ``/docs/`` and ``/docs/sub/``.
+        """
+        like_pattern = f"{path_prefix}%"
+        query = (
+            select(BlackboardFileModel)
+            .where(
+                BlackboardFileModel.workspace_id == workspace_id,
+                BlackboardFileModel.parent_path.like(like_pattern),
+            )
+            .order_by(
+                BlackboardFileModel.parent_path.asc(),
+                BlackboardFileModel.is_directory.desc(),
+                BlackboardFileModel.name.asc(),
+            )
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        rows = result.scalars().all()
+        return [f for row in rows if (f := self._to_domain(row)) is not None]
+
+    async def bulk_update_parent_path(
+        self,
+        workspace_id: str,
+        old_prefix: str,
+        new_prefix: str,
+    ) -> int:
+        """Rewrite ``parent_path`` of every descendant in a single SQL UPDATE.
+
+        Uses string substitution at SQL level: rows where ``parent_path``
+        equals ``old_prefix`` or starts with ``old_prefix`` get rewritten to
+        the corresponding ``new_prefix`` form.
+        """
+        # Exact-match rows (parent_path == old_prefix) get the new prefix outright.
+        # Deeper rows whose parent_path is like "old_prefix%" need substring
+        # replacement of the prefix.
+        from sqlalchemy import case, func, literal, or_
+
+        old_len = len(old_prefix)
+        stmt = (
+            update(BlackboardFileModel)
+            .where(
+                BlackboardFileModel.workspace_id == workspace_id,
+                or_(
+                    BlackboardFileModel.parent_path == old_prefix,
+                    BlackboardFileModel.parent_path.like(f"{old_prefix}%"),
+                ),
+            )
+            .values(
+                parent_path=case(
+                    (BlackboardFileModel.parent_path == old_prefix, literal(new_prefix)),
+                    else_=func.concat(
+                        literal(new_prefix),
+                        func.substr(BlackboardFileModel.parent_path, old_len + 1),
+                    ),
+                )
+            )
+        )
+        result = await self._session.execute(stmt)
+        cursor_result = cast(CursorResult[Any], result)
+        return int(cursor_result.rowcount or 0)
+
+    async def update_checksum(
+        self,
+        file_id: str,
+        checksum_sha256: str,
+    ) -> None:
+        """Idempotent set: only writes when checksum is currently NULL."""
+        stmt = (
+            update(BlackboardFileModel)
+            .where(
+                BlackboardFileModel.id == file_id,
+                BlackboardFileModel.checksum_sha256.is_(None),
+            )
+            .values(checksum_sha256=checksum_sha256)
+        )
+        await self._session.execute(stmt)
+
     def _to_domain(self, db_model: BlackboardFileModel | None) -> BlackboardFile | None:
         if db_model is None:
             return None
@@ -61,6 +149,8 @@ class SqlBlackboardFileRepository(
             uploader_type=db_model.uploader_type,
             uploader_id=db_model.uploader_id,
             uploader_name=db_model.uploader_name,
+            checksum_sha256=db_model.checksum_sha256,
+            mime_type_detected=db_model.mime_type_detected,
             created_at=db_model.created_at,
         )
 
@@ -77,5 +167,7 @@ class SqlBlackboardFileRepository(
             uploader_type=domain_entity.uploader_type,
             uploader_id=domain_entity.uploader_id,
             uploader_name=domain_entity.uploader_name,
+            checksum_sha256=domain_entity.checksum_sha256,
+            mime_type_detected=domain_entity.mime_type_detected,
             created_at=domain_entity.created_at,
         )

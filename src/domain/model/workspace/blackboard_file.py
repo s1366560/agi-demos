@@ -20,6 +20,8 @@ class BlackboardFile(Entity):
     uploader_type: str  # "user" or "agent"
     uploader_id: str
     uploader_name: str
+    checksum_sha256: str | None = None
+    mime_type_detected: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:

@@ -230,6 +230,8 @@ class TestBlackboardRouter:
 
         assert delete_response.status_code == 200
         delete_event = publish_mock.await_args.kwargs
-        assert delete_event["event_type"] == AgentEventType.BLACKBOARD_FILE_DELETED
+        # Deleting a directory now emits the dedicated directory-deleted event.
+        assert delete_event["event_type"] == AgentEventType.BLACKBOARD_DIRECTORY_DELETED
         assert delete_event["payload"]["file_id"] == created["id"]
         assert delete_event["payload"]["workspace_id"] == WORKSPACE_ID
+        assert delete_event["payload"]["is_directory"] is True

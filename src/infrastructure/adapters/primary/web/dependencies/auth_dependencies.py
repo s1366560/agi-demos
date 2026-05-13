@@ -7,7 +7,7 @@ Business logic is delegated to AuthService in the application layer.
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from fastapi import Depends, Header, HTTPException, Query, status
@@ -35,6 +35,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository im
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
     SqlUserRepository,
 )
+
+if TYPE_CHECKING:
+    from src.domain.model.workspace.actor_identity import ActorIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +393,37 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         ) from e
+
+
+async def get_current_actor(
+    current_user: "DBUser" = Depends(get_current_user),
+    x_agent_id: str | None = Header(default=None, alias="X-Agent-Id"),
+    x_agent_label: str | None = Header(default=None, alias="X-Agent-Label"),
+) -> "ActorIdentity":
+    """Resolve the acting principal for workspace mutation provenance.
+
+    Authentication is still done via the API key (``get_current_user``).
+    When the caller is an agent runtime acting on behalf of a service user
+    it MUST also send ``X-Agent-Id`` (and optionally ``X-Agent-Label``).
+    Otherwise the actor defaults to the authenticated human user.
+    """
+    from src.domain.model.workspace.actor_identity import ActorIdentity  # local to avoid cycle
+
+    if x_agent_id:
+        agent_id = x_agent_id.strip()
+        if agent_id:
+            return ActorIdentity(
+                kind="agent",
+                id=agent_id,
+                label=(x_agent_label or agent_id).strip() or agent_id,
+            )
+
+    user_label = (
+        getattr(current_user, "display_name", None)
+        or getattr(current_user, "email", None)
+        or current_user.id
+    )
+    return ActorIdentity(kind="user", id=current_user.id, label=user_label)
 
 
 async def get_current_user_tenant(

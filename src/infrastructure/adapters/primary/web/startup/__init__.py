@@ -11,6 +11,10 @@ from .autonomy_waker import (
     initialize_autonomy_idle_waker,
     shutdown_autonomy_idle_waker,
 )
+from .blackboard_outbox import (
+    initialize_blackboard_outbox_dispatcher,
+    shutdown_blackboard_outbox_dispatcher,
+)
 from .channels import (
     get_channel_manager,
     initialize_channel_manager,
@@ -41,6 +45,7 @@ __all__ = [
     "get_channel_manager",
     "initialize_attempt_recovery",
     "initialize_autonomy_idle_waker",
+    "initialize_blackboard_outbox_dispatcher",
     "initialize_channel_manager",
     "initialize_container",
     "initialize_database_schema",
@@ -58,6 +63,7 @@ __all__ = [
     "set_message_router",
     "shutdown_attempt_recovery",
     "shutdown_autonomy_idle_waker",
+    "shutdown_blackboard_outbox_dispatcher",
     "shutdown_channel_manager",
     "shutdown_docker_services",
     "shutdown_sandbox_idle_reaper",

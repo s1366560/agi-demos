@@ -464,6 +464,8 @@ class BlackboardFileModel(Base):
     uploader_type: Mapped[str] = mapped_column(String(10), nullable=False)
     uploader_id: Mapped[str] = mapped_column(String, nullable=False)
     uploader_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mime_type_detected: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workspace: Mapped["WorkspaceModel"] = relationship(back_populates="blackboard_files")
@@ -3306,6 +3308,48 @@ class WorkspacePlanOutboxModel(Base):
         Index("ix_workspace_plan_outbox_workspace_status", "workspace_id", "status"),
         Index("ix_workspace_plan_outbox_status_next_attempt", "status", "next_attempt_at"),
         Index("ix_workspace_plan_outbox_lease", "lease_owner", "lease_expires_at"),
+    )
+
+
+class WorkspaceBlackboardOutboxModel(Base):
+    """Transactional outbox row for blackboard SSE events.
+
+    Persisted in the same DB transaction as the originating mutation
+    (post/reply/file create/update/delete). A background dispatcher
+    drains pending rows and publishes them to the Redis workspace event
+    bus, then marks the row dispatched. Guarantees at-least-once
+    delivery even when Redis is unavailable at request time.
+    """
+
+    __tablename__ = "workspace_blackboard_outbox"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    project_id: Mapped[str] = mapped_column(String, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    correlation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_blackboard_outbox_workspace_status", "workspace_id", "status"),
+        Index("ix_blackboard_outbox_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_blackboard_outbox_created_at", "created_at"),
     )
 
 
