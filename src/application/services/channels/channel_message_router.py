@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, cast
 from src.application.services.channels._session import with_session
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -239,7 +240,7 @@ class ChannelMessageRouter:
                 f"[MessageRouter] Media import failed: {e}",
                 exc_info=True,
             )
-            error_msg = f"抱歉，文件导入时发生错误: {e!s}"
+            error_msg = _("Sorry, an error occurred while importing the file: {error}").format(error=str(e))
             await self._send_error_reply(message, error_msg)
 
     def _apply_sandbox_path(self, message: Message, sandbox_path: str) -> None:
@@ -261,20 +262,23 @@ class ChannelMessageRouter:
         """Build display text for imported media."""
         original_text = message.content.text or ""
         if message.content.type == MessageType.POST and original_text.strip():
-            return f"{original_text}\n\n[图片已上传: {sandbox_path}]"
+            return f"{original_text}\n\n[{_('Image uploaded')}: {sandbox_path}]"
 
         _type_labels: dict[str, str] = {
-            "image": "图片已上传到沙箱",
-            "file": "文件已上传到沙箱",
+            "image": _("Image uploaded to sandbox"),
+            "file": _("File uploaded to sandbox"),
         }
-        label = _type_labels.get(message.content.type.value, "媒体已上传到沙箱")
+        label = _type_labels.get(message.content.type.value, _("Media uploaded to sandbox"))
         return f"[{label}: {sandbox_path}]"
 
     async def _handle_media_import_failure(self, message: Message) -> None:
         """Handle failed media import by notifying the user."""
+        filename = message.content.file_name or _("unknown")
         error_msg = (
-            f"抱歉，文件导入失败。文件可能过大（超过50MB）或格式不支持。"
-            f"文件名: {message.content.file_name or '未知'}"
+            _(
+                "Sorry, file import failed. The file may be too large (over 50MB) "
+                "or its format is not supported. Filename: {filename}"
+            ).format(filename=filename)
         )
         logger.warning(f"[MessageRouter] Media import failed - {error_msg}")
         await self._send_error_reply(

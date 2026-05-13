@@ -45,7 +45,7 @@ describe('ProjectSettingsModal', () => {
     it('should render modal when isOpen is true', () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      expect(screen.getByText('项目设置')).toBeInTheDocument();
+      expect(screen.getByText('Project Settings')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Test Project')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Test Description')).toBeInTheDocument();
     });
@@ -53,7 +53,7 @@ describe('ProjectSettingsModal', () => {
     it('should not render modal when isOpen is false', () => {
       render(<ProjectSettingsModal {...defaultProps} isOpen={false} />);
 
-      expect(screen.queryByText('项目设置')).not.toBeInTheDocument();
+      expect(screen.queryByText('Project Settings')).not.toBeInTheDocument();
     });
   });
 
@@ -61,7 +61,7 @@ describe('ProjectSettingsModal', () => {
     it('should update project name input', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const nameInput = screen.getByPlaceholderText('输入项目名称');
+      const nameInput = screen.getByPlaceholderText('Enter project name');
       await fireEvent.change(nameInput, { target: { value: 'New Project Name' } });
 
       expect(nameInput).toHaveValue('New Project Name');
@@ -70,7 +70,7 @@ describe('ProjectSettingsModal', () => {
     it('should update description textarea', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const descriptionTextarea = screen.getByPlaceholderText('添加项目描述...');
+      const descriptionTextarea = screen.getByPlaceholderText('Add project description...');
       await fireEvent.change(descriptionTextarea, { target: { value: 'New Description' } });
 
       expect(descriptionTextarea).toHaveValue('New Description');
@@ -79,7 +79,7 @@ describe('ProjectSettingsModal', () => {
     it('should toggle public checkbox', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const publicCheckbox = screen.getByLabelText('公开项目');
+      const publicCheckbox = screen.getByLabelText('Public Project');
       await fireEvent.click(publicCheckbox);
 
       expect(publicCheckbox).toBeChecked();
@@ -90,7 +90,7 @@ describe('ProjectSettingsModal', () => {
     it('should call onSave when save button is clicked', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const saveButton = screen.getByText('保存更改');
+      const saveButton = screen.getByText('Save Changes');
       await fireEvent.click(saveButton);
 
       await waitFor(() => {
@@ -101,7 +101,7 @@ describe('ProjectSettingsModal', () => {
     it('should call onClose when cancel button is clicked', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const cancelButton = screen.getByText('取消');
+      const cancelButton = screen.getByText('Cancel');
       await fireEvent.click(cancelButton);
 
       expect(mockOnClose).toHaveBeenCalled();
@@ -112,19 +112,19 @@ describe('ProjectSettingsModal', () => {
     it('should show confirmation dialog when delete button is clicked', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const deleteButton = screen.getByText('删除项目');
+      const deleteButton = screen.getByText('Delete Project');
       await fireEvent.click(deleteButton);
 
-      expect(screen.getByText('确认删除')).toBeInTheDocument();
+      expect(screen.getByText('Confirm Delete')).toBeInTheDocument();
     });
 
     it('should call onDelete when confirmed', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const deleteButton = screen.getByText('删除项目');
+      const deleteButton = screen.getByText('Delete Project');
       await fireEvent.click(deleteButton);
 
-      const confirmButton = screen.getByText('确认删除');
+      const confirmButton = screen.getByText('Confirm Delete');
       await fireEvent.click(confirmButton);
       await waitFor(() => {
         expect(mockOnDelete).toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe('ProjectSettingsModal', () => {
 
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const deleteButton = screen.getByText('删除项目');
+      const deleteButton = screen.getByText('Delete Project');
       await fireEvent.click(deleteButton);
 
       expect(projectService.deleteProject).not.toHaveBeenCalled();
@@ -151,7 +151,7 @@ describe('ProjectSettingsModal', () => {
 
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const saveButton = screen.getByText('保存更改');
+      const saveButton = screen.getByText('Save Changes');
       await fireEvent.click(saveButton);
 
       await waitFor(() => {
@@ -166,14 +166,14 @@ describe('ProjectSettingsModal', () => {
 
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const deleteButton = screen.getByText('删除项目');
+      const deleteButton = screen.getByText('Delete Project');
       await fireEvent.click(deleteButton);
 
-      const confirmButton = screen.getByText('确认删除');
+      const confirmButton = screen.getByText('Confirm Delete');
       expect(confirmButton).toBeInTheDocument();
       await fireEvent.click(confirmButton);
       await waitFor(() => {
-        expect(screen.queryByText('确认删除')).not.toBeInTheDocument();
+        expect(screen.queryByText('Confirm Delete')).not.toBeInTheDocument();
       });
     });
   });
@@ -182,10 +182,10 @@ describe('ProjectSettingsModal', () => {
     it('should show error when project name is empty', async () => {
       render(<ProjectSettingsModal {...defaultProps} />);
 
-      const nameInput = screen.getByPlaceholderText('输入项目名称');
+      const nameInput = screen.getByPlaceholderText('Enter project name');
       await fireEvent.change(nameInput, { target: { value: '' } });
 
-      const saveButton = screen.getByText('保存更改');
+      const saveButton = screen.getByText('Save Changes');
       await fireEvent.click(saveButton);
 
       // Should not call updateProject with empty name

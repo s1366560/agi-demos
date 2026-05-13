@@ -54,7 +54,7 @@ interface ConversationsState {
     projectId: string,
     status?: ConversationStatus,
     limit?: number,
-    signal?: AbortSignal
+    signalOrOptions?: AbortSignal | ListConversationsOptions
   ) => Promise<void>;
   loadMoreConversations: (projectId: string, status?: ConversationStatus) => Promise<void>;
   createConversation: (projectId: string, title?: string) => Promise<Conversation>;
@@ -67,6 +67,28 @@ interface ConversationsState {
   updateCurrentConversation: (conversation: Conversation) => void;
   clearPendingFlag: () => void;
   reset: () => void;
+}
+
+interface ListConversationsOptions {
+  signal?: AbortSignal | undefined;
+  silent?: boolean | undefined;
+}
+
+function isAbortSignal(
+  value: AbortSignal | ListConversationsOptions | undefined
+): value is AbortSignal {
+  return (
+    typeof value === 'object' && 'aborted' in value && typeof value.addEventListener === 'function'
+  );
+}
+
+function normalizeListOptions(
+  signalOrOptions: AbortSignal | ListConversationsOptions | undefined
+): ListConversationsOptions {
+  if (isAbortSignal(signalOrOptions)) {
+    return { signal: signalOrOptions };
+  }
+  return signalOrOptions ?? {};
 }
 
 /**
@@ -104,15 +126,18 @@ export const useConversationsStore = create<ConversationsState>()(
         projectId: string,
         status?: ConversationStatus,
         limit = 10,
-        signal?: AbortSignal
+        signalOrOptions?: AbortSignal | ListConversationsOptions
       ) => {
+        const { signal, silent = false } = normalizeListOptions(signalOrOptions);
         // Skip if already loading for the same project
         const state = get();
         if (state.conversationsLoading) {
           return;
         }
 
-        set({ conversationsLoading: true, conversationsError: null });
+        if (!silent) {
+          set({ conversationsLoading: true, conversationsError: null });
+        }
         try {
           const response = await agentService.listConversations(
             projectId,
@@ -125,23 +150,27 @@ export const useConversationsStore = create<ConversationsState>()(
             conversations: response.items,
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
-            conversationsLoading: false,
+            ...(!silent ? { conversationsLoading: false } : {}),
           });
         } catch (error: unknown) {
           // Defect #15: silently swallow aborted requests so a stale
           // project switch does not surface as a user-facing error.
-          if (signal?.aborted || (error as { name?: string })?.name === 'CanceledError') {
-            set({ conversationsLoading: false });
+          if (signal?.aborted || (error as { name?: string }).name === 'CanceledError') {
+            if (!silent) {
+              set({ conversationsLoading: false });
+            }
             return;
           }
           const err = error as {
             response?: { data?: { detail?: string | undefined } | undefined } | undefined;
             message?: string | undefined;
           };
-          set({
-            conversationsError: err?.response?.data?.detail || 'Failed to list conversations',
-            conversationsLoading: false,
-          });
+          if (!silent) {
+            set({
+              conversationsError: err.response?.data?.detail || 'Failed to list conversations',
+              conversationsLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -168,7 +197,7 @@ export const useConversationsStore = create<ConversationsState>()(
             message?: string | undefined;
           };
           set({
-            conversationsError: err?.response?.data?.detail || 'Failed to load more conversations',
+            conversationsError: err.response?.data?.detail || 'Failed to load more conversations',
             conversationsLoadingMore: false,
           });
         }
@@ -203,7 +232,7 @@ export const useConversationsStore = create<ConversationsState>()(
             message?: string | undefined;
           };
           set({
-            conversationsError: err?.response?.data?.detail || 'Failed to create conversation',
+            conversationsError: err.response?.data?.detail || 'Failed to create conversation',
             conversationsLoading: false,
           });
           throw error;
@@ -229,7 +258,7 @@ export const useConversationsStore = create<ConversationsState>()(
             message?: string | undefined;
           };
           set({
-            conversationsError: err?.response?.data?.detail || 'Failed to get conversation',
+            conversationsError: err.response?.data?.detail || 'Failed to get conversation',
             conversationsLoading: false,
           });
           return null;
@@ -260,7 +289,7 @@ export const useConversationsStore = create<ConversationsState>()(
             message?: string | undefined;
           };
           set({
-            conversationsError: err?.response?.data?.detail || 'Failed to delete conversation',
+            conversationsError: err.response?.data?.detail || 'Failed to delete conversation',
             conversationsLoading: false,
           });
           throw error;
@@ -289,7 +318,7 @@ export const useConversationsStore = create<ConversationsState>()(
             message?: string | undefined;
           };
           set({
-            conversationsError: err?.response?.data?.detail || 'Failed to rename conversation',
+            conversationsError: err.response?.data?.detail || 'Failed to rename conversation',
           });
           throw error;
         }

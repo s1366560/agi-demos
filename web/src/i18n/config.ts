@@ -21,13 +21,29 @@ i18n
   .init({
     resources,
     fallbackLng: 'en-US',
+    supportedLngs: ['en-US', 'zh-CN'],
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      // Honor previously chosen language first, then fall back to navigator.
+      // navigator covers browser default per product requirement.
+      order: ['localStorage', 'navigator', 'htmlTag'],
       caches: ['localStorage'],
+      lookupLocalStorage: 'i18nextLng',
     },
   });
+
+// Keep <html lang="..."> in sync with the active language so screen readers,
+// browser spell-check, and search engines see the correct locale. Update on
+// init and whenever the user switches via LanguageSwitcher.
+const applyHtmlLang = (lang: string) => {
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('lang', lang);
+  }
+};
+
+applyHtmlLang(i18n.language || 'en-US');
+i18n.on('languageChanged', applyHtmlLang);
 
 export default i18n;

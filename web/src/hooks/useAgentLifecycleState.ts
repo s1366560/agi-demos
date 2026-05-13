@@ -25,6 +25,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { agentService } from '../services/agentService';
 import { logger } from '../utils/logger';
 
@@ -54,6 +56,7 @@ export function useAgentLifecycleState({
   tenantId,
   enabled = true,
 }: UseAgentLifecycleStateOptions): UseAgentLifecycleStateResult {
+  const { t } = useTranslation();
   const [lifecycleState, setLifecycleState] = useState<LifecycleStateData | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,71 +126,71 @@ export function useAgentLifecycleState({
   const status = useMemo<LifecycleStatus>(() => {
     if (!lifecycleState) {
       return {
-        label: '未启动',
+        label: t('agent.lifecycle.notStarted.label'),
         color: 'text-slate-500',
         icon: 'Power',
-        description: 'Agent 尚未初始化，将在首次请求时自动启动',
+        description: t('agent.lifecycle.notStarted.description'),
       };
     }
 
     switch (lifecycleState.lifecycleState) {
       case 'initializing':
         return {
-          label: '初始化中',
+          label: t('agent.lifecycle.initializing.label'),
           color: 'text-blue-500',
           icon: 'Loader2',
-          description: '正在加载工具、技能和配置',
+          description: t('agent.lifecycle.initializing.description'),
         };
 
       case 'ready':
         return {
-          label: '就绪',
+          label: t('agent.lifecycle.ready.label'),
           color: 'text-emerald-500',
           icon: 'CheckCircle',
-          description: `Agent 已就绪，${lifecycleState.toolCount || 0} 个工具`,
+          description: t('agent.lifecycle.ready.description', { count: lifecycleState.toolCount || 0 }),
         };
 
       case 'executing':
         return {
-          label: '执行中',
+          label: t('agent.lifecycle.running.label'),
           color: 'text-amber-500',
           icon: 'Cpu',
-          description: '正在处理聊天请求',
+          description: t('agent.lifecycle.running.description'),
         };
 
       case 'paused':
         return {
-          label: '已暂停',
+          label: t('agent.lifecycle.paused.label'),
           color: 'text-orange-500',
           icon: 'Pause',
-          description: 'Agent 已暂停，不接收新请求',
+          description: t('agent.lifecycle.paused.description'),
         };
 
       case 'shutting_down':
         return {
-          label: '关闭中',
+          label: t('agent.lifecycle.shuttingDown.label'),
           color: 'text-slate-500',
           icon: 'Power',
-          description: 'Agent 正在关闭',
+          description: t('agent.lifecycle.shuttingDown.description'),
         };
 
       case 'error':
         return {
-          label: '错误',
+          label: t('agent.lifecycle.error.label'),
           color: 'text-red-500',
           icon: 'AlertCircle',
-          description: lifecycleState.errorMessage || 'Agent 遇到错误',
+          description: lifecycleState.errorMessage || t('agent.lifecycle.error.description'),
         };
 
       default:
         return {
-          label: '未知',
+          label: t('agent.lifecycle.unknown.label'),
           color: 'text-gray-500',
           icon: 'HelpCircle',
-          description: 'Agent 状态未知',
+          description: t('agent.lifecycle.unknown.description'),
         };
     }
-  }, [lifecycleState]);
+  }, [lifecycleState, t]);
 
   return {
     lifecycleState,

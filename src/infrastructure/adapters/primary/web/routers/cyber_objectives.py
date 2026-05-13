@@ -106,12 +106,16 @@ async def _ensure_objective_root_task(
 
     command_service = _get_workspace_task_command_service(request, db)
     event_publisher = _get_workspace_task_event_publisher(request)
+    metadata = build_projected_objective_root_metadata(objective)
+    user_pref = getattr(current_user, "preferred_language", None)
+    if isinstance(user_pref, str) and user_pref in {"en-US", "zh-CN"}:
+        metadata[PREFERRED_LANGUAGE] = user_pref
     task = await command_service.create_task(
         workspace_id=workspace_id,
         actor_user_id=current_user.id,
         title=objective.title,
         description=objective.description,
-        metadata=build_projected_objective_root_metadata(objective),
+        metadata=metadata,
     )
     await db.commit()
     try:
@@ -346,6 +350,10 @@ async def project_objective_to_task(
         metadata = build_projected_objective_root_metadata(objective)
         if body is not None and body.preferred_language is not None:
             metadata[PREFERRED_LANGUAGE] = body.preferred_language
+        else:
+            user_pref = getattr(current_user, "preferred_language", None)
+            if isinstance(user_pref, str) and user_pref in {"en-US", "zh-CN"}:
+                metadata[PREFERRED_LANGUAGE] = user_pref
         task = await command_service.create_task(
             workspace_id=workspace_id,
             actor_user_id=current_user.id,

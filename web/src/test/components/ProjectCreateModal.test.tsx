@@ -38,14 +38,14 @@ describe('ProjectCreateModal', () => {
 
   it('renders modal when open', () => {
     render(<ProjectCreateModal isOpen={true} onClose={mockOnClose} />);
-    expect(screen.getByText('创建项目', { selector: 'h2' })).toBeInTheDocument();
+    expect(screen.getByText('Create Project', { selector: 'h2' })).toBeInTheDocument();
   });
 
   it('handles basic form input', () => {
     render(<ProjectCreateModal isOpen={true} onClose={mockOnClose} />);
 
-    const nameInput = screen.getByPlaceholderText('输入项目名称');
-    const descInput = screen.getByPlaceholderText('描述这个项目的目标和用途');
+    const nameInput = screen.getByPlaceholderText('Enter project name');
+    const descInput = screen.getByPlaceholderText('Describe the goals and purpose of this project');
 
     fireEvent.change(nameInput, { target: { value: 'New Project' } });
     fireEvent.change(descInput, { target: { value: 'Description' } });
@@ -58,22 +58,22 @@ describe('ProjectCreateModal', () => {
     render(<ProjectCreateModal isOpen={true} onClose={mockOnClose} />);
 
     // Switch to memory rules
-    fireEvent.click(screen.getByText('记忆规则'));
-    expect(screen.getByLabelText('最大记忆片段数')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Memory Rules'));
+    expect(screen.getByLabelText('Max Memory Episodes')).toBeInTheDocument();
 
     // Switch to graph config
-    fireEvent.click(screen.getByText('图谱配置'));
-    expect(screen.getByLabelText('最大节点数')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Graph Config'));
+    expect(screen.getByLabelText('Max Nodes')).toBeInTheDocument();
   });
 
   it('submits form', async () => {
     render(<ProjectCreateModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
 
-    fireEvent.change(screen.getByPlaceholderText('输入项目名称'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter project name'), {
       target: { value: 'Project 1' },
     });
 
-    const submitButton = screen.getByText('创建项目', { selector: 'button' });
+    const submitButton = screen.getByText('Create Project', { selector: 'button' });
     fireEvent.click(submitButton);
 
     await waitFor(() => {

@@ -104,6 +104,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
     LINEAGE_SOURCE,
+    PREFERRED_LANGUAGE,
     ROOT_GOAL_TASK_ID,
     TASK_ROLE,
     WORKSPACE_AGENT_BINDING_ID,
@@ -1593,6 +1594,36 @@ def _team_agent_prompt(display_name: str, description: str) -> str:
     )
 
 
+async def _build_child_task_metadata(
+    *,
+    task_repo: SqlWorkspaceTaskRepository,
+    root_task_id: str,
+    plan_id: str,
+    node: PlanNode,
+) -> dict[str, Any]:
+    """Build metadata for a child execution task created from a plan node.
+
+    Inherits ``preferred_language`` from the root goal task so worker
+    conversations spawned from this child stay in the user's language.
+    """
+    metadata: dict[str, Any] = {
+        AUTONOMY_SCHEMA_VERSION_KEY: AUTONOMY_SCHEMA_VERSION,
+        TASK_ROLE: "execution_task",
+        ROOT_GOAL_TASK_ID: root_task_id,
+        LINEAGE_SOURCE: "agent",
+        DERIVED_FROM_INTERNAL_PLAN_STEP: node.id,
+        WORKSPACE_PLAN_ID: plan_id,
+        WORKSPACE_PLAN_NODE_ID: node.id,
+        **_execution_task_metadata_from_node(node),
+    }
+    root_task = await task_repo.find_by_id(root_task_id)
+    if root_task is not None:
+        inherited_pref = (root_task.metadata or {}).get(PREFERRED_LANGUAGE)
+        if isinstance(inherited_pref, str) and inherited_pref in {"en-US", "zh-CN"}:
+            metadata[PREFERRED_LANGUAGE] = inherited_pref
+    return metadata
+
+
 def _make_sql_dispatcher(
     session: AsyncSession,
     item: WorkspacePlanOutboxModel,
@@ -1634,21 +1665,18 @@ def _make_sql_dispatcher(
         )
         command_service = WorkspaceTaskCommandService(task_service)
         if existing_task is None:
+            child_metadata = await _build_child_task_metadata(
+                task_repo=task_repo,
+                root_task_id=root_task_id,
+                plan_id=plan_id,
+                node=node,
+            )
             existing_task = await command_service.create_task(
                 workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 title=node.title,
                 description=node.description or None,
-                metadata={
-                    AUTONOMY_SCHEMA_VERSION_KEY: AUTONOMY_SCHEMA_VERSION,
-                    TASK_ROLE: "execution_task",
-                    ROOT_GOAL_TASK_ID: root_task_id,
-                    LINEAGE_SOURCE: "agent",
-                    DERIVED_FROM_INTERNAL_PLAN_STEP: node.id,
-                    WORKSPACE_PLAN_ID: plan_id,
-                    WORKSPACE_PLAN_NODE_ID: node.id,
-                    **_execution_task_metadata_from_node(node),
-                },
+                metadata=child_metadata,
                 priority=WorkspaceTaskPriority.from_rank(min(max(int(node.priority), 0), 4)),
                 estimated_effort=(
                     f"{node.estimated_effort.minutes}m"

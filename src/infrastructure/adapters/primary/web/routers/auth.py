@@ -39,6 +39,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserRole,
     UserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +78,12 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
         return
 
     # Create default project
+    owner_display = user.full_name or user.email
     default_project = DBProject(
         id=str(uuid4()),
         tenant_id=tenant.id,
-        name="默认项目",
-        description=f"{user.full_name or user.email} 的默认项目",
+        name=_("Default project"),
+        description=_("Default project for {owner}").format(owner=owner_display),
         owner_id=user.id,
         memory_rules={},
         graph_config={},
@@ -290,6 +292,7 @@ async def read_users_me(
         is_active=current_user.is_active,
         created_at=current_user.created_at,
         profile={},
+        preferred_language=current_user.preferred_language,
     )
 
 
@@ -302,6 +305,9 @@ async def update_user_me(
     """Update current user information."""
     if user_update.name is not None:
         current_user.full_name = user_update.name
+
+    if user_update.preferred_language is not None:
+        current_user.preferred_language = user_update.preferred_language
 
     if user_update.profile is not None:
         # Merge existing profile with new profile data
@@ -316,14 +322,24 @@ async def update_user_me(
     await db.commit()
     await db.refresh(current_user)
 
+    # Reload roles for response
+    result = await db.execute(
+        refresh_select_statement(select(DBUser)
+        .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+        .where(DBUser.id == current_user.id))
+    )
+    user_with_roles = result.scalar_one_or_none()
+    role_names = [r.role.name for r in user_with_roles.roles] if user_with_roles else []
+
     return UserSchema(
         user_id=current_user.id,
         email=current_user.email,
         name=current_user.full_name or "",
-        roles=[r.role.name for r in current_user.roles],
+        roles=role_names,
         is_active=current_user.is_active,
         created_at=current_user.created_at,
         profile={},
+        preferred_language=current_user.preferred_language,
     )
 
 

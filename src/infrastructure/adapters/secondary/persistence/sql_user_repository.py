@@ -93,6 +93,7 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
             password_hash=db_model.hashed_password,  # Map DB column to domain field
             is_active=db_model.is_active,
             must_change_password=db_model.must_change_password,
+            preferred_language=db_model.preferred_language,
             profile={},  # Default empty dict since DB doesn't have this column
             created_at=db_model.created_at,
         )
@@ -117,6 +118,7 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
             hashed_password=domain_entity.password_hash,  # Map domain field to DB column
             is_active=domain_entity.is_active,
             must_change_password=domain_entity.must_change_password,
+            preferred_language=domain_entity.preferred_language,
             created_at=domain_entity.created_at,
         )
 
@@ -138,3 +140,4 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
             db_model.hashed_password = domain_entity.password_hash
         db_model.is_active = domain_entity.is_active
         db_model.must_change_password = domain_entity.must_change_password
+        db_model.preferred_language = domain_entity.preferred_language

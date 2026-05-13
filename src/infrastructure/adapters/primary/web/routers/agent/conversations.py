@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
+from src.application.services.conversation_events import publish_conversation_created
 from src.configuration.factories import create_llm_client
 from src.domain.model.agent import ConversationStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -107,6 +108,18 @@ async def create_conversation(
             agent_config=data.agent_config,
         )
         await db.commit()
+        try:
+            redis_client = container.redis()
+            if redis_client is not None:
+                await publish_conversation_created(
+                    redis_client=redis_client,
+                    conversation=conversation,
+                )
+        except Exception:
+            logger.exception(
+                "Failed to publish conversation_created after conversation commit",
+                extra={"conversation_id": conversation.id, "project_id": conversation.project_id},
+            )
         return ConversationResponse.from_domain(conversation)
 
     except (ValueError, AttributeError) as e:

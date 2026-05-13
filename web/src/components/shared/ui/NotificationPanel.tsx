@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
+import { useTranslation } from 'react-i18next';
+
 import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
 
 import { useNotificationStore } from '@/stores/notification';
@@ -9,6 +11,7 @@ import { useNotificationStore } from '@/stores/notification';
 import { formatDateTime } from '@/utils/date';
 
 export const NotificationPanel: React.FC = () => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const {
     notifications,
@@ -96,8 +99,8 @@ export const NotificationPanel: React.FC = () => {
       <button
         onClick={togglePanel}
         className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        aria-label="Notifications"
-        title="通知"
+        aria-label={t('common.notifications.title')}
+        title={t('common.notifications.title')}
       >
         <Bell className="w-5 h-5 text-gray-600 dark:text-slate-400" />
         {unreadCount > 0 && (
@@ -110,14 +113,14 @@ export const NotificationPanel: React.FC = () => {
       {isOpen && (
         <div className="absolute right-0 top-12 w-96 bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 z-50">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900 dark:text-white">通知</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">{t('common.notifications.title')}</h3>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
                   className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
-                  全部已读
+                  {t('common.notifications.markAllRead')}
                 </button>
               )}
               <button onClick={closePanel} aria-label="Close">
@@ -134,7 +137,7 @@ export const NotificationPanel: React.FC = () => {
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center text-slate-500 dark:text-slate-400">
                 <Bell className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>暂无通知</p>
+                <p>{t('common.notifications.empty')}</p>
               </div>
             ) : (
               notifications.map((notification) => (
@@ -167,8 +170,8 @@ export const NotificationPanel: React.FC = () => {
                             handleInlineMarkAsRead(e, notification.id);
                           }}
                           className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
-                          aria-label="Mark as read"
-                          title="标记为已读"
+                          aria-label={t('common.notifications.markAsRead')}
+                          title={t('common.notifications.markAsRead')}
                         >
                           <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
                         </button>
@@ -178,8 +181,8 @@ export const NotificationPanel: React.FC = () => {
                           handleInlineDelete(e, notification.id);
                         }}
                         className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                        aria-label="Delete notification"
-                        title="删除"
+                        aria-label={t('common.notifications.delete')}
+                        title={t('common.notifications.delete')}
                       >
                         <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
                       </button>

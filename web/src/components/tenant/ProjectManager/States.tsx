@@ -6,6 +6,8 @@
 
 import { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Folder, AlertCircle, Plus } from 'lucide-react';
 
 import { useProjectManagerContext } from './context';
@@ -46,6 +48,7 @@ export const Empty: FC<ProjectManagerEmptyProps> = ({
   className = '',
 }) => {
   const context = useProjectManagerContext();
+  const { t } = useTranslation();
 
   // Determine message based on variant
   const getMessage = () => {
@@ -53,12 +56,12 @@ export const Empty: FC<ProjectManagerEmptyProps> = ({
 
     switch (variant) {
       case 'no-tenant':
-        return '请先选择工作空间';
+        return t('tenant.projectManager.states.noTenantMessage');
       case 'no-results':
-        return '没有找到匹配的项目';
+        return t('tenant.projectManager.states.noResultsMessage');
       case 'no-projects':
       default:
-        return '开始创建你的第一个项目';
+        return t('tenant.projectManager.states.noProjectsMessage');
     }
   };
 
@@ -66,12 +69,12 @@ export const Empty: FC<ProjectManagerEmptyProps> = ({
   const getSubtitle = () => {
     switch (variant) {
       case 'no-tenant':
-        return '选择一个工作空间来查看和管理项目';
+        return t('tenant.projectManager.states.noTenantSubtitle');
       case 'no-results':
-        return '尝试使用不同的搜索关键词';
+        return t('tenant.projectManager.states.noResultsSubtitle');
       case 'no-projects':
       default:
-        return '创建项目来开始组织你的记忆和知识';
+        return t('tenant.projectManager.states.noProjectsSubtitle');
     }
   };
 
@@ -103,7 +106,7 @@ export const Empty: FC<ProjectManagerEmptyProps> = ({
             className="flex items-center space-x-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors mx-auto"
           >
             <Plus className="h-4 w-4" />
-            <span>创建项目</span>
+            <span>{t('tenant.projectManager.states.createProjectButton')}</span>
           </button>
         )}
       </div>

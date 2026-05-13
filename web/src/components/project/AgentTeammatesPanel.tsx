@@ -12,6 +12,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { useTranslation } from 'react-i18next';
+
 import { useQuery } from '@tanstack/react-query';
 import { Badge, Button, Card, Empty, List, Skeleton, Space, Tag, Typography, message } from 'antd';
 import { Bot, MessageSquarePlus } from 'lucide-react';
@@ -39,6 +41,7 @@ function initials(name: string): string {
 }
 
 export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [startingId, setStartingId] = useState<string | null>(null);
 
@@ -122,7 +125,7 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
                       void handleStartChat(agent);
                     }}
                   >
-                    开始对话
+                    {t('project.agentTeammates.startConversation')}
                   </Button>,
                 ]}
               >

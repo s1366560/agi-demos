@@ -171,6 +171,7 @@ export type AgentEventType =
   | 'plan_step_complete'
   | 'plan_execution_complete'
   | 'reflection_complete'
+  | 'conversation_created'
   | 'adjustment_applied'
   // Permission events
   | 'permission_asked' // Permission asked

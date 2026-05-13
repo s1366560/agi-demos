@@ -46,6 +46,37 @@ class TestConversationScope:
         assert wl._conversation_scope_for_task("t1", "att-9") == "task:t1:attempt:att-9"
 
 
+class TestPreferredLanguageFromMetadata:
+    """Workspace tasks store the user's UI language under the
+    PREFERRED_LANGUAGE metadata key. worker_launch reads it back here to
+    forward into stream_chat_v2 / system context. This is the bridge between
+    the persisted task and the LLM call — keep it strict."""
+
+    def test_returns_zh_cn(self) -> None:
+        assert wl._preferred_language_from_metadata({"preferred_language": "zh-CN"}) == "zh-CN"
+
+    def test_returns_en_us(self) -> None:
+        assert wl._preferred_language_from_metadata({"preferred_language": "en-US"}) == "en-US"
+
+    def test_unknown_locale_is_rejected(self) -> None:
+        assert wl._preferred_language_from_metadata({"preferred_language": "fr-FR"}) is None
+
+    def test_empty_string_is_rejected(self) -> None:
+        assert wl._preferred_language_from_metadata({"preferred_language": ""}) is None
+
+    def test_non_string_is_rejected(self) -> None:
+        assert wl._preferred_language_from_metadata({"preferred_language": 42}) is None
+
+    def test_missing_key_returns_none(self) -> None:
+        assert wl._preferred_language_from_metadata({}) is None
+
+    def test_none_metadata_returns_none(self) -> None:
+        assert wl._preferred_language_from_metadata(None) is None
+
+    def test_non_mapping_returns_none(self) -> None:
+        assert wl._preferred_language_from_metadata("preferred_language=zh-CN") is None
+
+
 class TestConversationId:
     def test_deterministic_and_distinct_per_scope(self) -> None:
         a = wl._conversation_id_for_worker(

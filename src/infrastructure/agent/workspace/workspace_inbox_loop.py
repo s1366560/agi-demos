@@ -167,7 +167,7 @@ class WorkspaceInboxLoop:
         task.cancel()
         try:
             await task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except (asyncio.CancelledError, Exception):
             pass
         finally:
             self._task = None
@@ -199,7 +199,7 @@ class WorkspaceInboxLoop:
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=2.0)
                     return
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
     async def _handle_message(self, message: AgentMessage) -> None:

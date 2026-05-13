@@ -56,6 +56,19 @@ def _with_preferred_language_metadata(
     return {**dict(metadata or {}), PREFERRED_LANGUAGE: preferred_language}
 
 
+def _resolve_preferred_language(
+    explicit: PreferredLanguage | None,
+    user: User,
+) -> PreferredLanguage | None:
+    """Pick `explicit` when supplied, else fall back to the user's stored preference."""
+    if explicit is not None:
+        return explicit
+    stored = getattr(user, "preferred_language", None)
+    if isinstance(stored, str) and stored in {"en-US", "zh-CN"}:
+        return cast(PreferredLanguage, stored)
+    return None
+
+
 def _get_workspace_task_service(request: Request, db: AsyncSession) -> WorkspaceTaskService:
     """Build WorkspaceTaskService from repositories in DI container."""
     container = get_container_with_db(request, db)
@@ -418,7 +431,10 @@ async def create_workspace_task(
             title=body.title,
             description=body.description,
             assignee_user_id=body.assignee_user_id,
-            metadata=_with_preferred_language_metadata(body.metadata, body.preferred_language),
+            metadata=_with_preferred_language_metadata(
+                body.metadata,
+                _resolve_preferred_language(body.preferred_language, current_user),
+            ),
             estimated_effort=body.estimated_effort,
             blocker_reason=body.blocker_reason,
         )
@@ -665,7 +681,10 @@ async def assign_workspace_task_to_agent(
             task_id=task_id,
             actor_user_id=current_user.id,
             workspace_agent_id=body.workspace_agent_id,
-            metadata=_with_preferred_language_metadata(None, body.preferred_language),
+            metadata=_with_preferred_language_metadata(
+                None,
+                _resolve_preferred_language(body.preferred_language, current_user),
+            ),
         )
         await db.commit()
     except Exception as exc:

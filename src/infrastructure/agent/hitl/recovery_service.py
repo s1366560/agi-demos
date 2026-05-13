@@ -243,7 +243,7 @@ class HITLRecoveryService:
             from src.infrastructure.adapters.secondary.persistence.database import (
                 async_session_factory,
             )
-            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (  # noqa: E501
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
                 SqlHITLRequestRepository,
             )
 

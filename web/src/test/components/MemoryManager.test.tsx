@@ -64,7 +64,7 @@ describe('MemoryManager', () => {
   it('renders empty state when no project selected', () => {
     (useProjectStore as any).mockReturnValue({ currentProject: null });
     render(<MemoryManager />);
-    expect(screen.getByText('请先选择项目')).toBeInTheDocument();
+    expect(screen.getByText('Select a Project First')).toBeInTheDocument();
   });
 
   it('renders list of memories', () => {
@@ -110,7 +110,7 @@ describe('MemoryManager', () => {
 
   it('opens create modal', () => {
     render(<MemoryManager />);
-    fireEvent.click(screen.getByText('新建记忆'));
+    fireEvent.click(screen.getByText('New Memory'));
     expect(screen.getByTestId('memory-create-modal')).toBeInTheDocument();
   });
 });

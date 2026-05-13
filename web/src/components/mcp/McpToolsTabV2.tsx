@@ -5,6 +5,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Spin, Input, Select } from 'antd';
 import { Search, Wrench, Server } from 'lucide-react';
 
@@ -19,6 +21,7 @@ import type { ToolWithServer } from './McpToolItemV2';
 const { Search: AntSearch } = Input;
 
 export const McpToolsTabV2: React.FC = () => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [serverFilter, setServerFilter] = useState<string>('all');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -66,10 +69,10 @@ export const McpToolsTabV2: React.FC = () => {
 
   const serverOptions = useMemo(
     () => [
-      { label: '全部服务器', value: 'all' },
+      { label: t('mcp.tools.allServers'), value: 'all' },
       ...servers.map((s) => ({ label: s.name, value: s.id })),
     ],
-    [servers]
+    [servers, t]
   );
 
   const serversWithTools = servers.filter((s) => s.discovered_tools?.length).length;
@@ -78,7 +81,7 @@ export const McpToolsTabV2: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Spin size="large" />
-        <p className="text-sm text-slate-400 mt-4">加载工具中...</p>
+        <p className="text-sm text-slate-400 mt-4">{t('mcp.tools.loading')}</p>
       </div>
     );
   }
@@ -97,7 +100,7 @@ export const McpToolsTabV2: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {allTools.length}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">工具总数</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mcp.tools.totalTools')}</p>
               </div>
             </div>
             <div className="w-px h-10 bg-slate-200 dark:bg-slate-700" />
@@ -109,13 +112,13 @@ export const McpToolsTabV2: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {serversWithTools}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">有工具的服务器</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mcp.tools.serversWithTools')}</p>
               </div>
             </div>
           </div>
           {filteredTools.length !== allTools.length && (
             <span className="text-sm text-slate-500 dark:text-slate-400">
-              显示 {filteredTools.length} / {allTools.length}
+              {t('mcp.tools.showCount', { shown: filteredTools.length, total: allTools.length })}
             </span>
           )}
         </div>
@@ -126,7 +129,7 @@ export const McpToolsTabV2: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <AntSearch
-              placeholder="搜索工具名称或描述..."
+              placeholder={t('mcp.tools.searchPlaceholder')}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -140,7 +143,7 @@ export const McpToolsTabV2: React.FC = () => {
             value={serverFilter}
             onChange={setServerFilter}
             className="w-full sm:w-52"
-            placeholder="按服务器筛选"
+            placeholder={t('mcp.tools.filterByServer')}
             options={serverOptions}
             suffixIcon={<Server size={14} className="text-slate-400" />}
           />
@@ -156,10 +159,10 @@ export const McpToolsTabV2: React.FC = () => {
             <Wrench size={28} className="text-slate-300 dark:text-slate-500" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
-            {allTools.length === 0 ? '暂无工具' : '无匹配工具'}
+            {allTools.length === 0 ? t('mcp.tools.emptyNoTools') : t('mcp.tools.emptyNoMatch')}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-            {allTools.length === 0 ? '同步 MCP 服务器以发现可用工具' : '尝试调整搜索或筛选条件'}
+            {allTools.length === 0 ? t('mcp.tools.hintSync') : t('mcp.tools.hintAdjust')}
           </p>
         </div>
       ) : (

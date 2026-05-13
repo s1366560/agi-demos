@@ -17,8 +17,16 @@ import { useShallow } from 'zustand/react/shallow';
 import { authAPI, tenantAPI } from '../services/api';
 import { httpClient } from '../services/client/httpClient';
 import { setFeatures } from '../utils/featureCheck';
+import i18n from '../i18n/config';
 
 import type { User } from '../types/memory';
+
+function syncLanguageFromUser(user: User | null | undefined) {
+  const pref = user?.preferred_language;
+  if (pref && pref !== i18n.language) {
+    void i18n.changeLanguage(pref);
+  }
+}
 
 interface AuthState {
   user: User | null;
@@ -86,6 +94,7 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               error: null,
             });
+            syncLanguageFromUser(user);
             await get()._loadPostAuthData();
           } catch (error: unknown) {
             const apiError = error as ApiError;
@@ -94,7 +103,7 @@ export const useAuthStore = create<AuthState>()(
               ? typeof detail === 'string'
                 ? detail
                 : JSON.stringify(detail)
-              : '登录失败，请检查您的凭据';
+              : i18n.t('login.errors.invalidCredentials');
             set({
               error: errorMessage,
               isLoading: false,
@@ -146,13 +155,15 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true });
 
           try {
-            await authAPI.verifyToken(token);
+            const verifiedUser = await authAPI.verifyToken(token);
 
             set({
+              user: verifiedUser,
               isAuthenticated: true,
               isLoading: false,
               error: null,
             });
+            syncLanguageFromUser(verifiedUser);
             await get()._loadPostAuthData();
           } catch (_error) {
             // Token is invalid, clear it

@@ -139,6 +139,8 @@ async def agent_websocket_endpoint(
       {type: 'sandbox_event', routing_key: str, project_id: str, data: {...}}
     - reflection_complete: Project reflection cycle completed
       {type: 'reflection_complete', routing_key: str, project_id: str, sequence_id: str, data: {...}}
+    - conversation_created: Project conversation created
+      {type: 'conversation_created', routing_key: str, project_id: str, sequence_id: str, data: {...}}
     """
     # Authenticate
     auth_result = await authenticate_websocket(token, db)

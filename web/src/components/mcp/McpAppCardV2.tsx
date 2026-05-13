@@ -5,6 +5,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Popconfirm, Tag, Tooltip } from 'antd';
 import {
   LayoutGrid,
@@ -38,6 +40,8 @@ import {
 } from 'lucide-react';
 
 import { SOURCE_STYLES, CARD_STYLES, ANIMATION_CLASSES, APP_STATUS_STYLES } from './styles';
+
+import { formatDistanceToNow } from '@/utils/date';
 
 import type { MCPApp } from '@/types/mcpApp';
 
@@ -79,12 +83,7 @@ function getLifecycleText(app: MCPApp, key: string): string | undefined {
 
 function formatRelativeTime(dateStr?: string): string {
   if (!dateStr) return '';
-  const minutes = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes} 分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  return `${Math.floor(hours / 24)} 天前`;
+  return formatDistanceToNow(dateStr);
 }
 
 function formatFileSize(bytes?: number): string {
@@ -113,6 +112,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
   deleting,
   retrying,
 }) => {
+  const { t } = useTranslation();
   const statusCfg = APP_STATUS_STYLES[app.status] ?? APP_STATUS_STYLES.disabled!;
   const sourceCfg = SOURCE_STYLES[app.source] ?? SOURCE_STYLES.user_added!;
   const isAgentDeveloped = app.source === 'agent_developed';
@@ -200,7 +200,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
                 }
                 className="text-2xs flex-shrink-0 m-0 px-1.5 py-0.5 rounded-full"
               >
-                运行：{serverRuntime}
+                {t('mcp.appCard.runtimePrefix', { value: serverRuntime })}
               </Tag>
             )}
           </div>
@@ -211,17 +211,17 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           <div className="flex items-center gap-1.5 mb-1">
             <Globe size={10} className="text-slate-400" />
             <span className="text-2xs text-slate-500 dark:text-slate-400 font-medium">
-              资源地址
+              {t('mcp.appCard.resourceUri')}
             </span>
           </div>
           <code className="text-xs text-slate-600 dark:text-slate-400 break-all font-mono block">
-            {app.ui_metadata?.resourceUri || '无资源地址'}
+            {app.ui_metadata?.resourceUri || t('mcp.appCard.noResourceUri')}
           </code>
           {refreshStatus && (
             <div className="flex items-center gap-1 mt-1.5 text-2xs text-slate-500 dark:text-slate-400">
               <Clock size={10} />
               <span>
-                刷新 {refreshStatus}
+                {t('mcp.appCard.refreshWithStatus', { status: refreshStatus })}
                 {refreshAt ? ` · ${formatRelativeTime(refreshAt)}` : ''}
               </span>
             </div>
@@ -250,7 +250,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
               ) : (
                 <RotateCcw size={10} />
               )}
-              重试
+              {t('mcp.appCard.retry')}
             </button>
           </div>
         )}
@@ -260,7 +260,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           <div className="mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-100 dark:border-amber-800/30">
             <div className="flex items-center gap-2">
               <AlertCircle size={12} className="text-amber-500" />
-              <p className="text-xs text-amber-700 dark:text-amber-300">加载时间较长，请尝试刷新</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">{t('mcp.appCard.slowLoadHint')}</p>
             </div>
           </div>
         )}
@@ -275,7 +275,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${sourceCfg.bgColor} ${sourceCfg.textColor}`}
               >
                 {isAgentDeveloped ? <Bot size={10} /> : <User size={10} />}
-                {isAgentDeveloped ? 'AI' : '用户'}
+                {isAgentDeveloped ? t('mcp.appCard.developerAI') : t('mcp.appCard.developerUser')}
               </span>
             </Tooltip>
 
@@ -300,18 +300,18 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors font-medium"
               >
                 <ExternalLink size={12} />
-                打开
+                {t('mcp.appCard.open')}
               </button>
             )}
 
             {/* Delete Button */}
             <Popconfirm
-              title="确定要删除此应用吗？"
+              title={t('mcp.appCard.deleteConfirm')}
               onConfirm={() => {
                 onDelete(app.id);
               }}
-              okText="删除"
-              cancelText="取消"
+              okText={t('mcp.appCard.deleteOk')}
+              cancelText={t('mcp.appCard.deleteCancel')}
             >
               <button
                 type="button"

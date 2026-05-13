@@ -35,13 +35,12 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Tuple
 
 try:
     from docx import Document
-    from docx.shared import Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.oxml.ns import qn
+    from docx.shared import Inches, Pt, RGBColor
 except ImportError:
     print("错误: 缺少 python-docx 依赖")
     print("请运行: pip install python-docx")
@@ -49,7 +48,7 @@ except ImportError:
 
 try:
     import markdown
-    from markdown.extensions import tables, fenced_code
+    from markdown.extensions import fenced_code, tables
 except ImportError:
     print("错误: 缺少 markdown 依赖")
     print("请运行: pip install markdown")
@@ -182,7 +181,7 @@ class MarkdownToDocxConverter:
         # 设置中文字体
         style.element.rPr.rFonts.set(qn("w:eastAsia"), "微软雅黑")
 
-    def extract_mermaid_blocks(self, content: str) -> List[Tuple[str, str]]:
+    def extract_mermaid_blocks(self, content: str) -> list[tuple[str, str]]:
         """
         提取Markdown中的Mermaid代码块
 
@@ -200,7 +199,7 @@ class MarkdownToDocxConverter:
 
         return blocks
 
-    def replace_mermaid_with_placeholders(self, content: str, blocks: List[Tuple[str, str]]) -> str:
+    def replace_mermaid_with_placeholders(self, content: str, blocks: list[tuple[str, str]]) -> str:
         """将Mermaid代码块替换为占位符"""
         result = content
         pattern = r"```mermaid\s*\n.*?\n```"
@@ -210,7 +209,7 @@ class MarkdownToDocxConverter:
 
         return result
 
-    def render_mermaid_blocks(self, blocks: List[Tuple[str, str]]) -> dict:
+    def render_mermaid_blocks(self, blocks: list[tuple[str, str]]) -> dict:
         """渲染所有Mermaid代码块为PNG图片"""
         self.mermaid_renderer.initialize()
 
@@ -225,7 +224,7 @@ class MarkdownToDocxConverter:
                 image_paths[placeholder] = output_path
                 print(f"  ✓ 已保存到: {output_path}")
             else:
-                print(f"  ✗ 渲染失败,将使用文本占位")
+                print("  ✗ 渲染失败,将使用文本占位")
                 image_paths[placeholder] = None
 
         return image_paths
@@ -312,7 +311,7 @@ class MarkdownToDocxConverter:
         paragraph.paragraph_format.space_before = Pt(6)
         paragraph.paragraph_format.space_after = Pt(6)
 
-    def add_table(self, rows: List[List[str]]):
+    def add_table(self, rows: list[list[str]]):
         """添加表格"""
         if not rows:
             return
@@ -445,7 +444,7 @@ class MarkdownToDocxConverter:
         print(f"读取文件: {self.md_file}")
 
         # 读取Markdown内容
-        with open(self.md_file, "r", encoding="utf-8") as f:
+        with open(self.md_file, encoding="utf-8") as f:
             content = f.read()
 
         # 提取Mermaid代码块

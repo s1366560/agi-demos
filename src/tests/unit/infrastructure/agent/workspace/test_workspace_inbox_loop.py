@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpVerb
+from src.domain.model.workspace.wtp_envelope import WtpVerb
 from src.domain.ports.services.agent_message_bus_port import (
     AgentMessage,
     AgentMessageType,

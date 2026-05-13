@@ -5,16 +5,8 @@
  */
 
 import type { FileMetadata } from '../../services/sandboxUploadService';
-import type {
-  ActEventData,
-  AgentEvent,
-  Conversation,
-  ObserveEventData,
-} from '../../types/agent';
-import type {
-  ConversationState,
-  HITLSummary,
-} from '../../types/conversationState';
+import type { ActEventData, AgentEvent, Conversation, ObserveEventData } from '../../types/agent';
+import type { ConversationState, HITLSummary } from '../../types/conversationState';
 import type { LLMConfigOverrides } from '../../types/memory';
 
 /**
@@ -32,6 +24,13 @@ export interface AdditionalAgentHandlers {
   imageAttachments?: string[] | undefined;
   /** Target agent ID for multi-agent routing */
   agentId?: string | undefined;
+}
+
+export interface LoadConversationsOptions {
+  signal?: AbortSignal | undefined;
+  force?: boolean | undefined;
+  silent?: boolean | undefined;
+  limit?: number | undefined;
 }
 
 export interface AgentV3State {
@@ -57,7 +56,10 @@ export interface AgentV3State {
 
   // Actions
   setActiveConversation: (id: string | null) => void;
-  loadConversations: (projectId: string, signal?: AbortSignal) => Promise<void>;
+  loadConversations: (
+    projectId: string,
+    signalOrOptions?: AbortSignal | LoadConversationsOptions
+  ) => Promise<void>;
   loadMoreConversations: (projectId: string) => Promise<void>;
   loadMessages: (conversationId: string, projectId: string) => Promise<void>;
   loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;

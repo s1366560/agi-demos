@@ -6,6 +6,8 @@
 
 import React, { FC, useState, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Search as SearchIcon } from 'lucide-react';
 
 import { useProjectManagerContext } from './context';
@@ -16,9 +18,11 @@ export const Search: FC<ProjectManagerSearchProps> = ({
   value: controlledValue,
   defaultValue = '',
   onChange,
-  placeholder = '搜索项目...',
+  placeholder,
   className = '',
 }) => {
+  const { t } = useTranslation();
+  const effectivePlaceholder = placeholder ?? t('tenant.projectManager.searchPlaceholder');
   const context = useProjectManagerContext();
   const isControlled = controlledValue !== undefined;
 
@@ -53,9 +57,9 @@ export const Search: FC<ProjectManagerSearchProps> = ({
         data-testid="search-input"
         value={searchValue}
         onChange={handleChange}
-        placeholder={placeholder}
+        placeholder={effectivePlaceholder}
         className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-        aria-label={placeholder}
+        aria-label={effectivePlaceholder}
       />
     </div>
   );

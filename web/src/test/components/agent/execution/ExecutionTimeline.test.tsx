@@ -217,8 +217,8 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText(/执行计划/i)).toBeInTheDocument();
-      expect(screen.getByText(/1\/3 步骤已完成/i)).toBeInTheDocument();
+      expect(screen.getByText(/Execution plan/i)).toBeInTheDocument();
+      expect(screen.getByText(/1\/3 steps completed/i)).toBeInTheDocument();
     });
 
     it('should render simple-timeline mode', async () => {
@@ -266,7 +266,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText(/匹配模式 \(85%\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/Matched pattern \(85%\)/i)).toBeInTheDocument();
     });
   });
 
@@ -301,7 +301,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText('执行中')).toBeInTheDocument();
+      expect(screen.getByText('Running')).toBeInTheDocument();
     });
 
     it('should show completed status when all steps done', async () => {
@@ -317,7 +317,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText('已完成')).toBeInTheDocument();
+      expect(screen.getByText('Completed')).toBeInTheDocument();
     });
 
     it('should show waiting status when not streaming and not completed', async () => {
@@ -332,7 +332,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText('等待中')).toBeInTheDocument();
+      expect(screen.getByText('Waiting')).toBeInTheDocument();
     });
   });
 
@@ -388,7 +388,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
       );
 
       // Active step (2) should show "执行中..."
-      expect(screen.getAllByText('执行中...').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Running...').length).toBeGreaterThan(0);
     });
 
     it('should show tool count for steps with executions', async () => {
@@ -416,7 +416,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
       );
 
       // Use getAllByText since the tool count appears in multiple places
-      expect(screen.getAllByText(/1 工具/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/1 tools/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -499,8 +499,8 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText('展开全部')).toBeInTheDocument();
-      expect(screen.getByText('收起全部')).toBeInTheDocument();
+      expect(screen.getByText('Expand all')).toBeInTheDocument();
+      expect(screen.getByText('Collapse all')).toBeInTheDocument();
     });
 
     it('should not show controls when only one step', async () => {
@@ -516,8 +516,8 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.queryByText('展开全部')).not.toBeInTheDocument();
-      expect(screen.queryByText('收起全部')).not.toBeInTheDocument();
+      expect(screen.queryByText('Expand all')).not.toBeInTheDocument();
+      expect(screen.queryByText('Collapse all')).not.toBeInTheDocument();
     });
 
     it('should expand all steps when clicking expand all', async () => {
@@ -533,7 +533,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      const expandAllBtn = screen.getByText('展开全部');
+      const expandAllBtn = screen.getByText('Expand all');
       fireEvent.click(expandAllBtn);
 
       // Verify the button was clicked without error
@@ -553,7 +553,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      const collapseAllBtn = screen.getByText('收起全部');
+      const collapseAllBtn = screen.getByText('Collapse all');
       fireEvent.click(collapseAllBtn);
 
       // Verify the button was clicked without error
@@ -731,7 +731,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText('0/3 步骤已完成')).toBeInTheDocument();
+      expect(screen.getByText('0/3 steps completed')).toBeInTheDocument();
     });
 
     it('should handle tool executions with step numbers', async () => {

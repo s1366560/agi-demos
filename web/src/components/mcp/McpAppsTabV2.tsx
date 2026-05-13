@@ -5,6 +5,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message, Spin, Input, Badge } from 'antd';
 import { LayoutGrid, RefreshCw, Search } from 'lucide-react';
 
@@ -21,6 +23,7 @@ import { CARD_STYLES, BUTTON_STYLES } from './styles';
 import type { MCPApp, MCPAppStatus } from '@/types/mcpApp';
 
 export const McpAppsTabV2: React.FC = () => {
+  const { t } = useTranslation();
   const apps = useMCPAppStore((s) => s.apps);
   const loading = useMCPAppStore((s) => s.loading);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
@@ -53,9 +56,9 @@ export const McpAppsTabV2: React.FC = () => {
       try {
         await mcpAppAPI.delete(appId);
         removeApp(appId);
-        message.success('MCP 应用已删除');
+        message.success(t('mcp.apps.deleteSuccess'));
       } catch {
-        message.error('删除 MCP 应用失败');
+        message.error(t('mcp.apps.deleteFailed'));
       } finally {
         setDeleting((prev) => {
           const next = new Set(prev);
@@ -64,7 +67,7 @@ export const McpAppsTabV2: React.FC = () => {
         });
       }
     },
-    [removeApp]
+    [removeApp, t]
   );
 
   const handleRetry = useCallback(
@@ -73,9 +76,9 @@ export const McpAppsTabV2: React.FC = () => {
       try {
         await mcpAppAPI.refresh(appId);
         await fetchApps(currentProject?.id);
-        message.success('应用已刷新');
+        message.success(t('mcp.apps.refreshSuccess'));
       } catch {
-        message.error('重试失败');
+        message.error(t('mcp.apps.retryFailed'));
       } finally {
         setRetrying((prev) => {
           const next = new Set(prev);
@@ -84,7 +87,7 @@ export const McpAppsTabV2: React.FC = () => {
         });
       }
     },
-    [fetchApps, currentProject?.id]
+    [fetchApps, currentProject?.id, t]
   );
 
   const handleOpenInCanvas = useCallback((app: MCPApp) => {
@@ -121,7 +124,7 @@ export const McpAppsTabV2: React.FC = () => {
   if (loading && Object.keys(apps).length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Spin tip="加载 MCP 应用中..." />
+        <Spin tip={t('mcp.apps.loading')} />
       </div>
     );
   }
@@ -140,7 +143,7 @@ export const McpAppsTabV2: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {appList.length}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">应用总数</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mcp.apps.totalApps')}</p>
               </div>
             </div>
 
@@ -149,21 +152,21 @@ export const McpAppsTabV2: React.FC = () => {
               {statusCounts.ready > 0 && (
                 <Badge count={statusCounts.ready} color="green" offset={[-10, 0]}>
                   <span className="text-xs px-2.5 py-1 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-full font-medium">
-                    就绪
+                    {t('mcp.apps.statusReady')}
                   </span>
                 </Badge>
               )}
               {statusCounts.loading > 0 && (
                 <Badge count={statusCounts.loading} color="blue" offset={[-10, 0]}>
                   <span className="text-xs px-2.5 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full font-medium">
-                    加载中
+                    {t('mcp.apps.statusLoading')}
                   </span>
                 </Badge>
               )}
               {statusCounts.error > 0 && (
                 <Badge count={statusCounts.error} color="red" offset={[-10, 0]}>
                   <span className="text-xs px-2.5 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-full font-medium">
-                    错误
+                    {t('mcp.apps.statusError')}
                   </span>
                 </Badge>
               )}
@@ -173,7 +176,7 @@ export const McpAppsTabV2: React.FC = () => {
           <div className="flex items-center gap-3">
             {Object.keys(apps).length > 5 && (
               <Input
-                placeholder="搜索应用..."
+                placeholder={t('mcp.apps.searchPlaceholder')}
                 prefix={<Search size={14} className="text-slate-400" />}
                 value={search}
                 onChange={(e) => {
@@ -185,7 +188,7 @@ export const McpAppsTabV2: React.FC = () => {
             )}
             <button type="button" onClick={handleRefresh} className={BUTTON_STYLES.secondary}>
               <RefreshCw size={14} />
-              刷新
+              {t('mcp.apps.refresh')}
             </button>
           </div>
         </div>
@@ -200,10 +203,10 @@ export const McpAppsTabV2: React.FC = () => {
             <LayoutGrid size={32} className="text-slate-300 dark:text-slate-500" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
-            暂无 MCP 应用
+            {t('mcp.apps.empty')}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            发现 MCP 服务器后，应用将自动显示在此处
+            {t('mcp.apps.emptyHint')}
           </p>
         </div>
       ) : (

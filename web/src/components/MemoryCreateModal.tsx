@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 import { X, Brain, AlertCircle, Type, Hash, Settings } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useMemoryStore } from '../stores/memory';
 import { useProjectStore } from '../stores/project';
@@ -16,6 +17,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { t } = useTranslation();
   const { createMemory, extractEntities, extractRelationships, isLoading, error } =
     useMemoryStore();
   const { currentProject } = useProjectStore();
@@ -108,7 +110,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">创建记忆</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('memory.create.title')}</h2>
           </div>
           <button
             onClick={handleClose}
@@ -133,7 +135,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Type className="h-4 w-4" />
-                <span>基础信息</span>
+                <span>{t('memory.create.tabBasic')}</span>
               </div>
             </button>
             <button
@@ -148,7 +150,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Hash className="h-4 w-4" />
-                <span>实体提取</span>
+                <span>{t('memory.create.tabExtraction')}</span>
               </div>
             </button>
             <button
@@ -163,7 +165,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Settings className="h-4 w-4" />
-                <span>高级设置</span>
+                <span>{t('memory.create.tabAdvanced')}</span>
               </div>
             </button>
           </nav>
@@ -192,7 +194,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     htmlFor="memory-create-title"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    记忆标题 *
+                    {t('memory.create.titleLabel')}
                   </label>
                   <input
                     type="text"
@@ -202,7 +204,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       setFormData({ ...formData, title: e.target.value });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                    placeholder="输入记忆标题"
+                    placeholder={t('memory.create.titlePlaceholder')}
                     required
                     disabled={isLoading}
                     aria-required="true"
@@ -214,7 +216,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     htmlFor="memory-create-content"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    记忆内容 *
+                    {t('memory.create.contentLabel')}
                   </label>
                   <textarea
                     id="memory-create-content"
@@ -223,7 +225,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       setFormData({ ...formData, content: e.target.value });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                    placeholder="输入记忆内容"
+                    placeholder={t('memory.create.contentPlaceholder')}
                     rows={6}
                     required
                     disabled={isLoading}
@@ -237,7 +239,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       htmlFor="memory-create-type"
                       className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >
-                      记忆类型
+                      {t('memory.create.typeLabel')}
                     </label>
                     <select
                       id="memory-create-type"
@@ -248,10 +250,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                       disabled={isLoading}
                     >
-                      <option value="text">文本</option>
-                      <option value="document">文档</option>
-                      <option value="image">图片</option>
-                      <option value="video">视频</option>
+                      <option value="text">{t('memory.create.typeText')}</option>
+                      <option value="document">{t('memory.create.typeDocument')}</option>
+                      <option value="image">{t('memory.create.typeImage')}</option>
+                      <option value="video">{t('memory.create.typeVideo')}</option>
                     </select>
                   </div>
 
@@ -260,7 +262,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       htmlFor="memory-create-author"
                       className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >
-                      用户ID
+                      {t('memory.create.authorLabel')}
                     </label>
                     <input
                       type="text"
@@ -270,7 +272,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         setFormData({ ...formData, author_id: e.target.value });
                       }}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                      placeholder="输入用户ID（可选）"
+                      placeholder={t('memory.create.authorPlaceholder')}
                       disabled={isLoading}
                       aria-describedby="memory-create-author-help"
                     />
@@ -278,7 +280,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       id="memory-create-author-help"
                       className="text-xs text-gray-500 dark:text-slate-400"
                     >
-                      可选：记录创建此记忆的用户
+                      {t('memory.create.authorHelp')}
                     </span>
                   </div>
                 </div>
@@ -291,11 +293,11 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   <div className="flex items-center space-x-2 mb-2">
                     <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                      AI 实体提取
+                      {t('memory.create.extractionHeading')}
                     </span>
                   </div>
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    点击下面的按钮来自动提取文本中的实体和关系。确保你已经在基础信息中输入了内容。
+                    {t('memory.create.extractionHint')}
                   </p>
                 </div>
 
@@ -309,10 +311,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     {isExtracting ? (
                       <div className="flex items-center space-x-2">
                         <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>提取中...</span>
+                        <span>{t('memory.create.extracting')}</span>
                       </div>
                     ) : (
-                      '提取实体'
+                      t('memory.create.extractEntities')
                     )}
                   </button>
                   <button
@@ -324,10 +326,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     {isExtracting ? (
                       <div className="flex items-center space-x-2">
                         <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>提取中...</span>
+                        <span>{t('memory.create.extracting')}</span>
                       </div>
                     ) : (
-                      '提取关系'
+                      t('memory.create.extractRelationships')
                     )}
                   </button>
                 </div>
@@ -335,7 +337,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 {extractedEntities.length > 0 && (
                   <div className="mb-4">
                     <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                      提取的实体
+                      {t('memory.create.extractedEntitiesHeading')}
                     </h4>
                     <div className="grid grid-cols-2 gap-2">
                       {extractedEntities.map((entity, index) => (
@@ -359,7 +361,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 {extractedRelationships.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                      提取的关系
+                      {t('memory.create.extractedRelationshipsHeading')}
                     </h4>
                     <div className="space-y-2">
                       {extractedRelationships.map((relationship, index) => (
@@ -386,7 +388,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                    元数据设置
+                    {t('memory.create.metadataLabel')}
                   </label>
                   <div className="space-y-3">
                     <div className="flex items-center space-x-2">
@@ -410,7 +412,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         htmlFor="enable_search"
                         className="text-sm text-gray-700 dark:text-slate-300"
                       >
-                        启用搜索
+                        {t('memory.create.enableSearch')}
                       </label>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -434,7 +436,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         htmlFor="enable_graph"
                         className="text-sm text-gray-700 dark:text-slate-300"
                       >
-                        启用图谱
+                        {t('memory.create.enableGraph')}
                       </label>
                     </div>
                   </div>
@@ -445,7 +447,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     htmlFor="memory-create-tags"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    标签
+                    {t('memory.create.tagsLabel')}
                   </label>
                   <input
                     type="text"
@@ -464,7 +466,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                    placeholder="输入标签，用逗号分隔"
+                    placeholder={t('memory.create.tagsPlaceholder')}
                     disabled={isLoading}
                     aria-describedby="memory-create-tags-help"
                   />
@@ -472,7 +474,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     id="memory-create-tags-help"
                     className="text-xs text-gray-500 dark:text-slate-400"
                   >
-                    使用逗号分隔多个标签
+                    {t('memory.create.tagsHelp')}
                   </span>
                 </div>
               </>
@@ -487,7 +489,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             disabled={isLoading}
           >
-            取消
+            {t('memory.create.cancel')}
           </button>
           <button
             type="submit"
@@ -499,10 +501,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>创建中...</span>
+                <span>{t('memory.create.creating')}</span>
               </div>
             ) : (
-              '创建记忆'
+              t('memory.create.submit')
             )}
           </button>
         </div>

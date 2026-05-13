@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { X, Settings, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { formatDateOnly } from '@/utils/date';
 
@@ -25,24 +26,6 @@ interface ProjectSettingsModalProps {
   onDelete?: ((projectId: string) => void) | undefined;
 }
 
-const AGENT_MODE_OPTIONS: { value: AgentConversationMode; label: string; hint: string }[] = [
-  {
-    value: 'single_agent',
-    label: '单 Agent(默认)',
-    hint: '每个会话只路由到一个 Agent，HITL 以私密 modal 呈现。',
-  },
-  {
-    value: 'multi_agent_shared',
-    label: '多 Agent 共享频道',
-    hint: '多个 Agent 在同一会话中协作；HITL 将以频道消息形式公开。',
-  },
-  {
-    value: 'multi_agent_isolated',
-    label: '多 Agent 独立线程',
-    hint: '每个 Agent 保留独立线程，并排展示，互不干扰。',
-  },
-];
-
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   project,
   isOpen,
@@ -50,6 +33,24 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   onSave,
   onDelete,
 }) => {
+  const { t } = useTranslation();
+  const AGENT_MODE_OPTIONS: { value: AgentConversationMode; label: string; hint: string }[] = [
+    {
+      value: 'single_agent',
+      label: t('project.settings.agentMode.singleAgent.label'),
+      hint: t('project.settings.agentMode.singleAgent.hint'),
+    },
+    {
+      value: 'multi_agent_shared',
+      label: t('project.settings.agentMode.multiShared.label'),
+      hint: t('project.settings.agentMode.multiShared.hint'),
+    },
+    {
+      value: 'multi_agent_isolated',
+      label: t('project.settings.agentMode.multiIsolated.label'),
+      hint: t('project.settings.agentMode.multiIsolated.hint'),
+    },
+  ];
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || '');
   const [isPublic, setIsPublic] = useState(project.is_public);
@@ -107,7 +108,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Settings className="h-5 w-5 text-gray-600 dark:text-slate-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">项目设置</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('project.settings.title')}</h2>
           </div>
           <button
             onClick={onClose}
@@ -121,7 +122,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           {/* Project Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              项目名称 *
+              {t('project.settings.nameLabel')}
             </label>
             <input
               type="text"
@@ -131,14 +132,14 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               }}
               disabled={isSaving}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder="输入项目名称"
+              placeholder={t('project.settings.namePlaceholder')}
             />
           </div>
 
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              描述
+              {t('project.settings.descriptionLabel')}
             </label>
             <textarea
               value={description}
@@ -148,7 +149,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               disabled={isSaving}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              placeholder="添加项目描述..."
+              placeholder={t('project.settings.descriptionPlaceholder')}
             />
           </div>
 
@@ -165,18 +166,18 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 className="w-4 h-4 text-blue-600 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                公开项目
+                {t('project.settings.publicLabel')}
               </span>
             </label>
             <p className="mt-1 text-xs text-gray-500 dark:text-slate-500">
-              公开项目可以被任何拥有链接的人访问
+              {t('project.settings.publicHint')}
             </p>
           </div>
 
           {/* Agent conversation mode */}
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-              Agent 会话模式
+              {t('project.settings.agentModeLabel')}
             </p>
             <div className="space-y-2">
               {AGENT_MODE_OPTIONS.map((option) => (
@@ -211,13 +212,13 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           {/* Project Info */}
           <div className="pt-4 border-t border-gray-200 dark:border-slate-800">
             <p className="text-xs text-gray-500 dark:text-slate-500">
-              项目ID:{' '}
+              {t('project.settings.projectIdPrefix')}{' '}
               <code className="px-1 py-0.5 bg-gray-100 dark:bg-slate-800 rounded">
                 {project.id}
               </code>
             </p>
             <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">
-              创建于 {formatDateOnly(project.created_at)}
+              {t('project.settings.createdAtPrefix')} {formatDateOnly(project.created_at)}
             </p>
           </div>
 
@@ -227,7 +228,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               {showDeleteConfirm ? (
                 <div className="space-y-3">
                   <p className="text-sm text-red-600 dark:text-red-400">
-                    确定要删除此项目吗？此操作不可恢复，所有相关的记忆和数据都将被删除。
+                    {t('project.settings.deleteConfirmMessage')}
                   </p>
                   <div className="flex space-x-3">
                     <button
@@ -238,7 +239,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                       disabled={isDeleting}
                       className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      取消
+                      {t('project.settings.cancel')}
                     </button>
                     <button
                       type="button"
@@ -246,7 +247,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                       disabled={isDeleting}
                       className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isDeleting ? '删除中...' : '确认删除'}
+                      {isDeleting ? t('project.settings.deleting') : t('project.settings.confirmDelete')}
                     </button>
                   </div>
                 </div>
@@ -259,7 +260,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                   className="w-full px-4 py-2 border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 flex items-center justify-center space-x-2"
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span>删除项目</span>
+                  <span>{t('project.settings.deleteProject')}</span>
                 </button>
               )}
             </div>
@@ -273,7 +274,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             disabled={isSaving}
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            取消
+            {t('project.settings.cancel')}
           </button>
           <button
             type="button"
@@ -281,7 +282,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             disabled={isSaving || !name.trim()}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSaving ? '保存中...' : '保存更改'}
+            {isSaving ? t('project.settings.saving') : t('project.settings.saveChanges')}
           </button>
         </div>
       </div>

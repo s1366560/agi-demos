@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   Button,
   Checkbox,
@@ -97,6 +98,7 @@ function ForkDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [includeExecutor, setIncludeExecutor] = useState(true);
   const [includeMetadata, setIncludeMetadata] = useState(true);
@@ -133,7 +135,7 @@ function ForkDialog({
       confirmLoading={mutation.isPending}
     >
       <div className="space-y-4">
-        <Text type="secondary">选择复制到私有库时要包含的内容：</Text>
+        <Text type="secondary">{t('skill.curated.forkDialogContent')}</Text>
         <div className={`rounded-[6px] p-3 ${surface}`}>
           <Checkbox
             checked={includeExecutor}
@@ -141,7 +143,7 @@ function ForkDialog({
               setIncludeExecutor(e.target.checked);
             }}
           >
-            执行器（tools + full_content）
+            {t('skill.curated.forkIncludeExecutor')}
           </Checkbox>
           <div className="mt-3">
             <Checkbox
@@ -150,7 +152,7 @@ function ForkDialog({
                 setIncludeMetadata(e.target.checked);
               }}
             >
-              元数据 (metadata)
+              {t('skill.curated.forkIncludeMetadata')}
             </Checkbox>
           </div>
         </div>
@@ -166,6 +168,7 @@ function VersionedCuratedRow({
   group: VersionGroup;
   onFork: (curated: CuratedSkill) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string>(group.versions[0]?.id ?? '');
   const selected = group.versions.find((version) => version.id === selectedId) ?? group.versions[0];
 
@@ -194,7 +197,7 @@ function VersionedCuratedRow({
               style={{ minWidth: 116 }}
               options={group.versions.map((version) => ({
                 value: version.id,
-                label: `v${version.semver}${version.status === 'deprecated' ? '（已弃用）' : ''}`,
+                label: `v${version.semver}${version.status === 'deprecated' ? t('skill.curated.deprecatedSuffix') : ''}`,
               }))}
             />
           ) : (
@@ -207,7 +210,7 @@ function VersionedCuratedRow({
         </Paragraph>
         <div className={`mt-2 text-xs ${mutedText}`}>
           hash <code>{selected.revision_hash.slice(0, 12)}</code>
-          {hasMultiple ? ` · ${String(group.versions.length)} 个版本` : ''}
+          {hasMultiple ? t('skill.curated.versionCount', { count: group.versions.length }) : ''}
         </div>
       </div>
       <Button
@@ -218,13 +221,14 @@ function VersionedCuratedRow({
         }}
         disabled={isDeprecated}
       >
-        Fork 到私有库
+        {t('skill.curated.forkButton')}
       </Button>
     </div>
   );
 }
 
 function CuratedTab() {
+  const { t } = useTranslation();
   const [includeDeprecated, setIncludeDeprecated] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ['skills', 'curated', { includeDeprecated }],
@@ -239,20 +243,20 @@ function CuratedTab() {
   return (
     <>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <Text type="secondary">{groups.length} 个已发布 Skill</Text>
+        <Text type="secondary">{t('skill.curated.publishedCount', { count: groups.length })}</Text>
         <span className="inline-flex items-center gap-2 text-sm text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]">
           <Switch
             size="small"
             checked={includeDeprecated}
             onChange={setIncludeDeprecated}
-            aria-label="包含已弃用版本"
+            aria-label={t('skill.curated.includeDeprecatedAria')}
           />
-          包含已弃用版本
+          {t('skill.curated.includeDeprecatedLabel')}
         </span>
       </div>
       {groups.length === 0 ? (
         <div className={`rounded-[6px] py-12 ${surface}`}>
-          <Empty description="精选库暂无已发布的 Skill" />
+          <Empty description={t('skill.curated.emptyCurated')} />
         </div>
       ) : (
         <div className={`overflow-hidden rounded-[6px] ${surface}`}>
@@ -273,15 +277,16 @@ function CuratedTab() {
 }
 
 function SubmissionRow({ submission }: { submission: SkillSubmission }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const withdrawMutation = useMutation({
     mutationFn: (id: string) => curatedSkillAPI.withdrawSubmission(id),
     onSuccess: () => {
-      message.success('已撤回提交');
+      message.success(t('skill.curated.withdrawSuccess'));
       void qc.invalidateQueries({ queryKey: ['skills', 'submissions', 'mine'] });
     },
     onError: (err: Error) => {
-      message.error(err.message || '撤回失败');
+      message.error(err.message || t('skill.curated.withdrawFailed'));
     },
   });
   const name = submission.skill_snapshot.name as string;
@@ -297,7 +302,10 @@ function SubmissionRow({ submission }: { submission: SkillSubmission }) {
         </div>
         <div className="mt-2 space-y-1">
           {submission.submission_note ? (
-            <div className={`text-sm ${mutedText}`}>备注：{submission.submission_note}</div>
+            <div className={`text-sm ${mutedText}`}>
+              {t('skill.curated.noteLabel')}
+              {submission.submission_note}
+            </div>
           ) : null}
           {submission.review_note ? (
             <div
@@ -307,7 +315,8 @@ function SubmissionRow({ submission }: { submission: SkillSubmission }) {
                   : `text-sm ${mutedText}`
               }
             >
-              审核意见：{submission.review_note}
+              {t('skill.curated.reviewNoteLabel')}
+              {submission.review_note}
             </div>
           ) : null}
           <div className={`text-xs ${mutedText}`}>
@@ -317,16 +326,16 @@ function SubmissionRow({ submission }: { submission: SkillSubmission }) {
       </div>
       {isPending ? (
         <Popconfirm
-          title="撤回此提交？"
-          description="撤回后状态变为 withdrawn，不再进入审核队列。"
-          okText="撤回"
-          cancelText="取消"
+          title={t('skill.curated.withdrawConfirmTitle')}
+          description={t('skill.curated.withdrawConfirmDescription')}
+          okText={t('skill.curated.withdrawOk')}
+          cancelText={t('skill.curated.withdrawCancel')}
           onConfirm={() => {
             withdrawMutation.mutate(submission.id);
           }}
         >
           <Button size="small" icon={<Undo2 size={14} />} loading={withdrawMutation.isPending}>
-            撤回
+            {t('skill.curated.withdrawAction')}
           </Button>
         </Popconfirm>
       ) : null}
@@ -335,6 +344,7 @@ function SubmissionRow({ submission }: { submission: SkillSubmission }) {
 }
 
 function SubmissionsTab() {
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery({
     queryKey: ['skills', 'submissions', 'mine'],
     queryFn: () => curatedSkillAPI.listMySubmissions(),
@@ -346,7 +356,7 @@ function SubmissionsTab() {
   if (items.length === 0) {
     return (
       <div className={`rounded-[6px] py-12 ${surface}`}>
-        <Empty description="暂无提交记录" />
+        <Empty description={t('skill.curated.emptySubmissions')} />
       </div>
     );
   }
@@ -361,22 +371,23 @@ function SubmissionsTab() {
 }
 
 export default function CuratedSkills() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div>
         <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>Library</div>
         <h1 className={`mt-2 text-2xl font-semibold leading-8 tracking-normal ${pageText}`}>
-          精选 Skill 库
+          {t('skill.curated.pageTitle')}
         </h1>
         <p className={`mt-1 max-w-3xl text-sm ${mutedText}`}>
-          精选库包含管理员审核通过的 Skill 模板，所有租户都可以 fork 到自己的私有库进行修改。
+          {t('skill.curated.pageDescription')}
         </p>
       </div>
       <div className={`rounded-[6px] p-3 ${surface}`}>
         <Tabs
           items={[
-            { key: 'curated', label: '精选库', children: <CuratedTab /> },
-            { key: 'submissions', label: '我的提交', children: <SubmissionsTab /> },
+            { key: 'curated', label: t('skill.curated.tabCurated'), children: <CuratedTab /> },
+            { key: 'submissions', label: t('skill.curated.tabSubmissions'), children: <SubmissionsTab /> },
           ]}
         />
       </div>

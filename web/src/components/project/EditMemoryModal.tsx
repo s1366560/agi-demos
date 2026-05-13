@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { X, Loader2, Save } from 'lucide-react';
 
 import { memoryAPI } from '../../services/api';
@@ -20,6 +22,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
   onUpdate,
   projectId,
 }) => {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -104,7 +107,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">编辑记忆</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('memory.edit.title')}</h2>
           </div>
           <button
             type="button"
@@ -134,7 +137,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               htmlFor="memory-title"
               className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
             >
-              标题 *
+              {t('memory.edit.titleLabel')} *
             </label>
             <input
               id="memory-title"
@@ -144,7 +147,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                 setTitle(e.target.value);
               }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-              placeholder="输入记忆标题"
+              placeholder={t('memory.edit.titlePlaceholder')}
               required
               disabled={isSaving}
               aria-required="true"
@@ -156,7 +159,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               htmlFor="memory-content"
               className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
             >
-              内容 *
+              {t('memory.edit.contentLabel')} *
             </label>
             <textarea
               id="memory-content"
@@ -166,7 +169,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               }}
               rows={12}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white resize-none"
-              placeholder="输入记忆内容..."
+              placeholder={t('memory.edit.contentPlaceholder')}
               required
               disabled={isSaving}
               aria-required="true"
@@ -178,7 +181,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               htmlFor="memory-tags"
               className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
             >
-              标签
+              {t('memory.edit.tagsLabel')}
             </label>
             <div className="flex flex-wrap gap-2 mb-2">
               {tags.map((tag) => (
@@ -194,7 +197,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                     }}
                     className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     disabled={isSaving}
-                    aria-label={`移除标签 ${tag}`}
+                    aria-label={t('memory.edit.removeTagAria', { tag })}
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -221,7 +224,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                 className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
                 disabled={isSaving}
               >
-                添加
+                {t('memory.edit.addTag')}
               </button>
             </div>
           </div>
@@ -229,7 +232,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
           {/* Optimistic locking notice */}
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-4">
             <p className="text-sm text-yellow-800 dark:text-yellow-300">
-              ⚠️ 此记忆使用乐观锁定。如果其他用户同时修改了此记忆，您需要刷新页面后重试。
+              ⚠️ {t('memory.edit.optimisticLockWarning')}
             </p>
           </div>
         </form>
@@ -242,7 +245,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50"
             disabled={isSaving}
           >
-            取消
+            {t('memory.edit.cancel')}
           </button>
           <button
             type="button"
@@ -251,7 +254,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             disabled={isSaving}
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
-            {isSaving ? '保存中...' : '保存更改'}
+            {isSaving ? t('memory.edit.saving') : t('memory.edit.save')}
           </button>
         </div>
       </div>

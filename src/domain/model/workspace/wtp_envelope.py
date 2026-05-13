@@ -45,7 +45,6 @@ from src.domain.ports.services.agent_message_bus_port import (
     AgentMessageType,
 )
 
-
 WTP_VERSION = "1"
 
 

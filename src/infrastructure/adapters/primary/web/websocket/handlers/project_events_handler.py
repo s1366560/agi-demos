@@ -48,7 +48,7 @@ async def _ensure_project_member(context: MessageContext, project_id: str) -> bo
 
 
 class SubscribeProjectEventsHandler(WebSocketMessageHandler):
-    """Subscribe to project-scoped events (e.g., reflection_complete)."""
+    """Subscribe to project-scoped events (e.g., reflection_complete, conversation_created)."""
 
     @property
     def message_type(self) -> str:

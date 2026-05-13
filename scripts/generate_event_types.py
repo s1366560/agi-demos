@@ -10,8 +10,6 @@ Usage:
     make generate-event-types
 """
 
-import json
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -21,14 +19,14 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.domain.events.types import (
-    AgentEventType,
-    EventCategory,
     DELTA_EVENT_TYPES,
     HITL_EVENT_TYPES,
     INTERNAL_EVENT_TYPES,
     TERMINAL_EVENT_TYPES,
-    get_frontend_event_types,
+    AgentEventType,
+    EventCategory,
     get_event_category,
+    get_frontend_event_types,
 )
 
 

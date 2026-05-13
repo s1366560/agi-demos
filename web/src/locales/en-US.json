@@ -63,13 +63,19 @@
       "unavailable": "Unavailable"
     },
     "time": {
-      "justNow": "Just now",
+      "justNow": "just now",
       "ago": "{{time}} ago",
       "minutes": "m",
       "hours": "h",
       "days": "d",
       "never": "Never",
-      "updated": "Updated {{time}}"
+      "updated": "Updated {{time}}",
+      "secondsAgo": "{{count}}s ago",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "yesterday": "yesterday",
+      "daysAgo": "{{count}}d ago",
+      "weeksAgo": "{{count}}w ago"
     },
     "stats": {
       "storage": "Storage",
@@ -110,7 +116,14 @@
       "tags": "Tags"
     },
     "signIn": "Sign in",
-    "goHome": "Go home"
+    "goHome": "Go home",
+    "notifications": {
+      "title": "Notifications",
+      "empty": "No notifications",
+      "markAllRead": "Mark all as read",
+      "markAsRead": "Mark as read",
+      "delete": "Delete"
+    }
   },
   "login": {
     "title": "Welcome Back",
@@ -166,6 +179,9 @@
         "noProvider": "OAuth provider not specified",
         "exchangeFailed": "Failed to complete OAuth authentication"
       }
+    },
+    "errors": {
+      "invalidCredentials": "Login failed. Please check your credentials."
     }
   },
   "nav": {
@@ -222,7 +238,8 @@
     "instanceTemplates": "Instance Templates",
     "auditLogs": "Audit Logs",
     "orgSettings": "Organization Settings",
-    "blackboard": "Blackboard"
+    "blackboard": "Blackboard",
+    "tenant": "Tenant"
   },
   "blackboard": {
     "title": "Blackboard",
@@ -674,7 +691,10 @@
   "user": {
     "profile": "Profile",
     "settings": "Settings",
-    "logout": "Logout"
+    "logout": "Logout",
+    "theme": "Theme",
+    "language": "Language",
+    "billing": "Billing"
   },
   "tenant": {
     "skills": {
@@ -2221,6 +2241,61 @@
       "deleteConfirm": "Are you sure you want to delete this pattern?",
       "deleteSuccess": "Pattern deleted successfully",
       "createSuccess": "Pattern created successfully"
+    },
+    "selector": {
+      "workspacesTitle": "Workspaces",
+      "newButton": "New",
+      "emptyMessage": "No workspaces yet",
+      "createButton": "Create workspace"
+    },
+    "projectManager": {
+      "searchPlaceholder": "Search projects...",
+      "deleteConfirm": "Delete this project? This action cannot be undone.",
+      "filterAll": "All",
+      "settingsTooltip": "Project settings",
+      "createdAt": "Created {{date}}",
+      "states": {
+        "noTenantMessage": "Please select a workspace first",
+        "noTenantSubtitle": "Select a workspace to view and manage projects",
+        "noResultsMessage": "No matching projects found",
+        "noResultsSubtitle": "Try using different search keywords",
+        "noProjectsMessage": "Start by creating your first project",
+        "noProjectsSubtitle": "Create a project to organize your memories and knowledge",
+        "createProjectButton": "Create Project",
+        "errorDismiss": "Dismiss"
+      }
+    },
+    "create": {
+      "title": "Create workspace",
+      "nameLabel": "Workspace name",
+      "namePlaceholder": "Enter workspace name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe what this workspace is for",
+      "descriptionHint": "Optional: describe the workspace purpose",
+      "planLabel": "Plan",
+      "planFree": "Free",
+      "planBasic": "Basic",
+      "planPremium": "Premium",
+      "planEnterprise": "Enterprise",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create"
+    },
+    "createModal": {
+      "title": "Create workspace",
+      "nameLabel": "Workspace name",
+      "namePlaceholder": "Enter workspace name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe what this workspace is for",
+      "descriptionHint": "Optional: describe the workspace purpose",
+      "planLabel": "Plan",
+      "planFree": "Free",
+      "planBasic": "Basic",
+      "planPremium": "Premium",
+      "planEnterprise": "Enterprise",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create"
     }
   },
   "project": {
@@ -2300,7 +2375,37 @@
       "sandboxResourceLimit": "Resource Limit",
       "sandboxMemory": "Memory (MB)",
       "sandboxCPU": "CPU Cores",
-      "sandboxSave": "Save"
+      "sandboxSave": "Save",
+      "nameLabel": "Project Name *",
+      "namePlaceholder": "Enter project name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Add project description...",
+      "publicLabel": "Public Project",
+      "publicHint": "Public projects can be accessed by anyone with the link",
+      "agentModeLabel": "Agent Conversation Mode",
+      "agentMode": {
+        "singleAgent": {
+          "label": "Single Agent (Default)",
+          "hint": "Each conversation routes to a single Agent; HITL appears as a private modal."
+        },
+        "multiShared": {
+          "label": "Multi-Agent Shared Channel",
+          "hint": "Multiple Agents collaborate in the same conversation; HITL is exposed as channel messages."
+        },
+        "multiIsolated": {
+          "label": "Multi-Agent Isolated Threads",
+          "hint": "Each Agent keeps an isolated thread, displayed side-by-side without interference."
+        }
+      },
+      "projectIdPrefix": "Project ID:",
+      "createdAtPrefix": "Created",
+      "deleteConfirmMessage": "Are you sure you want to delete this project? This action cannot be undone. All related memories and data will be deleted.",
+      "cancel": "Cancel",
+      "deleting": "Deleting...",
+      "confirmDelete": "Confirm Delete",
+      "deleteProject": "Delete Project",
+      "saving": "Saving...",
+      "saveChanges": "Save Changes"
     },
     "search": {
       "options": {
@@ -3244,6 +3349,62 @@
         "failedToLoadSchema": "Failed to load schema"
       },
       "pleaseEnter": "Please enter {{field}}"
+    },
+    "agentTeammates": {
+      "startConversation": "Start conversation"
+    },
+    "create": {
+      "title": "Create Project",
+      "closeAria": "Close create project dialog",
+      "tabBasic": "Basic Settings",
+      "tabMemory": "Memory Rules",
+      "tabGraph": "Graph Config",
+      "tabSandbox": "Sandbox Settings",
+      "nameLabel": "Project Name *",
+      "namePlaceholder": "Enter project name",
+      "descriptionLabel": "Project Description",
+      "descriptionPlaceholder": "Describe the goals and purpose of this project",
+      "descriptionHelp": "Optional: describe the project's goals and purpose",
+      "statusLabel": "Project Status",
+      "statusActive": "Active",
+      "statusPaused": "Paused",
+      "statusArchived": "Archived",
+      "maxEpisodesLabel": "Max Memory Episodes",
+      "rangeEpisodes": "Range: 100 - 10000",
+      "retentionDaysLabel": "Retention Days",
+      "rangeRetentionDays": "Range: 1 - 365 days",
+      "refreshIntervalLabel": "Auto-refresh Interval (hours)",
+      "rangeRefreshHours": "Range: 1 - 168 hours",
+      "autoRefreshLabel": "Enable Auto-refresh",
+      "maxNodesLabel": "Max Nodes",
+      "rangeNodes": "Range: 100 - 50000",
+      "maxEdgesLabel": "Max Edges",
+      "rangeEdges": "Range: 100 - 100000",
+      "similarityLabel": "Similarity Threshold",
+      "communityDetectionLabel": "Enable Community Detection",
+      "sandboxIntroPrefix": "Sandbox",
+      "sandboxIntroBody": " is the secure isolated environment where Agents run code and tools. You can choose between cloud-hosted sandbox or local sandbox.",
+      "sandboxTypeLabel": "Sandbox Type",
+      "cloudSandbox": "Cloud Sandbox",
+      "recommended": "Recommended",
+      "cloudSandboxDescription": "Runs in cloud Docker containers, no local setup required, works out of the box. Suitable for most users.",
+      "localSandbox": "Local Sandbox",
+      "advanced": "Advanced",
+      "localSandboxDescription": "Runs on your local machine, can access local files and resources. Requires the desktop client.",
+      "localConfigHeading": "Local Sandbox Configuration",
+      "tunnelUrlLabel": "Tunnel URL",
+      "optional": "(optional)",
+      "tunnelUrlHelp": "A public address generated by ngrok or cloudflare tunnel, used by the cloud platform to connect to your local sandbox",
+      "workspacePathLabel": "Workspace Path",
+      "workspacePathHelp": "Local workspace directory the Agent can access",
+      "tipPrefix": "Tip:",
+      "tipIntro": "After choosing local sandbox you will need to:",
+      "tipStep1": "Download and install the MemStack desktop client",
+      "tipStep2": "Start the local sandbox service",
+      "tipStep3": "Configure the tunnel connection in the client",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create Project"
     }
   },
   "dashboard": {
@@ -3448,11 +3609,40 @@
       },
       "error": {
         "label": "Error",
-        "prefix": "Error"
+        "prefix": "Error",
+        "description": "Agent encountered an error"
       },
       "planMode": {
         "tooltip": "{{mode}} Mode - Agent is creating a detailed plan",
         "label": "Plan"
+      },
+      "notStarted": {
+        "label": "Not started",
+        "description": "Agent has not been initialised; it will start on the first request."
+      },
+      "initializing": {
+        "label": "Initializing",
+        "description": "Loading tools, skills, and configuration"
+      },
+      "ready": {
+        "label": "Ready",
+        "description": "Agent is ready, {{count}} tools loaded"
+      },
+      "running": {
+        "label": "Running",
+        "description": "Processing chat requests"
+      },
+      "paused": {
+        "label": "Paused",
+        "description": "Agent is paused and not accepting new requests"
+      },
+      "shuttingDown": {
+        "label": "Shutting down",
+        "description": "Agent is shutting down"
+      },
+      "unknown": {
+        "label": "Unknown",
+        "description": "Agent state is unknown"
       }
     },
     "chat": {
@@ -4022,6 +4212,32 @@
         "minutes": "m",
         "hours": "h"
       }
+    },
+    "executionTimeline": {
+      "title": "Execution plan",
+      "stepsCompleted": "{{completed}}/{{total}} steps completed",
+      "matchedPattern": "Matched pattern ({{percent}}%)",
+      "statusCompleted": "Completed",
+      "statusRunning": "Running",
+      "statusWaiting": "Waiting",
+      "toolsLabel": "{{count}} tools",
+      "runningEllipsis": "Running...",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    },
+    "costTracker": {
+      "inputTokens": "Input tokens: {{value}}",
+      "outputTokens": "Output tokens: {{value}}",
+      "totalTokens": "Total: {{value}}",
+      "costLabel": "Cost: {{value}}",
+      "modelLabel": "Model: {{model}}",
+      "empty": "No cost data yet",
+      "modelPrefix": "Model:",
+      "tokenUsage": "Token usage",
+      "inputShort": "Input:",
+      "outputShort": "Output:",
+      "estimatedCost": "Estimated cost",
+      "updatedAt": "Updated: {{time}}"
     }
   },
   "user_profile": {
@@ -4534,6 +4750,31 @@
         "reasonLabel": "Please provide a reason for discarding:",
         "reasonPlaceholder": "e.g., Duplicate event, Stale data, Manual fix applied..."
       }
+    },
+    "skillReview": {
+      "pageTitle": "Skill Review (Admin)",
+      "pageDescription": "Review tenant-submitted Skill candidates. Approval publishes with the current version; rejection records a review note.",
+      "tabs": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "withdrawn": "Withdrawn"
+      },
+      "approveTitle": "Approve Submission",
+      "rejectTitle": "Reject Submission",
+      "approveDescription": "Approving will publish this Skill snapshot to the curated library.",
+      "rejectDescription": "Rejecting will close this record and save your review note.",
+      "releaseVersion": "Release Version",
+      "trustSubmitter": "Keep submitter version (v{{version}})",
+      "bumpPatch": "Override as patch",
+      "bumpMinor": "Override as minor",
+      "bumpMajor": "Override as major",
+      "effectiveVersion": "Effective version:",
+      "deprecateNote": "(If an active version already exists from the same source, the previous version will be marked deprecated automatically)",
+      "notePlaceholder": "Review note (optional)",
+      "submissionNotePrefix": "Submission note:",
+      "reviewNotePrefix": "Review note:",
+      "emptyDescription": "No {{status}} submissions"
     }
   },
   "system": {
@@ -4601,5 +4842,304 @@
     "signInSubtitle": "You must be signed in to approve a CLI login. After signing in, you will be returned here automatically.",
     "copyBackLink": "Copy return link",
     "footer": "Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI."
+  },
+  "skill": {
+    "submit": {
+      "successMessage": "Submitted to the curated review queue.",
+      "titleWithName": "Submit \"{{name}}\" to curated",
+      "titleGeneric": "Submit to curated",
+      "okText": "Submit",
+      "description": "After submission an admin reviews the Skill; once approved it is published to the curated library and every tenant can fork it.",
+      "versionLabel": "Version (semver)",
+      "versionFormatHint": "Must follow MAJOR.MINOR.PATCH (e.g. 1.2.3)",
+      "noteLabel": "Submission note (optional)",
+      "notePlaceholder": "Why is this Skill worth adding to the curated library?"
+    },
+    "curated": {
+      "pageTitle": "Curated Skill Library",
+      "pageDescription": "The curated library contains Skill templates approved by admins. All tenants can fork them to their private library to modify.",
+      "tabCurated": "Curated",
+      "tabSubmissions": "My Submissions",
+      "publishedCount": "{{count}} published Skills",
+      "includeDeprecatedAria": "Include deprecated versions",
+      "includeDeprecatedLabel": "Include deprecated versions",
+      "emptyCurated": "No Skills published in the curated library yet",
+      "emptySubmissions": "No submissions yet",
+      "deprecatedSuffix": " (deprecated)",
+      "versionCount": " · {{count}} versions",
+      "forkButton": "Fork to private library",
+      "forkDialogContent": "Choose what to include when copying to your private library:",
+      "forkIncludeExecutor": "Executor (tools + full_content)",
+      "forkIncludeMetadata": "Metadata",
+      "withdrawSuccess": "Submission withdrawn",
+      "withdrawFailed": "Withdrawal failed",
+      "noteLabel": "Note:",
+      "reviewNoteLabel": "Review note:",
+      "withdrawConfirmTitle": "Withdraw this submission?",
+      "withdrawConfirmDescription": "After withdrawal the status becomes withdrawn and will no longer enter the review queue.",
+      "withdrawOk": "Withdraw",
+      "withdrawCancel": "Cancel",
+      "withdrawAction": "Withdraw"
+    }
+  },
+  "mcp": {
+    "tools": {
+      "allServers": "All servers",
+      "loading": "Loading tools...",
+      "totalTools": "Total tools",
+      "serversWithTools": "Servers with tools",
+      "showCount": "Showing {{shown}} / {{total}}",
+      "searchPlaceholder": "Search tool name or description...",
+      "filterByServer": "Filter by server",
+      "emptyNoTools": "No tools yet",
+      "emptyNoMatch": "No matching tools",
+      "hintSync": "Sync an MCP server to discover available tools",
+      "hintAdjust": "Try adjusting your search or filters"
+    },
+    "apps": {
+      "deleteSuccess": "MCP app deleted",
+      "deleteFailed": "Failed to delete MCP app",
+      "refreshSuccess": "App refreshed",
+      "retryFailed": "Retry failed",
+      "loading": "Loading MCP apps...",
+      "totalApps": "Total apps",
+      "statusReady": "Ready",
+      "statusLoading": "Loading",
+      "statusError": "Error",
+      "searchPlaceholder": "Search apps...",
+      "refresh": "Refresh",
+      "empty": "No MCP apps",
+      "emptyHint": "Apps will appear here once MCP servers are discovered."
+    },
+    "appCard": {
+      "runtimePrefix": "Runtime: {{value}}",
+      "resourceUri": "Resource URI",
+      "noResourceUri": "No resource URI",
+      "refreshWithStatus": "Refresh {{status}}",
+      "retry": "Retry",
+      "slowLoadHint": "Loading is taking longer than usual; try refreshing.",
+      "developerAI": "AI",
+      "developerUser": "User",
+      "open": "Open",
+      "deleteConfirm": "Are you sure you want to delete this app?",
+      "deleteOk": "Delete",
+      "deleteCancel": "Cancel"
+    },
+    "servers": {
+      "searchPlaceholder": "Search server name or description...",
+      "statusAll": "All status",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Disabled",
+      "typePlaceholder": "Type",
+      "typeAll": "All types",
+      "runtimeAll": "All runtime status",
+      "runtimeRunning": "Running",
+      "runtimeStarting": "Starting",
+      "runtimeError": "Error",
+      "runtimeDisabled": "Disabled",
+      "runtimeUnknown": "Unknown",
+      "refreshTooltip": "Refresh list",
+      "reconcileTooltip": "Reconcile runtime with sandbox",
+      "reconcileButton": "Reconcile",
+      "createButton": "Create Server",
+      "filterSummary": "Showing {{shown}} / {{total}} servers",
+      "clearFilters": "Clear filters",
+      "enableSuccess": "Server enabled",
+      "disableSuccess": "Server disabled",
+      "syncSuccess": "Server synced",
+      "connectSuccess": "Connected",
+      "connectSuccessDetail": "Connected ({{latency}}ms, {{count}} tools)",
+      "connectFailed": "Connection failed: {{message}}",
+      "deleteSuccess": "Server deleted",
+      "selectProjectFirst": "Please select a project first",
+      "reconcileSuccess": "Runtime reconciled: {{restored}} restored, {{running}} already running, {{failed}} failed",
+      "reconcileFailed": "Failed to reconcile MCP runtime",
+      "errorBanner": "{{count}} servers have sync errors. Please check server card details.",
+      "loadingServers": "Loading servers...",
+      "emptyTitle": "No MCP Servers",
+      "emptyHint": "Create your first MCP server to enable powerful tools and capabilities",
+      "emptyCreateButton": "Create Server",
+      "noMatch": "No servers match the current filters",
+      "clearAllFilters": "Clear all filters"
+    }
+  },
+  "memory": {
+    "edit": {
+      "title": "Edit memory",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter memory title",
+      "contentLabel": "Content",
+      "contentPlaceholder": "Enter memory content...",
+      "tagsLabel": "Tags",
+      "removeTagAria": "Remove tag {{tag}}",
+      "addTag": "Add",
+      "optimisticLockWarning": "This memory uses optimistic locking. If another user modified it concurrently, please reload and try again.",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "save": "Save changes"
+    },
+    "detail": {
+      "editTitle": "Edit Memory",
+      "title": "Memory Details",
+      "saveAria": "Save",
+      "saveTitle": "Save",
+      "cancelAria": "Cancel editing",
+      "cancelTitle": "Cancel",
+      "editAria": "Edit",
+      "editTitleTooltip": "Edit",
+      "shareAria": "Share",
+      "shareTitle": "Share",
+      "downloadAria": "Download",
+      "downloadTitle": "Download",
+      "closeAria": "Close",
+      "versionConflict": "Version conflict: this memory was modified by another user. Please refresh and try again.",
+      "saveFailed": "Save failed, please try again later",
+      "linkCopied": "Link copied to clipboard!",
+      "linkCopyFailed": "Failed to copy link",
+      "titlePlaceholder": "Memory Title",
+      "userPrefix": "User:",
+      "createdPrefix": "Created:",
+      "updatedPrefix": "Updated:",
+      "contentHeading": "Memory Content",
+      "contentPlaceholder": "Enter memory content...",
+      "entitiesHeading": "Entities",
+      "relationshipsHeading": "Relationships",
+      "confidencePrefix": "Confidence:",
+      "metadataHeading": "Metadata",
+      "projectPrefix": "Project:",
+      "viewCountPrefix": "Views:"
+    },
+    "manager": {
+      "selectProjectFirstHeading": "Select a Project First",
+      "selectProjectHint": "Select a project to view and manage memories",
+      "title": "Memory Management",
+      "countSuffix": "({{count}} items)",
+      "newButton": "New Memory",
+      "searchPlaceholder": "Search memories...",
+      "typeAll": "All Types",
+      "typeText": "Text",
+      "typeDocument": "Document",
+      "typeImage": "Image",
+      "typeVideo": "Video",
+      "userFilterPlaceholder": "Filter by user...",
+      "search": "Search",
+      "reset": "Reset",
+      "emptyHeading": "No Memories",
+      "emptyNoMatch": "No matching memories found",
+      "emptyHint": "Start creating your first memory",
+      "createMemory": "Create Memory",
+      "deleteConfirm": "Are you sure you want to delete this memory? This action cannot be undone.",
+      "entitiesLabel": "Entities",
+      "relationshipsLabel": "Relationships"
+    },
+    "create": {
+      "title": "Create Memory",
+      "tabBasic": "Basic Info",
+      "tabExtraction": "Entity Extraction",
+      "tabAdvanced": "Advanced Settings",
+      "titleLabel": "Memory Title *",
+      "titlePlaceholder": "Enter memory title",
+      "contentLabel": "Memory Content *",
+      "contentPlaceholder": "Enter memory content",
+      "typeLabel": "Memory Type",
+      "typeText": "Text",
+      "typeDocument": "Document",
+      "typeImage": "Image",
+      "typeVideo": "Video",
+      "authorLabel": "User ID",
+      "authorPlaceholder": "Enter user ID (optional)",
+      "authorHelp": "Optional: record the user creating this memory",
+      "extractionHeading": "AI Entity Extraction",
+      "extractionHint": "Click the buttons below to automatically extract entities and relationships from the text. Make sure you have entered content in Basic Info.",
+      "extractEntities": "Extract Entities",
+      "extractRelationships": "Extract Relationships",
+      "extracting": "Extracting...",
+      "extractedEntitiesHeading": "Extracted Entities",
+      "extractedRelationshipsHeading": "Extracted Relationships",
+      "metadataLabel": "Metadata Settings",
+      "enableSearch": "Enable Search",
+      "enableGraph": "Enable Graph",
+      "tagsLabel": "Tags",
+      "tagsPlaceholder": "Enter tags separated by commas",
+      "tagsHelp": "Use commas to separate multiple tags",
+      "cancel": "Cancel",
+      "creating": "Creating...",
+      "submit": "Create Memory"
+    }
+  },
+  "hitl": {
+    "types": {
+      "clarification": {
+        "title": "Needs Clarification",
+        "submitText": "Confirm Answer"
+      },
+      "decision": {
+        "title": "Needs Decision",
+        "submitText": "Confirm Decision"
+      },
+      "envVar": {
+        "title": "Configure Environment Variables",
+        "submitText": "Save Config"
+      },
+      "permission": {
+        "title": "Permission Request",
+        "submitText": "Authorize"
+      }
+    },
+    "clarificationType": {
+      "scope": "Scope confirmation",
+      "approach": "Approach selection",
+      "prerequisite": "Prerequisite",
+      "priority": "Priority",
+      "custom": "Custom"
+    },
+    "decisionType": {
+      "branch": "Branch selection",
+      "method": "Method selection",
+      "confirmation": "Confirm operation",
+      "risk": "Risk confirmation",
+      "custom": "Custom"
+    },
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
+    "remainingTime": "Remaining time",
+    "contextHeading": "Context:",
+    "recommended": "Recommended",
+    "customAnswer": "Custom input",
+    "customDecision": "Custom decision",
+    "answerPlaceholder": "Enter your answer...",
+    "decisionPlaceholder": "Enter your decision...",
+    "noPresetOptions": "No preset options available, please enter manually",
+    "emptyOptionsMessage": "No options available",
+    "emptyOptionsDescription": "There are no options to select from",
+    "emptyDecisionDescription": "There are no decision options available",
+    "cancel": "Cancel",
+    "confirmAndAcceptRisk": "Confirm and accept risk",
+    "timeoutDefaultMessage": "Default option on timeout",
+    "timeoutDefaultDescription": "If you do not decide in time, the system will automatically pick: {{label}}",
+    "riskAlertTitle": "Risk warning",
+    "envInputPlaceholder": "Enter {{label}}",
+    "envRequiredTag": "Required",
+    "envValidationMessage": "Please enter {{label}}",
+    "envSecurityTitle": "Security notice",
+    "envSecurityDescription": "Password environment variables are stored encrypted to protect your sensitive information.",
+    "highRiskTitle": "High-risk operation warning",
+    "highRiskDescription": "This operation may significantly impact the system. Please review carefully before deciding.",
+    "toolName": "Tool name",
+    "requestedAction": "Requested action",
+    "riskLevel": "Risk level",
+    "requestDescription": "Request description:",
+    "detailsHeading": "Details:",
+    "deny": "Deny",
+    "allowAlways": "Always allow",
+    "authorize": "Authorize"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System"
   }
 }

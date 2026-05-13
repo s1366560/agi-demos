@@ -7,6 +7,8 @@
  * Format convention: ISO style (YYYY-MM-DD HH:mm)
  */
 
+import i18n from '@/i18n/config';
+
 type DateInput = Date | string | number | null | undefined;
 
 function pad(n: number): string {
@@ -115,7 +117,18 @@ export function formatReadableTime(timestamp: number): string {
 }
 
 /**
- * Relative time in English: "just now", "5m ago", "2d ago"
+ * Locale-aware relative time.
+ *
+ * Buckets:
+ *   < 60s  -> "just now"
+ *   < 60m  -> "{n}m ago"
+ *   < 24h  -> "{n}h ago"
+ *   = 1d   -> "yesterday"
+ *   < 7d   -> "{n}d ago"
+ *   < 30d  -> "{n}w ago"
+ *   else   -> absolute date
+ *
+ * Output language follows `i18next` so it switches with the user's locale.
  */
 export function formatDistanceToNow(input: DateInput): string {
   const date = toDate(input);
@@ -128,47 +141,31 @@ export function formatDistanceToNow(input: DateInput): string {
   const diffDays = Math.floor(diffHours / 24);
 
   if (diffSecs < 60) {
-    return 'just now';
-  } else if (diffMins < 60) {
-    return `${String(diffMins)}m ago`;
-  } else if (diffHours < 24) {
-    return `${String(diffHours)}h ago`;
-  } else if (diffDays < 7) {
-    return `${String(diffDays)}d ago`;
-  } else {
-    return formatDateOnly(date);
+    return i18n.t('common.time.justNow');
   }
+  if (diffMins < 60) {
+    return i18n.t('common.time.minutesAgo', { count: diffMins });
+  }
+  if (diffHours < 24) {
+    return i18n.t('common.time.hoursAgo', { count: diffHours });
+  }
+  if (diffDays === 1) {
+    return i18n.t('common.time.yesterday');
+  }
+  if (diffDays < 7) {
+    return i18n.t('common.time.daysAgo', { count: diffDays });
+  }
+  if (diffDays < 30) {
+    return i18n.t('common.time.weeksAgo', { count: Math.floor(diffDays / 7) });
+  }
+  return formatDateOnly(date);
 }
 
 /**
- * Relative time in Chinese
+ * @deprecated Use {@link formatDistanceToNow}; it now follows the active i18n
+ * locale automatically and produces the same Chinese output when zh-CN is
+ * active.
  */
 export function formatDistanceToNowCN(input: DateInput): string {
-  const date = toDate(input);
-  if (!date) return '';
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSecs < 10) {
-    return '刚刚';
-  } else if (diffSecs < 60) {
-    return `${String(diffSecs)}秒前`;
-  } else if (diffMins < 60) {
-    return `${String(diffMins)}分钟前`;
-  } else if (diffHours < 24) {
-    return `${String(diffHours)}小时前`;
-  } else if (diffDays === 1) {
-    return '昨天';
-  } else if (diffDays < 7) {
-    return `${String(diffDays)}天前`;
-  } else if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return `${String(weeks)}周前`;
-  } else {
-    return formatDateOnly(date);
-  }
+  return formatDistanceToNow(input);
 }

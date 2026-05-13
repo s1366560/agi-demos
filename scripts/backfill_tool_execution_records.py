@@ -52,14 +52,13 @@ async def _run() -> int:
     args = _build_parser().parse_args()
     apply_changes = args.apply and not args.dry_run
 
-    async with async_session_factory() as session:
-        async with session.begin():
-            service = ToolExecutionBackfillService(session)
-            stats = await service.backfill(
-                conversation_id=args.conversation_id,
-                limit=args.limit,
-                apply_changes=apply_changes,
-            )
+    async with async_session_factory() as session, session.begin():
+        service = ToolExecutionBackfillService(session)
+        stats = await service.backfill(
+            conversation_id=args.conversation_id,
+            limit=args.limit,
+            apply_changes=apply_changes,
+        )
 
     mode = "apply" if apply_changes else "dry-run"
     print(f"[tool-execution-backfill] mode={mode}")

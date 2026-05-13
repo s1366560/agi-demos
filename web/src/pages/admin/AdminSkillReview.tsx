@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Empty, Input, Modal, Radio, Skeleton, Tabs, Tag, Typography, message } from 'antd';
 import { Check, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import {
   curatedSkillAPI,
@@ -68,6 +69,7 @@ function ReviewDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const [note, setNote] = useState('');
   const [bump, setBump] = useState<SemverBump | 'trust'>('trust');
 
@@ -104,7 +106,7 @@ function ReviewDialog({
 
   return (
     <Modal
-      title={mode === 'approve' ? '通过审核' : '驳回提交'}
+      title={mode === 'approve' ? t('admin.skillReview.approveTitle') : t('admin.skillReview.rejectTitle')}
       open={open}
       onCancel={() => {
         setNote('');
@@ -121,27 +123,27 @@ function ReviewDialog({
       <div className="space-y-4">
         <Text type="secondary">
           {mode === 'approve'
-            ? '审核通过将把此 Skill 快照发布到精选库。'
-            : '驳回提交将关闭此记录并记录你的审核意见。'}
+            ? t('admin.skillReview.approveDescription')
+            : t('admin.skillReview.rejectDescription')}
         </Text>
         {mode === 'approve' ? (
           <div className={`space-y-2 rounded-[6px] p-3 ${surface}`}>
-            <Text strong>发布版本号</Text>
+            <Text strong>{t('admin.skillReview.releaseVersion')}</Text>
             <Radio.Group
               value={bump}
               onChange={(e) => {
                 setBump(e.target.value as SemverBump | 'trust');
               }}
             >
-              <Radio value="trust">沿用提交者版本 (v{submission?.proposed_semver ?? '-'})</Radio>
-              <Radio value="patch">覆盖为 patch</Radio>
-              <Radio value="minor">覆盖为 minor</Radio>
-              <Radio value="major">覆盖为 major</Radio>
+              <Radio value="trust">{t('admin.skillReview.trustSubmitter', { version: submission?.proposed_semver ?? '-' })}</Radio>
+              <Radio value="patch">{t('admin.skillReview.bumpPatch')}</Radio>
+              <Radio value="minor">{t('admin.skillReview.bumpMinor')}</Radio>
+              <Radio value="major">{t('admin.skillReview.bumpMajor')}</Radio>
             </Radio.Group>
             <Text type="secondary" className="text-xs">
-              最终发布版本：<Tag color="blue">v{effectiveSemver}</Tag>
+              {t('admin.skillReview.effectiveVersion')}<Tag color="blue">v{effectiveSemver}</Tag>
               <span className="ml-2">
-                （若同一来源已有激活版本，旧版本会自动标记为 deprecated）
+                {t('admin.skillReview.deprecateNote')}
               </span>
             </Text>
           </div>
@@ -152,7 +154,7 @@ function ReviewDialog({
           onChange={(e) => {
             setNote(e.target.value);
           }}
-          placeholder="审核意见（可选）"
+          placeholder={t('admin.skillReview.notePlaceholder')}
           maxLength={2000}
           showCount
         />
@@ -168,6 +170,7 @@ function SubmissionRow({
   submission: SkillSubmission;
   onReview: (s: SkillSubmission, mode: 'approve' | 'reject') => void;
 }) {
+  const { t } = useTranslation();
   const name = submission.skill_snapshot.name as string;
   const description = submission.skill_snapshot.description as string;
   const isPending = submission.status === 'pending';
@@ -188,7 +191,7 @@ function SubmissionRow({
           {new Date(submission.created_at).toLocaleString()}
         </div>
         {submission.submission_note ? (
-          <div className={`mt-2 text-sm ${mutedText}`}>提交备注：{submission.submission_note}</div>
+          <div className={`mt-2 text-sm ${mutedText}`}>{t('admin.skillReview.submissionNotePrefix')}{submission.submission_note}</div>
         ) : null}
         {submission.review_note ? (
           <div
@@ -198,7 +201,7 @@ function SubmissionRow({
                 : `mt-2 text-sm ${mutedText}`
             }
           >
-            审核意见：{submission.review_note}
+            {t('admin.skillReview.reviewNotePrefix')}{submission.review_note}
           </div>
         ) : null}
       </div>
@@ -229,6 +232,7 @@ function SubmissionRow({
 }
 
 function SubmissionsList({ status }: { status: StatusFilter }) {
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'skill-submissions', status],
     queryFn: () => curatedSkillAPI.adminList(status),
@@ -245,7 +249,7 @@ function SubmissionsList({ status }: { status: StatusFilter }) {
   if (items.length === 0) {
     return (
       <div className={`rounded-[6px] py-12 ${surface}`}>
-        <Empty description={`暂无 ${status} 的提交`} />
+        <Empty description={t('admin.skillReview.emptyDescription', { status })} />
       </div>
     );
   }
@@ -276,6 +280,7 @@ function SubmissionsList({ status }: { status: StatusFilter }) {
 }
 
 export default function AdminSkillReview() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div>
@@ -283,20 +288,20 @@ export default function AdminSkillReview() {
           Admin Review
         </div>
         <Title level={3} className={`!mb-1 !mt-2 ${pageText}`}>
-          Skill 审核（管理员）
+          {t('admin.skillReview.pageTitle')}
         </Title>
         <Paragraph type="secondary" className="!mb-0 max-w-3xl">
-          审核由租户提交的 Skill 候选。通过后会以当前版本号发布到精选库；驳回会记录审核意见。
+          {t('admin.skillReview.pageDescription')}
         </Paragraph>
       </div>
       <div className={`rounded-[6px] p-3 ${surface}`}>
         <Tabs
           defaultActiveKey="pending"
           items={[
-            { key: 'pending', label: '待审核', children: <SubmissionsList status="pending" /> },
-            { key: 'approved', label: '已通过', children: <SubmissionsList status="approved" /> },
-            { key: 'rejected', label: '已驳回', children: <SubmissionsList status="rejected" /> },
-            { key: 'withdrawn', label: '已撤回', children: <SubmissionsList status="withdrawn" /> },
+            { key: 'pending', label: t('admin.skillReview.tabs.pending'), children: <SubmissionsList status="pending" /> },
+            { key: 'approved', label: t('admin.skillReview.tabs.approved'), children: <SubmissionsList status="approved" /> },
+            { key: 'rejected', label: t('admin.skillReview.tabs.rejected'), children: <SubmissionsList status="rejected" /> },
+            { key: 'withdrawn', label: t('admin.skillReview.tabs.withdrawn'), children: <SubmissionsList status="withdrawn" /> },
           ]}
         />
       </div>

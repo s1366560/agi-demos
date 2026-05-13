@@ -3,7 +3,7 @@ Authentication models for API Key management.
 """
 
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -45,6 +45,7 @@ class User(BaseModel):
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     profile: dict[str, Any] | None = Field(default_factory=dict)
+    preferred_language: str | None = None
 
     class Config:
         json_schema_extra: ClassVar = {
@@ -99,6 +100,7 @@ class UserProfile(BaseModel):
 class UserUpdate(BaseModel):
     name: str | None = None
     profile: UserProfile | None = None
+    preferred_language: Literal["en-US", "zh-CN"] | None = None
 
 
 class UserResponse(BaseModel):

@@ -63,6 +63,7 @@ interface BackendUserResponse {
   is_active: boolean;
   created_at: string;
   profile?: UserProfile;
+  preferred_language?: 'en-US' | 'zh-CN' | null;
 }
 
 // Share response types
@@ -111,6 +112,7 @@ export const authAPI = {
       created_at: userResponse.created_at,
       profile: userResponse.profile,
       must_change_password,
+      preferred_language: userResponse.preferred_language ?? undefined,
     };
 
     return { token, user, must_change_password: must_change_password ?? false };
@@ -126,10 +128,26 @@ export const authAPI = {
       is_active: userResponse.is_active,
       created_at: userResponse.created_at,
       profile: userResponse.profile,
+      preferred_language: userResponse.preferred_language ?? undefined,
     };
   },
   updateProfile: async (data: Partial<UserProfile>): Promise<User> => {
     return await api.put('/users/me', data);
+  },
+  updatePreferredLanguage: async (language: 'en-US' | 'zh-CN'): Promise<User> => {
+    const userResponse = await api.put<BackendUserResponse>('/users/me', {
+      preferred_language: language,
+    });
+    return {
+      id: userResponse.user_id,
+      email: userResponse.email,
+      name: userResponse.name,
+      roles: userResponse.roles,
+      is_active: userResponse.is_active,
+      created_at: userResponse.created_at,
+      profile: userResponse.profile,
+      preferred_language: userResponse.preferred_language ?? undefined,
+    };
   },
   changePassword: async (
     oldPassword: string,

@@ -304,6 +304,33 @@ def _preferred_language_from_metadata(metadata: Mapping[str, Any] | None) -> str
     return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
 
 
+async def _user_preferred_language(
+    db: AsyncSession, user_id: str | None
+) -> str | None:
+    """Look up the stored preferred_language for a user. Returns None on any failure."""
+    if not isinstance(user_id, str) or not user_id:
+        return None
+    try:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.common.base_repository import (
+            refresh_select_statement,
+        )
+        from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+
+        result = await db.execute(
+            refresh_select_statement(
+                select(DBUser.preferred_language).where(DBUser.id == user_id)
+            )
+        )
+        value = result.scalar_one_or_none()
+        if isinstance(value, str) and value in {"en-US", "zh-CN"}:
+            return value
+    except Exception:
+        logger.debug("workspace_worker_launch._user_preferred_language_failed", exc_info=True)
+    return None
+
+
 def _metadata_text(value: object) -> str | None:
     if not isinstance(value, str):
         return None
@@ -1591,6 +1618,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                             resolved_preferred_language = _preferred_language_from_metadata(
                                 root_metadata
                             )
+            if resolved_preferred_language is None:
+                resolved_preferred_language = await _user_preferred_language(
+                    db, task.created_by
+                )
             workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
             plan_node_metadata = await _load_plan_node_metadata_for_task(db, task)
             code_context_evaluation = evaluate_workspace_code_context(

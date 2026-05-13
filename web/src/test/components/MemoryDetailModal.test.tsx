@@ -43,11 +43,11 @@ describe('MemoryDetailModal', () => {
   it('renders memory details', () => {
     render(<MemoryDetailModal isOpen={true} onClose={mockOnClose} memory={mockMemory} />);
 
-    expect(screen.getByText('记忆详情')).toBeInTheDocument();
+    expect(screen.getByText('Memory Details')).toBeInTheDocument();
     expect(screen.getByText('Test Memory')).toBeInTheDocument();
     expect(screen.getByText('Test Content')).toBeInTheDocument();
     expect(screen.getByText('text')).toBeInTheDocument();
-    expect(screen.getByText('用户: user1')).toBeInTheDocument();
+    expect(screen.getByText('User: user1')).toBeInTheDocument();
   });
 
   it('renders entities and relationships', () => {
@@ -67,7 +67,7 @@ describe('MemoryDetailModal', () => {
 
     render(<MemoryDetailModal isOpen={true} onClose={mockOnClose} memory={mockMemory} />);
 
-    const downloadButton = screen.getByTitle('下载');
+    const downloadButton = screen.getByTitle('Download');
     fireEvent.click(downloadButton);
 
     expect(window.URL.createObjectURL).toHaveBeenCalled();

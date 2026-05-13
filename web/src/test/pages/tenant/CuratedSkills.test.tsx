@@ -74,7 +74,7 @@ describe('CuratedSkills (tenant)', () => {
     const select = screen.getByRole('combobox');
     expect(select).toBeInTheDocument();
     // "2 个版本" hint tells the user other versions are selectable.
-    expect(screen.getByText(/2 个版本/)).toBeInTheDocument();
+    expect(screen.getByText(/2 versions/)).toBeInTheDocument();
   });
 
   it('does not render a version selector when a source has only one version', async () => {
@@ -93,7 +93,7 @@ describe('CuratedSkills (tenant)', () => {
     vi.mocked(curatedSkillAPI.list).mockResolvedValue([]);
     render(withQuery(<CuratedSkills />));
     // Wait for query settled and the toggle label to render.
-    await screen.findByText('包含已弃用版本');
+    await screen.findByText('Include deprecated versions');
     expect(curatedSkillAPI.list).toHaveBeenCalledWith({ include_deprecated: false });
     const toggle = screen.getByRole('switch');
     fireEvent.click(toggle);
@@ -131,8 +131,8 @@ describe('AdminSkillReview bump selector', () => {
     const approveBtn = await screen.findByRole('button', { name: /Approve/i });
     fireEvent.click(approveBtn);
 
-    // Dialog open — default "trust submitter" preview shows 1.2.3 near "最终发布版本".
-    const previewLabel = await screen.findByText(/最终发布版本/);
+    // Dialog open — default "trust submitter" preview shows 1.2.3 near effective version label.
+    const previewLabel = await screen.findByText(/Effective version/);
     const previewRow = previewLabel.parentElement as HTMLElement;
     await waitFor(() => {
       expect(previewRow.textContent).toContain('v1.2.3');

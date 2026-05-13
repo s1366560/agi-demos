@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 import { message } from 'antd';
 import { X, Folder, AlertCircle, Settings, Brain, Users, Cloud, Monitor } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
@@ -17,6 +18,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { t } = useTranslation();
   const { createProject, isLoading, error } = useProjectStore();
   const { currentTenant } = useTenantStore();
 
@@ -119,12 +121,12 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Folder className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">创建项目</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('project.create.title')}</h2>
           </div>
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            aria-label="Close create project dialog"
+            aria-label={t('project.create.closeAria')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -144,7 +146,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Settings className="h-4 w-4" />
-                <span>基础设置</span>
+                <span>{t('project.create.tabBasic')}</span>
               </div>
             </button>
             <button
@@ -159,7 +161,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Brain className="h-4 w-4" />
-                <span>记忆规则</span>
+                <span>{t('project.create.tabMemory')}</span>
               </div>
             </button>
             <button
@@ -174,7 +176,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4" />
-                <span>图谱配置</span>
+                <span>{t('project.create.tabGraph')}</span>
               </div>
             </button>
             <button
@@ -189,7 +191,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Monitor className="h-4 w-4" />
-                <span>沙箱设置</span>
+                <span>{t('project.create.tabSandbox')}</span>
               </div>
             </button>
           </nav>
@@ -218,7 +220,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-name"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    项目名称 *
+                    {t('project.create.nameLabel')}
                   </label>
                   <input
                     type="text"
@@ -228,7 +230,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       setFormData({ ...formData, name: e.target.value });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                    placeholder="输入项目名称"
+                    placeholder={t('project.create.namePlaceholder')}
                     required
                     disabled={isLoading}
                     aria-required="true"
@@ -240,7 +242,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-description"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    项目描述
+                    {t('project.create.descriptionLabel')}
                   </label>
                   <textarea
                     id="project-create-description"
@@ -249,7 +251,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       setFormData({ ...formData, description: e.target.value });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-                    placeholder="描述这个项目的目标和用途"
+                    placeholder={t('project.create.descriptionPlaceholder')}
                     rows={3}
                     disabled={isLoading}
                     aria-describedby="project-create-description-help"
@@ -258,7 +260,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     id="project-create-description-help"
                     className="text-xs text-gray-500 dark:text-slate-400"
                   >
-                    可选：描述项目的目标和用途
+                    {t('project.create.descriptionHelp')}
                   </span>
                 </div>
 
@@ -267,7 +269,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-status"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    项目状态
+                    {t('project.create.statusLabel')}
                   </label>
                   <select
                     id="project-create-status"
@@ -278,9 +280,9 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                     disabled={isLoading}
                   >
-                    <option value="active">活跃</option>
-                    <option value="paused">暂停</option>
-                    <option value="archived">归档</option>
+                    <option value="active">{t('project.create.statusActive')}</option>
+                    <option value="paused">{t('project.create.statusPaused')}</option>
+                    <option value="archived">{t('project.create.statusArchived')}</option>
                   </select>
                 </div>
               </>
@@ -294,7 +296,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       htmlFor="project-create-max-episodes"
                       className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >
-                      最大记忆片段数
+                      {t('project.create.maxEpisodesLabel')}
                     </label>
                     <input
                       type="number"
@@ -319,7 +321,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-max-episodes-help"
                       className="text-xs text-gray-500 dark:text-slate-400"
                     >
-                      范围：100 - 10000
+                      {t('project.create.rangeEpisodes')}
                     </span>
                   </div>
 
@@ -328,7 +330,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       htmlFor="project-create-retention-days"
                       className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >
-                      保留天数
+                      {t('project.create.retentionDaysLabel')}
                     </label>
                     <input
                       type="number"
@@ -353,7 +355,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-retention-days-help"
                       className="text-xs text-gray-500 dark:text-slate-400"
                     >
-                      范围：1 - 365 天
+                      {t('project.create.rangeRetentionDays')}
                     </span>
                   </div>
                 </div>
@@ -363,7 +365,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-refresh-interval"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    自动刷新间隔（小时）
+                    {t('project.create.refreshIntervalLabel')}
                   </label>
                   <input
                     type="number"
@@ -388,7 +390,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     id="project-create-refresh-interval-help"
                     className="text-xs text-gray-500 dark:text-slate-400"
                   >
-                    范围：1 - 168 小时
+                    {t('project.create.rangeRefreshHours')}
                   </span>
                 </div>
 
@@ -413,7 +415,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-auto-refresh"
                     className="text-sm font-medium text-gray-700 dark:text-slate-300"
                   >
-                    启用自动刷新
+                    {t('project.create.autoRefreshLabel')}
                   </label>
                 </div>
               </>
@@ -427,7 +429,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       htmlFor="project-create-max-nodes"
                       className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >
-                      最大节点数
+                      {t('project.create.maxNodesLabel')}
                     </label>
                     <input
                       type="number"
@@ -452,7 +454,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-max-nodes-help"
                       className="text-xs text-gray-500 dark:text-slate-400"
                     >
-                      范围：100 - 50000
+                      {t('project.create.rangeNodes')}
                     </span>
                   </div>
 
@@ -461,7 +463,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       htmlFor="project-create-max-edges"
                       className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                     >
-                      最大边数
+                      {t('project.create.maxEdgesLabel')}
                     </label>
                     <input
                       type="number"
@@ -486,7 +488,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-max-edges-help"
                       className="text-xs text-gray-500 dark:text-slate-400"
                     >
-                      范围：100 - 100000
+                      {t('project.create.rangeEdges')}
                     </span>
                   </div>
                 </div>
@@ -496,7 +498,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-similarity"
                     className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                   >
-                    相似度阈值
+                    {t('project.create.similarityLabel')}
                   </label>
                   <input
                     type="range"
@@ -549,7 +551,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     htmlFor="project-create-community-detection"
                     className="text-sm font-medium text-gray-700 dark:text-slate-300"
                   >
-                    启用社区检测
+                    {t('project.create.communityDetectionLabel')}
                   </label>
                 </div>
               </>
@@ -559,14 +561,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <strong>沙箱</strong>是 Agent
-                    执行代码和工具的安全隔离环境。您可以选择使用云端托管沙箱或在本地运行沙箱。
+                    <strong>{t('project.create.sandboxIntroPrefix')}</strong>{t('project.create.sandboxIntroBody')}
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                    沙箱类型
+                    {t('project.create.sandboxTypeLabel')}
                   </label>
 
                   <div className="space-y-3">
@@ -592,14 +593,14 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         <div className="flex items-center space-x-2">
                           <Cloud className="w-4 h-4 text-blue-500" />
                           <span className="font-medium text-gray-900 dark:text-white">
-                            云端沙箱
+                            {t('project.create.cloudSandbox')}
                           </span>
                           <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded">
-                            推荐
+                            {t('project.create.recommended')}
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                          在云端 Docker 容器中运行，无需本地配置，开箱即用。适合大多数用户。
+                          {t('project.create.cloudSandboxDescription')}
                         </p>
                       </div>
                     </label>
@@ -626,14 +627,14 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         <div className="flex items-center space-x-2">
                           <Monitor className="w-4 h-4 text-purple-500" />
                           <span className="font-medium text-gray-900 dark:text-white">
-                            本地沙箱
+                            {t('project.create.localSandbox')}
                           </span>
                           <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
-                            高级
+                            {t('project.create.advanced')}
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
-                          在您的本地电脑运行，支持访问本地文件和资源。需要安装桌面客户端。
+                          {t('project.create.localSandboxDescription')}
                         </p>
                       </div>
                     </label>
@@ -644,7 +645,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                   <div className="mt-6 p-4 border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-4">
                     <h4 className="font-medium text-purple-900 dark:text-purple-200 flex items-center space-x-2">
                       <Monitor className="w-4 h-4" />
-                      <span>本地沙箱配置</span>
+                      <span>{t('project.create.localConfigHeading')}</span>
                     </h4>
 
                     <div>
@@ -652,7 +653,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         htmlFor="project-create-tunnel-url"
                         className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                       >
-                        隧道 URL <span className="text-gray-400">(可选)</span>
+                        {t('project.create.tunnelUrlLabel')} <span className="text-gray-400">{t('project.create.optional')}</span>
                       </label>
                       <input
                         type="url"
@@ -680,8 +681,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         disabled={isLoading}
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                        使用 ngrok 或 cloudflare tunnel
-                        生成的公网地址，用于云端平台连接到您的本地沙箱
+                        {t('project.create.tunnelUrlHelp')}
                       </p>
                     </div>
 
@@ -690,7 +690,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         htmlFor="project-create-workspace-path"
                         className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                       >
-                        工作目录 <span className="text-gray-400">(可选)</span>
+                        {t('project.create.workspacePathLabel')} <span className="text-gray-400">{t('project.create.optional')}</span>
                       </label>
                       <input
                         type="text"
@@ -718,18 +718,18 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         disabled={isLoading}
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                        Agent 可以访问的本地工作目录路径
+                        {t('project.create.workspacePathHelp')}
                       </p>
                     </div>
 
                     <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
                       <p className="text-sm text-purple-800 dark:text-purple-300">
-                        <strong>提示：</strong>选择本地沙箱后，您需要：
+                        <strong>{t('project.create.tipPrefix')}</strong>{t('project.create.tipIntro')}
                       </p>
                       <ol className="mt-2 text-sm text-purple-700 dark:text-purple-400 list-decimal list-inside space-y-1">
-                        <li>下载并安装 MemStack 桌面客户端</li>
-                        <li>启动本地沙箱服务</li>
-                        <li>在客户端中配置隧道连接</li>
+                        <li>{t('project.create.tipStep1')}</li>
+                        <li>{t('project.create.tipStep2')}</li>
+                        <li>{t('project.create.tipStep3')}</li>
                       </ol>
                     </div>
                   </div>
@@ -746,7 +746,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             disabled={isLoading}
           >
-            取消
+            {t('project.create.cancel')}
           </button>
           <button
             type="submit"
@@ -758,10 +758,10 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                <span>创建中...</span>
+                <span>{t('project.create.creating')}</span>
               </div>
             ) : (
-              '创建项目'
+              t('project.create.submit')
             )}
           </button>
         </div>

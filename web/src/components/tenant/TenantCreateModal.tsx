@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message } from 'antd';
 import { X, Building2, AlertCircle } from 'lucide-react';
 
@@ -16,6 +18,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { t } = useTranslation();
   const { createTenant, isLoading, error } = useTenantStore();
   const [formData, setFormData] = useState({
     name: '',
@@ -51,7 +54,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">创建工作空间</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('tenant.createModal.title')}</h2>
           </div>
           <button
             onClick={handleClose}
@@ -79,7 +82,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               htmlFor="tenant-create-name"
               className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
             >
-              工作空间名称 *
+              {t('tenant.createModal.nameLabel')} *
             </label>
             <input
               type="text"
@@ -89,7 +92,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
                 setFormData({ ...formData, name: e.target.value });
               }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-              placeholder="输入工作空间名称"
+              placeholder={t('tenant.createModal.namePlaceholder')}
               required
               disabled={isLoading}
               aria-required="true"
@@ -101,7 +104,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               htmlFor="tenant-create-description"
               className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
             >
-              描述
+              {t('tenant.createModal.descriptionLabel')}
             </label>
             <textarea
               id="tenant-create-description"
@@ -110,7 +113,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
                 setFormData({ ...formData, description: e.target.value });
               }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
-              placeholder="描述这个工作空间的用途"
+              placeholder={t('tenant.createModal.descriptionPlaceholder')}
               rows={3}
               disabled={isLoading}
               aria-describedby="tenant-create-description-help"
@@ -119,7 +122,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               id="tenant-create-description-help"
               className="text-xs text-gray-500 dark:text-slate-400"
             >
-              可选：描述工作空间的用途
+              {t('tenant.createModal.descriptionHint')}
             </span>
           </div>
 
@@ -128,7 +131,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               htmlFor="tenant-create-plan"
               className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
             >
-              计划类型
+              {t('tenant.createModal.planLabel')}
             </label>
             <select
               id="tenant-create-plan"
@@ -139,10 +142,10 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
               disabled={isLoading}
             >
-              <option value="free">免费版</option>
-              <option value="basic">基础版</option>
-              <option value="premium">高级版</option>
-              <option value="enterprise">企业版</option>
+              <option value="free">{t('tenant.createModal.planFree')}</option>
+              <option value="basic">{t('tenant.createModal.planBasic')}</option>
+              <option value="premium">{t('tenant.createModal.planPremium')}</option>
+              <option value="enterprise">{t('tenant.createModal.planEnterprise')}</option>
             </select>
           </div>
 
@@ -153,7 +156,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               disabled={isLoading}
             >
-              取消
+              {t('tenant.createModal.cancel')}
             </button>
             <button
               type="submit"
@@ -163,10 +166,10 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               {isLoading ? (
                 <div className="flex items-center justify-center space-x-2">
                   <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>创建中...</span>
+                  <span>{t('tenant.createModal.creating')}</span>
                 </div>
               ) : (
-                '创建'
+                t('tenant.createModal.submit')
               )}
             </button>
           </div>

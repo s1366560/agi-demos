@@ -30,6 +30,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { useTranslation } from 'react-i18next';
+
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import {
@@ -89,59 +91,59 @@ interface TypeConfigEntry {
 const TYPE_CONFIG: Record<HITLType, TypeConfigEntry> = {
   clarification: {
     icon: <HelpCircle style={{ color: 'var(--color-info)' }} size={16} />,
-    title: '需要澄清',
+    title: 'hitl.types.clarification.title',
     color: 'blue',
-    submitText: '确认回答',
+    submitText: 'hitl.types.clarification.submitText',
   },
   decision: {
     icon: <AlertCircle style={{ color: 'var(--color-warning)' }} size={16} />,
-    title: '需要决策',
+    title: 'hitl.types.decision.title',
     color: 'gold',
-    submitText: '确认决策',
+    submitText: 'hitl.types.decision.submitText',
   },
   env_var: {
     icon: <Key style={{ color: 'var(--color-success)' }} size={16} />,
-    title: '配置环境变量',
+    title: 'hitl.types.envVar.title',
     color: 'green',
-    submitText: '保存配置',
+    submitText: 'hitl.types.envVar.submitText',
   },
   permission: {
     icon: <ShieldCheck style={{ color: 'var(--color-tile-purple)' }} size={16} />,
-    title: '权限请求',
+    title: 'hitl.types.permission.title',
     color: 'purple',
-    submitText: '授权执行',
+    submitText: 'hitl.types.permission.submitText',
   },
 };
 
 const CLARIFICATION_TYPE_LABELS: Record<string, string> = {
-  scope: '范围确认',
-  approach: '方案选择',
-  prerequisite: '前置条件',
-  priority: '优先级',
-  custom: '自定义',
+  scope: 'hitl.clarificationType.scope',
+  approach: 'hitl.clarificationType.approach',
+  prerequisite: 'hitl.clarificationType.prerequisite',
+  priority: 'hitl.clarificationType.priority',
+  custom: 'hitl.clarificationType.custom',
 };
 
 const DECISION_TYPE_LABELS: Record<string, string> = {
-  branch: '分支选择',
-  method: '方法选择',
-  confirmation: '确认操作',
-  risk: '风险确认',
-  custom: '自定义',
+  branch: 'hitl.decisionType.branch',
+  method: 'hitl.decisionType.method',
+  confirmation: 'hitl.decisionType.confirmation',
+  risk: 'hitl.decisionType.risk',
+  custom: 'hitl.decisionType.custom',
 };
 
 const RISK_LEVEL_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   low: {
-    label: '低风险',
+    label: 'hitl.risk.low',
     color: 'green',
     icon: <ShieldCheck style={{ color: 'var(--color-success)' }} size={16} />,
   },
   medium: {
-    label: '中等风险',
+    label: 'hitl.risk.medium',
     color: 'gold',
     icon: <AlertTriangle style={{ color: 'var(--color-warning)' }} size={16} />,
   },
   high: {
-    label: '高风险',
+    label: 'hitl.risk.high',
     color: 'red',
     icon: <AlertTriangle style={{ color: 'var(--color-error)' }} size={16} />,
   },
@@ -157,6 +159,7 @@ interface UnifiedHITLPanelProps {
 }
 
 export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onClose }) => {
+  const { t } = useTranslation();
   const submitResponse = useUnifiedHITLStore((state) => state.submitResponse);
   const cancelRequest = useUnifiedHITLStore((state) => state.cancelRequest);
   const isSubmitting = useIsSubmitting(request.requestId);
@@ -220,11 +223,11 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
         <div className="flex items-center justify-between">
           <Space>
             {config.icon}
-            <span>{config.title}</span>
+            <span>{t(config.title)}</span>
             <SubtypeTag request={request} />
           </Space>
           {remainingTime !== null && (
-            <Tooltip title="剩余时间">
+            <Tooltip title={t('hitl.remainingTime')}>
               <Badge
                 count={`${Math.floor(remainingTime)}s`}
                 style={{
@@ -264,7 +267,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           isSubmitting={isSubmitting}
-          submitText={config.submitText}
+          submitText={t(config.submitText)}
         />
       </div>
     </Modal>
@@ -276,19 +279,22 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
 // =============================================================================
 
 const SubtypeTag: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) => {
+  const { t } = useTranslation();
   let label: string | undefined;
   let color = 'default';
 
   switch (request.hitlType) {
     case 'clarification':
       if (request.clarificationData?.clarificationType) {
-        label = CLARIFICATION_TYPE_LABELS[request.clarificationData.clarificationType];
+        const key = CLARIFICATION_TYPE_LABELS[request.clarificationData.clarificationType];
+        label = key ? t(key) : undefined;
         color = 'blue';
       }
       break;
     case 'decision':
       if (request.decisionData?.decisionType) {
-        label = DECISION_TYPE_LABELS[request.decisionData.decisionType];
+        const key = DECISION_TYPE_LABELS[request.decisionData.decisionType];
+        label = key ? t(key) : undefined;
         color = request.decisionData.decisionType === 'risk' ? 'red' : 'orange';
       }
       break;
@@ -301,7 +307,7 @@ const SubtypeTag: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) => {
     case 'permission':
       if (request.permissionData?.riskLevel) {
         const risk = RISK_LEVEL_CONFIG[request.permissionData.riskLevel];
-        label = risk?.label;
+        label = risk?.label ? t(risk.label) : undefined;
         color = risk?.color || 'purple';
       }
       break;
@@ -311,6 +317,7 @@ const SubtypeTag: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) => {
 };
 
 const ContextAlert: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) => {
+  const { t } = useTranslation();
   const context =
     request.hitlType === 'env_var'
       ? decodeEnvVarContext(request.envVarData?.context)
@@ -322,7 +329,7 @@ const ContextAlert: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) =>
 
   return (
     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-      <Text className="text-sm text-blue-700 dark:text-blue-300 font-semibold">上下文信息：</Text>
+      <Text className="text-sm text-blue-700 dark:text-blue-300 font-semibold">{t('hitl.contextHeading')}</Text>
       <div className="mt-2 space-y-1">
         {Object.entries(context).map(([key, value]) => (
           <div key={key} className="text-sm">
@@ -375,6 +382,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
   isSubmitting,
   submitText,
 }) => {
+  const { t } = useTranslation();
   const data = request.clarificationData;
   const hasOptions = data?.options && data.options.length > 0;
   const [selectedOption, setSelectedOption] = useState<string | null>(
@@ -430,7 +438,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
                       <Text strong>{optionLabel}</Text>
                       {option.recommended && (
                         <Tag color="green" className="text-xs">
-                          推荐
+                          {t('hitl.recommended')}
                         </Tag>
                       )}
                     </div>
@@ -447,14 +455,14 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
             {data?.allowCustom && (
               <Radio value="custom" className="w-full">
                 <div className="flex flex-col w-full">
-                  <Text strong>自定义输入</Text>
+                  <Text strong>{t('hitl.customAnswer')}</Text>
                   {selectedOption === 'custom' && (
                     <TextArea
                       value={customInput}
                       onChange={(e) => {
                         setCustomInput(e.target.value);
                       }}
-                      placeholder="输入您的答案..."
+                      placeholder={t('hitl.answerPlaceholder')}
                       rows={3}
                       className="mt-2"
                       autoFocus
@@ -467,26 +475,26 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
         </Radio.Group>
       ) : data?.allowCustom ? (
         <div className="space-y-2">
-          <Text type="secondary">暂无预设选项，请直接输入</Text>
+          <Text type="secondary">{t('hitl.noPresetOptions')}</Text>
           <TextArea
             value={customInput}
             onChange={(e) => {
               setCustomInput(e.target.value);
             }}
-            placeholder="输入您的答案..."
+            placeholder={t('hitl.answerPlaceholder')}
             rows={3}
             autoFocus
           />
         </div>
       ) : (
-        <Alert message="暂无可选选项" description="当前没有可供选择的选项" type="info" showIcon />
+        <Alert message={t('hitl.emptyOptionsMessage')} description={t('hitl.emptyOptionsDescription')} type="info" showIcon />
       )}
 
       <Divider />
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
-        <Button onClick={onCancel}>取消</Button>
+        <Button onClick={onCancel}>{t('hitl.cancel')}</Button>
         <Button
           type="primary"
           icon={<CheckCircle2 size={16} />}
@@ -512,6 +520,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
   isSubmitting,
   submitText,
 }) => {
+  const { t } = useTranslation();
   const data = request.decisionData;
   const hasOptions = data?.options && data.options.length > 0;
   const isMultiSelect = data?.selectionMode === 'multiple';
@@ -568,8 +577,8 @@ const DecisionContent: React.FC<HITLContentProps> = ({
       {/* Default option warning */}
       {data?.defaultOption && (
         <Alert
-          message="超时默认选项"
-          description={`如果您未在限定时间内做出决策，系统将自动选择：${defaultOptionLabel ?? ''}`}
+          message={t('hitl.timeoutDefaultMessage')}
+          description={t('hitl.timeoutDefaultDescription', { label: defaultOptionLabel ?? '' })}
           type="info"
           showIcon
         />
@@ -614,7 +623,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
             >
               <div className="flex items-center gap-2 mb-2">
                 <Radio checked={selectedOption === 'custom'} />
-                <Text strong>自定义决策</Text>
+                <Text strong>{t('hitl.customDecision')}</Text>
               </div>
               {selectedOption === 'custom' && (
                 <TextArea
@@ -622,7 +631,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
                   onChange={(e) => {
                     setCustomInput(e.target.value);
                   }}
-                  placeholder="输入您的决策..."
+                  placeholder={t('hitl.decisionPlaceholder')}
                   rows={3}
                   className="ml-6"
                   autoFocus
@@ -636,21 +645,21 @@ const DecisionContent: React.FC<HITLContentProps> = ({
         </div>
       ) : data?.allowCustom ? (
         <div className="space-y-2">
-          <Text type="secondary">暂无预设选项，请直接输入</Text>
+          <Text type="secondary">{t('hitl.noPresetOptions')}</Text>
           <TextArea
             value={customInput}
             onChange={(e) => {
               setCustomInput(e.target.value);
             }}
-            placeholder="输入您的决策..."
+            placeholder={t('hitl.decisionPlaceholder')}
             rows={3}
             autoFocus
           />
         </div>
       ) : (
         <Alert
-          message="暂无可选选项"
-          description="当前没有可供选择的决策选项"
+          message={t('hitl.emptyOptionsMessage')}
+          description={t('hitl.emptyDecisionDescription')}
           type="info"
           showIcon
         />
@@ -660,7 +669,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
-        <Button onClick={onCancel}>取消</Button>
+        <Button onClick={onCancel}>{t('hitl.cancel')}</Button>
         <Button
           type={hasHighRisk ? 'default' : 'primary'}
           danger={hasHighRisk ?? false}
@@ -669,7 +678,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
           disabled={isSubmitDisabled}
           loading={isSubmitting}
         >
-          {hasHighRisk ? '确认并承担风险' : submitText}
+          {hasHighRisk ? t('hitl.confirmAndAcceptRisk') : submitText}
         </Button>
       </div>
     </div>
@@ -682,6 +691,7 @@ const DecisionOptionCard: React.FC<{
   isMultiSelect?: boolean;
   onSelect: () => void;
 }> = ({ option, selected, isMultiSelect = false, onSelect }) => {
+  const { t } = useTranslation();
   const optionLabel = getOptionLabelText(option.label) ?? option.id;
   const optionRisks = getOptionRiskList(option.risks);
   const hasRisks = optionRisks.length > 0;
@@ -707,7 +717,7 @@ const DecisionOptionCard: React.FC<{
           </Text>
           {option.recommended && (
             <Tag color="green" className="text-xs">
-              推荐
+              {t('hitl.recommended')}
             </Tag>
           )}
         </div>
@@ -738,7 +748,7 @@ const DecisionOptionCard: React.FC<{
 
       {hasRisks && (
         <Alert
-          title="风险提示"
+          title={t('hitl.riskAlertTitle')}
           description={
             <ul className="list-disc list-inside space-y-1 text-sm">
               {optionRisks.map((risk, idx) => (
@@ -767,6 +777,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
   isSubmitting,
   submitText,
 }) => {
+  const { t } = useTranslation();
   const data = useMemo(
     () => decodeUnifiedEnvVarRequestData(request.envVarData),
     [request.envVarData]
@@ -803,7 +814,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
 
   const renderInput = (field: EnvVarField) => {
     const commonProps = {
-      placeholder: field.placeholder || `请输入${field.label}`,
+      placeholder: field.placeholder || t('hitl.envInputPlaceholder', { label: field.label }),
     };
 
     switch (field.inputType) {
@@ -840,7 +851,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
                 <span>{field.label}</span>
                 {field.required && (
                   <Tag color="red" className="text-xs">
-                    必填
+                    {t('hitl.envRequiredTag')}
                   </Tag>
                 )}
               </Space>
@@ -848,7 +859,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
             rules={[
               {
                 required: field.required,
-                message: `请输入${field.label}`,
+                message: t('hitl.envValidationMessage', { label: field.label }),
               },
             ]}
             extra={
@@ -867,8 +878,8 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
       {/* Security Notice */}
       {data?.fields.some((f) => f.inputType === 'password') && (
         <Alert
-          message="安全提示"
-          description="密码类型的环境变量将被加密存储，保护您的敏感信息。"
+          message={t('hitl.envSecurityTitle')}
+          description={t('hitl.envSecurityDescription')}
           type="warning"
           showIcon
         />
@@ -878,7 +889,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
-        <Button onClick={onCancel}>取消</Button>
+        <Button onClick={onCancel}>{t('hitl.cancel')}</Button>
         <Button
           type="primary"
           icon={<CheckCircle2 size={16} />}
@@ -902,6 +913,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
   onCancel: _onCancel,
   isSubmitting,
 }) => {
+  const { t } = useTranslation();
   const data = request.permissionData;
   const riskLevel = data?.riskLevel || 'medium';
   const riskConfig = RISK_LEVEL_CONFIG[riskLevel];
@@ -924,8 +936,8 @@ const PermissionContent: React.FC<HITLContentProps> = ({
       {riskLevel === 'high' && (
         <Alert
           type="warning"
-          message="高风险操作警告"
-          description="此操作可能对系统造成重大影响，请仔细审查后再决定。"
+          message={t('hitl.highRiskTitle')}
+          description={t('hitl.highRiskDescription')}
           showIcon
         />
       )}
@@ -935,21 +947,21 @@ const PermissionContent: React.FC<HITLContentProps> = ({
         <Descriptions.Item
           label={
             <Space>
-              <Code size={16} /> 工具名称
+              <Code size={16} /> {t('hitl.toolName')}
             </Space>
           }
         >
           <Text code>{data?.toolName}</Text>
         </Descriptions.Item>
-        <Descriptions.Item label="请求操作">
+        <Descriptions.Item label={t('hitl.requestedAction')}>
           <Text>{data?.action}</Text>
         </Descriptions.Item>
-        <Descriptions.Item label="风险等级">
+        <Descriptions.Item label={t('hitl.riskLevel')}>
           <Tag
             {...(riskConfig?.color != null ? { color: riskConfig.color } : {})}
             icon={riskConfig?.icon}
           >
-            {riskConfig?.label}
+            {riskConfig?.label ? t(riskConfig.label) : null}
           </Tag>
         </Descriptions.Item>
       </Descriptions>
@@ -957,7 +969,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
       {/* Request Description */}
       {data?.description && (
         <div>
-          <Text strong>请求描述：</Text>
+          <Text strong>{t('hitl.requestDescription')}</Text>
           <Paragraph className="mt-2">{data.description}</Paragraph>
         </div>
       )}
@@ -965,7 +977,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
       {/* Details */}
       {data?.details && Object.keys(data.details).length > 0 && (
         <div>
-          <Text strong>详细信息：</Text>
+          <Text strong>{t('hitl.detailsHeading')}</Text>
           <pre className="mt-2 p-3 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-auto max-h-48">
             {JSON.stringify(data.details, null, 2)}
           </pre>
@@ -977,12 +989,12 @@ const PermissionContent: React.FC<HITLContentProps> = ({
       {/* Actions */}
       <div className="flex justify-between">
         <Button danger icon={<XCircle size={16} />} onClick={handleDeny} loading={isSubmitting}>
-          拒绝
+          {t('hitl.deny')}
         </Button>
         <Space>
           {data?.allowRemember && (
             <Button onClick={handleGrantAlways} loading={isSubmitting}>
-              总是允许
+              {t('hitl.allowAlways')}
             </Button>
           )}
           <Button
@@ -991,7 +1003,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
             onClick={handleGrant}
             loading={isSubmitting}
           >
-            授权执行
+            {t('hitl.authorize')}
           </Button>
         </Space>
       </div>

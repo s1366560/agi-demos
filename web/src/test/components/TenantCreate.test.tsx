@@ -39,15 +39,15 @@ describe('TenantCreateModal', () => {
     it('should render modal when isOpen is true', () => {
       render(<TenantCreateModal {...defaultProps} />);
 
-      expect(screen.getByText('创建工作空间')).toBeInTheDocument();
-      expect(screen.getByLabelText('工作空间名称 *')).toBeInTheDocument();
-      expect(screen.getByLabelText('描述')).toBeInTheDocument();
+      expect(screen.getByText('Create workspace')).toBeInTheDocument();
+      expect(screen.getByLabelText('Workspace name *')).toBeInTheDocument();
+      expect(screen.getByLabelText('Description')).toBeInTheDocument();
     });
 
     it('should not render modal when isOpen is false', () => {
       render(<TenantCreateModal {...defaultProps} isOpen={false} />);
 
-      expect(screen.queryByText('创建工作空间')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create workspace')).not.toBeInTheDocument();
     });
   });
 
@@ -57,9 +57,9 @@ describe('TenantCreateModal', () => {
 
       render(<TenantCreateModal {...defaultProps} />);
 
-      const nameInput = screen.getByLabelText('工作空间名称 *');
-      const descriptionTextarea = screen.getByLabelText('描述');
-      const submitButton = screen.getByText('创建');
+      const nameInput = screen.getByLabelText('Workspace name *');
+      const descriptionTextarea = screen.getByLabelText('Description');
+      const submitButton = screen.getByText('Create');
 
       await fireEvent.change(nameInput, { target: { value: 'Test Tenant' } });
       await fireEvent.change(descriptionTextarea, { target: { value: 'Test Description' } });
@@ -77,8 +77,8 @@ describe('TenantCreateModal', () => {
     it('should call onSuccess and onClose after successful creation', async () => {
       render(<TenantCreateModal {...defaultProps} />);
 
-      const nameInput = screen.getByLabelText('工作空间名称 *');
-      const submitButton = screen.getByText('创建');
+      const nameInput = screen.getByLabelText('Workspace name *');
+      const submitButton = screen.getByText('Create');
 
       await fireEvent.change(nameInput, { target: { value: 'Test' } });
       await fireEvent.click(submitButton);
@@ -92,7 +92,7 @@ describe('TenantCreateModal', () => {
     it('should call onClose when cancel button is clicked', async () => {
       render(<TenantCreateModal {...defaultProps} />);
 
-      const cancelButton = screen.getByText('取消');
+      const cancelButton = screen.getByText('Cancel');
       await fireEvent.click(cancelButton);
 
       expect(mockOnClose).toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('TenantCreateModal', () => {
     it('should render without error message initially', async () => {
       mockedStore.error = null;
       render(<TenantCreateModal {...defaultProps} />);
-      expect(screen.queryByText(/创建失败/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/create failed/i)).not.toBeInTheDocument();
     });
 
     it('should call clearError when invoked', async () => {
@@ -128,8 +128,8 @@ describe('TenantCreateModal', () => {
   describe('Loading States', () => {
     it('should submit when form is valid', async () => {
       render(<TenantCreateModal {...defaultProps} />);
-      const nameInput = screen.getByLabelText('工作空间名称 *');
-      const submitButton = screen.getByText('创建');
+      const nameInput = screen.getByLabelText('Workspace name *');
+      const submitButton = screen.getByText('Create');
       await fireEvent.change(nameInput, { target: { value: 'Test' } });
       await fireEvent.click(submitButton);
       expect(mockedStore.createTenant).toHaveBeenCalled();
@@ -137,8 +137,8 @@ describe('TenantCreateModal', () => {
 
     it('inputs remain enabled when not loading', async () => {
       render(<TenantCreateModal {...defaultProps} />);
-      const nameInput = screen.getByLabelText('工作空间名称 *');
-      const submitButton = screen.getByText('创建');
+      const nameInput = screen.getByLabelText('Workspace name *');
+      const submitButton = screen.getByText('Create');
       await fireEvent.change(nameInput, { target: { value: 'Test' } });
       expect(nameInput).not.toBeDisabled();
       expect(submitButton).not.toBeDisabled();

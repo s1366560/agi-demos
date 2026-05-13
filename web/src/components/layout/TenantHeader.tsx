@@ -38,6 +38,7 @@ import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 import { useThemeStore } from '@/stores/theme';
 import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
+import { authAPI } from '@/services/api';
 
 import { deriveTopNavigationItems } from '@/config/navigation';
 
@@ -398,7 +399,7 @@ function HeaderUserMenu({
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const user = useUser();
-  const { logout } = useAuthActions();
+  const { logout, setUser } = useAuthActions();
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
   const tenants = useTenantStore((state) => state.tenants);
@@ -455,9 +456,22 @@ function HeaderUserMenu({
     setTheme(themes[(idx + 1) % themes.length] ?? 'light');
   };
 
+  // Prefer the resolved tag (i18next normalizes `zh` → `zh-CN` when
+  // `nonExplicitSupportedLngs` is set); fall back to the raw value.
+  const activeLanguage = i18n.resolvedLanguage || i18n.language || 'en-US';
+  const isZh = activeLanguage.toLowerCase().startsWith('zh');
+
   const toggleLanguage = () => {
-    const next = i18n.language === 'zh-CN' ? 'en-US' : 'zh-CN';
+    const next = isZh ? 'en-US' : 'zh-CN';
     void i18n.changeLanguage(next);
+    authAPI
+      .updatePreferredLanguage(next)
+      .then((updated) => {
+        setUser(updated);
+      })
+      .catch(() => {
+        /* swallow: local i18n already updated */
+      });
   };
 
   const { icon: themeIcon, label: themeLabel } = getThemePresentation(normalizedTheme, t);
@@ -523,7 +537,7 @@ function HeaderUserMenu({
                 {t('user.language', 'Language')}
               </span>
               <span className="text-xs text-slate-400">
-                {i18n.language === 'zh-CN' ? '中文' : 'EN'}
+                {isZh ? '中文' : 'EN'}
               </span>
             </button>
           </div>

@@ -232,6 +232,7 @@ export interface UserProfile {
 export interface UserUpdate {
   name?: string | undefined;
   profile?: UserProfile | undefined;
+  preferred_language?: 'en-US' | 'zh-CN' | undefined;
 }
 
 export interface User {
@@ -244,6 +245,7 @@ export interface User {
   must_change_password?: boolean | undefined;
   tenant_id?: string | undefined; // Keep for compatibility if needed, but backend removed it from response? No, backend removed it.
   profile?: UserProfile | undefined;
+  preferred_language?: 'en-US' | 'zh-CN' | undefined;
 }
 
 export interface UserTenant {

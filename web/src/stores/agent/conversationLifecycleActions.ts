@@ -12,23 +12,33 @@ import { logger } from '../../utils/logger';
 import { tabSync } from '../../utils/tabSync';
 
 import { useConversationsStore } from './conversationsStore';
-import {
-  clearDeltaBuffers,
-  deleteDeltaBuffer,
-} from './deltaBuffers';
+import { clearDeltaBuffers, deleteDeltaBuffer } from './deltaBuffers';
 import { useExecutionStore } from './executionStore';
 import { useAgentHITLStore } from './hitlStore';
-import {
-  touchConversation,
-  cancelPendingSave,
-  removeFromAccessOrder,
-} from './persistence';
+import { touchConversation, cancelPendingSave, removeFromAccessOrder } from './persistence';
 import { useStreamingStore } from './streamingStore';
 import { useTimelineStore } from './timelineStore';
 
-import type { AgentV3State } from './types';
+import type { AgentV3State, LoadConversationsOptions } from './types';
 import type { ConversationState } from '../../types/conversationState';
 import type { StoreApi } from 'zustand';
+
+function isAbortSignal(
+  value: AbortSignal | LoadConversationsOptions | undefined
+): value is AbortSignal {
+  return (
+    typeof value === 'object' && 'aborted' in value && typeof value.addEventListener === 'function'
+  );
+}
+
+function normalizeLoadOptions(
+  signalOrOptions: AbortSignal | LoadConversationsOptions | undefined
+): LoadConversationsOptions {
+  if (isAbortSignal(signalOrOptions)) {
+    return { signal: signalOrOptions };
+  }
+  return signalOrOptions ?? {};
+}
 
 export interface ConversationLifecycleDeps {
   get: () => {
@@ -45,24 +55,31 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
   const { get, set, resetCanvasForConversationScope } = deps;
 
   return {
-    loadConversations: async (projectId: string, signal?: AbortSignal): Promise<void> => {
+    loadConversations: async (
+      projectId: string,
+      signalOrOptions?: AbortSignal | LoadConversationsOptions
+    ): Promise<void> => {
       logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
+      const options = normalizeLoadOptions(signalOrOptions);
 
       // Prevent duplicate calls for the same project
       const currentConvos = get().conversations;
       const firstConvoProject = currentConvos[0]?.project_id;
-      if (currentConvos.length > 0 && firstConvoProject === projectId) {
-        logger.debug(
-          `[agentV3] Conversations already loaded for project ${projectId}, skipping`
-        );
+      if (!options.force && currentConvos.length > 0 && firstConvoProject === projectId) {
+        logger.debug(`[agentV3] Conversations already loaded for project ${projectId}, skipping`);
         return;
       }
 
       try {
         // Delegate to conversationsStore for API call + list management
-        await useConversationsStore.getState().listConversations(projectId, undefined, undefined, signal);
+        const limit =
+          options.limit ?? (options.force ? Math.max(currentConvos.length, 10) : undefined);
+        await useConversationsStore.getState().listConversations(projectId, undefined, limit, {
+          signal: options.signal,
+          silent: options.silent,
+        });
         // If the request was aborted (e.g. user switched projects), stop here.
-        if (signal?.aborted) {
+        if (options.signal?.aborted) {
           return;
         }
         // Sync back to agentV3 state (strangler fig dual-write)
@@ -72,9 +89,15 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
           hasMoreConversations: convState.hasMoreConversations,
           conversationsTotal: convState.conversationsTotal,
         });
-        logger.debug(`[agentV3] Loaded ${String(convState.conversations.length)} conversations via conversationsStore`);
+        logger.debug(
+          `[agentV3] Loaded ${String(convState.conversations.length)} conversations via conversationsStore`
+        );
       } catch (error) {
-        if (signal?.aborted || (error as { name?: string })?.name === 'CanceledError') {
+        if (options.signal?.aborted || (error as { name?: string }).name === 'CanceledError') {
+          return;
+        }
+        if (options.silent) {
+          logger.debug('[agentV3] Silent conversation refresh failed', error);
           return;
         }
         console.error('[agentV3] Failed to list conversations', error);
@@ -139,7 +162,11 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
       }
     },
 
-    renameConversation: async (conversationId: string, projectId: string, title: string): Promise<void> => {
+    renameConversation: async (
+      conversationId: string,
+      projectId: string,
+      title: string
+    ): Promise<void> => {
       try {
         await useConversationsStore.getState().renameConversation(conversationId, projectId, title);
         set({ conversations: useConversationsStore.getState().conversations });
@@ -153,7 +180,9 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
     createNewConversation: async (projectId: string): Promise<string | null> => {
       set({ isCreatingConversation: true });
       try {
-        const newConv = await useConversationsStore.getState().createConversation(projectId, 'New Conversation');
+        const newConv = await useConversationsStore
+          .getState()
+          .createConversation(projectId, 'New Conversation');
         resetCanvasForConversationScope();
 
         const newConvState = createDefaultConversationState();

@@ -66,7 +66,7 @@ describe('NotificationPanel', () => {
 
       render(<NotificationPanel />);
 
-      const bellButton = screen.getByTitle('通知');
+      const bellButton = screen.getByTitle('Notifications');
       expect(bellButton).toBeInTheDocument();
       expect(bellButton.textContent).toContain('3');
     });
@@ -76,7 +76,7 @@ describe('NotificationPanel', () => {
 
       render(<NotificationPanel />);
 
-      const bellButton = screen.getByTitle('通知');
+      const bellButton = screen.getByTitle('Notifications');
       expect(bellButton).toBeInTheDocument();
       expect(bellButton.textContent).toContain('9+');
     });
@@ -89,7 +89,7 @@ describe('NotificationPanel', () => {
       const bellButton = screen.getByRole('button', { name: /notifications/i });
       fireEvent.click(bellButton);
 
-      expect(screen.getByText('通知')).toBeInTheDocument();
+      expect(screen.getByText('Notifications')).toBeInTheDocument();
     });
 
     it('should close panel when X button is clicked', () => {
@@ -103,7 +103,7 @@ describe('NotificationPanel', () => {
       fireEvent.click(closeButton);
 
       // Panel should be closed
-      expect(screen.queryByText('通知')).not.toBeInTheDocument();
+      expect(screen.queryByText('Notifications')).not.toBeInTheDocument();
     });
 
     it('should close panel when clicking outside', () => {
@@ -113,13 +113,13 @@ describe('NotificationPanel', () => {
       fireEvent.click(bellButton);
 
       // Verify panel is open
-      expect(screen.getByText('通知')).toBeInTheDocument();
+      expect(screen.getByText('Notifications')).toBeInTheDocument();
 
       // Click outside the panel
       fireEvent.mouseDown(document.body);
 
       // Panel should be closed immediately (synchronous in this case)
-      expect(screen.queryByText('通知')).not.toBeInTheDocument();
+      expect(screen.queryByText('Notifications')).not.toBeInTheDocument();
     });
   });
 
@@ -134,7 +134,7 @@ describe('NotificationPanel', () => {
 
       // Check for the loading spinner container
       const loadingContainer = screen
-        .getByText('通知')
+        .getByText('Notifications')
         .closest('div')
         ?.nextElementSibling?.querySelector('[class*="animate-spin"]');
       expect(loadingContainer).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('NotificationPanel', () => {
       const bellButton = screen.getByRole('button', { name: /notifications/i });
       fireEvent.click(bellButton);
 
-      expect(screen.getByText('暂无通知')).toBeInTheDocument();
+      expect(screen.getByText('No notifications')).toBeInTheDocument();
     });
 
     it('should render notifications list', () => {
@@ -177,7 +177,7 @@ describe('NotificationPanel', () => {
       render(<NotificationPanel />);
 
       // Find bell button by title since it has a badge
-      const bellButton = screen.getByTitle('通知');
+      const bellButton = screen.getByTitle('Notifications');
       fireEvent.click(bellButton);
 
       expect(screen.getByText('Test Notification')).toBeInTheDocument();
@@ -202,10 +202,10 @@ describe('NotificationPanel', () => {
       render(<NotificationPanel />);
 
       // Find bell button by title since it has a badge
-      const bellButton = screen.getByTitle('通知');
+      const bellButton = screen.getByTitle('Notifications');
       fireEvent.click(bellButton);
 
-      expect(screen.getByText('全部已读')).toBeInTheDocument();
+      expect(screen.getByText('Mark all as read')).toBeInTheDocument();
     });
   });
 
@@ -232,7 +232,7 @@ describe('NotificationPanel', () => {
 
       render(<NotificationPanel />);
 
-      const bellButton = screen.getByTitle('通知');
+      const bellButton = screen.getByTitle('Notifications');
       fireEvent.click(bellButton);
 
       // Click on the notification div (the container) using the first "Test" text (the title)
@@ -267,7 +267,7 @@ describe('NotificationPanel', () => {
       const bellButton = screen.getByRole('button', { name: /notifications/i });
       fireEvent.click(bellButton);
 
-      const deleteButtons = screen.getAllByTitle('删除');
+      const deleteButtons = screen.getAllByTitle('Delete');
       fireEvent.click(deleteButtons[0]);
 
       // The delete is async but we just check that it was called
@@ -291,10 +291,10 @@ describe('NotificationPanel', () => {
 
       render(<NotificationPanel />);
 
-      const bellButton = screen.getByTitle('通知');
+      const bellButton = screen.getByTitle('Notifications');
       fireEvent.click(bellButton);
 
-      const markAllButton = screen.getByText('全部已读');
+      const markAllButton = screen.getByText('Mark all as read');
       fireEvent.click(markAllButton);
 
       expect(mockMarkAllAsRead).toHaveBeenCalled();

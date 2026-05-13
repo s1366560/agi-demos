@@ -69,7 +69,13 @@
       "hours": "小时",
       "days": "天",
       "never": "从不",
-      "updated": "更新于 {{time}}"
+      "updated": "更新于 {{time}}",
+      "secondsAgo": "{{count}}秒前",
+      "minutesAgo": "{{count}}分钟前",
+      "hoursAgo": "{{count}}小时前",
+      "yesterday": "昨天",
+      "daysAgo": "{{count}}天前",
+      "weeksAgo": "{{count}}周前"
     },
     "stats": {
       "storage": "存储",
@@ -110,7 +116,14 @@
       "tags": "标签"
     },
     "signIn": "登录",
-    "goHome": "返回首页"
+    "goHome": "返回首页",
+    "notifications": {
+      "title": "通知",
+      "empty": "暂无通知",
+      "markAllRead": "全部已读",
+      "markAsRead": "标记为已读",
+      "delete": "删除"
+    }
   },
   "login": {
     "title": "欢迎回来",
@@ -166,6 +179,9 @@
         "noProvider": "未指定 OAuth 提供商",
         "exchangeFailed": "OAuth 认证失败"
       }
+    },
+    "errors": {
+      "invalidCredentials": "登录失败，请检查您的凭据"
     }
   },
   "nav": {
@@ -222,7 +238,8 @@
     "instanceTemplates": "实例模板",
     "auditLogs": "审计日志",
     "orgSettings": "组织设置",
-    "blackboard": "中央黑板"
+    "blackboard": "中央黑板",
+    "tenant": "组织"
   },
   "blackboard": {
     "title": "中央黑板",
@@ -674,7 +691,10 @@
   "user": {
     "profile": "个人资料",
     "settings": "设置",
-    "logout": "登出"
+    "logout": "登出",
+    "theme": "主题",
+    "language": "语言",
+    "billing": "账单"
   },
   "tenant": {
     "welcome": "欢迎来到 MemStack",
@@ -2368,6 +2388,45 @@
       "deleteConfirm": "确定要删除此模式吗？",
       "deleteSuccess": "模式删除成功",
       "createSuccess": "模式创建成功"
+    },
+    "selector": {
+      "workspacesTitle": "工作空间",
+      "newButton": "新建",
+      "emptyMessage": "暂无工作空间",
+      "createButton": "创建工作空间"
+    },
+    "projectManager": {
+      "searchPlaceholder": "搜索项目...",
+      "deleteConfirm": "确定要删除这个项目吗？此操作不可恢复。",
+      "filterAll": "全部",
+      "settingsTooltip": "项目设置",
+      "createdAt": "创建于 {{date}}",
+      "states": {
+        "noTenantMessage": "请先选择工作空间",
+        "noTenantSubtitle": "选择一个工作空间来查看和管理项目",
+        "noResultsMessage": "没有找到匹配的项目",
+        "noResultsSubtitle": "尝试使用不同的搜索关键词",
+        "noProjectsMessage": "开始创建你的第一个项目",
+        "noProjectsSubtitle": "创建项目来开始组织你的记忆和知识",
+        "createProjectButton": "创建项目",
+        "errorDismiss": "关闭"
+      }
+    },
+    "createModal": {
+      "title": "创建工作空间",
+      "nameLabel": "工作空间名称",
+      "namePlaceholder": "输入工作空间名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "描述这个工作空间的用途",
+      "descriptionHint": "可选：描述工作空间的用途",
+      "planLabel": "计划类型",
+      "planFree": "免费版",
+      "planBasic": "基础版",
+      "planPremium": "高级版",
+      "planEnterprise": "企业版",
+      "cancel": "取消",
+      "creating": "创建中...",
+      "submit": "创建"
     }
   },
   "project": {
@@ -2447,7 +2506,37 @@
       "sandboxResourceLimit": "资源限制",
       "sandboxMemory": "内存（MB）",
       "sandboxCPU": "CPU 核数",
-      "sandboxSave": "保存"
+      "sandboxSave": "保存",
+      "nameLabel": "项目名称 *",
+      "namePlaceholder": "输入项目名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "添加项目描述...",
+      "publicLabel": "公开项目",
+      "publicHint": "公开项目可以被任何拥有链接的人访问",
+      "agentModeLabel": "Agent 会话模式",
+      "agentMode": {
+        "singleAgent": {
+          "label": "单 Agent(默认)",
+          "hint": "每个会话只路由到一个 Agent，HITL 以私密 modal 呈现。"
+        },
+        "multiShared": {
+          "label": "多 Agent 共享频道",
+          "hint": "多个 Agent 在同一会话中协作；HITL 将以频道消息形式公开。"
+        },
+        "multiIsolated": {
+          "label": "多 Agent 独立线程",
+          "hint": "每个 Agent 保留独立线程，并排展示，互不干扰。"
+        }
+      },
+      "projectIdPrefix": "项目ID:",
+      "createdAtPrefix": "创建于",
+      "deleteConfirmMessage": "确定要删除此项目吗？此操作不可恢复，所有相关的记忆和数据都将被删除。",
+      "cancel": "取消",
+      "deleting": "删除中...",
+      "confirmDelete": "确认删除",
+      "deleteProject": "删除项目",
+      "saving": "保存中...",
+      "saveChanges": "保存更改"
     },
     "search": {
       "options": {
@@ -3384,6 +3473,62 @@
         "failedToLoadSchema": "加载方案失败"
       },
       "pleaseEnter": "请输入 {{field}}"
+    },
+    "agentTeammates": {
+      "startConversation": "开始对话"
+    },
+    "create": {
+      "title": "创建项目",
+      "closeAria": "关闭创建项目对话框",
+      "tabBasic": "基础设置",
+      "tabMemory": "记忆规则",
+      "tabGraph": "图谱配置",
+      "tabSandbox": "沙箱设置",
+      "nameLabel": "项目名称 *",
+      "namePlaceholder": "输入项目名称",
+      "descriptionLabel": "项目描述",
+      "descriptionPlaceholder": "描述这个项目的目标和用途",
+      "descriptionHelp": "可选：描述项目的目标和用途",
+      "statusLabel": "项目状态",
+      "statusActive": "活跃",
+      "statusPaused": "暂停",
+      "statusArchived": "归档",
+      "maxEpisodesLabel": "最大记忆片段数",
+      "rangeEpisodes": "范围：100 - 10000",
+      "retentionDaysLabel": "保留天数",
+      "rangeRetentionDays": "范围：1 - 365 天",
+      "refreshIntervalLabel": "自动刷新间隔（小时）",
+      "rangeRefreshHours": "范围：1 - 168 小时",
+      "autoRefreshLabel": "启用自动刷新",
+      "maxNodesLabel": "最大节点数",
+      "rangeNodes": "范围：100 - 50000",
+      "maxEdgesLabel": "最大边数",
+      "rangeEdges": "范围：100 - 100000",
+      "similarityLabel": "相似度阈值",
+      "communityDetectionLabel": "启用社区检测",
+      "sandboxIntroPrefix": "沙箱",
+      "sandboxIntroBody": "是 Agent 执行代码和工具的安全隔离环境。您可以选择使用云端托管沙箱或在本地运行沙箱。",
+      "sandboxTypeLabel": "沙箱类型",
+      "cloudSandbox": "云端沙箱",
+      "recommended": "推荐",
+      "cloudSandboxDescription": "在云端 Docker 容器中运行，无需本地配置，开箱即用。适合大多数用户。",
+      "localSandbox": "本地沙箱",
+      "advanced": "高级",
+      "localSandboxDescription": "在您的本地电脑运行，支持访问本地文件和资源。需要安装桌面客户端。",
+      "localConfigHeading": "本地沙箱配置",
+      "tunnelUrlLabel": "隧道 URL",
+      "optional": "(可选)",
+      "tunnelUrlHelp": "使用 ngrok 或 cloudflare tunnel 生成的公网地址，用于云端平台连接到您的本地沙箱",
+      "workspacePathLabel": "工作目录",
+      "workspacePathHelp": "Agent 可以访问的本地工作目录路径",
+      "tipPrefix": "提示：",
+      "tipIntro": "选择本地沙箱后，您需要：",
+      "tipStep1": "下载并安装 MemStack 桌面客户端",
+      "tipStep2": "启动本地沙箱服务",
+      "tipStep3": "在客户端中配置隧道连接",
+      "cancel": "取消",
+      "creating": "创建中...",
+      "submit": "创建项目"
     }
   },
   "dashboard": {
@@ -3588,11 +3733,40 @@
       },
       "error": {
         "label": "错误",
-        "prefix": "错误"
+        "prefix": "错误",
+        "description": "Agent 遇到错误"
       },
       "planMode": {
         "tooltip": "{{mode}} 模式 - Agent 正在创建详细计划",
         "label": "计划"
+      },
+      "notStarted": {
+        "label": "未启动",
+        "description": "Agent 尚未初始化，将在首次请求时自动启动"
+      },
+      "initializing": {
+        "label": "初始化中",
+        "description": "正在加载工具、技能和配置"
+      },
+      "ready": {
+        "label": "就绪",
+        "description": "Agent 已就绪，{{count}} 个工具"
+      },
+      "running": {
+        "label": "执行中",
+        "description": "正在处理聊天请求"
+      },
+      "paused": {
+        "label": "已暂停",
+        "description": "Agent 已暂停，不接收新请求"
+      },
+      "shuttingDown": {
+        "label": "关闭中",
+        "description": "Agent 正在关闭"
+      },
+      "unknown": {
+        "label": "未知",
+        "description": "Agent 状态未知"
       }
     },
     "chat": {
@@ -4162,6 +4336,32 @@
         "minutes": "分",
         "hours": "小时"
       }
+    },
+    "executionTimeline": {
+      "title": "执行计划",
+      "stepsCompleted": "{{completed}}/{{total}} 步骤已完成",
+      "matchedPattern": "匹配模式 ({{percent}}%)",
+      "statusCompleted": "已完成",
+      "statusRunning": "执行中",
+      "statusWaiting": "等待中",
+      "toolsLabel": "{{count}} 工具",
+      "runningEllipsis": "执行中...",
+      "expandAll": "展开全部",
+      "collapseAll": "收起全部"
+    },
+    "costTracker": {
+      "inputTokens": "输入 Tokens: {{value}}",
+      "outputTokens": "输出 Tokens: {{value}}",
+      "totalTokens": "总计: {{value}}",
+      "costLabel": "费用: {{value}}",
+      "modelLabel": "模型: {{model}}",
+      "empty": "暂无费用数据",
+      "modelPrefix": "模型：",
+      "tokenUsage": "Token 使用",
+      "inputShort": "输入:",
+      "outputShort": "输出:",
+      "estimatedCost": "估算费用",
+      "updatedAt": "更新于: {{time}}"
     }
   },
   "user_profile": {
@@ -4674,6 +4874,31 @@
         "cleanupResolvedDesc": "这将永久删除所有已解决消息。此操作无法撤销。"
       },
       "errorTypeDistribution": "错误类型分布"
+    },
+    "skillReview": {
+      "pageTitle": "Skill 审核（管理员）",
+      "pageDescription": "审核由租户提交的 Skill 候选。通过后会以当前版本号发布到精选库；驳回会记录审核意见。",
+      "tabs": {
+        "pending": "待审核",
+        "approved": "已通过",
+        "rejected": "已驳回",
+        "withdrawn": "已撤回"
+      },
+      "approveTitle": "通过审核",
+      "rejectTitle": "驳回提交",
+      "approveDescription": "审核通过将把此 Skill 快照发布到精选库。",
+      "rejectDescription": "驳回提交将关闭此记录并记录你的审核意见。",
+      "releaseVersion": "发布版本号",
+      "trustSubmitter": "沿用提交者版本 (v{{version}})",
+      "bumpPatch": "覆盖为 patch",
+      "bumpMinor": "覆盖为 minor",
+      "bumpMajor": "覆盖为 major",
+      "effectiveVersion": "最终发布版本：",
+      "deprecateNote": "（若同一来源已有激活版本，旧版本会自动标记为 deprecated）",
+      "notePlaceholder": "审核意见（可选）",
+      "submissionNotePrefix": "提交备注：",
+      "reviewNotePrefix": "审核意见：",
+      "emptyDescription": "暂无 {{status}} 的提交"
     }
   },
   "system": {
@@ -4741,5 +4966,304 @@
     "signInSubtitle": "您必须登录后才能批准 CLI 登录。登录后将自动返回此页。",
     "copyBackLink": "复制返回链接",
     "footer": "仅批准您自己刚刚生成的代码。系统将向等待中的 CLI 颁发 30 天 API 密钥。"
+  },
+  "skill": {
+    "submit": {
+      "successMessage": "已提交至精选库审核队列",
+      "titleWithName": "提交 \"{{name}}\" 到精选库",
+      "titleGeneric": "提交到精选库",
+      "okText": "提交",
+      "description": "提交后管理员会审核此 Skill 的内容；通过后将发布到精选库，所有租户都可以 fork。",
+      "versionLabel": "版本号（semver）",
+      "versionFormatHint": "格式需为 MAJOR.MINOR.PATCH（例如 1.2.3）",
+      "noteLabel": "提交备注（可选）",
+      "notePlaceholder": "为什么这个 Skill 值得加入精选库？"
+    },
+    "curated": {
+      "pageTitle": "精选 Skill 库",
+      "pageDescription": "精选库包含管理员审核通过的 Skill 模板，所有租户都可以 fork 到自己的私有库进行修改。",
+      "tabCurated": "精选库",
+      "tabSubmissions": "我的提交",
+      "publishedCount": "{{count}} 个已发布 Skill",
+      "includeDeprecatedAria": "包含已弃用版本",
+      "includeDeprecatedLabel": "包含已弃用版本",
+      "emptyCurated": "精选库暂无已发布的 Skill",
+      "emptySubmissions": "暂无提交记录",
+      "deprecatedSuffix": "（已弃用）",
+      "versionCount": " · {{count}} 个版本",
+      "forkButton": "Fork 到私有库",
+      "forkDialogContent": "选择复制到私有库时要包含的内容：",
+      "forkIncludeExecutor": "执行器（tools + full_content）",
+      "forkIncludeMetadata": "元数据 (metadata)",
+      "withdrawSuccess": "已撤回提交",
+      "withdrawFailed": "撤回失败",
+      "noteLabel": "备注：",
+      "reviewNoteLabel": "审核意见：",
+      "withdrawConfirmTitle": "撤回此提交？",
+      "withdrawConfirmDescription": "撤回后状态变为 withdrawn，不再进入审核队列。",
+      "withdrawOk": "撤回",
+      "withdrawCancel": "取消",
+      "withdrawAction": "撤回"
+    }
+  },
+  "mcp": {
+    "tools": {
+      "allServers": "全部服务器",
+      "loading": "加载工具中...",
+      "totalTools": "工具总数",
+      "serversWithTools": "有工具的服务器",
+      "showCount": "显示 {{shown}} / {{total}}",
+      "searchPlaceholder": "搜索工具名称或描述...",
+      "filterByServer": "按服务器筛选",
+      "emptyNoTools": "暂无工具",
+      "emptyNoMatch": "无匹配工具",
+      "hintSync": "同步 MCP 服务器以发现可用工具",
+      "hintAdjust": "尝试调整搜索或筛选条件"
+    },
+    "apps": {
+      "deleteSuccess": "MCP 应用已删除",
+      "deleteFailed": "删除 MCP 应用失败",
+      "refreshSuccess": "应用已刷新",
+      "retryFailed": "重试失败",
+      "loading": "加载 MCP 应用中...",
+      "totalApps": "应用总数",
+      "statusReady": "就绪",
+      "statusLoading": "加载中",
+      "statusError": "错误",
+      "searchPlaceholder": "搜索应用...",
+      "refresh": "刷新",
+      "empty": "暂无 MCP 应用",
+      "emptyHint": "发现 MCP 服务器后，应用将自动显示在此处"
+    },
+    "appCard": {
+      "runtimePrefix": "运行：{{value}}",
+      "resourceUri": "资源地址",
+      "noResourceUri": "无资源地址",
+      "refreshWithStatus": "刷新 {{status}}",
+      "retry": "重试",
+      "slowLoadHint": "加载时间较长，请尝试刷新",
+      "developerAI": "AI",
+      "developerUser": "用户",
+      "open": "打开",
+      "deleteConfirm": "确定要删除此应用吗？",
+      "deleteOk": "删除",
+      "deleteCancel": "取消"
+    },
+    "servers": {
+      "searchPlaceholder": "搜索服务器名称或描述...",
+      "statusAll": "全部状态",
+      "statusEnabled": "已启用",
+      "statusDisabled": "已禁用",
+      "typePlaceholder": "类型",
+      "typeAll": "全部类型",
+      "runtimeAll": "全部运行状态",
+      "runtimeRunning": "运行中",
+      "runtimeStarting": "启动中",
+      "runtimeError": "错误",
+      "runtimeDisabled": "已禁用",
+      "runtimeUnknown": "未知",
+      "refreshTooltip": "刷新列表",
+      "reconcileTooltip": "与沙盒协调运行时",
+      "reconcileButton": "协调",
+      "createButton": "创建服务器",
+      "filterSummary": "显示 {{shown}} / {{total}} 个服务器",
+      "clearFilters": "清除筛选",
+      "enableSuccess": "服务器已启用",
+      "disableSuccess": "服务器已禁用",
+      "syncSuccess": "服务器同步成功",
+      "connectSuccess": "连接成功",
+      "connectSuccessDetail": "连接成功 ({{latency}}ms, {{count}} 个工具)",
+      "connectFailed": "连接失败：{{message}}",
+      "deleteSuccess": "服务器已删除",
+      "selectProjectFirst": "请先选择项目",
+      "reconcileSuccess": "运行时已协调：恢复 {{restored}} 个，已运行 {{running}} 个，失败 {{failed}} 个",
+      "reconcileFailed": "协调 MCP 运行时失败",
+      "errorBanner": "{{count}} 个服务器存在同步错误，请检查服务器卡片详情",
+      "loadingServers": "加载服务器中...",
+      "emptyTitle": "暂无 MCP 服务器",
+      "emptyHint": "创建第一个 MCP 服务器，启用强大的工具和功能",
+      "emptyCreateButton": "创建服务器",
+      "noMatch": "没有符合筛选条件的服务器",
+      "clearAllFilters": "清除所有筛选"
+    }
+  },
+  "memory": {
+    "edit": {
+      "title": "编辑记忆",
+      "titleLabel": "标题",
+      "titlePlaceholder": "输入记忆标题",
+      "contentLabel": "内容",
+      "contentPlaceholder": "输入记忆内容...",
+      "tagsLabel": "标签",
+      "removeTagAria": "移除标签 {{tag}}",
+      "addTag": "添加",
+      "optimisticLockWarning": "⚠️ 此记忆使用乐观锁定。如果其他用户同时修改了此记忆，您需要刷新页面后重试。",
+      "cancel": "取消",
+      "saving": "保存中...",
+      "save": "保存更改"
+    },
+    "detail": {
+      "editTitle": "编辑记忆",
+      "title": "记忆详情",
+      "saveAria": "保存",
+      "saveTitle": "保存",
+      "cancelAria": "取消编辑",
+      "cancelTitle": "取消",
+      "editAria": "编辑",
+      "editTitleTooltip": "编辑",
+      "shareAria": "分享",
+      "shareTitle": "分享",
+      "downloadAria": "下载",
+      "downloadTitle": "下载",
+      "closeAria": "关闭",
+      "versionConflict": "版本冲突：该记忆已被其他用户修改。请刷新页面后重试。",
+      "saveFailed": "保存失败，请稍后重试",
+      "linkCopied": "链接已复制到剪贴板！",
+      "linkCopyFailed": "复制链接失败",
+      "titlePlaceholder": "记忆标题",
+      "userPrefix": "用户:",
+      "createdPrefix": "创建:",
+      "updatedPrefix": "更新:",
+      "contentHeading": "记忆内容",
+      "contentPlaceholder": "输入记忆内容...",
+      "entitiesHeading": "实体信息",
+      "relationshipsHeading": "关系信息",
+      "confidencePrefix": "置信度:",
+      "metadataHeading": "元数据",
+      "projectPrefix": "项目:",
+      "viewCountPrefix": "查看次数:"
+    },
+    "manager": {
+      "selectProjectFirstHeading": "请先选择项目",
+      "selectProjectHint": "选择一个项目来查看和管理记忆",
+      "title": "记忆管理",
+      "countSuffix": "({{count}} 条)",
+      "newButton": "新建记忆",
+      "searchPlaceholder": "搜索记忆内容...",
+      "typeAll": "所有类型",
+      "typeText": "文本",
+      "typeDocument": "文档",
+      "typeImage": "图片",
+      "typeVideo": "视频",
+      "userFilterPlaceholder": "按用户筛选...",
+      "search": "搜索",
+      "reset": "重置",
+      "emptyHeading": "暂无记忆",
+      "emptyNoMatch": "没有找到匹配的记忆",
+      "emptyHint": "开始创建你的第一条记忆",
+      "createMemory": "创建记忆",
+      "deleteConfirm": "确定要删除这条记忆吗？此操作不可恢复。",
+      "entitiesLabel": "实体",
+      "relationshipsLabel": "关系"
+    },
+    "create": {
+      "title": "创建记忆",
+      "tabBasic": "基础信息",
+      "tabExtraction": "实体提取",
+      "tabAdvanced": "高级设置",
+      "titleLabel": "记忆标题 *",
+      "titlePlaceholder": "输入记忆标题",
+      "contentLabel": "记忆内容 *",
+      "contentPlaceholder": "输入记忆内容",
+      "typeLabel": "记忆类型",
+      "typeText": "文本",
+      "typeDocument": "文档",
+      "typeImage": "图片",
+      "typeVideo": "视频",
+      "authorLabel": "用户ID",
+      "authorPlaceholder": "输入用户ID（可选）",
+      "authorHelp": "可选：记录创建此记忆的用户",
+      "extractionHeading": "AI 实体提取",
+      "extractionHint": "点击下面的按钮来自动提取文本中的实体和关系。确保你已经在基础信息中输入了内容。",
+      "extractEntities": "提取实体",
+      "extractRelationships": "提取关系",
+      "extracting": "提取中...",
+      "extractedEntitiesHeading": "提取的实体",
+      "extractedRelationshipsHeading": "提取的关系",
+      "metadataLabel": "元数据设置",
+      "enableSearch": "启用搜索",
+      "enableGraph": "启用图谱",
+      "tagsLabel": "标签",
+      "tagsPlaceholder": "输入标签，用逗号分隔",
+      "tagsHelp": "使用逗号分隔多个标签",
+      "cancel": "取消",
+      "creating": "创建中...",
+      "submit": "创建记忆"
+    }
+  },
+  "hitl": {
+    "types": {
+      "clarification": {
+        "title": "需要澄清",
+        "submitText": "确认回答"
+      },
+      "decision": {
+        "title": "需要决策",
+        "submitText": "确认决策"
+      },
+      "envVar": {
+        "title": "配置环境变量",
+        "submitText": "保存配置"
+      },
+      "permission": {
+        "title": "权限请求",
+        "submitText": "授权执行"
+      }
+    },
+    "clarificationType": {
+      "scope": "范围确认",
+      "approach": "方案选择",
+      "prerequisite": "前置条件",
+      "priority": "优先级",
+      "custom": "自定义"
+    },
+    "decisionType": {
+      "branch": "分支选择",
+      "method": "方法选择",
+      "confirmation": "确认操作",
+      "risk": "风险确认",
+      "custom": "自定义"
+    },
+    "risk": {
+      "low": "低风险",
+      "medium": "中等风险",
+      "high": "高风险"
+    },
+    "remainingTime": "剩余时间",
+    "contextHeading": "上下文信息：",
+    "recommended": "推荐",
+    "customAnswer": "自定义输入",
+    "customDecision": "自定义决策",
+    "answerPlaceholder": "输入您的答案...",
+    "decisionPlaceholder": "输入您的决策...",
+    "noPresetOptions": "暂无预设选项，请直接输入",
+    "emptyOptionsMessage": "暂无可选选项",
+    "emptyOptionsDescription": "当前没有可供选择的选项",
+    "emptyDecisionDescription": "当前没有可供选择的决策选项",
+    "cancel": "取消",
+    "confirmAndAcceptRisk": "确认并承担风险",
+    "timeoutDefaultMessage": "超时默认选项",
+    "timeoutDefaultDescription": "如果您未在限定时间内做出决策，系统将自动选择：{{label}}",
+    "riskAlertTitle": "风险提示",
+    "envInputPlaceholder": "请输入{{label}}",
+    "envRequiredTag": "必填",
+    "envValidationMessage": "请输入{{label}}",
+    "envSecurityTitle": "安全提示",
+    "envSecurityDescription": "密码类型的环境变量将被加密存储，保护您的敏感信息。",
+    "highRiskTitle": "高风险操作警告",
+    "highRiskDescription": "此操作可能对系统造成重大影响，请仔细审查后再决定。",
+    "toolName": "工具名称",
+    "requestedAction": "请求操作",
+    "riskLevel": "风险等级",
+    "requestDescription": "请求描述：",
+    "detailsHeading": "详细信息：",
+    "deny": "拒绝",
+    "allowAlways": "总是允许",
+    "authorize": "授权执行"
+  },
+  "theme": {
+    "dark": "深色",
+    "light": "浅色",
+    "system": "跟随系统"
   }
 }

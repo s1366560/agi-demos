@@ -7,6 +7,7 @@
 
 import axios, { AxiosRequestConfig } from 'axios';
 
+import i18n from '@/i18n/config';
 import { getAuthToken, clearAuthState } from '@/utils/tokenResolver';
 
 import { parseAxiosError } from './ApiError';
@@ -46,6 +47,13 @@ const NO_AUTH_ENDPOINTS = ['/auth/token', '/auth/register', '/public'];
  */
 client.interceptors.request.use(
   (config) => {
+    // Inject the active i18next locale so backend gettext middleware can
+    // localize error messages and validation feedback. Hyphenated tag
+    // matches the HTTP convention; backend normalizes both forms.
+    const language = (i18n.language || 'en-US').replace('_', '-');
+    config.headers['Accept-Language'] = language;
+    config.headers['X-Language'] = language;
+
     // Check if this is a public endpoint that doesn't require auth
     const url = config.url || '';
     const isNoAuthEndpoint = NO_AUTH_ENDPOINTS.some(

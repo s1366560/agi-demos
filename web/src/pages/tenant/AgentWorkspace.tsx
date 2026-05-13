@@ -18,6 +18,7 @@ import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
+import { useConversationListAutoRefresh } from '../../hooks/useConversationListAutoRefresh';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useAgentV3Store } from '../../stores/agentV3';
 import { useAuthStore } from '../../stores/auth';
@@ -91,6 +92,7 @@ export const AgentWorkspace: FC = () => {
 
   // Subscribe to workspace SSE events for real-time group chat updates
   useBlackboardSSE(effectiveWorkspaceId);
+  useConversationListAutoRefresh(selectedProjectId);
 
   // Calculate base path for conversation navigation - memoized
   const basePath = useMemo(
@@ -100,7 +102,7 @@ export const AgentWorkspace: FC = () => {
 
   // Navigate to create project - memoized callback
   const handleCreateProject = useCallback(() => {
-    navigate('/tenant/projects/new');
+    void navigate('/tenant/projects/new');
   }, [navigate]);
 
   // Load projects on mount - optimized with removed function dependency
@@ -110,7 +112,7 @@ export const AgentWorkspace: FC = () => {
         await listProjects(tenantId);
       }
     };
-    loadProjects();
+    void loadProjects();
     // Only depend on tenantId - listProjects is stable from store
   }, [tenantId, listProjects, projects.length]);
 
@@ -144,7 +146,7 @@ export const AgentWorkspace: FC = () => {
     // user switches projects so a slow response can't overwrite the newer
     // project's list.
     const controller = new AbortController();
-    loadConversations(selectedProjectId, controller.signal);
+    void loadConversations(selectedProjectId, controller.signal);
     // Persist selection using cached hook
     setLastProjectId(selectedProjectId);
     // Update global current project for consistency

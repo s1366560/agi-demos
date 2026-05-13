@@ -7,6 +7,8 @@
 
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { DollarSign, Zap } from 'lucide-react';
 
 
@@ -59,6 +61,7 @@ export const CostTrackerCompact: React.FC<CostTrackerProps> = ({
   costTracking,
   showModel = false,
 }) => {
+  const { t } = useTranslation();
   const colors = useThemeColors({
     warning: '--color-warning',
     success: '--color-success',
@@ -72,11 +75,11 @@ export const CostTrackerCompact: React.FC<CostTrackerProps> = ({
     <Tooltip
       title={
         <Space direction="vertical" size={4}>
-          <div>输入 Tokens: {costTracking.inputTokens.toLocaleString()}</div>
-          <div>输出 Tokens: {costTracking.outputTokens.toLocaleString()}</div>
-          <div>总计: {costTracking.totalTokens.toLocaleString()}</div>
-          <div>费用: {formatCost(costTracking.costUsd)}</div>
-          {showModel && <div>模型: {costTracking.model}</div>}
+          <div>{t('agent.costTracker.inputTokens', { value: costTracking.inputTokens.toLocaleString() })}</div>
+          <div>{t('agent.costTracker.outputTokens', { value: costTracking.outputTokens.toLocaleString() })}</div>
+          <div>{t('agent.costTracker.totalTokens', { value: costTracking.totalTokens.toLocaleString() })}</div>
+          <div>{t('agent.costTracker.costLabel', { value: formatCost(costTracking.costUsd) })}</div>
+          {showModel && <div>{t('agent.costTracker.modelLabel', { model: costTracking.model })}</div>}
         </Space>
       }
     >
@@ -101,6 +104,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
   costTracking,
   showModel = true,
 }) => {
+  const { t } = useTranslation();
   const colors = useThemeColors({
     muted: '--color-text-muted',
     info: '--color-info',
@@ -111,7 +115,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
   if (!costTracking) {
     return (
       <div style={{ padding: '8px 12px', color: colors.muted }}>
-        <Text type="secondary">暂无费用数据</Text>
+        <Text type="secondary">{t('agent.costTracker.empty')}</Text>
       </div>
     );
   }
@@ -125,7 +129,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
         {/* Model */}
         {showModel && (
           <div>
-            <Text type="secondary">模型：</Text>
+            <Text type="secondary">{t('agent.costTracker.modelPrefix')}</Text>
             <Text strong>{costTracking.model}</Text>
           </div>
         )}
@@ -133,7 +137,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
         {/* Token Bar */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <Text type="secondary">Token 使用</Text>
+            <Text type="secondary">{t('agent.costTracker.tokenUsage')}</Text>
             <Text>{costTracking.totalTokens.toLocaleString()}</Text>
           </div>
           <Progress
@@ -147,11 +151,11 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
             <Space size={16}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                <span style={{ color: colors.success }}>●</span> 输入:{' '}
+                <span style={{ color: colors.success }}>●</span> {t('agent.costTracker.inputShort')}{' '}
                 {formatTokenCount(costTracking.inputTokens)}
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                <span style={{ color: colors.info }}>●</span> 输出:{' '}
+                <span style={{ color: colors.info }}>●</span> {t('agent.costTracker.outputShort')}{' '}
                 {formatTokenCount(costTracking.outputTokens)}
               </Text>
             </Space>
@@ -160,7 +164,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
 
         {/* Cost */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text type="secondary">估算费用</Text>
+          <Text type="secondary">{t('agent.costTracker.estimatedCost')}</Text>
           <Text strong style={{ fontSize: 16, color: colors.success }}>
             {formatCost(costTracking.costUsd)}
           </Text>
@@ -168,7 +172,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
 
         {/* Last Updated */}
         <Text type="secondary" style={{ fontSize: 11 }}>
-          更新于: {formatTimeOnly(costTracking.lastUpdated)}
+          {t('agent.costTracker.updatedAt', { time: formatTimeOnly(costTracking.lastUpdated) })}
         </Text>
       </Space>
     </div>

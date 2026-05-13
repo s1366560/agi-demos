@@ -1,14 +1,14 @@
 /**
- * Pool Service - Agent Pool管理API
+ * Pool Service - Agent Pool Management API
  *
- * 提供Agent Pool的状态查询和管理功能。
+ * Provides Agent Pool status queries and management.
  *
- * 功能:
- * - 获取池状态概览
- * - 列出所有实例
- * - 管理实例生命周期 (暂停/恢复/终止)
- * - 设置项目分级
- * - 获取指标数据
+ * Features:
+ * - Get pool status overview
+ * - List all instances
+ * - Manage instance lifecycle (pause/resume/terminate)
+ * - Set project tier
+ * - Get metrics data
  *
  * @packageDocumentation
  */
@@ -22,12 +22,12 @@ import { httpClient } from './client/httpClient';
 // ============================================================================
 
 /**
- * 项目分级
+ * Project tier
  */
 export type ProjectTier = 'hot' | 'warm' | 'cold';
 
 /**
- * 实例状态
+ * Instance status
  */
 export type InstanceStatus =
   | 'created'
@@ -42,12 +42,12 @@ export type InstanceStatus =
   | 'terminated';
 
 /**
- * 健康状态
+ * Health status
  */
 export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
 /**
- * 池状态响应
+ * Pool status response
  */
 export interface PoolStatus {
   enabled: boolean;
@@ -73,7 +73,7 @@ export interface PoolStatus {
 }
 
 /**
- * 实例信息
+ * Instance info
  */
 export interface PoolInstance {
   instance_key: string;
@@ -91,7 +91,7 @@ export interface PoolInstance {
 }
 
 /**
- * 实例列表响应
+ * Instance list response
  */
 export interface InstanceListResponse {
   instances: PoolInstance[];
@@ -101,14 +101,14 @@ export interface InstanceListResponse {
 }
 
 /**
- * 设置分级请求
+ * Set tier request
  */
 export interface SetTierRequest {
   tier: ProjectTier;
 }
 
 /**
- * 设置分级响应
+ * Set tier response
  */
 export interface SetTierResponse {
   project_id: string;
@@ -118,7 +118,7 @@ export interface SetTierResponse {
 }
 
 /**
- * 操作响应
+ * Operation response
  */
 export interface OperationResponse {
   success: boolean;
@@ -126,7 +126,7 @@ export interface OperationResponse {
 }
 
 /**
- * 指标响应
+ * Metrics response
  */
 export interface MetricsResponse {
   instances: {
@@ -153,7 +153,7 @@ export interface MetricsResponse {
 }
 
 /**
- * 列表查询参数
+ * List query parameters
  */
 export interface ListInstancesParams {
   tier?: ProjectTier | undefined;
@@ -170,11 +170,11 @@ export interface ListInstancesParams {
 const BASE_PATH = '/admin/pool';
 
 /**
- * Agent Pool管理服务
+ * Agent Pool management service
  */
 export const poolService = {
   /**
-   * 获取池状态概览
+   * Get pool status overview
    */
   getStatus: async (): Promise<PoolStatus> => {
     try {
@@ -187,7 +187,7 @@ export const poolService = {
   },
 
   /**
-   * 列出所有实例
+   * List all instances
    */
   listInstances: async (params?: ListInstancesParams): Promise<InstanceListResponse> => {
     try {
@@ -202,7 +202,7 @@ export const poolService = {
   },
 
   /**
-   * 获取实例详情
+   * Get instance details
    */
   getInstance: async (instanceKey: string): Promise<PoolInstance> => {
     try {
@@ -217,7 +217,7 @@ export const poolService = {
   },
 
   /**
-   * 暂停实例
+   * Pause an instance
    */
   pauseInstance: async (instanceKey: string): Promise<OperationResponse> => {
     try {
@@ -232,7 +232,7 @@ export const poolService = {
   },
 
   /**
-   * 恢复实例
+   * Resume an instance
    */
   resumeInstance: async (instanceKey: string): Promise<OperationResponse> => {
     try {
@@ -247,7 +247,7 @@ export const poolService = {
   },
 
   /**
-   * 终止实例
+   * Terminate an instance
    */
   terminateInstance: async (
     instanceKey: string,
@@ -266,7 +266,7 @@ export const poolService = {
   },
 
   /**
-   * 获取项目分级
+   * Get project tier
    */
   getProjectTier: async (
     projectId: string,
@@ -286,7 +286,7 @@ export const poolService = {
   },
 
   /**
-   * 设置项目分级
+   * Set project tier
    */
   setProjectTier: async (
     projectId: string,
@@ -307,7 +307,7 @@ export const poolService = {
   },
 
   /**
-   * 获取指标 (JSON格式)
+   * Get metrics (JSON format)
    */
   getMetrics: async (): Promise<MetricsResponse> => {
     try {
@@ -320,7 +320,7 @@ export const poolService = {
   },
 
   /**
-   * 获取指标 (Prometheus格式)
+   * Get metrics (Prometheus format)
    */
   getMetricsPrometheus: async (): Promise<string> => {
     try {

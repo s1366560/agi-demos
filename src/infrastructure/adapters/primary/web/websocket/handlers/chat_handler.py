@@ -57,6 +57,11 @@ class SendMessageHandler(WebSocketMessageHandler):
         if preferred_language not in {"en-US", "zh-CN"}:
             preferred_language = None
 
+        # Fallback: when the client did not specify a per-message language,
+        # use the authenticated user's stored preference.
+        if preferred_language is None:
+            preferred_language = await _resolve_user_preferred_language(context)
+
         try:
             container = context.get_scoped_container()
 
@@ -256,6 +261,32 @@ class StopSessionHandler(WebSocketMessageHandler):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+async def _resolve_user_preferred_language(context: MessageContext) -> str | None:
+    """Look up the authenticated user's stored preferred_language.
+
+    Returns one of {"en-US", "zh-CN"} or None if unset/invalid.
+    """
+    try:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.common.base_repository import (
+            refresh_select_statement,
+        )
+        from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+
+        result = await context.db.execute(
+            refresh_select_statement(
+                select(DBUser.preferred_language).where(DBUser.id == context.user_id)
+            )
+        )
+        value = result.scalar_one_or_none()
+        if isinstance(value, str) and value in {"en-US", "zh-CN"}:
+            return value
+    except Exception:
+        logger.debug("[WS] Failed to load user preferred_language", exc_info=True)
+    return None
 
 
 async def stream_agent_to_websocket(

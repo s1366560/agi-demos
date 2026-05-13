@@ -55,6 +55,8 @@ dependencies = [
     "apscheduler>=4.0.0a1",
     "python-socks[asyncio]>=2.4.0",
     "email-validator>=2.3.0",
+    # i18n: Babel for .po/.mo extraction & compilation
+    "babel>=2.14.0",
 ]
 
 [project.optional-dependencies]

@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 
 import { message, Select, Spin, Input, Tooltip } from 'antd';
 import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
@@ -27,6 +28,7 @@ import type { ServerFilters } from './types';
 const { Search: AntSearch } = Input;
 
 export const McpServerTabV2: React.FC = () => {
+  const { t } = useTranslation();
   const [isReconciling, setIsReconciling] = useState(false);
 
   // Filters
@@ -141,7 +143,7 @@ export const McpServerTabV2: React.FC = () => {
     async (server: MCPServerResponse, enabled: boolean) => {
       try {
         await toggleEnabled(server.id, enabled);
-        message.success(enabled ? '服务器已启用' : '服务器已禁用');
+        message.success(enabled ? t('mcp.servers.enableSuccess') : t('mcp.servers.disableSuccess'));
       } catch {
         /* store handles error */
       }
@@ -153,7 +155,7 @@ export const McpServerTabV2: React.FC = () => {
     async (server: MCPServerResponse) => {
       try {
         await syncServer(server.id);
-        message.success('服务器同步成功');
+        message.success(t('mcp.servers.syncSuccess'));
       } catch {
         /* store handles error */
       }
@@ -170,11 +172,11 @@ export const McpServerTabV2: React.FC = () => {
           const toolsCount = result.tools_discovered ?? 0;
           message.success(
             latencyMs != null
-              ? `连接成功 (${Math.round(latencyMs)}ms, ${toolsCount} 个工具)`
-              : '连接成功'
+              ? t('mcp.servers.connectSuccessDetail', { latency: Math.round(latencyMs), count: toolsCount })
+              : t('mcp.servers.connectSuccess')
           );
         } else {
-          message.error(`连接失败：${result.message}`);
+          message.error(t('mcp.servers.connectFailed', { message: result.message }));
         }
       } catch {
         /* store handles error */
@@ -187,7 +189,7 @@ export const McpServerTabV2: React.FC = () => {
     async (id: string) => {
       try {
         await deleteServer(id);
-        message.success('服务器已删除');
+        message.success(t('mcp.servers.deleteSuccess'));
       } catch {
         /* store handles error */
       }
@@ -203,7 +205,7 @@ export const McpServerTabV2: React.FC = () => {
 
   const handleReconcile = useCallback(async () => {
     if (!currentProject?.id) {
-      message.warning('请先选择项目');
+      message.warning(t('mcp.servers.selectProjectFirst'));
       return;
     }
 
@@ -215,10 +217,14 @@ export const McpServerTabV2: React.FC = () => {
         fetchApps(currentProject.id),
       ]);
       message.success(
-        `运行时已协调：恢复 ${result.restored} 个，已运行 ${result.already_running} 个，失败 ${result.failed} 个`
+        t('mcp.servers.reconcileSuccess', {
+          restored: result.restored,
+          running: result.already_running,
+          failed: result.failed,
+        })
       );
     } catch {
-      message.error('协调 MCP 运行时失败');
+      message.error(t('mcp.servers.reconcileFailed'));
     } finally {
       setIsReconciling(false);
     }
@@ -253,7 +259,7 @@ export const McpServerTabV2: React.FC = () => {
           {/* Search */}
           <div className="flex-1 min-w-0">
             <AntSearch
-              placeholder="搜索服务器名称或描述..."
+              placeholder={t('mcp.servers.searchPlaceholder')}
               value={filters.search}
               onChange={(e) => {
                 setFilters({ ...filters, search: e.target.value });
@@ -276,9 +282,9 @@ export const McpServerTabV2: React.FC = () => {
                 className="w-32"
                 size="middle"
                 options={[
-                  { label: '全部状态', value: 'all' },
-                  { label: '已启用', value: 'enabled' },
-                  { label: '已禁用', value: 'disabled' },
+                  { label: t('mcp.servers.statusAll'), value: 'all' },
+                  { label: t('mcp.servers.statusEnabled'), value: 'enabled' },
+                  { label: t('mcp.servers.statusDisabled'), value: 'disabled' },
                 ]}
               />
             </div>
@@ -289,9 +295,9 @@ export const McpServerTabV2: React.FC = () => {
               }}
               className="w-36"
               size="middle"
-              placeholder="类型"
+              placeholder={t('mcp.servers.typePlaceholder')}
               options={[
-                { label: '全部类型', value: 'all' },
+                { label: t('mcp.servers.typeAll'), value: 'all' },
                 { label: 'STDIO', value: 'stdio' },
                 { label: 'SSE', value: 'sse' },
                 { label: 'HTTP', value: 'http' },
@@ -306,19 +312,19 @@ export const McpServerTabV2: React.FC = () => {
               className="w-40"
               size="middle"
               options={[
-                { label: '全部运行状态', value: 'all' },
-                { label: '运行中', value: 'running' },
-                { label: '启动中', value: 'starting' },
-                { label: '错误', value: 'error' },
-                { label: '已禁用', value: 'disabled' },
-                { label: '未知', value: 'unknown' },
+                { label: t('mcp.servers.runtimeAll'), value: 'all' },
+                { label: t('mcp.servers.runtimeRunning'), value: 'running' },
+                { label: t('mcp.servers.runtimeStarting'), value: 'starting' },
+                { label: t('mcp.servers.runtimeError'), value: 'error' },
+                { label: t('mcp.servers.runtimeDisabled'), value: 'disabled' },
+                { label: t('mcp.servers.runtimeUnknown'), value: 'unknown' },
               ]}
             />
           </div>
 
           {/* Actions */}
           <div className="flex gap-2">
-            <Tooltip title="刷新列表">
+            <Tooltip title={t('mcp.servers.refreshTooltip')}>
               <button
                 onClick={handleRefresh}
                 disabled={isLoading}
@@ -331,7 +337,7 @@ export const McpServerTabV2: React.FC = () => {
                 />
               </button>
             </Tooltip>
-            <Tooltip title="与沙盒协调运行时">
+            <Tooltip title={t('mcp.servers.reconcileTooltip')}>
               <button
                 onClick={handleReconcile}
                 disabled={isReconciling || !currentProject?.id}
@@ -341,12 +347,12 @@ export const McpServerTabV2: React.FC = () => {
                   size={16}
                   className={isReconciling ? 'animate-spin motion-reduce:animate-none' : ''}
                 />
-                <span className="text-xs font-medium">协调</span>
+                <span className="text-xs font-medium">{t('mcp.servers.reconcileButton')}</span>
               </button>
             </Tooltip>
             <button onClick={handleCreate} className={BUTTON_STYLES.primary}>
               <Plus size={18} />
-              <span>创建服务器</span>
+              <span>{t('mcp.servers.createButton')}</span>
             </button>
           </div>
         </div>
@@ -355,13 +361,13 @@ export const McpServerTabV2: React.FC = () => {
         {hasActiveFilters && (
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              显示 {filteredServers.length} / {servers.length} 个服务器
+              {t('mcp.servers.filterSummary', { shown: filteredServers.length, total: servers.length })}
             </span>
             <button
               onClick={clearFilters}
               className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
             >
-              清除筛选
+              {t('mcp.servers.clearFilters')}
             </button>
           </div>
         )}
@@ -372,7 +378,7 @@ export const McpServerTabV2: React.FC = () => {
         <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
           <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
           <p className="text-sm text-amber-800 dark:text-amber-300">
-            {errorCount} 个服务器存在同步错误，请检查服务器卡片详情
+            {t('mcp.servers.errorBanner', { count: errorCount })}
           </p>
         </div>
       )}
@@ -381,7 +387,7 @@ export const McpServerTabV2: React.FC = () => {
       {isLoading && servers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Spin size="large" />
-          <p className="text-sm text-slate-400 mt-4">加载服务器中...</p>
+          <p className="text-sm text-slate-400 mt-4">{t('mcp.servers.loadingServers')}</p>
         </div>
       ) : servers.length === 0 ? (
         <div
@@ -391,14 +397,14 @@ export const McpServerTabV2: React.FC = () => {
             <Server size={28} className="text-slate-300 dark:text-slate-500" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
-            暂无 MCP 服务器
+            {t('mcp.servers.emptyTitle')}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 max-w-sm">
-            创建第一个 MCP 服务器，启用强大的工具和功能
+            {t('mcp.servers.emptyHint')}
           </p>
           <button onClick={handleCreate} className={BUTTON_STYLES.primary}>
             <Plus size={18} />
-            创建服务器
+            {t('mcp.servers.emptyCreateButton')}
           </button>
         </div>
       ) : filteredServers.length === 0 ? (
@@ -406,12 +412,12 @@ export const McpServerTabV2: React.FC = () => {
           <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-3">
             <Search size={20} className="text-slate-300 dark:text-slate-500" />
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">没有符合筛选条件的服务器</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('mcp.servers.noMatch')}</p>
           <button
             onClick={clearFilters}
             className="mt-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
           >
-            清除所有筛选
+            {t('mcp.servers.clearAllFilters')}
           </button>
         </div>
       ) : (

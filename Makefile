@@ -530,6 +530,34 @@ generate-event-types: ## Generate TypeScript event types from Python
 	@echo " TypeScript event types generated"
 
 # =============================================================================
+# Internationalization (i18n)
+# =============================================================================
+.PHONY: i18n-extract i18n-update i18n-compile i18n-init-locale
+
+I18N_LOCALES_DIR := src/infrastructure/i18n/locales
+I18N_BABEL_CFG := src/infrastructure/i18n/babel.cfg
+I18N_POT := $(I18N_LOCALES_DIR)/messages.pot
+
+i18n-extract: ## Extract translatable strings into messages.pot
+	@echo " Extracting translatable strings..."
+	uv run pybabel extract -F $(I18N_BABEL_CFG) -o $(I18N_POT) src/
+	@echo " Wrote $(I18N_POT)"
+
+i18n-update: i18n-extract ## Update existing locale catalogs from messages.pot
+	@echo " Updating catalogs..."
+	uv run pybabel update -i $(I18N_POT) -d $(I18N_LOCALES_DIR) -D messages
+	@echo " Catalogs updated; review .po diffs and translate new msgstr entries"
+
+i18n-compile: ## Compile .po -> .mo for all locales
+	@echo " Compiling catalogs..."
+	uv run pybabel compile -d $(I18N_LOCALES_DIR) -D messages
+	@echo " Catalogs compiled"
+
+i18n-init-locale: ## Initialize a new locale catalog (usage: make i18n-init-locale LOCALE=ja_JP)
+	@if [ -z "$(LOCALE)" ]; then echo "Usage: make i18n-init-locale LOCALE=<code>"; exit 1; fi
+	uv run pybabel init -i $(I18N_POT) -d $(I18N_LOCALES_DIR) -D messages -l $(LOCALE)
+
+# =============================================================================
 # Git Hooks
 # =============================================================================
 .PHONY: hooks-install hooks-uninstall guard-refresh-select

@@ -19,6 +19,7 @@ from src.infrastructure.agent.tools.workspace_planning_contract import (
     WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
     persist_workspace_planning_contract,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -192,6 +193,7 @@ class WorkspacePlannerAgentDecomposer:
         self._min_subtasks = max(1, min(min_subtasks, self._max_subtasks))
         self._extra_context = extra_context
         self._session = session
+        self._resolved_language: str | None = None
         self._planner_agent = build_builtin_workspace_planner_agent(
             tenant_id=tenant_id,
             project_id=project_id,
@@ -206,6 +208,8 @@ class WorkspacePlannerAgentDecomposer:
     ) -> DecompositionResult:
         if self._turn_runner is None:
             return self._fallback(query, "No agent turn runner available for builtin workspace planner")
+
+        await self._ensure_resolved_language()
 
         user_prompt = self._build_user_prompt(
             query=query,
@@ -288,6 +292,7 @@ class WorkspacePlannerAgentDecomposer:
             )
             if item
         )
+        language_directive = self._language_directive()
         return (
             "Plan this workspace kickoff using the builtin workspace planner contract.\n\n"
             f"Workspace ID: {self._workspace_id}\n"
@@ -296,6 +301,7 @@ class WorkspacePlannerAgentDecomposer:
             f"Minimum subtasks when software work has separable phases: {self._min_subtasks}\n\n"
             f"Context:\n{context or 'none'}\n\n"
             f"Goal:\n{query}\n\n"
+            f"{language_directive}"
             "You are in read-only planning mode. Do not implement, edit files, mutate todos, "
             "start services, or finish in prose. Your final action must be exactly one "
             "workspace_submit_planning_contract call. If code evidence is insufficient for "
@@ -310,6 +316,7 @@ class WorkspacePlannerAgentDecomposer:
         diagnostics: list[dict[str, Any]],
         rejection_reason: str,
     ) -> str:
+        language_directive = self._language_directive()
         return (
             "The previous builtin workspace planner turn did not produce an acceptable "
             "workspace_submit_planning_contract.\n\n"
@@ -322,12 +329,75 @@ class WorkspacePlannerAgentDecomposer:
             f"Context:\n{conversation_context or self._extra_context or 'none'}\n\n"
             f"Workspace metadata:\n{self._metadata_context()}\n\n"
             f"Goal:\n{query}\n\n"
+            f"{language_directive}"
             "Contract-only repair mode is active. You have exactly one useful tool: "
             "workspace_submit_planning_contract. Use the prior evidence summaries and "
             "workspace context above; do not invent service commands or ports. Submit a "
             "task DAG now. If services are not sufficiently evidenced, leave "
             "delivery_cicd.services empty."
         )
+
+    def _language_directive(self) -> str:
+        """Return a language instruction block, empty when no preference is set.
+
+        Reads from the pre-resolved language (see ``_ensure_resolved_language``), which
+        considers root_metadata → workspace_metadata → actor user's stored preference.
+        Returns a trailing ``\n\n`` so it can be safely concatenated into prompts.
+        """
+        language = self._resolved_language
+        if language not in {"en-US", "zh-CN"}:
+            return ""
+        if language == "zh-CN":
+            return (
+                "Language: 使用简体中文撰写本次规划中所有子任务的 title 与 description"
+                "（technical_concept / evidence_refs 中的英文标识符可以保留原文）。\n\n"
+            )
+        return (
+            "Language: write every subtask title and description in English (en-US).\n\n"
+        )
+
+    async def _ensure_resolved_language(self) -> None:
+        """Resolve and cache the preferred_language for this planning run.
+
+        Resolution order:
+          1. root_metadata[PREFERRED_LANGUAGE]
+          2. workspace_metadata[PREFERRED_LANGUAGE]
+          3. The actor user's stored ``users.preferred_language`` (DB lookup)
+
+        Safe to call multiple times; only the first invocation does any work.
+        """
+        if self._resolved_language is not None:
+            return
+        candidate = self._root_metadata.get(PREFERRED_LANGUAGE) or self._workspace_metadata.get(
+            PREFERRED_LANGUAGE
+        )
+        if isinstance(candidate, str) and candidate in {"en-US", "zh-CN"}:
+            self._resolved_language = candidate
+            return
+        # DB fallback: read the actor's stored preference.
+        if self._session is None or not self._actor_user_id:
+            self._resolved_language = ""  # mark as resolved-empty
+            return
+        try:
+            from sqlalchemy import select
+
+            from src.infrastructure.adapters.secondary.persistence.models import (
+                User as DBUser,
+            )
+
+            result = await self._session.execute(
+                select(DBUser.preferred_language).where(DBUser.id == self._actor_user_id)
+            )
+            value = result.scalar_one_or_none()
+            if isinstance(value, str) and value in {"en-US", "zh-CN"}:
+                self._resolved_language = value
+                return
+        except Exception:
+            logger.debug(
+                "workspace_planner_agent_decomposer: user preferred_language lookup failed",
+                exc_info=True,
+            )
+        self._resolved_language = ""
 
     def _metadata_context(self) -> str:
         return json.dumps(

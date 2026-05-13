@@ -6,6 +6,8 @@
 
 import React, { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Folder, Settings, Trash2 } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
@@ -23,6 +25,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
   variant: _variant = 'card',
   className = '',
 }) => {
+  const { t } = useTranslation();
   const context = useProjectManagerContext();
 
   // Determine if this project is selected
@@ -88,7 +91,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
             data-testid="settings-btn"
             onClick={handleSettingsClick}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
-            title="项目设置"
+            title={t('tenant.projectManager.settingsTooltip')}
           >
             <Settings className="h-4 w-4" />
           </button>
@@ -109,7 +112,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
       )}
 
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-500">
-        <span>创建于 {formatDateOnly(project.created_at)}</span>
+        <span>{t('tenant.projectManager.createdAt', { date: formatDateOnly(project.created_at) })}</span>
       </div>
     </div>
   );

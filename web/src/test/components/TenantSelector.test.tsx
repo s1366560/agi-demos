@@ -32,9 +32,9 @@ describe('TenantSelector', () => {
 
   it('renders empty state', () => {
     render(<TenantSelector onCreateTenant={mockOnCreateTenant} />);
-    expect(screen.getByText('暂无工作空间')).toBeInTheDocument();
+    expect(screen.getByText('No workspaces yet')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('创建工作空间'));
+    fireEvent.click(screen.getByText('Create workspace'));
     expect(mockOnCreateTenant).toHaveBeenCalled();
   });
 

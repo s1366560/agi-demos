@@ -230,7 +230,7 @@ describe('ProjectManager - Compound Component Pattern', () => {
       render(<ProjectManager variant="full" />);
 
       expect(screen.getByTestId('empty-state')).toBeInTheDocument();
-      expect(screen.getByText('请先选择工作空间')).toBeInTheDocument();
+      expect(screen.getByText('Please select a workspace first')).toBeInTheDocument();
     });
   });
 
@@ -270,7 +270,7 @@ describe('ProjectManager - Compound Component Pattern', () => {
 
       render(<ProjectManager variant="full" />);
 
-      expect(screen.getByText('创建项目')).toBeInTheDocument();
+      expect(screen.getByText('Create Project')).toBeInTheDocument();
     });
   });
 });
@@ -297,7 +297,7 @@ describe('ProjectManager.Search', () => {
   it('should use default placeholder when not provided', () => {
     render(<ProjectManager.Search />, { wrapper: Wrapper });
 
-    const input = screen.getByPlaceholderText('搜索项目...');
+    const input = screen.getByPlaceholderText('Search projects...');
     expect(input).toBeInTheDocument();
   });
 
@@ -511,13 +511,13 @@ describe('ProjectManager.Empty', () => {
   it('should show create button when showCreateButton is true', () => {
     render(<ProjectManager.Empty showCreateButton={true} />, { wrapper: Wrapper });
 
-    expect(screen.getByText('创建项目')).toBeInTheDocument();
+    expect(screen.getByText('Create Project')).toBeInTheDocument();
   });
 
   it('should not show create button when showCreateButton is false', () => {
     render(<ProjectManager.Empty showCreateButton={false} />, { wrapper: Wrapper });
 
-    expect(screen.queryByText('创建项目')).not.toBeInTheDocument();
+    expect(screen.queryByText('Create Project')).not.toBeInTheDocument();
   });
 
   it('should call onCreateClick when create button is clicked', () => {
@@ -526,7 +526,7 @@ describe('ProjectManager.Empty', () => {
       wrapper: Wrapper,
     });
 
-    const createBtn = screen.getByText('创建项目');
+    const createBtn = screen.getByText('Create Project');
     fireEvent.click(createBtn);
 
     expect(handleCreate).toHaveBeenCalled();

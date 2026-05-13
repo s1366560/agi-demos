@@ -28,6 +28,8 @@ import {
   useContext,
 } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Check, ChevronDown, ChevronRight, ListTodo, X } from 'lucide-react';
 
 import { SimpleExecutionView } from './SimpleExecutionView';
@@ -176,6 +178,7 @@ export function getDisplayMode(
  * Used by both the Header compound component and the full-timeline render.
  */
 const HeaderContent: React.FC = () => {
+  const { t } = useTranslation();
   const { steps, isStreaming, matchedPattern } = useExecutionTimelineContext();
 
   const completedSteps = steps.filter((s) => s.status === 'completed').length;
@@ -190,9 +193,9 @@ const HeaderContent: React.FC = () => {
             <ListTodo size={20} className="text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">{t('agent.executionTimeline.title')}</h3>
             <p className="text-sm text-slate-500">
-              {completedSteps}/{totalSteps} 步骤已完成
+              {t('agent.executionTimeline.stepsCompleted', { completed: completedSteps, total: totalSteps })}
             </p>
           </div>
         </div>
@@ -200,7 +203,7 @@ const HeaderContent: React.FC = () => {
         <div className="flex items-center gap-2">
           {matchedPattern && (
             <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-              匹配模式 ({Math.round(matchedPattern.similarity * 100)}%)
+              {t('agent.executionTimeline.matchedPattern', { percent: Math.round(matchedPattern.similarity * 100) })}
             </span>
           )}
 
@@ -213,7 +216,11 @@ const HeaderContent: React.FC = () => {
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
             }`}
           >
-            {completedSteps === totalSteps ? '已完成' : isStreaming ? '执行中' : '等待中'}
+            {completedSteps === totalSteps
+              ? t('agent.executionTimeline.statusCompleted')
+              : isStreaming
+                ? t('agent.executionTimeline.statusRunning')
+                : t('agent.executionTimeline.statusWaiting')}
           </span>
         </div>
       </div>
@@ -255,6 +262,7 @@ interface ChecklistProps {
 }
 
 export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
+  const { t } = useTranslation();
   const { workPlan, steps, currentStepNumber, isStreaming, isStepExpanded, toggleStep } =
     useExecutionTimelineContext();
 
@@ -321,9 +329,9 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                   {step.description}
                 </span>
                 {step.toolExecutions && step.toolExecutions.length > 0 && (
-                  <span className="text-xs text-slate-400">{step.toolExecutions.length} 工具</span>
+                  <span className="text-xs text-slate-400">{t('agent.executionTimeline.toolsLabel', { count: step.toolExecutions.length })}</span>
                 )}
-                {isActive && isStreaming && <span className="text-xs text-primary">执行中...</span>}
+                {isActive && isStreaming && <span className="text-xs text-primary">{t('agent.executionTimeline.runningEllipsis')}</span>}
                 {isStepExpanded(step.stepNumber) ? (
                   <ChevronDown size={18} className="text-slate-400" />
                 ) : (
@@ -343,6 +351,7 @@ interface ControlsProps {
 }
 
 export const Controls: React.FC<ControlsProps> = ({ children }) => {
+  const { t } = useTranslation();
   const { steps, expandAll, collapseAll } = useExecutionTimelineContext();
 
   if (steps.length <= 1) return null;
@@ -352,11 +361,11 @@ export const Controls: React.FC<ControlsProps> = ({ children }) => {
       {children || (
         <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
           <button type="button" onClick={expandAll} className="text-xs text-primary hover:underline">
-            展开全部
+            {t('agent.executionTimeline.expandAll')}
           </button>
           <span className="text-slate-300">|</span>
           <button type="button" onClick={collapseAll} className="text-xs text-primary hover:underline">
-            收起全部
+            {t('agent.executionTimeline.collapseAll')}
           </button>
         </div>
       )}
@@ -442,6 +451,7 @@ function SimpleTimelineMode({
   isStreaming,
   children,
 }: SimpleTimelineModeProps) {
+  const { t } = useTranslation();
   return (
     <div className="w-full mb-4">
       {/* Work Plan Checklist - Only show if workPlan exists */}
@@ -451,7 +461,7 @@ function SimpleTimelineMode({
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <ListTodo size={18} className="text-primary" />
             </div>
-            <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">{t('agent.executionTimeline.title')}</h3>
           </div>
           <div className="space-y-2">
             {workPlan.steps.map((step, idx) => {
@@ -497,7 +507,7 @@ function SimpleTimelineMode({
                     {step.description}
                   </span>
                   {isActive && isStreaming && (
-                    <span className="ml-auto text-xs text-primary">执行中...</span>
+                    <span className="ml-auto text-xs text-primary">{t('agent.executionTimeline.runningEllipsis')}</span>
                   )}
                 </div>
               );

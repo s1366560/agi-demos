@@ -41,14 +41,14 @@ describe('MemoryCreateModal', () => {
 
   it('renders modal when open', () => {
     render(<MemoryCreateModal isOpen={true} onClose={mockOnClose} />);
-    expect(screen.getByRole('heading', { name: '创建记忆' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create Memory' })).toBeInTheDocument();
   });
 
   it('handles form input', () => {
     render(<MemoryCreateModal isOpen={true} onClose={mockOnClose} />);
 
-    const titleInput = screen.getByPlaceholderText('输入记忆标题');
-    const contentInput = screen.getByPlaceholderText('输入记忆内容');
+    const titleInput = screen.getByPlaceholderText('Enter memory title');
+    const contentInput = screen.getByPlaceholderText('Enter memory content');
 
     fireEvent.change(titleInput, { target: { value: 'New Memory' } });
     fireEvent.change(contentInput, { target: { value: 'Memory Content' } });
@@ -60,10 +60,10 @@ describe('MemoryCreateModal', () => {
   it('submits form', async () => {
     render(<MemoryCreateModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
 
-    fireEvent.change(screen.getByPlaceholderText('输入记忆标题'), { target: { value: 'Title' } });
-    fireEvent.change(screen.getByPlaceholderText('输入记忆内容'), { target: { value: 'Content' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter memory title'), { target: { value: 'Title' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter memory content'), { target: { value: 'Content' } });
 
-    fireEvent.click(screen.getByRole('button', { name: '创建记忆' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Memory' }));
 
     await waitFor(() => {
       expect(mockCreateMemory).toHaveBeenCalledWith(
@@ -88,13 +88,13 @@ describe('MemoryCreateModal', () => {
     render(<MemoryCreateModal isOpen={true} onClose={mockOnClose} />);
 
     // Fill content
-    fireEvent.change(screen.getByPlaceholderText('输入记忆内容'), { target: { value: 'Content' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter memory content'), { target: { value: 'Content' } });
 
     // Switch to extraction tab - need to find tab button
-    fireEvent.click(screen.getByText('实体提取'));
+    fireEvent.click(screen.getByText('Entity Extraction'));
 
     // Click extract buttons
-    fireEvent.click(screen.getByText('提取实体'));
+    fireEvent.click(screen.getByText('Extract Entities'));
 
     await waitFor(() => {
       expect(mockExtractEntities).toHaveBeenCalled();

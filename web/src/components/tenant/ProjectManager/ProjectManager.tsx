@@ -6,6 +6,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -28,6 +30,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
   onProjectSelect,
   className = '',
 }) => {
+  const { t } = useTranslation();
   const { currentTenant } = useTenantStore();
   const {
     projects,
@@ -72,7 +75,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
     async (projectId: string) => {
       if (!currentTenant) return;
 
-      if (window.confirm('确定要删除这个项目吗？此操作不可恢复。')) {
+      if (window.confirm(t('tenant.projectManager.deleteConfirm'))) {
         try {
           await deleteProject(currentTenant.id, projectId);
         } catch {
@@ -80,7 +83,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
         }
       }
     },
-    [currentTenant, deleteProject]
+    [currentTenant, deleteProject, t]
   );
 
   // Handle opening settings modal

@@ -14,6 +14,7 @@ import {
   Save,
   XCircle,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { formatDateTimeFull } from '@/utils/date';
 
@@ -31,6 +32,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   onClose,
   memory,
 }) => {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(memory?.content || '');
   const [editedTitle, setEditedTitle] = useState(memory?.title || '');
@@ -84,9 +86,9 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
     } catch (err: any) {
       console.error('Failed to update memory:', err);
       if (err.message && err.message.includes('409')) {
-        setError('版本冲突：该记忆已被其他用户修改。请刷新页面后重试。');
+        setError(t('memory.detail.versionConflict'));
       } else {
-        setError('保存失败，请稍后重试');
+        setError(t('memory.detail.saveFailed'));
       }
     } finally {
       setIsLoading(false);
@@ -107,10 +109,10 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      alert('链接已复制到剪贴板！');
+      alert(t('memory.detail.linkCopied'));
     } catch (err) {
       console.error('Failed to copy link:', err);
-      alert('复制链接失败');
+      alert(t('memory.detail.linkCopyFailed'));
     }
   };
 
@@ -134,7 +136,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <h2 id="memory-detail-title" className="text-lg font-semibold text-gray-900 dark:text-white">
-              {isEditing ? '编辑记忆' : '记忆详情'}
+              {isEditing ? t('memory.detail.editTitle') : t('memory.detail.title')}
             </h2>
           </div>
           <div className="flex items-center space-x-2">
@@ -145,7 +147,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   disabled={isLoading}
                   className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
                   aria-label="Save"
-                  title="保存"
+                  title={t('memory.detail.saveTitle')}
                 >
                   {isLoading ? (
                     <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-green-600"></div>
@@ -158,7 +160,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   disabled={isLoading}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
                   aria-label="Cancel editing"
-                  title="取消"
+                  title={t('memory.detail.cancelTitle')}
                 >
                   <XCircle className="h-4 w-4" />
                 </button>
@@ -169,7 +171,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   onClick={handleEdit}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   aria-label="Edit"
-                  title="编辑"
+                  title={t('memory.detail.editTitleTooltip')}
                 >
                   <Edit3 className="h-4 w-4" />
                 </button>
@@ -177,7 +179,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   onClick={handleShare}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   aria-label="Share"
-                  title="分享"
+                  title={t('memory.detail.shareTitle')}
                 >
                   <Share2 className="h-4 w-4" />
                 </button>
@@ -185,7 +187,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   onClick={handleDownload}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   aria-label="Download"
-                  title="下载"
+                  title={t('memory.detail.downloadTitle')}
                 >
                   <Download className="h-4 w-4" />
                 </button>
@@ -218,7 +220,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                       setEditedTitle(e.target.value);
                     }}
                     className="flex-1 text-xl font-semibold text-gray-900 dark:text-white bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="记忆标题"
+                    placeholder={t('memory.detail.titlePlaceholder')}
                     aria-label="Edit memory title"
                   />
                 ) : (
@@ -232,24 +234,24 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 {memory.author_id && (
                   <div className="flex items-center space-x-1">
                     <User className="h-4 w-4" />
-                    <span>用户: {memory.author_id}</span>
+                    <span>{t('memory.detail.userPrefix')} {memory.author_id}</span>
                   </div>
                 )}
                 <div className="flex items-center space-x-1">
                   <Calendar className="h-4 w-4" />
-                  <span>创建: {formatDate(memory.created_at)}</span>
+                  <span>{t('memory.detail.createdPrefix')} {formatDate(memory.created_at)}</span>
                 </div>
                 {memory.updated_at !== memory.created_at && (
                   <div className="flex items-center space-x-1">
                     <Calendar className="h-4 w-4" />
-                    <span>更新: {formatDate(memory.updated_at || '')}</span>
+                    <span>{t('memory.detail.updatedPrefix')} {formatDate(memory.updated_at || '')}</span>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="mb-6">
-              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">记忆内容</h4>
+              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.contentHeading')}</h4>
               {isEditing ? (
                 <div>
                   <textarea
@@ -258,7 +260,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                       setEditedContent(e.target.value);
                     }}
                     className="w-full h-64 px-4 py-3 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-slate-200 whitespace-pre-wrap leading-relaxed resize-y"
-                    placeholder="输入记忆内容..."
+                    placeholder={t('memory.detail.contentPlaceholder')}
                     aria-label="Edit memory content"
                   />
                   {error && (
@@ -278,7 +280,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
             {memory.entities && memory.entities.length > 0 && (
               <div className="mb-6">
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">实体信息</h4>
+                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.entitiesHeading')}</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {memory.entities.map((entity, index) => (
                     <div
@@ -307,7 +309,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
             {memory.relationships && memory.relationships.length > 0 && (
               <div className="mb-6">
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">关系信息</h4>
+                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.relationshipsHeading')}</h4>
                 <div className="space-y-3">
                   {memory.relationships.map((relationship, index) => (
                     <div
@@ -332,7 +334,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                             </span>
                             {relationship.confidence && (
                               <span className="text-xs text-purple-500 dark:text-purple-400">
-                                置信度: {relationship.confidence}
+                                {t('memory.detail.confidencePrefix')} {relationship.confidence}
                               </span>
                             )}
                           </div>
@@ -352,7 +354,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
             {memory.metadata && Object.keys(memory.metadata).length > 0 && (
               <div className="mb-6">
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">元数据</h4>
+                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.metadataHeading')}</h4>
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 border border-gray-100 dark:border-slate-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {Object.entries(memory.metadata).map(([key, value]) => (
@@ -375,11 +377,11 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               <div className="flex items-center justify-between text-sm text-gray-500 dark:text-slate-400">
                 <div className="flex items-center space-x-4">
                   <span>ID: {memory.id}</span>
-                  <span>项目: {memory.project_id}</span>
+                  <span>{t('memory.detail.projectPrefix')} {memory.project_id}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Eye className="h-4 w-4" />
-                  <span>查看次数: {memory.metadata?.view_count || 0}</span>
+                  <span>{t('memory.detail.viewCountPrefix')} {memory.metadata?.view_count || 0}</span>
                 </div>
               </div>
             </div>

@@ -203,6 +203,28 @@ def _select_existing_root_candidate(
     return ranked_candidates[0][0]
 
 
+async def _user_preferred_language_from_db(
+    db: AsyncSession, user_id: str | None
+) -> str | None:
+    """Look up the stored preferred_language for a user. Returns None on any failure."""
+    if not isinstance(user_id, str) or not user_id:
+        return None
+    try:
+        from sqlalchemy import select
+
+        from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+
+        result = await db.execute(
+            select(DBUser.preferred_language).where(DBUser.id == user_id)
+        )
+        value = result.scalar_one_or_none()
+        if isinstance(value, str) and value in {"en-US", "zh-CN"}:
+            return value
+    except Exception:
+        logger.debug("workspace_goal_runtime._user_preferred_language_failed", exc_info=True)
+    return None
+
+
 async def maybe_materialize_workspace_goal_candidate(
     project_id: str,
     tenant_id: str,
@@ -284,11 +306,19 @@ async def maybe_materialize_workspace_goal_candidate(
                 task_service=task_service,
                 task_command_service=command_service,
             )
+            # Fallback: if no explicit preferred_language was supplied, read the
+            # actor user's stored preference so the materialized goal root carries
+            # the language hint into downstream planning + worker conversations.
+            resolved_preferred_language = preferred_language
+            if resolved_preferred_language is None:
+                resolved_preferred_language = await _user_preferred_language_from_db(
+                    db, user_id
+                )
             task = await materializer.materialize_candidate(
                 workspace_id=workspace.id,
                 actor_user_id=user_id,
                 candidate=selected_candidate,
-                preferred_language=preferred_language,
+                preferred_language=resolved_preferred_language,
             )
             if task is None:
                 return None

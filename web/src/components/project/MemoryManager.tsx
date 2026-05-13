@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
 import { Brain, Search, Plus, Clock, User, Tag, AlertCircle, Eye, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { formatDateTime } from '@/utils/date';
 
@@ -16,6 +17,7 @@ interface MemoryManagerProps {
 }
 
 export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) => {
+  const { t } = useTranslation();
   const { currentProject } = useProjectStore();
   const {
     memories,
@@ -72,7 +74,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   const handleDeleteMemory = async (memoryId: string) => {
     if (!currentProject) return;
 
-    if (window.confirm('确定要删除这条记忆吗？此操作不可恢复。')) {
+    if (window.confirm(t('memory.manager.deleteConfirm'))) {
       try {
         await deleteMemory(currentProject.id, memoryId);
       } catch (_error) {
@@ -105,8 +107,8 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8">
         <div className="text-center">
           <Brain className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">请先选择项目</h3>
-          <p className="text-gray-600 dark:text-slate-400">选择一个项目来查看和管理记忆</p>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('memory.manager.selectProjectFirstHeading')}</h3>
+          <p className="text-gray-600 dark:text-slate-400">{t('memory.manager.selectProjectHint')}</p>
         </div>
       </div>
     );
@@ -128,9 +130,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-gray-600 dark:text-slate-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">记忆管理</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('memory.manager.title')}</h3>
             <span className="text-sm text-gray-500 dark:text-slate-500">
-              ({memories.length} 条)
+              {t('memory.manager.countSuffix', { count: memories.length })}
             </span>
           </div>
           <button
@@ -140,7 +142,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
           >
             <Plus className="h-4 w-4" />
-            <span>新建记忆</span>
+            <span>{t('memory.manager.newButton')}</span>
           </button>
         </div>
 
@@ -149,7 +151,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
-              placeholder="搜索记忆内容..."
+              placeholder={t('memory.manager.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -167,18 +169,18 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             >
-              <option value="all">所有类型</option>
-              <option value="text">文本</option>
-              <option value="document">文档</option>
-              <option value="image">图片</option>
-              <option value="video">视频</option>
+              <option value="all">{t('memory.manager.typeAll')}</option>
+              <option value="text">{t('memory.manager.typeText')}</option>
+              <option value="document">{t('memory.manager.typeDocument')}</option>
+              <option value="image">{t('memory.manager.typeImage')}</option>
+              <option value="video">{t('memory.manager.typeVideo')}</option>
             </select>
           </div>
 
           <div>
             <input
               type="text"
-              placeholder="按用户筛选..."
+              placeholder={t('memory.manager.userFilterPlaceholder')}
               value={filterUser}
               onChange={(e) => {
                 setFilterUser(e.target.value);
@@ -192,7 +194,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               onClick={loadMemories}
               className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
             >
-              搜索
+              {t('memory.manager.search')}
             </button>
             <button
               onClick={() => {
@@ -203,7 +205,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               }}
               className="px-3 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-sm"
             >
-              重置
+              {t('memory.manager.reset')}
             </button>
           </div>
         </div>
@@ -222,11 +224,11 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
         {memories.length === 0 ? (
           <div className="text-center py-8">
             <Brain className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
-            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">暂无记忆</h4>
+            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('memory.manager.emptyHeading')}</h4>
             <p className="text-gray-600 dark:text-slate-400 mb-4">
               {searchTerm || filterType !== 'all' || filterUser
-                ? '没有找到匹配的记忆'
-                : '开始创建你的第一条记忆'}
+                ? t('memory.manager.emptyNoMatch')
+                : t('memory.manager.emptyHint')}
             </p>
             {!searchTerm && filterType === 'all' && !filterUser && (
               <button
@@ -235,7 +237,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
-                创建记忆
+                {t('memory.manager.createMemory')}
               </button>
             )}
           </div>
@@ -308,7 +310,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
                   <div className="mb-2">
                     <div className="flex items-center space-x-2 mb-1">
                       <Tag className="h-3 w-3 text-gray-400 dark:text-slate-500" />
-                      <span className="text-xs text-gray-500 dark:text-slate-500">实体</span>
+                      <span className="text-xs text-gray-500 dark:text-slate-500">{t('memory.manager.entitiesLabel')}</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {memory.entities.slice(0, 5).map((entity, index) => (
@@ -332,7 +334,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
                   <div>
                     <div className="flex items-center space-x-2 mb-1">
                       <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                      <span className="text-xs text-gray-500 dark:text-slate-500">关系</span>
+                      <span className="text-xs text-gray-500 dark:text-slate-500">{t('memory.manager.relationshipsLabel')}</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {memory.relationships.slice(0, 3).map((relationship, index) => (

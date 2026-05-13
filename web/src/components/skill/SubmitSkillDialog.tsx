@@ -8,6 +8,8 @@
 
 import { useEffect, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { useMutation } from '@tanstack/react-query';
 import { Input, Modal, Space, Typography, message } from 'antd';
 
@@ -30,6 +32,7 @@ interface SubmitSkillDialogProps {
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 
 export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogProps) {
+  const { t } = useTranslation();
   const [semver, setSemver] = useState('0.1.0');
   const [note, setNote] = useState('');
 
@@ -57,7 +60,7 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
       });
     },
     onSuccess: () => {
-      message.success('已提交至精选库审核队列');
+      message.success(t('skill.submit.successMessage'));
       onClose();
     },
     onError: (err: Error) => {
@@ -69,25 +72,25 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
 
   return (
     <Modal
-      title={skill ? `提交 "${skill.name}" 到精选库` : '提交到精选库'}
+      title={skill ? t('skill.submit.titleWithName', { name: skill.name }) : t('skill.submit.titleGeneric')}
       open={open}
       onCancel={onClose}
       onOk={() => {
         mutation.mutate();
       }}
-      okText="提交"
+      okText={t('skill.submit.okText')}
       okButtonProps={{ disabled: invalidSemver }}
       confirmLoading={mutation.isPending}
     >
       <Space orientation="vertical" className="w-full" size="middle">
         <div className={`rounded-[6px] p-3 ${surface}`}>
           <Text type="secondary">
-            提交后管理员会审核此 Skill 的内容；通过后将发布到精选库，所有租户都可以 fork。
+            {t('skill.submit.description')}
           </Text>
         </div>
         <div>
           <label htmlFor="skill-submit-semver" className="font-medium">
-            版本号（semver）
+            {t('skill.submit.versionLabel')}
           </label>
           <Input
             id="skill-submit-semver"
@@ -101,13 +104,13 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
           />
           {invalidSemver ? (
             <Text type="danger" className="text-xs">
-              格式需为 MAJOR.MINOR.PATCH（例如 1.2.3）
+              {t('skill.submit.versionFormatHint')}
             </Text>
           ) : null}
         </div>
         <div>
           <label htmlFor="skill-submit-note" className="font-medium">
-            提交备注（可选）
+            {t('skill.submit.noteLabel')}
           </label>
           <TextArea
             id="skill-submit-note"
@@ -117,7 +120,7 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
             onChange={(e) => {
               setNote(e.target.value);
             }}
-            placeholder="为什么这个 Skill 值得加入精选库？"
+            placeholder={t('skill.submit.notePlaceholder')}
             maxLength={2000}
             showCount
           />

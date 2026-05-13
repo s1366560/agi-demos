@@ -610,8 +610,17 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
             "Origin",
             "X-Requested-With",
             "X-Request-ID",
+            "X-Language",
+            "Accept-Language",
         ],
+        expose_headers=["Content-Language"],
     )
+
+    # Locale negotiation: resolves X-Language / lang / Accept-Language and pins
+    # the request to a contextvar consumed by gettext wrappers.
+    from src.infrastructure.i18n.middleware import LocaleMiddleware
+
+    app.add_middleware(LocaleMiddleware)
 
     # Configure rate limiting
     app.state.limiter = limiter
