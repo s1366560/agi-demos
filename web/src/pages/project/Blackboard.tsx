@@ -258,6 +258,8 @@ export function Blackboard() {
   const {
     handleCreatePost,
     handleCreateReply,
+    handleUpdatePost,
+    handleUpdateReply,
     handleLoadReplies,
     handleDeletePost,
     handlePinPost,
@@ -457,6 +459,8 @@ export function Blackboard() {
               onLoadReplies={handleLoadReplies}
               onCreatePost={handleCreatePost}
               onCreateReply={handleCreateReply}
+              onUpdatePost={handleUpdatePost}
+              onUpdateReply={handleUpdateReply}
               onDeletePost={handleDeletePost}
               onPinPost={handlePinPost}
               onUnpinPost={handleUnpinPost}

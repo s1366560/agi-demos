@@ -19,8 +19,17 @@ export function useBlackboardPageActions({
 }: BlackboardActionDeps) {
   const { t } = useTranslation();
   const message = useLazyMessage();
-  const { createPost, loadReplies, createReply, deletePost, pinPost, unpinPost, deleteReply } =
-    useWorkspaceActions();
+  const {
+    createPost,
+    updatePost,
+    loadReplies,
+    createReply,
+    updateReply,
+    deletePost,
+    pinPost,
+    unpinPost,
+    deleteReply,
+  } = useWorkspaceActions();
 
   const handleCreatePost = useCallback(
     async (data: { title: string; content: string }) => {
@@ -54,6 +63,40 @@ export function useBlackboardPageActions({
       }
     },
     [createReply, message, projectId, selectedWorkspaceId, t, tenantId]
+  );
+
+  const handleUpdatePost = useCallback(
+    async (postId: string, data: { title: string; content: string }) => {
+      if (!tenantId || !projectId || !selectedWorkspaceId) {
+        return false;
+      }
+
+      try {
+        await updatePost(tenantId, projectId, selectedWorkspaceId, postId, data);
+        return true;
+      } catch (_updateError) {
+        message?.error(t('blackboard.errors.updatePost', 'Failed to update post'));
+        return false;
+      }
+    },
+    [message, projectId, selectedWorkspaceId, t, tenantId, updatePost]
+  );
+
+  const handleUpdateReply = useCallback(
+    async (postId: string, replyId: string, content: string) => {
+      if (!tenantId || !projectId || !selectedWorkspaceId) {
+        return false;
+      }
+
+      try {
+        await updateReply(tenantId, projectId, selectedWorkspaceId, postId, replyId, { content });
+        return true;
+      } catch (_updateError) {
+        message?.error(t('blackboard.errors.updateReply', 'Failed to update reply'));
+        return false;
+      }
+    },
+    [message, projectId, selectedWorkspaceId, t, tenantId, updateReply]
   );
 
   const handleLoadReplies = useCallback(
@@ -141,6 +184,8 @@ export function useBlackboardPageActions({
   return {
     handleCreatePost,
     handleCreateReply,
+    handleUpdatePost,
+    handleUpdateReply,
     handleLoadReplies,
     handleDeletePost,
     handlePinPost,

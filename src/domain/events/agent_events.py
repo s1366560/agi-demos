@@ -55,11 +55,14 @@ __all__ = [
     "AgentSuggestionsEvent",
     "AgentTaskAssignedEvent",
     "AgentTaskRefusedEvent",
+    "BlackboardFileCreatedEvent",
+    "BlackboardFileDeletedEvent",
     "BlackboardPostCreatedEvent",
     "BlackboardPostDeletedEvent",
     "BlackboardPostUpdatedEvent",
     "BlackboardReplyCreatedEvent",
     "BlackboardReplyDeletedEvent",
+    "BlackboardReplyUpdatedEvent",
     "ContextCompactedEvent",
     "ConversationParticipantJoinedEvent",
     "ConversationParticipantLeftEvent",
@@ -1794,6 +1797,16 @@ class BlackboardReplyCreatedEvent(AgentDomainEvent):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class BlackboardReplyUpdatedEvent(AgentDomainEvent):
+    """Event: A reply was updated on a blackboard post."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_REPLY_UPDATED
+    workspace_id: str
+    post_id: str
+    reply_id: str
+    changes: dict[str, Any] = Field(default_factory=dict)
+
+
 class BlackboardReplyDeletedEvent(AgentDomainEvent):
     """Event: A reply was deleted from a blackboard post."""
 
@@ -1801,6 +1814,26 @@ class BlackboardReplyDeletedEvent(AgentDomainEvent):
     workspace_id: str
     post_id: str
     reply_id: str
+
+
+class BlackboardFileCreatedEvent(AgentDomainEvent):
+    """Event: A file or directory was added to a blackboard workspace."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_FILE_CREATED
+    workspace_id: str
+    file_id: str
+    parent_path: str = "/"
+    name: str | None = None
+    is_directory: bool = False
+
+
+class BlackboardFileDeletedEvent(AgentDomainEvent):
+    """Event: A file or directory was removed from a blackboard workspace."""
+
+    event_type: AgentEventType = AgentEventType.BLACKBOARD_FILE_DELETED
+    workspace_id: str
+    file_id: str
+    parent_path: str | None = None
 
 
 class WorkspaceTaskCreatedEvent(AgentDomainEvent):
@@ -2060,7 +2093,10 @@ def get_event_type_docstring() -> str:
         BlackboardPostUpdatedEvent,
         BlackboardPostDeletedEvent,
         BlackboardReplyCreatedEvent,
+        BlackboardReplyUpdatedEvent,
         BlackboardReplyDeletedEvent,
+        BlackboardFileCreatedEvent,
+        BlackboardFileDeletedEvent,
         WorkspaceTaskCreatedEvent,
         WorkspaceTaskUpdatedEvent,
         WorkspaceTaskDeletedEvent,

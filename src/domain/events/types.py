@@ -296,7 +296,10 @@ class AgentEventType(str, Enum):
     BLACKBOARD_POST_UPDATED = "blackboard_post_updated"
     BLACKBOARD_POST_DELETED = "blackboard_post_deleted"
     BLACKBOARD_REPLY_CREATED = "blackboard_reply_created"
+    BLACKBOARD_REPLY_UPDATED = "blackboard_reply_updated"
     BLACKBOARD_REPLY_DELETED = "blackboard_reply_deleted"
+    BLACKBOARD_FILE_CREATED = "blackboard_file_created"
+    BLACKBOARD_FILE_DELETED = "blackboard_file_deleted"
     WORKSPACE_UPDATED = "workspace_updated"
     WORKSPACE_DELETED = "workspace_deleted"
     WORKSPACE_MEMBER_LEFT = "workspace_member_left"
@@ -502,7 +505,10 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.BLACKBOARD_POST_UPDATED: EventCategory.AGENT,
     AgentEventType.BLACKBOARD_POST_DELETED: EventCategory.AGENT,
     AgentEventType.BLACKBOARD_REPLY_CREATED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_REPLY_UPDATED: EventCategory.AGENT,
     AgentEventType.BLACKBOARD_REPLY_DELETED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_FILE_CREATED: EventCategory.AGENT,
+    AgentEventType.BLACKBOARD_FILE_DELETED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_UPDATED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_DELETED: EventCategory.AGENT,
     AgentEventType.WORKSPACE_MEMBER_LEFT: EventCategory.AGENT,

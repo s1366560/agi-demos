@@ -1,10 +1,12 @@
-import { fireEvent, waitFor } from '@testing-library/react';
+import { act, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SharedFileBrowser } from '@/components/blackboard/tabs/SharedFileBrowser';
+import { useWorkspaceStore } from '@/stores/workspace';
 import { render, screen } from '@/test/utils';
 
 import type { BlackboardFileItem } from '@/services/blackboardFileService';
+import type { ReactNode } from 'react';
 
 const {
   listFilesMock,
@@ -35,6 +37,22 @@ vi.mock('@/services/blackboardFileService', () => ({
 }));
 
 vi.mock('@/components/ui/lazyAntd', () => ({
+  LazyPopconfirm: ({
+    children,
+    okText,
+    onConfirm,
+  }: {
+    children: ReactNode;
+    okText?: ReactNode;
+    onConfirm?: () => void;
+  }) => (
+    <span>
+      {children}
+      <button type="button" onClick={onConfirm}>
+        {okText}
+      </button>
+    </span>
+  ),
   useLazyMessage: () => ({
     success: messageSuccessMock,
     error: messageErrorMock,
@@ -67,6 +85,7 @@ describe('SharedFileBrowser', () => {
     uploadFileMock.mockResolvedValue(makeFile());
     downloadFileMock.mockResolvedValue(new Blob(['hello'], { type: 'text/plain' }));
     deleteFileMock.mockResolvedValue(true);
+    useWorkspaceStore.setState({ fileRefreshCounters: {} });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -120,7 +139,11 @@ describe('SharedFileBrowser', () => {
     const first = new File(['a'], 'a.txt', { type: 'text/plain' });
     const second = new File(['b'], 'b.txt', { type: 'text/plain' });
 
-    fireEvent.change(input!, { target: { files: [first, second] } });
+    expect(input).not.toBeNull();
+    if (!input) {
+      throw new Error('file input not found');
+    }
+    fireEvent.change(input, { target: { files: [first, second] } });
 
     await waitFor(() => {
       expect(uploadFileMock).toHaveBeenCalledTimes(2);
@@ -135,11 +158,12 @@ describe('SharedFileBrowser', () => {
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
     fireEvent.click(await screen.findByTitle('blackboard.files.delete'));
+    fireEvent.click(await screen.findByRole('button', { name: 'common.yes' }));
 
     await waitFor(() => {
       expect(deleteFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1');
     });
-    expect(window.confirm).toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
     expect(listFilesMock).toHaveBeenCalledTimes(2);
   });
 
@@ -151,6 +175,33 @@ describe('SharedFileBrowser', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('load exploded');
 
     fireEvent.click(screen.getByRole('button', { name: /common.retry/i }));
+
+    await waitFor(() => {
+      expect(listFilesMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('refreshes the active folder when a blackboard file event arrives', async () => {
+    render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
+
+    await waitFor(() => {
+      expect(listFilesMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', '/');
+    });
+
+    act(() => {
+      useWorkspaceStore.getState().handleBlackboardEvent({
+        type: 'blackboard_file_created',
+        data: {
+          workspace_id: 'ws-1',
+          file: {
+            id: 'file-2',
+            workspace_id: 'ws-1',
+            parent_path: '/',
+            name: 'new.txt',
+          },
+        },
+      });
+    });
 
     await waitFor(() => {
       expect(listFilesMock).toHaveBeenCalledTimes(2);

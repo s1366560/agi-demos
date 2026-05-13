@@ -1,6 +1,6 @@
 /**
  * Auto-generated event types from Python.
- * Generated at: 2026-05-07T08:22:41.903971Z
+ * Generated at: 2026-05-13T01:54:13.192586Z
  *
  * DO NOT EDIT MANUALLY - run `make generate-event-types` to regenerate.
  */
@@ -142,7 +142,10 @@ export type AgentEventType =
   | "blackboard_post_updated"
   | "blackboard_post_deleted"
   | "blackboard_reply_created"
+  | "blackboard_reply_updated"
   | "blackboard_reply_deleted"
+  | "blackboard_file_created"
+  | "blackboard_file_deleted"
   | "workspace_updated"
   | "workspace_deleted"
   | "workspace_member_left"
@@ -174,13 +177,13 @@ export type AgentEventType =
   | "task_recovery_action_completed";
 
 // Delta events (not persisted)
-export const DELTA_EVENT_TYPES: AgentEventType[] = ["act_delta", "thought_delta", "text_end", "text_start", "text_delta"];
+export const DELTA_EVENT_TYPES: AgentEventType[] = ["thought_delta", "act_delta", "text_start", "text_delta", "text_end"];
 
 // Terminal events (stream completion)
-export const TERMINAL_EVENT_TYPES: AgentEventType[] = ["cancelled", "error", "complete"];
+export const TERMINAL_EVENT_TYPES: AgentEventType[] = ["error", "complete", "cancelled"];
 
 // HITL events (require user response)
-export const HITL_EVENT_TYPES: AgentEventType[] = ["a2ui_action_asked", "decision_asked", "permission_asked", "clarification_asked", "elicitation_asked", "env_var_requested"];
+export const HITL_EVENT_TYPES: AgentEventType[] = ["a2ui_action_asked", "permission_asked", "decision_asked", "clarification_asked", "env_var_requested", "elicitation_asked"];
 
 // Helper functions
 export function isTerminalEvent(eventType: AgentEventType): boolean {
@@ -323,7 +326,10 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   "blackboard_post_updated": "agent",
   "blackboard_post_deleted": "agent",
   "blackboard_reply_created": "agent",
+  "blackboard_reply_updated": "agent",
   "blackboard_reply_deleted": "agent",
+  "blackboard_file_created": "agent",
+  "blackboard_file_deleted": "agent",
   "workspace_updated": "agent",
   "workspace_deleted": "agent",
   "workspace_member_left": "agent",
@@ -487,7 +493,10 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   "blackboard_post_updated",
   "blackboard_post_deleted",
   "blackboard_reply_created",
+  "blackboard_reply_updated",
   "blackboard_reply_deleted",
+  "blackboard_file_created",
+  "blackboard_file_deleted",
   "workspace_updated",
   "workspace_deleted",
   "workspace_member_left",

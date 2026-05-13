@@ -13,6 +13,7 @@ from src.application.services.workspace_surface_contract import (
     SIGNAL_ROLE_KEY,
     SURFACE_BOUNDARY_KEY,
 )
+from src.domain.events.types import AgentEventType
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     Tenant,
@@ -104,6 +105,10 @@ class TestBlackboardRouter:
         assert publish_kwargs["metadata"][SIGNAL_ROLE_KEY] == SENSING_CAPABLE
         assert publish_kwargs["payload"][SURFACE_BOUNDARY_KEY] == OWNED
         assert publish_kwargs["payload"]["authority_class"] == AUTHORITATIVE
+        assert publish_kwargs["payload"]["post"]["id"] == created["id"]
+        assert publish_kwargs["payload"]["post"]["title"] == "Release Plan"
+        assert publish_kwargs["payload"]["post"]["content"] == "Ship by Friday"
+        assert publish_kwargs["payload"]["post"]["workspace_id"] == WORKSPACE_ID
 
     @pytest.mark.asyncio
     async def test_viewer_cannot_create_but_can_list(self, test_db, client, test_user):
@@ -158,3 +163,73 @@ class TestBlackboardRouter:
             assert call.kwargs["metadata"]["authority_class"] == AUTHORITATIVE
             assert call.kwargs["payload"][SURFACE_BOUNDARY_KEY] == OWNED
             assert call.kwargs["payload"]["authority_class"] == AUTHORITATIVE
+
+    @pytest.mark.asyncio
+    async def test_update_reply_publishes_reply_updated_event(self, test_db, client, test_user, monkeypatch):
+        publish_mock = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.blackboard.publish_workspace_event",
+            publish_mock,
+        )
+        await _seed_workspace_membership(test_db, role="owner")
+        base = f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/workspaces/{WORKSPACE_ID}/blackboard"
+
+        post_response = client.post(
+            f"{base}/posts",
+            json={"title": "Review", "content": "Track decisions"},
+        )
+        post_id = post_response.json()["id"]
+        reply_response = client.post(
+            f"{base}/posts/{post_id}/replies",
+            json={"content": "Initial note"},
+        )
+        reply_id = reply_response.json()["id"]
+
+        update_response = client.patch(
+            f"{base}/posts/{post_id}/replies/{reply_id}",
+            json={"content": "Updated note", "metadata": {"edited": True}},
+        )
+
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["content"] == "Updated note"
+        publish_kwargs = publish_mock.await_args.kwargs
+        assert publish_kwargs["event_type"] == AgentEventType.BLACKBOARD_REPLY_UPDATED
+        assert publish_kwargs["payload"]["post_id"] == post_id
+        assert publish_kwargs["payload"]["reply"]["id"] == reply_id
+        assert publish_kwargs["payload"]["reply"]["content"] == "Updated note"
+        assert publish_kwargs["payload"][SURFACE_BOUNDARY_KEY] == OWNED
+        assert publish_kwargs["payload"]["authority_class"] == AUTHORITATIVE
+
+    @pytest.mark.asyncio
+    async def test_file_mutations_publish_blackboard_events(self, test_db, client, test_user, monkeypatch):
+        publish_mock = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.blackboard.publish_workspace_event",
+            publish_mock,
+        )
+        await _seed_workspace_membership(test_db, role="owner")
+        base = f"/api/v1/tenants/{TENANT_ID}/projects/{PROJECT_ID}/workspaces/{WORKSPACE_ID}/blackboard"
+
+        create_response = client.post(
+            f"{base}/files/mkdir",
+            json={"parent_path": "/", "name": "docs"},
+        )
+
+        assert create_response.status_code == 201
+        created = create_response.json()
+        create_event = publish_mock.await_args.kwargs
+        assert create_event["event_type"] == AgentEventType.BLACKBOARD_FILE_CREATED
+        assert create_event["payload"]["file"]["id"] == created["id"]
+        assert create_event["payload"]["file"]["parent_path"] == "/"
+        assert create_event["payload"]["file"]["is_directory"] is True
+        assert create_event["payload"][SURFACE_BOUNDARY_KEY] == OWNED
+        assert create_event["payload"]["authority_class"] == AUTHORITATIVE
+
+        delete_response = client.delete(f"{base}/files/{created['id']}")
+
+        assert delete_response.status_code == 200
+        delete_event = publish_mock.await_args.kwargs
+        assert delete_event["event_type"] == AgentEventType.BLACKBOARD_FILE_DELETED
+        assert delete_event["payload"]["file_id"] == created["id"]
+        assert delete_event["payload"]["workspace_id"] == WORKSPACE_ID

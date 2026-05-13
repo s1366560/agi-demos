@@ -38,6 +38,8 @@ export interface DiscussionTabProps {
   setReplyDraft: (v: string) => void;
   creatingPost: boolean;
   replying: boolean;
+  updatingPostId: string | null;
+  updatingReplyId: string | null;
   deletingPostId: string | null;
   deletingReplyId: string | null;
   togglingPostId: string | null;
@@ -46,6 +48,8 @@ export interface DiscussionTabProps {
   repliesByPostId: Record<string, BlackboardReply[]>;
   handleCreatePost: () => Promise<void>;
   handleCreateReply: () => Promise<void>;
+  handleUpdateSelectedPost: (data: { title: string; content: string }) => Promise<boolean>;
+  handleUpdateSelectedReply: (replyId: string, content: string) => Promise<boolean>;
   handleTogglePin: () => Promise<void>;
   handleDeleteSelectedPost: () => Promise<void>;
   handleDeleteSelectedReply: (replyId: string) => Promise<void>;
@@ -256,10 +260,14 @@ function ThreadDetailView({
   replyDraft,
   setReplyDraft,
   replying,
+  updatingPostId,
+  updatingReplyId,
   deletingPostId,
   deletingReplyId,
   togglingPostId,
   handleCreateReply,
+  handleUpdateSelectedPost,
+  handleUpdateSelectedReply,
   handleTogglePin,
   handleDeleteSelectedPost,
   handleDeleteSelectedReply,
@@ -274,10 +282,14 @@ function ThreadDetailView({
   replyDraft: string;
   setReplyDraft: (v: string) => void;
   replying: boolean;
+  updatingPostId: string | null;
+  updatingReplyId: string | null;
   deletingPostId: string | null;
   deletingReplyId: string | null;
   togglingPostId: string | null;
   handleCreateReply: () => Promise<void>;
+  handleUpdateSelectedPost: (data: { title: string; content: string }) => Promise<boolean>;
+  handleUpdateSelectedReply: (replyId: string, content: string) => Promise<boolean>;
   handleTogglePin: () => Promise<void>;
   handleDeleteSelectedPost: () => Promise<void>;
   handleDeleteSelectedReply: (replyId: string) => Promise<void>;
@@ -285,6 +297,43 @@ function ThreadDetailView({
   onBack: () => void;
   t: (key: string, fallback: string) => string;
 }) {
+  const [isEditingPost, setIsEditingPost] = useState(false);
+  const [postTitleDraft, setPostTitleDraft] = useState(post.title);
+  const [postContentDraft, setPostContentDraft] = useState(post.content);
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [replyContentDraft, setReplyContentDraft] = useState('');
+
+  const savePostEdit = async () => {
+    const title = postTitleDraft.trim();
+    const content = postContentDraft.trim();
+    if (!title || !content) {
+      return;
+    }
+
+    const updated = await handleUpdateSelectedPost({ title, content });
+    if (updated) {
+      setIsEditingPost(false);
+    }
+  };
+
+  const startReplyEdit = (reply: BlackboardReply) => {
+    setEditingReplyId(reply.id);
+    setReplyContentDraft(reply.content);
+  };
+
+  const saveReplyEdit = async (replyId: string) => {
+    const content = replyContentDraft.trim();
+    if (!content) {
+      return;
+    }
+
+    const updated = await handleUpdateSelectedReply(replyId, content);
+    if (updated) {
+      setEditingReplyId(null);
+      setReplyContentDraft('');
+    }
+  };
+
   return (
     <div className="space-y-0">
       {/* Back navigation */}
@@ -323,13 +372,80 @@ function ThreadDetailView({
           </span>
         </div>
         <div className="px-4 py-4">
-          <h2 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
-            {post.title}
-          </h2>
-          <article className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-text-secondary dark:text-text-muted">
-            {post.content}
-          </article>
+          {isEditingPost ? (
+            <div className="space-y-3">
+              <Input
+                value={postTitleDraft}
+                aria-label={t('blackboard.postTitle', 'Title')}
+                onChange={(event) => {
+                  setPostTitleDraft(event.target.value);
+                }}
+                maxLength={200}
+              />
+              <TextArea
+                value={postContentDraft}
+                aria-label={t('blackboard.postContent', 'Content')}
+                onChange={(event) => {
+                  setPostContentDraft(event.target.value);
+                }}
+                rows={5}
+                maxLength={2000}
+                showCount
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void savePostEdit();
+                  }}
+                  disabled={
+                    updatingPostId === post.id ||
+                    !postTitleDraft.trim() ||
+                    !postContentDraft.trim()
+                  }
+                  className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {updatingPostId === post.id
+                    ? t('common.loading', 'Loading...')
+                    : t('common.save', 'Save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingPost(false);
+                    setPostTitleDraft(post.title);
+                    setPostContentDraft(post.content);
+                  }}
+                  className="rounded-md border border-border-light px-4 py-1.5 text-xs text-text-secondary transition hover:border-primary/30 hover:bg-primary/8 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:text-text-muted"
+                >
+                  {t('common.cancel', 'Cancel')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
+                {post.title}
+              </h2>
+              <article className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-text-secondary dark:text-text-muted">
+                {post.content}
+              </article>
+            </>
+          )}
           <div className="mt-4 flex items-center gap-2">
+            {!isEditingPost && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingPost(true);
+                  setPostTitleDraft(post.title);
+                  setPostContentDraft(post.content);
+                }}
+                className="rounded-md border border-border-light px-3 py-1 text-xs text-text-secondary transition hover:border-primary/30 hover:bg-primary/8 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:text-text-muted dark:hover:text-primary-200"
+              >
+                {t('blackboard.edit', 'Edit')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -429,9 +545,60 @@ function ThreadDetailView({
                 </Popconfirm>
               </div>
             </div>
-            <p className="whitespace-pre-wrap break-words px-4 py-3 text-sm leading-6 text-text-secondary dark:text-text-muted">
-              {reply.content}
-            </p>
+            {editingReplyId === reply.id ? (
+              <div className="space-y-2 px-4 py-3">
+                <TextArea
+                  value={replyContentDraft}
+                  aria-label={t('blackboard.replyContent', 'Reply content')}
+                  onChange={(event) => {
+                    setReplyContentDraft(event.target.value);
+                  }}
+                  rows={3}
+                  maxLength={1000}
+                  showCount
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void saveReplyEdit(reply.id);
+                    }}
+                    disabled={updatingReplyId === reply.id || !replyContentDraft.trim()}
+                    className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updatingReplyId === reply.id
+                      ? t('common.loading', 'Loading...')
+                      : t('common.save', 'Save')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingReplyId(null);
+                      setReplyContentDraft('');
+                    }}
+                    className="rounded-md border border-border-light px-3 py-1 text-xs text-text-secondary transition hover:border-primary/30 hover:bg-primary/8 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:text-text-muted"
+                  >
+                    {t('common.cancel', 'Cancel')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-3">
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary dark:text-text-muted">
+                  {reply.content}
+                </p>
+                <button
+                  type="button"
+                  aria-label={t('blackboard.editReply', 'Edit reply')}
+                  onClick={() => {
+                    startReplyEdit(reply);
+                  }}
+                  className="mt-2 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition hover:bg-primary/8 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-text-muted dark:hover:text-primary-200"
+                >
+                  {t('blackboard.edit', 'Edit')}
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
@@ -491,6 +658,8 @@ export function DiscussionTab({
   setReplyDraft,
   creatingPost,
   replying,
+  updatingPostId,
+  updatingReplyId,
   deletingPostId,
   deletingReplyId,
   togglingPostId,
@@ -499,6 +668,8 @@ export function DiscussionTab({
   repliesByPostId,
   handleCreatePost,
   handleCreateReply,
+  handleUpdateSelectedPost,
+  handleUpdateSelectedReply,
   handleTogglePin,
   handleDeleteSelectedPost,
   handleDeleteSelectedReply,
@@ -519,6 +690,7 @@ export function DiscussionTab({
   if (selectedPost) {
     return (
       <ThreadDetailView
+        key={selectedPost.id}
         post={selectedPost}
         replies={selectedReplies}
         repliesLoaded={selectedRepliesLoaded}
@@ -526,10 +698,14 @@ export function DiscussionTab({
         replyDraft={replyDraft}
         setReplyDraft={setReplyDraft}
         replying={replying}
+        updatingPostId={updatingPostId}
+        updatingReplyId={updatingReplyId}
         deletingPostId={deletingPostId}
         deletingReplyId={deletingReplyId}
         togglingPostId={togglingPostId}
         handleCreateReply={handleCreateReply}
+        handleUpdateSelectedPost={handleUpdateSelectedPost}
+        handleUpdateSelectedReply={handleUpdateSelectedReply}
         handleTogglePin={handleTogglePin}
         handleDeleteSelectedPost={handleDeleteSelectedPost}
         handleDeleteSelectedReply={handleDeleteSelectedReply}

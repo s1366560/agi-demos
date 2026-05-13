@@ -47,6 +47,7 @@ describe('useBlackboardSSE', () => {
     expect(classifyWorkspaceEventType('workspace_task_updated')).toBe('task');
     expect(classifyWorkspaceEventType('workspace_plan_updated')).toBe('plan');
     expect(classifyWorkspaceEventType('blackboard_post_created')).toBe('blackboard');
+    expect(classifyWorkspaceEventType('blackboard_reply_updated')).toBe('blackboard');
     expect(classifyWorkspaceEventType('workspace_message_created')).toBe('chat');
     expect(classifyWorkspaceEventType('workspace_member_joined')).toBe('member');
     expect(classifyWorkspaceEventType('workspace_updated')).toBe('lifecycle');

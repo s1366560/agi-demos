@@ -116,6 +116,8 @@ function defaultProps(
     onLoadReplies: vi.fn().mockResolvedValue(true),
     onCreatePost: vi.fn().mockResolvedValue(true),
     onCreateReply: vi.fn().mockResolvedValue(true),
+    onUpdatePost: vi.fn().mockResolvedValue(true),
+    onUpdateReply: vi.fn().mockResolvedValue(true),
     onDeletePost: vi.fn().mockResolvedValue(true),
     onPinPost: vi.fn().mockResolvedValue(undefined),
     onUnpinPost: vi.fn().mockResolvedValue(undefined),

@@ -17,11 +17,13 @@ import {
   X,
 } from 'lucide-react';
 
+import { useWorkspaceStore } from '@/stores/workspace';
+
 import { blackboardFileService } from '@/services/blackboardFileService';
 import type { BlackboardFileItem } from '@/services/blackboardFileService';
 import { parseError } from '@/services/client/ApiError';
 
-import { useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { OwnedSurfaceBadge } from '../OwnedSurfaceBadge';
 
@@ -87,6 +89,9 @@ function fileIcon(item: BlackboardFileItem) {
 export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFileBrowserProps) {
   const { t } = useTranslation();
   const message = useLazyMessage();
+  const fileRefreshCounter = useWorkspaceStore(
+    (state) => state.fileRefreshCounters[workspaceId] ?? 0
+  );
   const [currentPath, setCurrentPath] = useState('/');
   const [files, setFiles] = useState<BlackboardFileItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,6 +106,15 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const previewObjectUrlRef = useRef<string | null>(null);
+  const lastFileRefreshCounterRef = useRef(fileRefreshCounter);
+
+  const revokePreviewObjectUrl = useCallback(() => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+  }, []);
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
@@ -125,6 +139,16 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   useEffect(() => {
     void fetchFiles();
   }, [fetchFiles]);
+
+  useEffect(() => {
+    if (fileRefreshCounter === lastFileRefreshCounterRef.current) {
+      return;
+    }
+    lastFileRefreshCounterRef.current = fileRefreshCounter;
+    void fetchFiles();
+  }, [fetchFiles, fileRefreshCounter]);
+
+  useEffect(() => revokePreviewObjectUrl, [revokePreviewObjectUrl]);
 
   const breadcrumbs = (() => {
     const parts = currentPath.split('/').filter(Boolean);
@@ -245,10 +269,6 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   };
 
   const handleDelete = async (item: BlackboardFileItem) => {
-    const confirmed = window.confirm(
-      t('blackboard.files.deleteConfirm', 'Delete {{name}}?', { name: item.name })
-    );
-    if (!confirmed) return;
     setDeletingId(item.id);
     try {
       await blackboardFileService.deleteFile(tenantId, projectId, workspaceId, item.id);
@@ -269,6 +289,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
 
   const openPreview = async (item: BlackboardFileItem) => {
     if (item.is_directory) return;
+    revokePreviewObjectUrl();
     setPreviewFile(item);
     setPreviewLoading(true);
     setPreviewContent(null);
@@ -280,7 +301,9 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         item.id
       );
       if (item.content_type.startsWith('image/') || item.content_type === 'application/pdf') {
-        setPreviewContent(URL.createObjectURL(blob));
+        const previewUrl = URL.createObjectURL(blob);
+        previewObjectUrlRef.current = previewUrl;
+        setPreviewContent(previewUrl);
       } else if (isTextType(item.content_type)) {
         setPreviewContent(await blob.text());
       }
@@ -297,13 +320,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   };
 
   const closePreview = () => {
-    if (
-      previewContent &&
-      (previewFile?.content_type.startsWith('image/') ||
-        previewFile?.content_type === 'application/pdf')
-    ) {
-      URL.revokeObjectURL(previewContent);
-    }
+    revokePreviewObjectUrl();
     setPreviewFile(null);
     setPreviewContent(null);
   };
@@ -331,7 +348,8 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   };
 
   return (
-    <div
+    <section
+      aria-label={t('blackboard.files.browserRegion', 'Shared files')}
       className="relative space-y-4"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -434,7 +452,6 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
               if (e.key === 'Escape') setShowMkdir(false);
             }}
             placeholder={t('blackboard.files.folderName', 'Folder name')}
-            autoFocus
             aria-label={t('blackboard.files.folderName', 'Folder name')}
             className="rounded-md border border-border-light bg-surface-light px-3 py-1.5 text-sm text-text-primary outline-none focus:ring-1 focus:ring-primary dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse"
           />
@@ -547,22 +564,30 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                           <Download className="h-4 w-4" />
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete(item)}
-                        disabled={deletingId === item.id}
-                        aria-label={t('blackboard.files.deleteNamed', 'Delete {{name}}', {
+                      <LazyPopconfirm
+                        title={t('blackboard.files.deleteConfirm', 'Delete {{name}}?', {
                           name: item.name,
                         })}
-                        className="rounded p-1.5 text-text-secondary transition hover:bg-error/10 hover:text-error dark:text-text-muted"
-                        title={t('blackboard.files.delete', 'Delete')}
+                        okText={t('common.yes', 'Yes')}
+                        cancelText={t('common.no', 'No')}
+                        onConfirm={() => void handleDelete(item)}
                       >
-                        {deletingId === item.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          disabled={deletingId === item.id}
+                          aria-label={t('blackboard.files.deleteNamed', 'Delete {{name}}', {
+                            name: item.name,
+                          })}
+                          className="rounded p-1.5 text-text-secondary transition hover:bg-error/10 hover:text-error dark:text-text-muted"
+                          title={t('blackboard.files.delete', 'Delete')}
+                        >
+                          {deletingId === item.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </LazyPopconfirm>
                     </div>
                   </td>
                 </tr>
@@ -660,6 +685,6 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

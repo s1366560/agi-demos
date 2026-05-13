@@ -102,6 +102,68 @@ function upsertManyById<T extends { id: string }>(items: T[], nextItems: T[]): T
   return nextItems.reduce((acc, item) => upsertById(acc, item), items);
 }
 
+function hasStringId(value: unknown): value is { id: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    value.id.length > 0
+  );
+}
+
+function hasStringProperty(value: object, key: string): boolean {
+  return key in value && typeof value[key as keyof typeof value] === 'string';
+}
+
+function isBlackboardPost(value: unknown): value is BlackboardPost {
+  return (
+    hasStringId(value) &&
+    hasStringProperty(value, 'workspace_id') &&
+    hasStringProperty(value, 'author_id') &&
+    hasStringProperty(value, 'title') &&
+    hasStringProperty(value, 'content') &&
+    hasStringProperty(value, 'status') &&
+    hasStringProperty(value, 'created_at') &&
+    'is_pinned' in value &&
+    typeof value.is_pinned === 'boolean' &&
+    'metadata' in value &&
+    typeof value.metadata === 'object' &&
+    value.metadata !== null
+  );
+}
+
+function isBlackboardReply(value: unknown): value is BlackboardReply {
+  return (
+    hasStringId(value) &&
+    hasStringProperty(value, 'post_id') &&
+    hasStringProperty(value, 'workspace_id') &&
+    hasStringProperty(value, 'author_id') &&
+    hasStringProperty(value, 'content') &&
+    hasStringProperty(value, 'created_at') &&
+    'metadata' in value &&
+    typeof value.metadata === 'object' &&
+    value.metadata !== null
+  );
+}
+
+function getBlackboardFileEventWorkspaceId(data: Record<string, unknown>): string | null {
+  if (typeof data.workspace_id === 'string' && data.workspace_id.length > 0) {
+    return data.workspace_id;
+  }
+  const file = data.file;
+  if (
+    typeof file === 'object' &&
+    file !== null &&
+    'workspace_id' in file &&
+    typeof file.workspace_id === 'string' &&
+    file.workspace_id.length > 0
+  ) {
+    return file.workspace_id;
+  }
+  return null;
+}
+
 function mergeWorkspaceAgentById(
   items: WorkspaceAgent[],
   nextItem: WorkspaceAgent
@@ -158,6 +220,7 @@ interface WorkspaceState {
   onlineAgents: PresenceAgent[];
   selectedHex: { q: number; r: number } | null;
   planRefreshCounters: Record<string, number>;
+  fileRefreshCounters: Record<string, number>;
 
   chatMessages: WorkspaceMessage[];
   chatLoading: boolean;
@@ -244,6 +307,13 @@ interface WorkspaceState {
     workspaceId: string,
     data: { title: string; content: string }
   ) => Promise<void>;
+  updatePost: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string,
+    data: { title: string; content: string }
+  ) => Promise<void>;
   loadReplies: (
     tenantId: string,
     projectId: string,
@@ -255,6 +325,14 @@ interface WorkspaceState {
     projectId: string,
     workspaceId: string,
     postId: string,
+    data: { content: string }
+  ) => Promise<void>;
+  updateReply: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    postId: string,
+    replyId: string,
     data: { content: string }
   ) => Promise<void>;
   deletePost: (
@@ -431,6 +509,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       onlineAgents: [],
       selectedHex: null,
       planRefreshCounters: {},
+      fileRefreshCounters: {},
 
       loadWorkspaces: async (tenantId, projectId) => {
         set({ isLoading: true, error: null });
@@ -624,6 +703,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }));
       },
 
+      updatePost: async (tenantId, projectId, workspaceId, postId, data) => {
+        const post = await workspaceBlackboardService.updatePost(
+          tenantId,
+          projectId,
+          workspaceId,
+          postId,
+          data
+        );
+        set((state) => ({
+          posts: upsertById(state.posts, post),
+        }));
+      },
+
       loadReplies: async (tenantId, projectId, workspaceId, postId) => {
         const state = get();
         const startedWithExistingPost = state.posts.some((post) => post.id === postId);
@@ -698,9 +790,26 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({
           repliesByPostId: {
             ...get().repliesByPostId,
-            [postId]: [...(get().repliesByPostId[postId] ?? []), reply],
+            [postId]: mergeReplies([reply], get().repliesByPostId[postId] ?? []),
           },
         });
+      },
+
+      updateReply: async (tenantId, projectId, workspaceId, postId, replyId, data) => {
+        const reply = await workspaceBlackboardService.updateReply(
+          tenantId,
+          projectId,
+          workspaceId,
+          postId,
+          replyId,
+          data
+        );
+        set((state) => ({
+          repliesByPostId: {
+            ...state.repliesByPostId,
+            [postId]: mergeReplies([reply], state.repliesByPostId[postId] ?? []),
+          },
+        }));
       },
 
       deletePost: async (tenantId, projectId, workspaceId, postId) => {
@@ -981,7 +1090,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           return;
         }
         if (type === 'blackboard_post_created' || type === 'blackboard_post_updated') {
-          const post = data.post as BlackboardPost;
+          const post = data.post;
+          if (!isBlackboardPost(post)) {
+            return;
+          }
           set((state) => ({
             posts: state.posts.some((p) => p.id === post.id)
               ? state.posts.map((p) => (p.id === post.id ? post : p))
@@ -1003,13 +1115,19 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               replyLoadingPostIds: nextReplyLoadingPostIds,
             };
           });
-        } else if (type === 'blackboard_reply_created') {
-          const reply = data.reply as BlackboardReply;
-          const postId = data.post_id as string;
+        } else if (type === 'blackboard_reply_created' || type === 'blackboard_reply_updated') {
+          const reply = data.reply;
+          if (!isBlackboardReply(reply)) {
+            return;
+          }
+          const postId = typeof data.post_id === 'string' ? data.post_id : reply.post_id;
+          if (!postId) {
+            return;
+          }
           set((state) => ({
             repliesByPostId: {
               ...state.repliesByPostId,
-              [postId]: [...(state.repliesByPostId[postId] || []), reply],
+              [postId]: mergeReplies([reply], state.repliesByPostId[postId] || []),
             },
           }));
         } else if (type === 'blackboard_reply_deleted') {
@@ -1019,6 +1137,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             repliesByPostId: {
               ...state.repliesByPostId,
               [postId]: (state.repliesByPostId[postId] || []).filter((r) => r.id !== replyId),
+            },
+          }));
+        } else if (type === 'blackboard_file_created' || type === 'blackboard_file_deleted') {
+          const workspaceId = getBlackboardFileEventWorkspaceId(data);
+          if (!workspaceId) {
+            return;
+          }
+          set((state) => ({
+            fileRefreshCounters: {
+              ...state.fileRefreshCounters,
+              [workspaceId]: (state.fileRefreshCounters[workspaceId] ?? 0) + 1,
             },
           }));
         }
@@ -1196,8 +1325,10 @@ export const useWorkspaceActions = () =>
       setCurrentWorkspace: state.setCurrentWorkspace,
       createWorkspace: state.createWorkspace,
       createPost: state.createPost,
+      updatePost: state.updatePost,
       loadReplies: state.loadReplies,
       createReply: state.createReply,
+      updateReply: state.updateReply,
       deletePost: state.deletePost,
       pinPost: state.pinPost,
       unpinPost: state.unpinPost,

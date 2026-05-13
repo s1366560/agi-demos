@@ -8,6 +8,8 @@ export interface BlackboardActionCallbacks {
   onLoadReplies: (postId: string) => Promise<boolean>;
   onCreatePost: (data: { title: string; content: string }) => Promise<boolean>;
   onCreateReply: (postId: string, content: string) => Promise<boolean>;
+  onUpdatePost: (postId: string, data: { title: string; content: string }) => Promise<boolean>;
+  onUpdateReply: (postId: string, replyId: string, content: string) => Promise<boolean>;
   onDeletePost: (postId: string) => Promise<boolean>;
   onPinPost: (postId: string) => Promise<void>;
   onUnpinPost: (postId: string) => Promise<void>;
@@ -83,6 +85,8 @@ export function useBlackboardActions({
     onLoadReplies,
     onCreatePost,
     onCreateReply,
+    onUpdatePost,
+    onUpdateReply,
     onDeletePost,
     onPinPost,
     onUnpinPost,
@@ -102,6 +106,8 @@ export function useBlackboardActions({
   >({});
   const [creatingPost, setCreatingPost] = useState(false);
   const [replying, setReplying] = useState(false);
+  const [updatingPostId, setUpdatingPostId] = useState<string | null>(null);
+  const [updatingReplyId, setUpdatingReplyId] = useState<string | null>(null);
   const [loadingRepliesPostId, setLoadingRepliesPostId] = useState<string | null>(null);
   const [togglingPostId, setTogglingPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -111,18 +117,19 @@ export function useBlackboardActions({
 
   const selectedPost = posts.find((post) => post.id === selectedPostId) ?? null;
 
+  const selectPostId = useCallback((postId: string | null) => {
+    setSelectedPostId(postId);
+    setReplyDraft('');
+  }, []);
+
   useEffect(() => {
     const fallbackPostId = posts.find((post) => post.is_pinned)?.id ?? posts[0]?.id ?? null;
     const hasSelectedPost = posts.some((post) => post.id === selectedPostId);
 
     if (!hasSelectedPost && fallbackPostId !== selectedPostId) {
-      setSelectedPostId(fallbackPostId);
+      selectPostId(fallbackPostId);
     }
-  }, [posts, selectedPostId]);
-
-  useEffect(() => {
-    setReplyDraft('');
-  }, [selectedPostId]);
+  }, [posts, selectPostId, selectedPostId]);
 
   const handleLoadReplies = useCallback(
     async (postId: string, options?: { manual?: boolean }) => {
@@ -210,6 +217,32 @@ export function useBlackboardActions({
     }
   };
 
+  const handleUpdateSelectedPost = async (data: { title: string; content: string }) => {
+    if (!selectedPost) {
+      return false;
+    }
+
+    setUpdatingPostId(selectedPost.id);
+    try {
+      return await onUpdatePost(selectedPost.id, data);
+    } finally {
+      setUpdatingPostId(null);
+    }
+  };
+
+  const handleUpdateSelectedReply = async (replyId: string, content: string) => {
+    if (!selectedPost) {
+      return false;
+    }
+
+    setUpdatingReplyId(replyId);
+    try {
+      return await onUpdateReply(selectedPost.id, replyId, content);
+    } finally {
+      setUpdatingReplyId(null);
+    }
+  };
+
   const handleTogglePin = async () => {
     if (!selectedPost) {
       return;
@@ -236,7 +269,9 @@ export function useBlackboardActions({
     try {
       const deleted = await onDeletePost(selectedPost.id);
       if (deleted) {
-        setSelectedPostId((current) => (current === selectedPost.id ? null : current));
+        if (selectedPostId === selectedPost.id) {
+          selectPostId(null);
+        }
       }
     } finally {
       setDeletingPostId(null);
@@ -314,7 +349,7 @@ export function useBlackboardActions({
 
   return {
     selectedPostId,
-    setSelectedPostId,
+    setSelectedPostId: selectPostId,
     selectedPost,
     postTitle,
     setPostTitle,
@@ -325,6 +360,8 @@ export function useBlackboardActions({
 
     creatingPost,
     replying,
+    updatingPostId,
+    updatingReplyId,
     loadingRepliesPostId,
     togglingPostId,
     deletingPostId,
@@ -340,6 +377,8 @@ export function useBlackboardActions({
     ) => Promise<void>,
     handleCreatePost,
     handleCreateReply,
+    handleUpdateSelectedPost,
+    handleUpdateSelectedReply,
     handleTogglePin,
     handleDeleteSelectedPost,
     handleDeleteSelectedReply,

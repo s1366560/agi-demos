@@ -65,6 +65,8 @@ export interface CentralBlackboardContentProps {
   onLoadReplies: (postId: string) => Promise<boolean>;
   onCreatePost: (data: { title: string; content: string }) => Promise<boolean>;
   onCreateReply: (postId: string, content: string) => Promise<boolean>;
+  onUpdatePost: (postId: string, data: { title: string; content: string }) => Promise<boolean>;
+  onUpdateReply: (postId: string, replyId: string, content: string) => Promise<boolean>;
   onDeletePost: (postId: string) => Promise<boolean>;
   onPinPost: (postId: string) => Promise<void>;
   onUnpinPost: (postId: string) => Promise<void>;
@@ -92,6 +94,8 @@ export function CentralBlackboardContent({
   onLoadReplies,
   onCreatePost,
   onCreateReply,
+  onUpdatePost,
+  onUpdateReply,
   onDeletePost,
   onPinPost,
   onUnpinPost,
@@ -178,6 +182,8 @@ export function CentralBlackboardContent({
       onLoadReplies,
       onCreatePost,
       onCreateReply,
+      onUpdatePost,
+      onUpdateReply,
       onDeletePost,
       onPinPost,
       onUnpinPost,
@@ -203,7 +209,7 @@ export function CentralBlackboardContent({
       collaboration: agents.length,
       members: agents.length,
       genes: genes.length,
-      status: `${stats.completionRatio}%`,
+      status: `${String(stats.completionRatio)}%`,
       topology: topologyNodes.length,
     };
     if (workspace?.description || objectives.length > 0 || posts.some((post) => post.is_pinned)) {
@@ -260,7 +266,6 @@ export function CentralBlackboardContent({
           id={`blackboard-panel-${activeTab}`}
           role="tabpanel"
           aria-labelledby={`blackboard-tab-${activeTab}`}
-          tabIndex={0}
           data-blackboard-boundary={activeTabMeta.boundary}
           data-blackboard-authority={activeTabMeta.authority}
           className="min-h-0 flex-1 overflow-y-auto px-4 py-4 focus-visible:outline-none sm:px-6 sm:py-5"
@@ -299,6 +304,8 @@ export function CentralBlackboardContent({
               setReplyDraft={actions.setReplyDraft}
               creatingPost={actions.creatingPost}
               replying={actions.replying}
+              updatingPostId={actions.updatingPostId}
+              updatingReplyId={actions.updatingReplyId}
               deletingPostId={actions.deletingPostId}
               deletingReplyId={actions.deletingReplyId}
               togglingPostId={actions.togglingPostId}
@@ -307,6 +314,8 @@ export function CentralBlackboardContent({
               repliesByPostId={repliesByPostId}
               handleCreatePost={actions.handleCreatePost}
               handleCreateReply={actions.handleCreateReply}
+              handleUpdateSelectedPost={actions.handleUpdateSelectedPost}
+              handleUpdateSelectedReply={actions.handleUpdateSelectedReply}
               handleTogglePin={actions.handleTogglePin}
               handleDeleteSelectedPost={actions.handleDeleteSelectedPost}
               handleDeleteSelectedReply={actions.handleDeleteSelectedReply}

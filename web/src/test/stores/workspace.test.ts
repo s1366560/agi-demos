@@ -77,6 +77,7 @@ describe('workspace store', () => {
       genes: [],
       chatMessages: [],
       planRefreshCounters: {},
+      fileRefreshCounters: {},
       isLoading: false,
       activeSurfaceRequestId: 0,
       error: null,
@@ -311,6 +312,91 @@ describe('workspace store', () => {
     expect(useWorkspaceStore.getState().posts).toEqual([
       expect.objectContaining({ id: 'post-1', title: 'Existing' }),
     ]);
+  });
+
+  it('handleBlackboardEvent ignores malformed post payloads without throwing', () => {
+    useWorkspaceStore.setState({
+      posts: [],
+    });
+
+    expect(() => {
+      useWorkspaceStore.getState().handleBlackboardEvent({
+        type: 'blackboard_post_created',
+        data: {
+          post_id: 'post-1',
+          surface_boundary: OWNED,
+          authority_class: AUTHORITATIVE,
+        },
+      });
+    }).not.toThrow();
+
+    expect(useWorkspaceStore.getState().posts).toEqual([]);
+  });
+
+  it('handleBlackboardEvent merges updated reply payloads', () => {
+    useWorkspaceStore.setState({
+      repliesByPostId: {
+        'post-1': [
+          {
+            id: 'reply-1',
+            post_id: 'post-1',
+            workspace_id: 'ws-1',
+            author_id: 'u-1',
+            content: 'Original',
+            metadata: {},
+            created_at: '2026-03-30T10:00:00Z',
+          },
+        ],
+      },
+    });
+
+    useWorkspaceStore.getState().handleBlackboardEvent({
+      type: 'blackboard_reply_updated',
+      data: {
+        post_id: 'post-1',
+        reply: {
+          id: 'reply-1',
+          post_id: 'post-1',
+          workspace_id: 'ws-1',
+          author_id: 'u-1',
+          content: 'Updated',
+          metadata: { edited: true },
+          created_at: '2026-03-30T10:00:00Z',
+          updated_at: '2026-03-30T10:02:00Z',
+        },
+        surface_boundary: OWNED,
+        authority_class: AUTHORITATIVE,
+      },
+    });
+
+    expect(useWorkspaceStore.getState().repliesByPostId['post-1']).toEqual([
+      expect.objectContaining({
+        id: 'reply-1',
+        content: 'Updated',
+        metadata: { edited: true },
+      }),
+    ]);
+  });
+
+  it('handleBlackboardEvent increments file refresh counters for file events', () => {
+    useWorkspaceStore.setState({
+      fileRefreshCounters: {},
+    });
+
+    useWorkspaceStore.getState().handleBlackboardEvent({
+      type: 'blackboard_file_created',
+      data: {
+        file: {
+          id: 'file-1',
+          workspace_id: 'ws-1',
+          parent_path: '/',
+          name: 'notes.txt',
+        },
+        workspace_id: 'ws-1',
+      },
+    });
+
+    expect(useWorkspaceStore.getState().fileRefreshCounters['ws-1']).toBe(1);
   });
 
   it('handleChatEvent accepts hosted sensing chat payloads', () => {

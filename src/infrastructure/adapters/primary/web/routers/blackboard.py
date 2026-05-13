@@ -312,6 +312,7 @@ async def create_post(
             event_type=AgentEventType.BLACKBOARD_POST_CREATED,
             payload=_blackboard_event_payload(
                 {
+                    "post": _to_post_response(post).model_dump(mode="json"),
                     "workspace_id": workspace_id,
                     "post_id": post.id,
                     "author_id": post.author_id,
@@ -557,7 +558,23 @@ async def create_directory(
             name=payload.name,
         )
         await db.commit()
-        return _to_file_response(directory)
+        response = _to_file_response(directory)
+        await publish_workspace_event(
+            request.app.state.container.redis(),
+            workspace_id=workspace_id,
+            event_type=AgentEventType.BLACKBOARD_FILE_CREATED,
+            payload=_blackboard_event_payload(
+                {
+                    "file": response.model_dump(mode="json"),
+                    "file_id": response.id,
+                    "parent_path": response.parent_path,
+                    "name": response.name,
+                    "is_directory": response.is_directory,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
+        )
+        return response
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
@@ -592,7 +609,23 @@ async def upload_file(
             content=content,
         )
         await db.commit()
-        return _to_file_response(bb_file)
+        response = _to_file_response(bb_file)
+        await publish_workspace_event(
+            request.app.state.container.redis(),
+            workspace_id=workspace_id,
+            event_type=AgentEventType.BLACKBOARD_FILE_CREATED,
+            payload=_blackboard_event_payload(
+                {
+                    "file": response.model_dump(mode="json"),
+                    "file_id": response.id,
+                    "parent_path": response.parent_path,
+                    "name": response.name,
+                    "is_directory": response.is_directory,
+                }
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
+        )
+        return response
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
@@ -646,6 +679,15 @@ async def delete_file(
             file_id=file_id,
         )
         await db.commit()
+        await publish_workspace_event(
+            request.app.state.container.redis(),
+            workspace_id=workspace_id,
+            event_type=AgentEventType.BLACKBOARD_FILE_DELETED,
+            payload=_blackboard_event_payload(
+                {"workspace_id": workspace_id, "file_id": file_id, "deleted": deleted}
+            ),
+            metadata=_blackboard_event_metadata(tenant_id, project_id),
+        )
         return {"deleted": deleted}
     except Exception as exc:
         await db.rollback()
@@ -829,12 +871,11 @@ async def update_reply(
         await publish_workspace_event(
             request.app.state.container.redis(),
             workspace_id=workspace_id,
-            event_type=AgentEventType.BLACKBOARD_POST_UPDATED,
+            event_type=AgentEventType.BLACKBOARD_REPLY_UPDATED,
             payload=_blackboard_event_payload(
                 {
                     "reply": _to_reply_response(reply).model_dump(mode="json"),
                     "post_id": post_id,
-                    "action": "reply_updated",
                 }
             ),
             metadata=_blackboard_event_metadata(tenant_id, project_id),
