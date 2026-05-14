@@ -227,6 +227,7 @@ Ray actors run from baked Docker images — local edits do **not** take effect u
 - Naming: `PascalCase` classes, `snake_case` funcs/vars, `UPPER_SNAKE_CASE` constants, `_leading_underscore` private.
 - Import order (auto): future → stdlib → third-party → `src.*` → relative.
 - **Multi-tenancy**: always scope queries by `project_id` / `tenant_id`.
+- **i18n**: user-visible strings must go through gettext (`from src.infrastructure.i18n import gettext as _`). New `HTTPException(detail=...)` literals are caught by `scripts/check-i18n-gettext.py` (wired into `make lint-backend`); logger calls stay in English. Frontend equivalent: `useTranslation()` / `t(...)` enforced by `scripts/check-i18n-literals.mjs` (wired into `make lint-web`).
 - Git hooks (after `hooks-install`) run pre-commit checks on staged code and validate commit subjects against the repo's Conventional Commit format. See `docs/TYPE_SAFETY.md`.
 
 Patterns for new domain/application/infrastructure layers follow standard DDD; examples: `src/domain/model/memory/`, `src/infrastructure/adapters/secondary/persistence/sql_*.py`, `src/application/services/*`.

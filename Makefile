@@ -489,6 +489,7 @@ lint: lint-backend lint-web ## Lint all code
 lint-backend: ## Lint Python code
 	@echo " Linting Python code..."
 	uv run python scripts/check_refresh_select_execute.py
+	uv run python scripts/check-i18n-gettext.py
 	uv run ruff check src/ sdk/
 	uv run mypy src/ --ignore-missing-imports
 	uv run pyright
@@ -501,6 +502,7 @@ guard-refresh-select: ## Check wrapped execute(select(...)) usage
 
 lint-web: ## Lint TypeScript code
 	@echo " Linting TypeScript code..."
+	node scripts/check-i18n-literals.mjs
 	cd web && pnpm run lint
 	cd web && pnpm run type-check
 	@echo " TypeScript code linted"
