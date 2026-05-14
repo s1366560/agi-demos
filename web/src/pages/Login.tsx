@@ -235,19 +235,19 @@ export const Login: React.FC = () => {
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-4 bg-white dark:bg-slate-900 text-gray-500 dark:text-slate-500">
-                  或者
+                  {t('login.form.or')}
                 </span>
               </div>
             </div>
 
             <div className="mt-8 text-center">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                还没有账户？{' '}
+                {t('login.form.no_account')}{' '}
                 <a
                   href="#"
                   className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors"
                 >
-                  立即注册
+                  {t('login.form.register')}
                 </a>
               </p>
             </div>
@@ -258,7 +258,7 @@ export const Login: React.FC = () => {
             <div className="flex items-center space-x-2 mb-3">
               <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                演示账户 (点击填充)
+                {t('login.demo.title')}
               </h3>
             </div>
             <div className="space-y-2 text-sm">
@@ -270,7 +270,7 @@ export const Login: React.FC = () => {
                 role="button"
                 tabIndex={0}
               >
-                <span className="font-medium">管理员</span>
+                <span className="font-medium">{t('login.demo.admin')}</span>
                 <span className="font-mono text-xs">admin@memstack.ai / adminpassword</span>
               </div>
               <div
@@ -281,7 +281,7 @@ export const Login: React.FC = () => {
                 role="button"
                 tabIndex={0}
               >
-                <span className="font-medium">普通用户</span>
+                <span className="font-medium">{t('login.demo.user')}</span>
                 <span className="font-mono text-xs">user@memstack.ai / userpassword</span>
               </div>
             </div>

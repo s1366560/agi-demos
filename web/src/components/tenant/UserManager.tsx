@@ -305,11 +305,11 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar className="h-3 w-3" />
-                        <span>加入于 {formatDate(user.created_at)}</span>
+                        <span>{t('tenant.users.joinedAt', { date: formatDate(user.created_at) })}</span>
                       </div>
                       {user.last_login && (
                         <div className="flex items-center space-x-1">
-                          <span>最后登录: {formatDate(user.last_login)}</span>
+                          <span>{t('tenant.users.lastLogin', { date: formatDate(user.last_login) })}</span>
                         </div>
                       )}
                     </div>

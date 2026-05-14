@@ -697,6 +697,21 @@
     "billing": "Billing"
   },
   "tenant": {
+    "create_modal": {
+      "title": "Create Tenant",
+      "name": "Name",
+      "name_placeholder": "Enter tenant name",
+      "description": "Description",
+      "desc_placeholder": "Optional description",
+      "cancel": "Cancel",
+      "create": "Create",
+      "creating": "Creating...",
+      "error": "Failed to create tenant"
+    },
+    "users": {
+      "joinedAt": "Joined {{date}}",
+      "lastLogin": "Last login: {{date}}"
+    },
     "skills": {
       "title": "Skill Management",
       "subtitle": "Configure and manage agent skill library",
@@ -712,7 +727,16 @@
       "noResults": "No matching skills found",
       "stats": {
         "total": "Total Skills",
-        "active": "Active"
+        "active": "Active",
+        "visible": "Visible"
+      },
+      "actions": {
+        "submitToCurated": "Submit to curated library",
+        "submitToCuratedAria": "Submit skill to curated library",
+        "edit": "Edit",
+        "editAria": "Edit skill",
+        "duplicate": "Duplicate",
+        "duplicateAria": "Duplicate skill"
       },
       "card": {
         "tools": "Tools"
@@ -2639,14 +2663,26 @@
           "title": "Export Data",
           "desc": "Download all graph data as JSON for backup or analysis",
           "button": "Export"
+        },
+        "embedding": {
+          "title": "Rebuild Embeddings",
+          "provider_dimension": "{{provider}} ({{dimension}}-dim)",
+          "dimension_mismatch": "Dimension mismatch",
+          "missing_vectors": "{{count}} nodes missing vectors",
+          "status_ok": "Status normal",
+          "button": "Rebuild Vectors",
+          "rebuilding": "Rebuilding..."
         }
       },
       "messages": {
         "refreshed": "Refreshed {{count}} episodes",
+        "refreshed_text": "Refreshed {{text}}",
         "duplicates_found": "Found {{count}} potential duplicates",
         "check_stale": "Check stale edges",
         "rebuild_started": "Community rebuild started (Task ID: {{taskId}})",
-        "export_success": "Data exported successfully"
+        "export_success": "Data exported successfully",
+        "embedding_rebuilt": "Rebuilt embeddings for {{count}} nodes",
+        "embedding_failed": "Failed to rebuild embeddings"
       },
       "recommendations": {
         "title": "Recommendations",

@@ -537,7 +537,8 @@ function HeaderUserMenu({
                 {t('user.language', 'Language')}
               </span>
               <span className="text-xs text-slate-400">
-                {isZh ? '中文' : 'EN'}
+                {/* i18n-ignore-next: native script convention for language indicator */}
+                {isZh ? '中文' : 'English'}
               </span>
             </button>
           </div>

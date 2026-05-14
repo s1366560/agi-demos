@@ -122,7 +122,8 @@ function mapPoolStatusToLifecycle(status: InstanceStatus | undefined): ProjectAg
 }
 
 /**
- * Lifecycle state configuration
+ * Lifecycle state configuration. `label` and `description` store i18n keys —
+ * translate them at the usage site via `t()`.
  */
 const lifecycleConfig: Record<
   ProjectAgentLifecycleState,
@@ -136,55 +137,55 @@ const lifecycleConfig: Record<
   }
 > = {
   uninitialized: {
-    label: '未启动',
+    label: 'agent.lifecycle.states.uninitialized',
     icon: Power,
     color: 'text-slate-500',
     bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: 'Agent 尚未初始化，将在首次请求时自动启动',
+    description: 'agent.lifecycle.descriptions.uninitialized',
   },
   initializing: {
-    label: '初始化中',
+    label: 'agent.lifecycle.states.initializing',
     icon: Loader2,
     color: 'text-blue-500',
     bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-    description: '正在加载工具、技能和配置',
+    description: 'agent.lifecycle.descriptions.initializing',
     animate: true,
   },
   ready: {
-    label: '就绪',
+    label: 'agent.lifecycle.states.ready',
     icon: CheckCircle2,
     color: 'text-emerald-500',
     bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
-    description: 'Agent 已就绪，可以接收请求',
+    description: 'agent.lifecycle.descriptions.ready',
   },
   executing: {
-    label: '执行中',
+    label: 'agent.lifecycle.states.executing',
     icon: Cpu,
     color: 'text-amber-500',
     bgColor: 'bg-amber-100 dark:bg-amber-900/30',
-    description: '正在处理聊天请求',
+    description: 'agent.lifecycle.descriptions.executing',
     animate: true,
   },
   paused: {
-    label: '已暂停',
+    label: 'agent.lifecycle.states.paused',
     icon: PauseCircle,
     color: 'text-orange-500',
     bgColor: 'bg-orange-100 dark:bg-orange-900/30',
-    description: 'Agent 已暂停，不接收新请求',
+    description: 'agent.lifecycle.descriptions.paused',
   },
   error: {
-    label: '错误',
+    label: 'agent.lifecycle.states.error',
     icon: AlertCircle,
     color: 'text-red-500',
     bgColor: 'bg-red-100 dark:bg-red-900/30',
-    description: 'Agent 遇到错误',
+    description: 'agent.lifecycle.descriptions.error',
   },
   shutting_down: {
-    label: '关闭中',
+    label: 'agent.lifecycle.states.shutting_down',
     icon: Power,
     color: 'text-slate-500',
     bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: 'Agent 正在关闭',
+    description: 'agent.lifecycle.descriptions.shutting_down',
     animate: true,
   },
 };
@@ -207,21 +208,21 @@ const tierConfig: Record<
     icon: Flame,
     color: 'text-orange-500',
     bgColor: 'bg-orange-100 dark:bg-orange-900/30',
-    description: '高频项目 - 独立资源池，优先响应',
+    description: 'agent.lifecycle.pool.tiers.hot',
   },
   warm: {
     label: 'WARM',
     icon: Cloud,
     color: 'text-blue-500',
     bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-    description: '中频项目 - 共享资源池，LRU 缓存',
+    description: 'agent.lifecycle.pool.tiers.warm',
   },
   cold: {
     label: 'COLD',
     icon: Snowflake,
     color: 'text-slate-500',
     bgColor: 'bg-slate-100 dark:bg-slate-800',
-    description: '低频项目 - 按需创建，节省资源',
+    description: 'agent.lifecycle.pool.tiers.cold',
   },
 };
 
@@ -557,20 +558,20 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         await poolService.terminateInstance(instanceKey, false);
         poolStatusSnapshotCache.delete(instanceKey);
         setPoolRefreshNonce((prev) => prev + 1);
-        message.info('正在终止 Agent 实例...');
+        message.info(t('agent.lifecycle.messages.terminating'));
       } else {
         // Fallback to WebSocket
         agentService.stopAgent(projectId);
-        message.info('正在停止 Agent...');
+        message.info(t('agent.lifecycle.messages.stopping'));
       }
     } catch (_err) {
-      message.error('停止 Agent 失败');
+      message.error(t('agent.lifecycle.messages.stopFailed'));
     } finally {
       setTimeout(() => {
         setIsActionPending(false);
       }, 3000);
     }
-  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
+  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey, t]);
 
   const handleRestartAgent = useCallback(async () => {
     setIsActionPending(true);
@@ -580,19 +581,19 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         await poolService.terminateInstance(instanceKey, true);
         poolStatusSnapshotCache.delete(instanceKey);
         setPoolRefreshNonce((prev) => prev + 1);
-        message.info('正在重启 Agent 实例...');
+        message.info(t('agent.lifecycle.messages.restarting'));
       } else {
         agentService.restartAgent(projectId);
-        message.info('正在重启 Agent...');
+        message.info(t('agent.lifecycle.messages.restartingAgent'));
       }
     } catch (_err) {
-      message.error('重启 Agent 失败');
+      message.error(t('agent.lifecycle.messages.restartFailed'));
     } finally {
       setTimeout(() => {
         setIsActionPending(false);
       }, 5000);
     }
-  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
+  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey, t]);
 
   const handlePauseAgent = useCallback(async () => {
     if (!poolInstance) return;
@@ -601,15 +602,15 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       await poolService.pauseInstance(instanceKey);
       poolStatusSnapshotCache.delete(instanceKey);
       setPoolRefreshNonce((prev) => prev + 1);
-      message.info('正在暂停 Agent 实例...');
+      message.info(t('agent.lifecycle.messages.pausing'));
     } catch (_err) {
-      message.error('暂停 Agent 失败');
+      message.error(t('agent.lifecycle.messages.pauseFailed'));
     } finally {
       setTimeout(() => {
         setIsActionPending(false);
       }, 2000);
     }
-  }, [poolInstance, instanceKey]);
+  }, [poolInstance, instanceKey, t]);
 
   const handleResumeAgent = useCallback(async () => {
     if (!poolInstance) return;
@@ -618,15 +619,15 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       await poolService.resumeInstance(instanceKey);
       poolStatusSnapshotCache.delete(instanceKey);
       setPoolRefreshNonce((prev) => prev + 1);
-      message.info('正在恢复 Agent 实例...');
+      message.info(t('agent.lifecycle.messages.resuming'));
     } catch (_err) {
-      message.error('恢复 Agent 失败');
+      message.error(t('agent.lifecycle.messages.resumeFailed'));
     } finally {
       setTimeout(() => {
         setIsActionPending(false);
       }, 2000);
     }
-  }, [poolInstance, instanceKey]);
+  }, [poolInstance, instanceKey, t]);
 
   // Get pool tier config
   const poolTierConfig = poolInstance?.tier ? tierConfig[poolInstance.tier] : null;
@@ -644,21 +645,22 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 <div className="space-y-2 max-w-xs">
                   <div className="font-medium flex items-center gap-2">
                     <Layers size={14} />
-                    <span>Agent 池管理</span>
+                    <span>{t('agent.lifecycle.pool.title')}</span>
                   </div>
                   {poolInstance ? (
                     <>
                       <div className="text-xs">
                         <div className="flex justify-between">
-                          <span className="opacity-70">层级:</span>
+                          <span className="opacity-70">{t('agent.lifecycle.pool.tier')}:</span>
                           <span className={poolTierConfig?.color}>{poolTierConfig?.label}</span>
+                          {/* poolTierConfig?.label stays untranslated — HOT/WARM/COLD are brand identifiers, not localized labels. */}
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">状态:</span>
+                          <span className="opacity-70">{t('agent.lifecycle.pool.status')}:</span>
                           <span>{poolInstance.status}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">健康:</span>
+                          <span className="opacity-70">{t('agent.lifecycle.pool.health')}:</span>
                           <span
                             className={
                               poolInstance.health_status === 'healthy'
@@ -670,24 +672,24 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">活跃请求:</span>
+                          <span className="opacity-70">{t('agent.lifecycle.pool.activeRequests')}:</span>
                           <span>{poolInstance.active_requests}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">总请求:</span>
+                          <span className="opacity-70">{t('agent.lifecycle.pool.totalRequests')}:</span>
                           <span>{poolInstance.total_requests}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">内存:</span>
+                          <span className="opacity-70">{t('agent.lifecycle.pool.memory')}:</span>
                           <span>{poolInstance.memory_used_mb} MB</span>
                         </div>
                       </div>
                       <div className="text-xs opacity-70 pt-1 border-t border-gray-600 mt-1">
-                        {poolTierConfig?.description}
+                        {poolTierConfig?.description ? t(poolTierConfig.description) : ''}
                       </div>
                     </>
                   ) : (
-                    <div className="text-xs opacity-70">尚未创建实例 - 首次请求时自动分配</div>
+                    <div className="text-xs opacity-70">{t('agent.lifecycle.pool.noInstance')}</div>
                   )}
                 </div>
               }
@@ -706,7 +708,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   <TierIcon size={12} />
                 )}
                 <span className="hidden sm:inline">
-                  {poolInstance ? (poolTierConfig?.label ?? 'POOL') : '待分配'}
+                  {poolInstance
+                    ? (poolTierConfig?.label ?? 'POOL')
+                    : t('agent.lifecycle.pool.pending')}
                 </span>
                 {poolInstance?.health_status === 'healthy' && (
                   <Heart size={10} className="text-emerald-500 fill-emerald-500" />
@@ -755,11 +759,11 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           <LazyTooltip
             title={
               <div className="space-y-2 max-w-xs">
-                <div className="font-medium">{config.label}</div>
-                <div className="text-xs opacity-80">{config.description}</div>
+                <div className="font-medium">{t(config.label)}</div>
+                <div className="text-xs opacity-80">{t(config.description)}</div>
                 {error && (
                   <div className="text-xs text-red-400 pt-1 border-t border-gray-600 mt-1">
-                    错误: {error}
+                    {t('agent.lifecycle.error.prefix')}: {error}
                   </div>
                 )}
               </div>
@@ -776,7 +780,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 size={12}
                 className={config.animate ? 'animate-spin motion-reduce:animate-none' : ''}
               />
-              <span className="hidden sm:inline">{config.label}</span>
+              <span className="hidden sm:inline">{t(config.label)}</span>
               {status.resources.activeCalls > 0 ? (
                 <span className="ml-0.5">({status.resources.activeCalls})</span>
               ) : null}
@@ -791,10 +795,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip
               title={
                 <div className="space-y-1">
-                  <div className="font-medium">工具统计</div>
-                  <div>总工具: {status.toolStats.total}</div>
-                  <div>内置工具: {status.toolStats.builtin}</div>
-                  <div>MCP 工具: {status.toolStats.mcp}</div>
+                  <div className="font-medium">{t('agent.lifecycle.stats.toolStats')}</div>
+                  <div>{t('agent.lifecycle.stats.totalTools')}: {status.toolStats.total}</div>
+                  <div>{t('agent.lifecycle.stats.builtinTools')}: {status.toolStats.builtin}</div>
+                  <div>{t('agent.lifecycle.stats.mcpTools')}: {status.toolStats.mcp}</div>
                 </div>
               }
             >
@@ -820,9 +824,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip
               title={
                 <div className="space-y-1">
-                  <div className="font-medium">技能统计</div>
-                  <div>总技能: {status.skillStats.total}</div>
-                  <div>已加载: {status.skillStats.loaded}</div>
+                  <div className="font-medium">{t('agent.lifecycle.stats.skillStats')}</div>
+                  <div>{t('agent.lifecycle.stats.totalSkills')}: {status.skillStats.total}</div>
+                  <div>{t('agent.lifecycle.stats.loaded')}: {status.skillStats.loaded}</div>
                 </div>
               }
             >
@@ -838,7 +842,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
         {/* Message Count */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
-        <LazyTooltip title="对话消息数">
+        <LazyTooltip title={t('agent.lifecycle.stats.messageCount')}>
           <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
             <MessageSquare size={11} />
             <span>{messageCount}</span>
@@ -852,12 +856,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <LazyTooltip
               title={
                 <div className="space-y-1">
-                  <div className="font-medium">任务进度</div>
+                  <div className="font-medium">{t('agent.lifecycle.stats.taskProgress')}</div>
                   <div>
-                    已完成: {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
+                    {t('agent.lifecycle.stats.completed')}: {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
                   </div>
-                  <div>进行中: {tasks.filter((t) => t.status === 'in_progress').length}</div>
-                  <div>待处理: {tasks.filter((t) => t.status === 'pending').length}</div>
+                  <div>{t('agent.lifecycle.stats.inProgress')}: {tasks.filter((t) => t.status === 'in_progress').length}</div>
+                  <div>{t('agent.lifecycle.stats.pending')}: {tasks.filter((t) => t.status === 'pending').length}</div>
                 </div>
               }
             >
@@ -882,12 +886,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
             <LazyTooltip
-              title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}
+              title={t('agent.lifecycle.planMode.tooltip', { mode: status.planMode.currentMode?.toUpperCase() || 'PLAN' })}
             >
               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                 <Zap size={11} />
                 <span className="hidden sm:inline">
-                  {status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}
+                  {status.planMode.currentMode === 'plan' ? t('agent.lifecycle.planMode.label') : status.planMode.currentMode}
                 </span>
               </div>
             </LazyTooltip>
@@ -951,10 +955,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {isError && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
-            <LazyTooltip title={error || 'Agent 错误'}>
+            <LazyTooltip title={error || t('agent.lifecycle.error.description')}>
               <div className="flex items-center gap-1 text-xs text-red-500">
                 <AlertTriangle size={11} />
-                <span className="hidden sm:inline">错误</span>
+                <span className="hidden sm:inline">{t('agent.lifecycle.error.label')}</span>
               </div>
             </LazyTooltip>
           </>
@@ -967,7 +971,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         <div className="flex items-center gap-1.5">
           {/* Pause Button - pool mode only, shown when agent is ready */}
           {canPause && (
-            <LazyTooltip title="暂停 Agent (停止接收新请求)">
+            <LazyTooltip title={t('agent.lifecycle.controls.pause')}>
               <button
                 type="button"
                 onClick={() => {
@@ -994,7 +998,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
           {/* Resume Button - pool mode only, shown when agent is paused */}
           {canResume && (
-            <LazyTooltip title="恢复 Agent">
+            <LazyTooltip title={t('agent.lifecycle.controls.resume')}>
               <button
                 type="button"
                 onClick={() => {
@@ -1022,18 +1026,18 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           {/* Stop Button - shown when agent is running */}
           {canStop && (
             <LazyPopconfirm
-              title="停止 Agent"
+              title={t('agent.lifecycle.controls.stopAgent')}
               description={
                 enablePoolManagement && poolEnabled
-                  ? '确定要终止 Agent 实例吗？实例将被释放。'
-                  : '确定要停止 Agent 吗？正在进行的任务将被中断。'
+                  ? t('agent.lifecycle.controls.confirmTerminate')
+                  : t('agent.lifecycle.controls.confirmStop')
               }
               onConfirm={handleStopAgent}
-              okText="停止"
-              cancelText="取消"
+              okText={t('agent.lifecycle.controls.stop')}
+              cancelText={t('agent.lifecycle.controls.cancel')}
               okButtonProps={{ danger: true }}
             >
-              <LazyTooltip title={enablePoolManagement && poolEnabled ? '终止实例' : '停止 Agent'}>
+              <LazyTooltip title={enablePoolManagement && poolEnabled ? t('agent.lifecycle.controls.terminateInstance') : t('agent.lifecycle.controls.stopAgent')}>
                 <button
                   type="button"
                   disabled={isActionPending}
@@ -1059,13 +1063,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           {/* Restart Button - shown when agent exists */}
           {canRestart && (
             <LazyPopconfirm
-              title="重启 Agent"
-              description="重启将刷新工具和配置。确定要重启吗？"
+              title={t('agent.lifecycle.controls.restart')}
+              description={t('agent.lifecycle.controls.confirmRestart')}
               onConfirm={handleRestartAgent}
-              okText="重启"
-              cancelText="取消"
+              okText={t('agent.lifecycle.controls.restart')}
+              cancelText={t('agent.lifecycle.controls.cancel')}
             >
-              <LazyTooltip title="重启 Agent (刷新工具和配置)">
+              <LazyTooltip title={t('agent.lifecycle.controls.restartAgent')}>
                 <button
                   type="button"
                   disabled={isActionPending}

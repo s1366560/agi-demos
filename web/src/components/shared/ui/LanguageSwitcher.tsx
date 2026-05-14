@@ -37,7 +37,7 @@ export const LanguageSwitcher: React.FC = () => {
       suffixIcon={<Globe size={16} />}
       options={[
         { value: 'en-US', label: 'English' },
-        { value: 'zh-CN', label: '简体中文' },
+        { value: 'zh-CN', label: '简体中文' }, // i18n-ignore: native script convention
       ]}
     />
   );

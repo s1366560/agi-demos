@@ -247,7 +247,7 @@ export const SkillList: FC = () => {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryStat label={t('tenant.skills.stats.total')} value={total} />
         <SummaryStat label={t('tenant.skills.stats.active')} value={activeCount} />
-        <SummaryStat label="当前可见" value={visibleCount} />
+        <SummaryStat label={t('tenant.skills.stats.visible')} value={visibleCount} />
       </div>
 
       <div className={`rounded-[6px] p-3 ${surface}`}>
@@ -281,7 +281,7 @@ export const SkillList: FC = () => {
             className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
           >
             <RefreshCw size={16} />
-            <span>刷新</span>
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -335,8 +335,8 @@ export const SkillList: FC = () => {
                       handleEdit(skill);
                     }}
                     className={iconButton}
-                    title="Edit"
-                    aria-label="Edit skill"
+                    title={t('tenant.skills.actions.edit')}
+                    aria-label={t('tenant.skills.actions.editAria')}
                   >
                     <Pencil size={16} />
                   </button>
@@ -346,8 +346,8 @@ export const SkillList: FC = () => {
                       void handleDuplicate(skill);
                     }}
                     className={iconButton}
-                    title="Duplicate"
-                    aria-label="Duplicate skill"
+                    title={t('tenant.skills.actions.duplicate')}
+                    aria-label={t('tenant.skills.actions.duplicateAria')}
                   >
                     <Copy size={16} />
                   </button>
@@ -357,8 +357,8 @@ export const SkillList: FC = () => {
                       setSubmittingSkill(skill);
                     }}
                     className={iconButton}
-                    title="提交到精选库"
-                    aria-label="Submit skill to curated library"
+                    title={t('tenant.skills.actions.submitToCurated')}
+                    aria-label={t('tenant.skills.actions.submitToCuratedAria')}
                   >
                     <Send size={16} />
                   </button>

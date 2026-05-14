@@ -69,7 +69,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">创建租户</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('tenant.create_modal.title')}</h2>
           </div>
           <button
             onClick={handleClose}

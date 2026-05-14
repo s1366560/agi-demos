@@ -47,7 +47,7 @@ export const Maintenance: React.FC = () => {
       const count = typeof episodesValue === 'number' ? episodesValue : 0;
       // If the response contains a descriptive message, use it directly
       if (typeof res.episodes_to_process === 'string' && Number.isNaN(Number(res.episodes_to_process))) {
-        setMessage(`已刷新 ${res.episodes_to_process}`);
+        setMessage(t('project.maintenance.messages.refreshed_text', { text: res.episodes_to_process }));
       } else {
         setMessage(t('project.maintenance.messages.refreshed', { count }));
       }
@@ -115,13 +115,13 @@ export const Maintenance: React.FC = () => {
     setEmbeddingLoading(true);
     try {
       const res = await graphService.rebuildEmbeddings(projectId);
-      setMessage(`成功重建 ${res.result.nodes} 个节点的 embeddings`);
+      setMessage(t('project.maintenance.messages.embedding_rebuilt', { count: res.result.nodes }));
       // Refresh embedding status after rebuild
       const newStatus = await graphService.getEmbeddingStatus(projectId);
       setEmbeddingStatus(newStatus);
     } catch (e) {
       console.error(e);
-      setMessage('重建 embeddings 失败');
+      setMessage(t('project.maintenance.messages.embedding_failed'));
     } finally {
       setEmbeddingLoading(false);
     }
@@ -253,25 +253,28 @@ export const Maintenance: React.FC = () => {
               description={
                 <div className="flex items-center gap-3">
                   <span>
-                    {embeddingStatus.current_provider} ({embeddingStatus.current_dimension}维)
+                    {t('project.maintenance.ops.embedding.provider_dimension', {
+                      provider: embeddingStatus.current_provider,
+                      dimension: embeddingStatus.current_dimension,
+                    })}
                   </span>
                   {!embeddingStatus.is_compatible ? (
                     <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs rounded-full">
-                      维度不匹配
+                      {t('project.maintenance.ops.embedding.dimension_mismatch')}
                     </span>
                   ) : embeddingStatus.missing_embeddings > 0 ? (
                     <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs rounded-full">
-                      {embeddingStatus.missing_embeddings} 个节点缺少向量
+                      {t('project.maintenance.ops.embedding.missing_vectors', { count: embeddingStatus.missing_embeddings })}
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
-                      状态正常
+                      {t('project.maintenance.ops.embedding.status_ok')}
                     </span>
                   )}
                 </div>
               }
               icon="model_training"
-              actionLabel={embeddingLoading ? '重建中...' : '重建向量'}
+              actionLabel={embeddingLoading ? t('project.maintenance.ops.embedding.rebuilding') : t('project.maintenance.ops.embedding.button')}
               onAction={handleRebuildEmbeddings}
               loading={embeddingLoading}
               warning={!embeddingStatus.is_compatible}

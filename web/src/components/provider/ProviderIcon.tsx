@@ -69,7 +69,7 @@ const PROVIDER_CONFIG: Record<
     icon: '🌙',
     gradient: 'from-purple-400 to-indigo-500',
     label: 'Moonshot Kimi',
-    description: 'Moonshot v1 系列',
+    description: 'Moonshot v1 series',
   },
   kimi_coding: {
     icon: '🧑‍💻',
@@ -122,8 +122,8 @@ const PROVIDER_CONFIG: Record<
   zai: {
     icon: '🐲',
     gradient: 'from-yellow-400 to-red-500',
-    label: 'ZhipuAI 智谱',
-    description: 'GLM-4 系列',
+    label: 'ZhipuAI 智谱', // i18n-ignore: brand name
+    description: 'GLM-4 series',
   },
   zai_coding: {
     icon: '🧠',

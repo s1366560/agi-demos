@@ -33,6 +33,8 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
+import { useLocaleNumberFormat } from '@/i18n/formatters';
+
 import { artifactService } from '@/services/artifactService';
 
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
@@ -83,11 +85,14 @@ import type {
 // Utilities
 // ========================================
 
-const COUNT_FORMATTER = new Intl.NumberFormat('en-US');
+const COUNT_FORMATTER_FALLBACK = new Intl.NumberFormat('en-US');
 const SUMMARY_PILL_CLASSES =
   'inline-flex items-center gap-1 rounded-full border border-black/8 bg-black/[0.02] px-2.5 py-1 text-xs text-neutral-600';
 
-const formatCount = (value: number): string => COUNT_FORMATTER.format(value);
+const formatCount = (
+  value: number,
+  formatter: Intl.NumberFormat = COUNT_FORMATTER_FALLBACK,
+): string => formatter.format(value);
 
 const SummaryPill: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <span className={SUMMARY_PILL_CLASSES}>
@@ -99,6 +104,7 @@ const SummaryPill: React.FC<{ label: string; value: string }> = ({ label, value 
 const ExecutionSummaryPanel: React.FC<{
   summary: ReturnType<typeof normalizeExecutionSummary>;
 }> = ({ summary }) => {
+  const countFormatter = useLocaleNumberFormat();
   if (!summary) {
     return null;
   }
@@ -107,24 +113,24 @@ const ExecutionSummaryPanel: React.FC<{
 
   return (
     <div className="mb-3 flex flex-wrap gap-2">
-      <SummaryPill label="Steps" value={formatCount(summary.stepCount)} />
+      <SummaryPill label="Steps" value={formatCount(summary.stepCount, countFormatter)} />
       {taskSummary ? (
         <SummaryPill
           label="Tasks"
-          value={`${formatCount(taskSummary.completed)}/${formatCount(taskSummary.total)}`}
+          value={`${formatCount(taskSummary.completed, countFormatter)}/${formatCount(taskSummary.total, countFormatter)}`}
         />
       ) : null}
       {taskSummary && taskSummary.remaining > 0 ? (
-        <SummaryPill label="Remaining" value={formatCount(taskSummary.remaining)} />
+        <SummaryPill label="Remaining" value={formatCount(taskSummary.remaining, countFormatter)} />
       ) : null}
       {summary.artifactCount > 0 ? (
-        <SummaryPill label="Artifacts" value={formatCount(summary.artifactCount)} />
+        <SummaryPill label="Artifacts" value={formatCount(summary.artifactCount, countFormatter)} />
       ) : null}
       {summary.callCount > 0 ? (
-        <SummaryPill label="LLM calls" value={formatCount(summary.callCount)} />
+        <SummaryPill label="LLM calls" value={formatCount(summary.callCount, countFormatter)} />
       ) : null}
       {summary.totalTokens.total > 0 ? (
-        <SummaryPill label="Tokens" value={formatCount(summary.totalTokens.total)} />
+        <SummaryPill label="Tokens" value={formatCount(summary.totalTokens.total, countFormatter)} />
       ) : null}
       {summary.totalCost > 0 ? (
         <SummaryPill label="Cost" value={summary.totalCostFormatted} />

@@ -697,6 +697,17 @@
     "billing": "账单"
   },
   "tenant": {
+    "create_modal": {
+      "title": "创建租户",
+      "name": "名称",
+      "name_placeholder": "输入租户名称",
+      "description": "描述",
+      "desc_placeholder": "可选描述",
+      "cancel": "取消",
+      "create": "创建",
+      "creating": "创建中...",
+      "error": "创建租户失败"
+    },
     "welcome": "欢迎来到 MemStack",
     "noTenantDescription": "您还没有加入任何租户空间。请联系管理员邀请您加入，或者创建一个新的租户空间。",
     "create": "创建租户",
@@ -748,6 +759,8 @@
       "submit": "创建项目"
     },
     "users": {
+      "joinedAt": "加入于 {{date}}",
+      "lastLogin": "最后登录: {{date}}",
       "title": "成员管理",
       "subtitle": "管理用户访问权限、分配角色并控制此租户的权限。",
       "inviteMember": "邀请成员",
@@ -1243,7 +1256,16 @@
       "noResults": "未找到匹配的技能",
       "stats": {
         "total": "总技能数",
-        "active": "活跃"
+        "active": "活跃",
+        "visible": "当前可见"
+      },
+      "actions": {
+        "submitToCurated": "提交到精选库",
+        "submitToCuratedAria": "提交技能到精选库",
+        "edit": "编辑",
+        "editAria": "编辑技能",
+        "duplicate": "复制",
+        "duplicateAria": "复制技能"
       },
       "card": {
         "tools": "工具"
@@ -2770,14 +2792,26 @@
           "title": "导出数据",
           "desc": "以 JSON 格式下载所有图谱数据用于备份或分析",
           "button": "导出"
+        },
+        "embedding": {
+          "title": "重建向量",
+          "provider_dimension": "{{provider}} ({{dimension}}维)",
+          "dimension_mismatch": "维度不匹配",
+          "missing_vectors": "{{count}} 个节点缺少向量",
+          "status_ok": "状态正常",
+          "button": "重建向量",
+          "rebuilding": "重建中..."
         }
       },
       "messages": {
         "refreshed": "已刷新 {{count}} 个 Episodes",
+        "refreshed_text": "已刷新 {{text}}",
         "duplicates_found": "发现 {{count}} 个潜在重复项",
         "check_stale": "检查陈旧边",
         "rebuild_started": "社区重建已开始 (任务 ID: {{taskId}})",
-        "export_success": "数据导出成功"
+        "export_success": "数据导出成功",
+        "embedding_rebuilt": "成功重建 {{count}} 个节点的 embeddings",
+        "embedding_failed": "重建 embeddings 失败"
       },
       "recommendations": {
         "title": "建议",

@@ -221,7 +221,7 @@ export const PROVIDERS: ProviderMeta[] = [
   },
   {
     value: 'zai',
-    label: 'ZhipuAI 智谱',
+    label: 'ZhipuAI 智谱', // i18n-ignore: brand name
     icon: '🐲',
     description: 'GLM-4-Plus, GLM-4-Flash, embedding-3',
     apiKeyEnvVar: 'ZAI_API_KEY',

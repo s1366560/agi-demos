@@ -3,6 +3,8 @@ import React from 'react';
 import { Avatar, Typography } from 'antd';
 import { Bot, User } from 'lucide-react';
 
+import { useLocaleDateFormat } from '@/i18n/formatters';
+
 import type { WorkspaceMessage } from '@/types/workspace';
 
 const { Text } = Typography;
@@ -44,12 +46,12 @@ export interface ChatMessageProps {
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
   const isAgent = message.sender_type === 'agent';
-  
-  const timeString = new Intl.DateTimeFormat('en-US', {
+
+  const timeFormatter = useLocaleDateFormat({
     hour: 'numeric',
     minute: 'numeric',
-    hour12: true,
-  }).format(new Date(message.created_at));
+  });
+  const timeString = timeFormatter.format(new Date(message.created_at));
 
   return (
     <div className={`flex w-full mb-4 ${isOwn ? 'justify-end' : 'justify-start'}`}>

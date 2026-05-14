@@ -86,7 +86,7 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'minimax_coding', label: 'MiniMax Coding' },
   { value: 'minimax_embedding', label: 'MiniMax Embedding' },
   { value: 'minimax_reranker', label: 'MiniMax Reranker' },
-  { value: 'zai', label: 'ZhipuAI (智普AI)' },
+  { value: 'zai', label: 'ZhipuAI (智普AI)' }, // i18n-ignore: brand name
   { value: 'zai_coding', label: 'Z.AI Coding' },
   { value: 'zai_embedding', label: 'Z.AI Embedding' },
   { value: 'zai_reranker', label: 'Z.AI Reranker' },

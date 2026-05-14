@@ -112,7 +112,7 @@ export const UserMenu = React.memo(function UserMenu({
               className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <User className="w-4 h-4 text-slate-400" />
-              {t('user.profile', '个人资料')}
+              {t('user.profile', 'Profile')}
             </Link>
             <Link
               to={settingsPath}
@@ -122,7 +122,7 @@ export const UserMenu = React.memo(function UserMenu({
               className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <Settings className="w-4 h-4 text-slate-400" />
-              {t('user.settings', '设置')}
+              {t('user.settings', 'Settings')}
             </Link>
           </div>
 
@@ -134,7 +134,7 @@ export const UserMenu = React.memo(function UserMenu({
             type="button"
           >
             <LogOut className="w-4 h-4" />
-            {t('common.logout', '登出')}
+            {t('common.logout', 'Sign out')}
           </button>
         </div>
       )}
