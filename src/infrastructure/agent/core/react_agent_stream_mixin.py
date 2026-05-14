@@ -39,6 +39,7 @@ from src.domain.events.agent_events import (
 from src.domain.model.agent.skill import Skill
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
+from ..i18n import directive_for, resolve_response_language
 from ..plugins.selection_pipeline import ToolSelectionContext
 from ..routing import ExecutionPath, RoutingDecision
 from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID, build_builtin_sisyphus_agent
@@ -1909,23 +1910,16 @@ class StreamMixin:
             tools=tools_to_use,
         )
 
-        # Inject language guidance so the agent's user-facing replies match the
-        # user's preferred UI language. The runtime context already carries
-        # ``preferred_language`` ("en-US" or "zh-CN"); we render it as a
-        # ``[Runtime Guidance]`` instruction. No-op when the language is not
-        # one of the supported values.
-        if runtime_preferred_language:
-            _language_labels = {"en-US": "English", "zh-CN": "Chinese (Simplified)"}
-            _language_label = _language_labels.get(runtime_preferred_language)
-            if _language_label:
-                await processor.add_runtime_guidance(
-                    "Respond to the user in "
-                    f"{_language_label} ({runtime_preferred_language}) "
-                    "unless they explicitly request another language. "
-                    "Keep tool arguments, code, and identifiers in their "
-                    "original form; only the natural-language portions of "
-                    "your reply should follow this language preference."
-                )
+        # Inject language guidance so the agent's user-facing replies match
+        # the user's preferred UI language. ``runtime_preferred_language``
+        # is the per-turn override from the workspace runtime payload; the
+        # resolver also falls back to the request-scoped locale set by
+        # ``LocaleMiddleware`` (``X-Language`` / ``Accept-Language`` /
+        # persisted user preference).
+        _language = resolve_response_language(
+            runtime_override=runtime_preferred_language,
+        )
+        await processor.add_runtime_guidance(directive_for(_language))
 
         # Inject lane JIT guidance (friction signals + matched playbooks +
         # entry-gate checks) for workspace-scoped sessions. No-op for

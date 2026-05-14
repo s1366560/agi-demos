@@ -564,26 +564,26 @@ def _inject_preferred_language_context(
     conversation_context: list[dict[str, Any]],
     preferred_language: str | None,
 ) -> list[dict[str, Any]]:
-    if preferred_language == "zh-CN":
-        content = (
-            "[Response Language]\n"
-            "The user's selected UI language for this turn is Simplified Chinese (zh-CN). "
-            "Write assistant prose in Simplified Chinese unless the user explicitly asks "
-            "for another language. Do not translate quoted user content, code, logs, "
-            "file paths, task titles, artifact names, or persisted workspace data."
-        )
-    elif preferred_language == "en-US":
-        content = (
-            "[Response Language]\n"
-            "The user's selected UI language for this turn is English (en-US). "
-            "Write assistant prose in English unless the user explicitly asks for another "
-            "language. Do not translate quoted user content, code, logs, file paths, "
-            "task titles, artifact names, or persisted workspace data."
-        )
-    else:
+    """Prepend a `[Response Language]` system message when a preference is set.
+
+    Delegates language normalization and directive rendering to the shared
+    resolver in :mod:`src.infrastructure.agent.i18n` so workspace runtime,
+    main ReAct loop, and future agent entry points stay aligned.
+    """
+    from src.infrastructure.agent.i18n import (
+        directive_for,
+        normalize_language,
+        resolve_response_language,
+    )
+
+    if normalize_language(preferred_language) is None:
         return conversation_context
 
-    return [{"role": "system", "content": content}, *conversation_context]
+    language = resolve_response_language(runtime_override=preferred_language)
+    return [
+        {"role": "system", "content": directive_for(language)},
+        *conversation_context,
+    ]
 
 
 async def _load_persisted_agent_config(conversation_id: str) -> dict[str, Any] | None:

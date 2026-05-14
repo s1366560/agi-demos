@@ -2,12 +2,32 @@
 
 Defines error types for MCP tool execution with proper classification
 for retry logic and user-friendly error messages.
+
+User-facing messages use English msgids wrapped through ``gettext`` so the
+active request locale (see ``src.infrastructure.i18n``) controls the
+actual rendered language.
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar
+
+from src.infrastructure.i18n import gettext as _
+
+# Extraction markers: Babel only collects strings from inline ``_()`` calls.
+# These message templates live in ``MCPToolError._SIMPLE_USER_MESSAGES`` as
+# plain English msgids (so they can be looked up at use-time with the
+# active request locale), but they need to be visible to ``pybabel
+# extract``. Listing them here once at module load keeps the catalog in
+# sync without changing runtime translation semantics.
+_BABEL_EXTRACTION_MARKERS = (
+    _("Unable to connect to sandbox container; please retry later"),
+    _("Parameter error: {message}"),
+    _("Permission denied: {message}"),
+    _("Sandbox does not exist or has been terminated"),
+    _("Sandbox has been terminated"),
+)
 
 
 class MCPToolErrorType(str, Enum):
@@ -74,11 +94,11 @@ class MCPToolError:
         return result
 
     _SIMPLE_USER_MESSAGES: ClassVar[dict[MCPToolErrorType, str]] = {
-        MCPToolErrorType.CONNECTION_ERROR: "无法连接到 sandbox 容器，请稍后重试",
-        MCPToolErrorType.PARAMETER_ERROR: "参数错误: {message}",
-        MCPToolErrorType.PERMISSION_ERROR: "权限被拒绝: {message}",
-        MCPToolErrorType.SANDBOX_NOT_FOUND: "Sandbox 不存在或已终止",
-        MCPToolErrorType.SANDBOX_TERMINATED: "Sandbox 已终止",
+        MCPToolErrorType.CONNECTION_ERROR: "Unable to connect to sandbox container; please retry later",
+        MCPToolErrorType.PARAMETER_ERROR: "Parameter error: {message}",
+        MCPToolErrorType.PERMISSION_ERROR: "Permission denied: {message}",
+        MCPToolErrorType.SANDBOX_NOT_FOUND: "Sandbox does not exist or has been terminated",
+        MCPToolErrorType.SANDBOX_TERMINATED: "Sandbox has been terminated",
     }
 
     def get_user_message(self) -> str:
@@ -87,7 +107,7 @@ class MCPToolError:
             return self._get_timeout_message()
         template = self._SIMPLE_USER_MESSAGES.get(self.error_type)
         if template is not None:
-            return template.format(message=self.message)
+            return _(template).format(message=self.message)
         return self.message
 
     def _get_timeout_message(self) -> str:
@@ -95,10 +115,13 @@ class MCPToolError:
         duration_info = ""
         if self.execution_duration_ms is not None and self.configured_timeout_s is not None:
             actual_s = self.execution_duration_ms / 1000
-            duration_info = (
-                f" (实际执行 {actual_s:.1f}s / 超时限制 {self.configured_timeout_s:.0f}s)"
-            )
-        return f"工具执行超时: {self.tool_name}{duration_info}"
+            duration_info = _(
+                " (actual execution {actual_s:.1f}s / timeout limit {timeout_s:.0f}s)"
+            ).format(actual_s=actual_s, timeout_s=self.configured_timeout_s)
+        return _("Tool execution timed out: {tool_name}{duration_info}").format(
+            tool_name=self.tool_name,
+            duration_info=duration_info,
+        )
 
 
 class MCPToolErrorClassifier:

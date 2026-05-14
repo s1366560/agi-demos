@@ -19,32 +19,68 @@ from src.domain.ports.agent.context_manager_port import (
     AttachmentInjectorPort,
     AttachmentMetadata,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
 
-# Default attachment context template
+# Default attachment context template (English msgid; rendered through
+# ``gettext`` at use-time so the active request locale controls the
+# output language).
 DEFAULT_CONTEXT_TEMPLATE = """╔══════════════════════════════════════════════════════════════╗
-║  📎 用户本次消息上传的文件 (CURRENT MESSAGE ATTACHMENTS)    ║
+║  CURRENT MESSAGE ATTACHMENTS                                 ║
 ╚══════════════════════════════════════════════════════════════╝
 
 {file_list}
 
-⚠️ 重要提示:
-1. 以上是用户在【本条消息】中上传的文件，不是历史文件
-2. 文件已同步到沙箱，请直接使用【沙箱路径】访问
-3. 如需读取文件内容，请使用 bash 工具执行: cat <沙箱路径>
-4. 请勿猜测或修改路径，直接使用上面列出的沙箱路径
+Important:
+1. The files above were uploaded in THIS user message (not history).
+2. They are already synced to the sandbox; use the sandbox path directly.
+3. To read a file, run via the bash tool: cat <sandbox_path>
+4. Do not guess or rewrite paths; use exactly the sandbox paths shown.
 
 ════════════════════════════════════════════════════════════════
 
 """
 
-# Default file item template
-DEFAULT_FILE_TEMPLATE = """  📄 文件名: {filename}
-     沙箱路径: {sandbox_path}
-     类型: {mime_type}
-     大小: {size}"""
+# Default file item template (English msgid; rendered through ``gettext``).
+DEFAULT_FILE_TEMPLATE = """  Filename: {filename}
+     Sandbox path: {sandbox_path}
+     Type: {mime_type}
+     Size: {size}"""
+
+
+# Extraction markers for Babel: the template constants above are looked up
+# at use-time via ``_(template)``, but Babel only extracts msgids from
+# string literals appearing inside ``_()`` calls (variables are skipped).
+# Re-stating the literals here keeps the catalog in sync; the resulting
+# strings are unused at runtime (current_locale is unset at import time,
+# so ``_()`` returns the msgid unchanged).
+_BABEL_EXTRACTION_MARKERS = (
+    _(
+        """╔══════════════════════════════════════════════════════════════╗
+║  CURRENT MESSAGE ATTACHMENTS                                 ║
+╚══════════════════════════════════════════════════════════════╝
+
+{file_list}
+
+Important:
+1. The files above were uploaded in THIS user message (not history).
+2. They are already synced to the sandbox; use the sandbox path directly.
+3. To read a file, run via the bash tool: cat <sandbox_path>
+4. Do not guess or rewrite paths; use exactly the sandbox paths shown.
+
+════════════════════════════════════════════════════════════════
+
+"""
+    ),
+    _(
+        """  Filename: {filename}
+     Sandbox path: {sandbox_path}
+     Type: {mime_type}
+     Size: {size}"""
+    ),
+)
 
 
 @dataclass
@@ -117,9 +153,13 @@ class AttachmentInjector(AttachmentInjectorPort):
             file_line = self._format_file_metadata(meta)
             file_lines.append(file_line)
 
-        # Build full context
+        # Build full context. Templates are English msgids; translate at
+        # use-time so the active request locale controls the rendered
+        # language. Custom templates supplied via config are passed
+        # through ``_()`` as well so user-provided translations stay
+        # consistent.
         file_list = self.config.file_separator.join(file_lines)
-        context = self.config.context_template.format(file_list=file_list)
+        context = _(self.config.context_template).format(file_list=file_list)
 
         if self._debug:
             logger.debug(f"[AttachmentInjector] Built context for {len(metadata_list)} files")
@@ -136,7 +176,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         Returns:
             Formatted file description
         """
-        return self.config.file_template.format(
+        return _(self.config.file_template).format(
             filename=meta.filename,
             sandbox_path=meta.sandbox_path,
             mime_type=meta.mime_type,

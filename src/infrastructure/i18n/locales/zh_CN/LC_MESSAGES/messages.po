@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: memstack 0.2.0\n"
 "Report-Msgid-Bugs-To: dev@memstack.ai\n"
-"POT-Creation-Date: 2026-05-14 09:04+0800\n"
+"POT-Creation-Date: 2026-05-14 09:19+0800\n"
 "PO-Revision-Date: 2026-05-13 00:00+0000\n"
 "Last-Translator: MemStack\n"
 "Language: zh_CN\n"
@@ -171,6 +171,85 @@ msgstr "未找到基因策略"
 #: src/infrastructure/adapters/primary/web/routers/tenants.py:931
 msgid "Registry not found"
 msgstr "未找到该注册表"
+
+#: src/infrastructure/agent/context/builder/attachment_injector.py:61
+#, python-brace-format
+msgid ""
+"╔══════════════════════════════════════════════════════════════╗\n"
+"║  CURRENT MESSAGE ATTACHMENTS                                 ║\n"
+"╚══════════════════════════════════════════════════════════════╝\n"
+"\n"
+"{file_list}\n"
+"\n"
+"Important:\n"
+"1. The files above were uploaded in THIS user message (not history).\n"
+"2. They are already synced to the sandbox; use the sandbox path directly."
+"\n"
+"3. To read a file, run via the bash tool: cat <sandbox_path>\n"
+"4. Do not guess or rewrite paths; use exactly the sandbox paths shown.\n"
+"\n"
+"════════════════════════════════════════════════════════════════\n"
+"\n"
+msgstr ""
+"╔══════════════════════════════════════════════════════════════╗\n"
+"║  本次消息上传的附件 (CURRENT MESSAGE ATTACHMENTS)             ║\n"
+"╚══════════════════════════════════════════════════════════════╝\n"
+"\n"
+"{file_list}\n"
+"\n"
+"重要提示：\n"
+"1. 以上是用户在【本条消息】中上传的文件，不是历史文件。\n"
+"2. 文件已同步到沙箱，请直接使用【沙箱路径】访问。\n"
+"3. 如需读取文件内容，请使用 bash 工具执行：cat <沙箱路径>\n"
+"4. 请勿猜测或修改路径，直接使用上面列出的沙箱路径。\n"
+"\n"
+"════════════════════════════════════════════════════════════════\n"
+"\n"
+
+#: src/infrastructure/agent/context/builder/attachment_injector.py:78
+#, python-brace-format
+msgid ""
+"  Filename: {filename}\n"
+"     Sandbox path: {sandbox_path}\n"
+"     Type: {mime_type}\n"
+"     Size: {size}"
+msgstr ""
+"  文件名：{filename}\n"
+"     沙箱路径：{sandbox_path}\n"
+"     类型：{mime_type}\n"
+"     大小：{size}"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:25
+msgid "Unable to connect to sandbox container; please retry later"
+msgstr "无法连接到 sandbox 容器，请稍后重试"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:26
+#, python-brace-format
+msgid "Parameter error: {message}"
+msgstr "参数错误：{message}"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:27
+#, python-brace-format
+msgid "Permission denied: {message}"
+msgstr "权限被拒绝：{message}"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:28
+msgid "Sandbox does not exist or has been terminated"
+msgstr "Sandbox 不存在或已终止"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:29
+msgid "Sandbox has been terminated"
+msgstr "Sandbox 已终止"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:119
+#, python-brace-format
+msgid " (actual execution {actual_s:.1f}s / timeout limit {timeout_s:.0f}s)"
+msgstr "（实际执行 {actual_s:.1f}s / 超时限制 {timeout_s:.0f}s）"
+
+#: src/infrastructure/agent/tools/mcp_errors.py:121
+#, python-brace-format
+msgid "Tool execution timed out: {tool_name}{duration_info}"
+msgstr "工具执行超时：{tool_name}{duration_info}"
 
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:59
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:63

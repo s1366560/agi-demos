@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: memstack 0.2.0\n"
 "Report-Msgid-Bugs-To: dev@memstack.ai\n"
-"POT-Creation-Date: 2026-05-13 17:18+0800\n"
+"POT-Creation-Date: 2026-05-14 09:19+0800\n"
 "PO-Revision-Date: 2026-05-13 00:00+0000\n"
 "Last-Translator: MemStack\n"
 "Language: en_US\n"
@@ -48,7 +48,49 @@ msgstr "unknown"
 msgid ""
 "Sorry, file import failed. The file may be too large (over 50MB) or its "
 "format is not supported. Filename: {filename}"
-msgstr "Sorry, file import failed. The file may be too large (over 50MB) or its format is not supported. Filename: {filename}"
+msgstr ""
+"Sorry, file import failed. The file may be too large (over 50MB) or its "
+"format is not supported. Filename: {filename}"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:148
+msgid "The resource was modified by another request. Please retry."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:167
+msgid "A database transaction error occurred. Please try again."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:188
+msgid "Database service is temporarily unavailable. Please try again later."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:207
+msgid "A data access error occurred. Please try again."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:395
+msgid "LLM rate limit exceeded. Please wait and try again."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:413
+msgid "No active LLM provider available. Please configure a provider."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:435
+msgid "Resource is currently locked. Please try again later."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:454
+msgid "Failed to release resource lock."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:472
+msgid "A lock operation failed."
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:512
+msgid "An unexpected error occurred. Please try again later."
+msgstr ""
 
 #: src/infrastructure/adapters/primary/web/routers/auth.py:85
 msgid "Default project"
@@ -58,6 +100,143 @@ msgstr "Default project"
 #, python-brace-format
 msgid "Default project for {owner}"
 msgstr "Default project for {owner}"
+
+#: src/infrastructure/adapters/primary/web/routers/auth.py:263
+msgid "API key not found"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:120
+#, python-brace-format
+msgid "Internal Error: {error}"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:303
+#: src/infrastructure/adapters/primary/web/routers/projects.py:336
+#: src/infrastructure/adapters/primary/web/routers/projects.py:388
+#: src/infrastructure/adapters/primary/web/routers/projects.py:428
+#: src/infrastructure/adapters/primary/web/routers/projects.py:580
+#: src/infrastructure/adapters/primary/web/routers/projects.py:701
+msgid "Project not found"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:406
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:219
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:275
+msgid "Invalid role"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:433
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:237
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:293
+msgid "User not found"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:578
+msgid "Invalid UUID"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:802
+#: src/infrastructure/adapters/primary/web/routers/projects.py:875
+msgid "Access denied"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:839
+msgid "Failed to get trending entities"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:910
+msgid "Failed to get recent skills"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:145
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:224
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:280
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:332
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:384
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:428
+msgid "Tenant not found"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:153
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:379
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:422
+msgid "Access denied to tenant"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:556
+msgid "Access denied to this tenant"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:759
+msgid "Gene policy not found"
+msgstr ""
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:869
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:902
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:931
+msgid "Registry not found"
+msgstr ""
+
+#: src/infrastructure/agent/context/builder/attachment_injector.py:61
+#, python-brace-format
+msgid ""
+"╔══════════════════════════════════════════════════════════════╗\n"
+"║  CURRENT MESSAGE ATTACHMENTS                                 ║\n"
+"╚══════════════════════════════════════════════════════════════╝\n"
+"\n"
+"{file_list}\n"
+"\n"
+"Important:\n"
+"1. The files above were uploaded in THIS user message (not history).\n"
+"2. They are already synced to the sandbox; use the sandbox path directly."
+"\n"
+"3. To read a file, run via the bash tool: cat <sandbox_path>\n"
+"4. Do not guess or rewrite paths; use exactly the sandbox paths shown.\n"
+"\n"
+"════════════════════════════════════════════════════════════════\n"
+"\n"
+msgstr ""
+
+#: src/infrastructure/agent/context/builder/attachment_injector.py:78
+#, python-brace-format
+msgid ""
+"  Filename: {filename}\n"
+"     Sandbox path: {sandbox_path}\n"
+"     Type: {mime_type}\n"
+"     Size: {size}"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:25
+msgid "Unable to connect to sandbox container; please retry later"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:26
+#, python-brace-format
+msgid "Parameter error: {message}"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:27
+#, python-brace-format
+msgid "Permission denied: {message}"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:28
+msgid "Sandbox does not exist or has been terminated"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:29
+msgid "Sandbox has been terminated"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:119
+#, python-brace-format
+msgid " (actual execution {actual_s:.1f}s / timeout limit {timeout_s:.0f}s)"
+msgstr ""
+
+#: src/infrastructure/agent/tools/mcp_errors.py:121
+#, python-brace-format
+msgid "Tool execution timed out: {tool_name}{duration_info}"
+msgstr ""
 
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:59
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:63
