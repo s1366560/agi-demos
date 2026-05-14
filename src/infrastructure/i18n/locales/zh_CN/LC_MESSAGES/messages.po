@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: memstack 0.2.0\n"
 "Report-Msgid-Bugs-To: dev@memstack.ai\n"
-"POT-Creation-Date: 2026-05-13 17:18+0800\n"
+"POT-Creation-Date: 2026-05-14 09:04+0800\n"
 "PO-Revision-Date: 2026-05-13 00:00+0000\n"
 "Last-Translator: MemStack\n"
 "Language: zh_CN\n"
@@ -47,6 +47,46 @@ msgid ""
 "format is not supported. Filename: {filename}"
 msgstr "抱歉，文件导入失败。文件可能过大（超过50MB）或格式不支持。文件名: {filename}"
 
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:148
+msgid "The resource was modified by another request. Please retry."
+msgstr "该资源已被其他请求修改，请重试。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:167
+msgid "A database transaction error occurred. Please try again."
+msgstr "数据库事务发生错误，请稍后重试。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:188
+msgid "Database service is temporarily unavailable. Please try again later."
+msgstr "数据库服务暂不可用，请稍后再试。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:207
+msgid "A data access error occurred. Please try again."
+msgstr "数据访问发生错误，请稍后重试。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:395
+msgid "LLM rate limit exceeded. Please wait and try again."
+msgstr "LLM 请求过于频繁，请稍后再试。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:413
+msgid "No active LLM provider available. Please configure a provider."
+msgstr "当前没有可用的 LLM 服务商，请先完成配置。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:435
+msgid "Resource is currently locked. Please try again later."
+msgstr "资源已被占用，请稍后再试。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:454
+msgid "Failed to release resource lock."
+msgstr "释放资源锁失败。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:472
+msgid "A lock operation failed."
+msgstr "锁操作失败。"
+
+#: src/infrastructure/adapters/primary/web/middleware/exception_handlers.py:512
+msgid "An unexpected error occurred. Please try again later."
+msgstr "发生未知错误，请稍后再试。"
+
 #: src/infrastructure/adapters/primary/web/routers/auth.py:85
 msgid "Default project"
 msgstr "默认项目"
@@ -55,6 +95,82 @@ msgstr "默认项目"
 #, python-brace-format
 msgid "Default project for {owner}"
 msgstr "{owner} 的默认项目"
+
+#: src/infrastructure/adapters/primary/web/routers/auth.py:263
+msgid "API key not found"
+msgstr "未找到该 API 密钥"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:120
+#, python-brace-format
+msgid "Internal Error: {error}"
+msgstr "内部错误：{error}"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:303
+#: src/infrastructure/adapters/primary/web/routers/projects.py:336
+#: src/infrastructure/adapters/primary/web/routers/projects.py:388
+#: src/infrastructure/adapters/primary/web/routers/projects.py:428
+#: src/infrastructure/adapters/primary/web/routers/projects.py:580
+#: src/infrastructure/adapters/primary/web/routers/projects.py:701
+msgid "Project not found"
+msgstr "未找到该项目"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:406
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:219
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:275
+msgid "Invalid role"
+msgstr "角色无效"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:433
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:237
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:293
+msgid "User not found"
+msgstr "未找到该用户"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:578
+msgid "Invalid UUID"
+msgstr "UUID 无效"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:802
+#: src/infrastructure/adapters/primary/web/routers/projects.py:875
+msgid "Access denied"
+msgstr "访问被拒绝"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:839
+msgid "Failed to get trending entities"
+msgstr "获取热门实体失败"
+
+#: src/infrastructure/adapters/primary/web/routers/projects.py:910
+msgid "Failed to get recent skills"
+msgstr "获取最近使用的技能失败"
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:145
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:224
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:280
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:332
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:384
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:428
+msgid "Tenant not found"
+msgstr "未找到该租户"
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:153
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:379
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:422
+msgid "Access denied to tenant"
+msgstr "无权访问该租户"
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:556
+msgid "Access denied to this tenant"
+msgstr "无权访问该租户"
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:759
+msgid "Gene policy not found"
+msgstr "未找到基因策略"
+
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:869
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:902
+#: src/infrastructure/adapters/primary/web/routers/tenants.py:931
+msgid "Registry not found"
+msgstr "未找到该注册表"
 
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:59
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:63
@@ -65,50 +181,4 @@ msgstr "邮箱或密码错误"
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:68
 msgid "__definitely_not_in_catalog__"
 msgstr ""
-
-# --- Authentication / authorization ---
-#~ msgid "Invalid email or password"
-#~ msgstr "邮箱或密码错误"
-
-#~ msgid "Email already in use"
-#~ msgstr "该邮箱已被占用"
-
-#~ msgid "Authentication required"
-#~ msgstr "请先登录"
-
-#~ msgid "Insufficient permissions"
-#~ msgstr "权限不足"
-
-#~ msgid "API key is invalid or has been revoked"
-#~ msgstr "API 密钥无效或已被撤销"
-
-# --- Projects / tenants ---
-#~ msgid "Project not found"
-#~ msgstr "未找到该项目"
-
-#~ msgid "Tenant not found"
-#~ msgstr "未找到该租户"
-
-#~ msgid "Project name is required"
-#~ msgstr "项目名称不能为空"
-
-# --- Memories / episodes / entities ---
-#~ msgid "Memory not found"
-#~ msgstr "未找到该记忆"
-
-#~ msgid "Episode not found"
-#~ msgstr "未找到该会话片段"
-
-#~ msgid "Entity not found"
-#~ msgstr "未找到该实体"
-
-# --- Rate limiting & generic errors ---
-#~ msgid "Rate limit exceeded. Please try again later."
-#~ msgstr "请求过于频繁，请稍后再试"
-
-#~ msgid "Internal server error"
-#~ msgstr "服务器内部错误"
-
-#~ msgid "Validation failed"
-#~ msgstr "校验失败"
 

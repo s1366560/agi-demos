@@ -45,6 +45,7 @@ from src.domain.ports.services.distributed_lock_port import (
     LockReleaseError,
 )
 from src.domain.shared_kernel import DomainException
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ async def optimistic_lock_handler(request: Request, exc: OptimisticLockError) ->
     return ErrorResponse(
         status_code=409,
         error_type="ConcurrentModification",
-        message="The resource was modified by another request. Please retry.",
+        message=_("The resource was modified by another request. Please retry."),
         error_id=error_id,
         retryable=True,
     ).to_response()
@@ -163,7 +164,7 @@ async def transaction_error_handler(request: Request, exc: TransactionError) -> 
     return ErrorResponse(
         status_code=500,
         error_type="TransactionError",
-        message="A database transaction error occurred. Please try again.",
+        message=_("A database transaction error occurred. Please try again."),
         error_id=error_id,
         retryable=True,
     ).to_response()
@@ -184,7 +185,7 @@ async def repository_connection_handler(
     return ErrorResponse(
         status_code=503,
         error_type="ServiceUnavailable",
-        message="Database service is temporarily unavailable. Please try again later.",
+        message=_("Database service is temporarily unavailable. Please try again later."),
         error_id=error_id,
         retryable=True,
     ).to_response()
@@ -203,7 +204,7 @@ async def repository_error_handler(request: Request, exc: RepositoryError) -> JS
     return ErrorResponse(
         status_code=500,
         error_type="RepositoryError",
-        message="A data access error occurred. Please try again.",
+        message=_("A data access error occurred. Please try again."),
         error_id=error_id,
         retryable=True,
     ).to_response()
@@ -391,7 +392,7 @@ async def llm_rate_limit_handler(request: Request, exc: LLMRateLimitError) -> JS
     return ErrorResponse(
         status_code=429,
         error_type="RateLimitExceeded",
-        message="LLM rate limit exceeded. Please wait and try again.",
+        message=_("LLM rate limit exceeded. Please wait and try again."),
         error_id=error_id,
         retryable=True,
     ).to_response()
@@ -409,7 +410,7 @@ async def no_active_provider_handler(request: Request, exc: NoActiveProviderErro
     return ErrorResponse(
         status_code=503,
         error_type="NoActiveProvider",
-        message="No active LLM provider available. Please configure a provider.",
+        message=_("No active LLM provider available. Please configure a provider."),
         error_id=error_id,
     ).to_response()
 
@@ -431,7 +432,7 @@ async def lock_acquisition_handler(request: Request, exc: LockAcquisitionError) 
     return ErrorResponse(
         status_code=409,
         error_type="LockAcquisitionFailed",
-        message="Resource is currently locked. Please try again later.",
+        message=_("Resource is currently locked. Please try again later."),
         error_id=error_id,
         retryable=True,
     ).to_response()
@@ -450,7 +451,7 @@ async def lock_release_handler(request: Request, exc: LockReleaseError) -> JSONR
     return ErrorResponse(
         status_code=500,
         error_type="LockReleaseFailed",
-        message="Failed to release resource lock.",
+        message=_("Failed to release resource lock."),
         error_id=error_id,
     ).to_response()
 
@@ -468,7 +469,7 @@ async def lock_error_handler(request: Request, exc: LockError) -> JSONResponse:
     return ErrorResponse(
         status_code=500,
         error_type="LockError",
-        message="A lock operation failed.",
+        message=_("A lock operation failed."),
         error_id=error_id,
     ).to_response()
 
@@ -490,7 +491,7 @@ async def domain_exception_handler(request: Request, exc: DomainException) -> JS
     return ErrorResponse(
         status_code=400,
         error_type="DomainError",
-        message=str(exc),
+        message=exc.localized_message() or str(exc),
         error_id=error_id,
     ).to_response()
 
@@ -508,7 +509,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return ErrorResponse(
         status_code=500,
         error_type="InternalServerError",
-        message="An unexpected error occurred. Please try again later.",
+        message=_("An unexpected error occurred. Please try again later."),
         error_id=error_id,
         retryable=True,
     ).to_response()

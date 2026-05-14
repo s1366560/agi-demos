@@ -53,4 +53,44 @@ class DomainEvent(ABC):
 
 
 class DomainException(Exception):
-    """Base exception for all domain errors."""
+    """Base exception for all domain errors.
+
+    Optional i18n attributes — when set, the exception handler will surface a
+    locale-aware ``user_message`` rendered via ``gettext`` instead of the raw
+    debugging string passed to ``__str__``. The internal ``args[0]`` text stays
+    in English so logs remain locale-agnostic.
+
+    Subclasses may either pass ``user_message=...`` to mark the exception
+    message itself as a translatable English source string, or pass
+    ``user_message=..., user_message_params={...}`` for placeholder formatting.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        user_message: str | None = None,
+        user_message_params: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.user_message = user_message
+        self.user_message_params = user_message_params or {}
+
+    def localized_message(self) -> str | None:
+        """Translate ``user_message`` using the active request locale.
+
+        Returns ``None`` when no translatable user-facing message was attached;
+        callers should then fall back to ``str(exc)``.
+        """
+        if not self.user_message:
+            return None
+        # Imported lazily to avoid pulling i18n into pure-domain test surfaces.
+        from src.infrastructure.i18n import gettext as _
+
+        translated = _(self.user_message)
+        if self.user_message_params:
+            try:
+                return translated.format(**self.user_message_params)
+            except (KeyError, IndexError):
+                return translated
+        return translated

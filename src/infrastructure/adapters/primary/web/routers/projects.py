@@ -38,6 +38,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
@@ -116,7 +117,7 @@ async def create_project(
         raise
     except Exception as e:
         logger.exception("Error creating project")
-        raise HTTPException(status_code=500, detail=f"Internal Error: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_("Internal Error: {error}").format(error=str(e))) from e
 
 
 @router.get("/", response_model=ProjectListResponse)
@@ -299,7 +300,7 @@ async def get_project(
     )
     project = result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
     return ProjectResponse.model_validate(project)
 
@@ -332,7 +333,7 @@ async def update_project(
     result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
     project = result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
     # Update fields
     update_data = project_data.model_dump(exclude_unset=True)
@@ -384,7 +385,7 @@ async def delete_project(
     result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
     project = result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
     await db.delete(project)
     await db.commit()
@@ -402,7 +403,7 @@ async def add_project_member(
     # Validate role
     role = body.role or "member"
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
 
     # Check if current user is owner or admin
     user_project_result = await db.execute(
@@ -424,12 +425,12 @@ async def add_project_member(
     project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
     project = project_result.scalar_one_or_none()
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
     # Check if user exists
     user_result = await db.execute(refresh_select_statement(select(User).where(User.id == body.user_id)))
     if not user_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
 
     # Check if user is already member
     existing_result = await db.execute(
@@ -574,9 +575,9 @@ async def list_project_members(
         uuid_like = re.match(r"^[0-9a-f-]{36}$", project_id) is not None
         if not uuid_like:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid UUID"
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_("Invalid UUID")
             )
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
     # Check if user has access to project
     user_project_result = await db.execute(
         refresh_select_statement(select(UserProject).where(
@@ -697,7 +698,7 @@ async def get_project_stats(
         project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
         project = project_result.scalar_one_or_none()
         if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=404, detail=_("Project not found"))
 
         # Get memory stats
         memory_stats_result = await db.execute(
@@ -798,7 +799,7 @@ async def get_trending_entities(
             ))
         )
         if not access.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         entities: list[TrendingEntity] = []
         try:
@@ -835,7 +836,7 @@ async def get_trending_entities(
         raise
     except Exception:
         logger.exception(f"Error getting trending entities for {project_id}")
-        raise HTTPException(status_code=500, detail="Failed to get trending entities") from None
+        raise HTTPException(status_code=500, detail=_("Failed to get trending entities")) from None
 
 
 class RecentSkillItem(BaseModel):
@@ -871,7 +872,7 @@ async def get_recent_skills(
             ))
         )
         if not access.scalar_one_or_none():
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         skills: list[RecentSkillItem] = []
         try:
@@ -906,4 +907,4 @@ async def get_recent_skills(
         raise
     except Exception:
         logger.exception(f"Error getting recent skills for {project_id}")
-        raise HTTPException(status_code=500, detail="Failed to get recent skills") from None
+        raise HTTPException(status_code=500, detail=_("Failed to get recent skills")) from None

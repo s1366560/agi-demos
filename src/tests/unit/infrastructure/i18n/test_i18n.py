@@ -70,3 +70,33 @@ class TestGettext:
     def test_current_locale_reflects_setter(self) -> None:
         set_current_locale("zh_CN")
         assert current_locale() == "zh_CN"
+
+
+class TestDomainExceptionLocalization:
+    def test_returns_none_when_no_user_message(self) -> None:
+        from src.domain.shared_kernel import DomainException
+
+        exc = DomainException("raw debug text")
+        assert exc.localized_message() is None
+        assert str(exc) == "raw debug text"
+
+    def test_translates_user_message_to_locale(self) -> None:
+        from src.domain.shared_kernel import DomainException
+
+        set_current_locale("zh_CN")
+        exc = DomainException(
+            "internal: project missing",
+            user_message="Project not found",
+        )
+        assert exc.localized_message() == "未找到该项目"
+
+    def test_substitutes_params(self) -> None:
+        from src.domain.shared_kernel import DomainException
+
+        set_current_locale("zh_CN")
+        exc = DomainException(
+            "boom",
+            user_message="Internal Error: {error}",
+            user_message_params={"error": "boom"},
+        )
+        assert exc.localized_message() == "内部错误：boom"

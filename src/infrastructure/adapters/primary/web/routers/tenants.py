@@ -27,6 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 
@@ -141,7 +142,7 @@ async def get_tenant(
     )
     tenant = result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
 
     user_tenant_result = await db.execute(
         refresh_select_statement(select(UserTenant).where(
@@ -149,7 +150,7 @@ async def get_tenant(
         ))
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to tenant")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant"))
 
     return TenantResponse.from_orm(tenant)
 
@@ -215,12 +216,12 @@ async def add_tenant_member(
     """Add member to tenant."""
     # Validate role set
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
     # Existence-first with invalid id 422
     result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
     tenant = result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
     # Permission check
     owner_check = await db.execute(
         refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
@@ -233,7 +234,7 @@ async def add_tenant_member(
     # Check if user exists
     user_result = await db.execute(refresh_select_statement(select(User).where(User.id == user_id)))
     if not user_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
 
     # Check if user is already member
     existing_result = await db.execute(
@@ -271,12 +272,12 @@ async def add_tenant_member_json(
     """Add member to tenant (JSON body version to match frontend)."""
     role = body.role or "member"
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
     # Existence-first with invalid id 422
     result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
     tenant = result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
     # Permission check
     owner_check = await db.execute(
         refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
@@ -289,7 +290,7 @@ async def add_tenant_member_json(
     # Check if user exists
     user_result = await db.execute(refresh_select_statement(select(User).where(User.id == body.user_id)))
     if not user_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
 
     # Check if user is already member
     existing_result = await db.execute(
@@ -328,7 +329,7 @@ async def remove_tenant_member(
     result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
     tenant = result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
     # Permission check
     owner_check = await db.execute(
         refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
@@ -375,12 +376,12 @@ async def list_tenant_members(
         ))
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to tenant")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant"))
     # Existence check
     result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
     tenant = result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
 
     # Get all members
     result = await db.execute(
@@ -418,13 +419,13 @@ async def get_tenant_stats(
         ))
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to tenant")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant"))
 
     # Get tenant details
     tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
     tenant = tenant_result.scalar_one_or_none()
     if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+        raise HTTPException(status_code=404, detail=_("Tenant not found"))
 
     # Get active projects count
     projects_result = await db.execute(refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id)))
@@ -552,7 +553,7 @@ async def get_tenant_analytics(
         ))
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=403, detail="Access denied to this tenant")
+        raise HTTPException(status_code=403, detail=_("Access denied to this tenant"))
 
     # Determine time range
     days_map = {"7d": 7, "30d": 30, "90d": 90}
@@ -755,7 +756,7 @@ async def delete_gene_policy(
     )
     existing = result.scalar_one_or_none()
     if not existing:
-        raise HTTPException(status_code=404, detail="Gene policy not found")
+        raise HTTPException(status_code=404, detail=_("Gene policy not found"))
     existing.deleted_at = datetime.now(UTC)
     await db.flush()
     await db.commit()
@@ -865,7 +866,7 @@ async def update_registry(
     )
     existing = result.scalar_one_or_none()
     if not existing:
-        raise HTTPException(status_code=404, detail="Registry not found")
+        raise HTTPException(status_code=404, detail=_("Registry not found"))
 
     existing.name = body.name
     existing.registry_type = body.registry_type
@@ -898,7 +899,7 @@ async def delete_registry(
     )
     existing = result.scalar_one_or_none()
     if not existing:
-        raise HTTPException(status_code=404, detail="Registry not found")
+        raise HTTPException(status_code=404, detail=_("Registry not found"))
     existing.deleted_at = datetime.now(UTC)
     await db.flush()
     await db.commit()
@@ -927,7 +928,7 @@ async def test_registry_connection(
     )
     existing = result.scalar_one_or_none()
     if not existing:
-        raise HTTPException(status_code=404, detail="Registry not found")
+        raise HTTPException(status_code=404, detail=_("Registry not found"))
 
     return TestConnectionResponse(
         success=True,
