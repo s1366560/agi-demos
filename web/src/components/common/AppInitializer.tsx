@@ -11,7 +11,6 @@ import { useTranslation } from 'react-i18next';
 
 import { Brain } from 'lucide-react';
 
-
 interface AppInitializerProps {
   children: React.ReactNode;
 }
@@ -20,6 +19,8 @@ interface AppInitializerProps {
  * Initial loading screen
  */
 const InitialLoadingScreen: React.FC = () => {
+  const { t } = useTranslation();
+
   return (
     <div className="fixed inset-0 bg-background-light dark:bg-background-dark flex items-center justify-center z-50">
       <div className="flex flex-col items-center gap-4">
@@ -36,7 +37,7 @@ const InitialLoadingScreen: React.FC = () => {
         {/* Loading spinner */}
         <div className="flex items-center gap-2 text-slate-500">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
-          <span className="text-sm">Loading...</span>
+          <span className="text-sm">{t('common.loading')}</span>
         </div>
       </div>
     </div>

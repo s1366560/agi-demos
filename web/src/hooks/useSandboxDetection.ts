@@ -174,7 +174,7 @@ export function useSandboxAgentHandlers(sandboxId?: string | null) {
       data: {
         call_id?: string | undefined;
         observation?: string | undefined;
-        result?: unknown | undefined;
+        result?: unknown;
         error?: string | undefined;
         duration_ms?: number | undefined;
       };
@@ -185,7 +185,7 @@ export function useSandboxAgentHandlers(sandboxId?: string | null) {
       const rawResult = event.data.result ?? event.data.observation;
       if (typeof rawResult === 'string') {
         observationValue = rawResult;
-      } else if (rawResult !== null && rawResult !== undefined) {
+      } else if (rawResult !== undefined) {
         observationValue = JSON.stringify(rawResult);
       }
 

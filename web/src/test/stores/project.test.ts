@@ -43,6 +43,39 @@ describe('ProjectStore', () => {
     expect(useProjectStore.getState().total).toBe(1);
   });
 
+  it('listProjects should ignore stale responses', async () => {
+    let resolveFirst: (value: any) => void = () => {};
+    let resolveSecond: (value: any) => void = () => {};
+    const firstRequest = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondRequest = new Promise((resolve) => {
+      resolveSecond = resolve;
+    });
+    (projectAPI.list as any).mockReturnValueOnce(firstRequest).mockReturnValueOnce(secondRequest);
+
+    const firstList = useProjectStore.getState().listProjects('tenant-1', { search: 'old' });
+    const secondList = useProjectStore.getState().listProjects('tenant-1', { search: 'new' });
+
+    resolveSecond({
+      projects: [{ id: 'new', name: 'New Result' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+    await secondList;
+    expect(useProjectStore.getState().projects).toEqual([{ id: 'new', name: 'New Result' }]);
+
+    resolveFirst({
+      projects: [{ id: 'old', name: 'Old Result' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+    await firstList;
+    expect(useProjectStore.getState().projects).toEqual([{ id: 'new', name: 'New Result' }]);
+  });
+
   it('createProject should add project to list', async () => {
     const newProject = { id: '2', name: 'New Project' };
     (projectAPI.create as any).mockResolvedValue(newProject);

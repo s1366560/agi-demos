@@ -19,6 +19,8 @@ import { useTranslation } from 'react-i18next';
 
 import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 
+import type { TFunction } from 'i18next';
+
 export interface ThinkingBlockProps {
   content: string;
   isStreaming: boolean;
@@ -28,6 +30,11 @@ export interface ThinkingBlockProps {
   steps?: string[] | undefined;
   /** Current step index */
   currentStep?: number | undefined;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 export const ThinkingBlock = memo<ThinkingBlockProps>(
@@ -73,10 +80,10 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
     );
 
     const formatDuration = (seconds: number): string => {
-      if (seconds < 60) return `${seconds}s`;
+      if (seconds < 60) return `${String(seconds)}s`;
       const mins = Math.floor(seconds / 60);
       const secs = seconds % 60;
-      return `${mins}m ${secs}s`;
+      return `${String(mins)}m ${String(secs)}s`;
     };
 
     // Truncate content for collapsed preview
@@ -111,7 +118,11 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
               onKeyDown={handleKeyDown}
               aria-expanded={expanded}
               aria-controls="thinking-content"
-              aria-label={expanded ? 'Collapse thinking' : 'Expand thinking'}
+              aria-label={
+                expanded
+                  ? tFallback(t, 'agent.thinking.collapse', 'Collapse thinking')
+                  : tFallback(t, 'agent.thinking.expand', 'Expand thinking')
+              }
               className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors duration-150 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             >
               {expanded ? (
@@ -162,12 +173,12 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
               <div className="w-full h-0.5 bg-slate-200 dark:bg-slate-700">
                 <div
                   className="h-full bg-primary transition-[width] duration-300 ease-in-out"
-                  style={{ width: `${progressPercentage}%` }}
+                  style={{ width: `${String(progressPercentage)}%` }}
                   role="progressbar"
                   aria-valuenow={progressPercentage}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-label="Thinking progress"
+                  aria-label={tFallback(t, 'agent.thinking.progress', 'Thinking progress')}
                 />
               </div>
             )}

@@ -7,6 +7,8 @@
  */
 import { type ReactNode, Component, memo, useCallback, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   normalizeA2UIEnvelopeRecords,
   normalizeA2UIJsonLikeString,
@@ -22,6 +24,7 @@ import { applyA2UIDataModelUpdate } from '@/utils/a2uiDataModel';
 import { MemStackA2UIViewer } from './MemStackA2UIViewer';
 
 import type { A2UIViewerProps } from '@copilotkit/a2ui-renderer';
+import type { TFunction } from 'i18next';
 
 // ---------------------------------------------------------------------------
 // Types (aligned with A2UI v0.8 ServerToClientMessage envelopes)
@@ -308,23 +311,29 @@ function normalizeComponentRef(input: unknown): string | undefined {
 
 function normalizeChildrenRef(input: unknown): { explicitList: string[] } | undefined {
   if (Array.isArray(input)) {
-    if (!input.every((child) => typeof child === 'string' && child.trim().length > 0)) {
+    const explicitList = input.filter(
+      (child): child is string => typeof child === 'string' && child.trim().length > 0
+    );
+    if (explicitList.length !== input.length) {
       return undefined;
     }
-    return { explicitList: input };
+    return { explicitList };
   }
 
   const record = normalizeEnvelopePayload(input);
   if (!record || !Array.isArray(record.explicitList)) return undefined;
-  if (!record.explicitList.every((child) => typeof child === 'string' && child.trim().length > 0)) {
+  const explicitList = record.explicitList.filter(
+    (child): child is string => typeof child === 'string' && child.trim().length > 0
+  );
+  if (explicitList.length !== record.explicitList.length) {
     return undefined;
   }
-  return { explicitList: record.explicitList as string[] };
+  return { explicitList };
 }
 
 function normalizeGapValue(input: unknown): string | undefined {
   if (typeof input === 'number' && Number.isFinite(input)) {
-    return `${input}px`;
+    return `${String(input)}px`;
   }
   if (typeof input === 'string' && input.trim().length > 0) {
     return input;
@@ -336,7 +345,7 @@ function reserveSyntheticComponentId(baseId: string, usedIds: Set<string>): stri
   let candidate = baseId;
   let suffix = 2;
   while (usedIds.has(candidate)) {
-    candidate = `${baseId}_${suffix}`;
+    candidate = `${baseId}_${String(suffix)}`;
     suffix += 1;
   }
   usedIds.add(candidate);
@@ -510,7 +519,7 @@ function normalizeTableRows(
     if (typeof record?.key === 'string' && record.key.trim().length > 0) {
       normalizedRow.key = record.key;
     } else {
-      normalizedRow.key = `row-${rowIndex}`;
+      normalizedRow.key = `row-${String(rowIndex)}`;
     }
     return [normalizedRow];
   });
@@ -1306,7 +1315,7 @@ function parseA2UISnapshot(
 
   return {
     parsed,
-    resolvedSurfaceId: targetSurfaceId ?? discoveredSurfaceId,
+    resolvedSurfaceId: targetSurfaceId,
     ...(hasDeleteSurface
       ? {}
       : {
@@ -1321,7 +1330,7 @@ function isUsableA2UISnapshot(snapshot: unknown): snapshot is A2UIMessageStreamS
     return false;
   }
 
-  const candidate = snapshot as Partial<A2UIMessageStreamSnapshot>;
+  const candidate = snapshot as Record<string, unknown>;
   const components = candidate.components;
   const data = candidate.data;
   const dataRecords = candidate.dataRecords;
@@ -1422,7 +1431,7 @@ function parseA2UIMessages(jsonl: string, targetSurfaceId?: string): ParsedSurfa
 
   return {
     parsed,
-    resolvedSurfaceId: targetSurfaceId ?? discoveredSurfaceId,
+    resolvedSurfaceId: targetSurfaceId,
     ...(hasDeleteSurface
       ? {}
       : {
@@ -1446,6 +1455,26 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+function A2UIRenderError({ message }: { message?: string | undefined }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 p-6 text-sm text-red-500 dark:text-red-400">
+      <span className="font-medium">
+        {tFallback(t, 'components.a2uiRenderer.errorTitle', 'A2UI render error')}
+      </span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        {message ?? tFallback(t, 'components.a2uiRenderer.unknownError', 'Unknown error')}
+      </span>
+    </div>
+  );
+}
+
 class A2UIErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -1465,14 +1494,7 @@ class A2UIErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
       if (this.props.fallback) {
         return this.props.fallback;
       }
-      return (
-        <div className="flex flex-col items-center justify-center gap-2 p-6 text-sm text-red-500 dark:text-red-400">
-          <span className="font-medium">A2UI render error</span>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {this.state.error?.message ?? 'Unknown error'}
-          </span>
-        </div>
-      );
+      return <A2UIRenderError message={this.state.error?.message} />;
     }
     return this.props.children;
   }

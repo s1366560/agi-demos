@@ -59,7 +59,10 @@ export const UndoConfirmation = memo<UndoConfirmationProps>(
               {t('common.cancel', 'Cancel')}
             </button>
             <button
-              onClick={handleConfirm}
+              type="button"
+              onClick={() => {
+                void handleConfirm();
+              }}
               disabled={loading}
               className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1.5"
             >

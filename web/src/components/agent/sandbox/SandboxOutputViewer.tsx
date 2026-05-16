@@ -8,6 +8,8 @@
 
 import { useState, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from 'antd';
 import {
   Copy,
@@ -73,6 +75,10 @@ const TOOL_COLORS: Record<string, string> = {
   bash: 'default',
 };
 
+function stringInput(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 function ToolExecutionCard({
   execution,
   onFileClick,
@@ -82,39 +88,62 @@ function ToolExecutionCard({
   onFileClick?: ((filePath: string) => void) | undefined;
   onArtifactExpand?: ((artifact: Artifact) => void) | undefined;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
     const content = execution.output || execution.error || '';
-    await navigator.clipboard.writeText(content);
-    setCopied(true);
-    message.success('Copied to clipboard');
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      message.success(
+        t('components.sandboxOutput.copySuccess', { defaultValue: 'Copied to clipboard' })
+      );
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      void message.error(t('components.sandboxOutput.copyFailed', { defaultValue: 'Copy failed' }));
+    }
   };
 
   // Format input for display
   const formattedInput = useMemo(() => {
     const input = execution.input;
     if (execution.toolName === 'read' || execution.toolName === 'write') {
-      return input.file_path as string;
+      return stringInput(input.file_path);
     }
     if (execution.toolName === 'edit') {
-      return `${input.file_path} (${(input.old_string as string)?.length || 0} → ${(input.new_string as string)?.length || 0} chars)`;
+      const filePath = stringInput(input.file_path);
+      const oldLength = stringInput(input.old_string).length;
+      const newLength = stringInput(input.new_string).length;
+      return t('components.sandboxOutput.editSummary', {
+        defaultValue: '{{filePath}} ({{oldLength}} → {{newLength}} chars)',
+        filePath,
+        oldLength,
+        newLength,
+      });
     }
     if (execution.toolName === 'glob') {
-      return input.pattern as string;
+      return stringInput(input.pattern);
     }
     if (execution.toolName === 'grep') {
-      return `${input.pattern} ${input.path ? `in ${input.path}` : ''}`;
+      const pattern = stringInput(input.pattern);
+      const path = stringInput(input.path);
+      return path
+        ? t('components.sandboxOutput.grepSummary', {
+            defaultValue: '{{pattern}} in {{path}}',
+            pattern,
+            path,
+          })
+        : pattern;
     }
     if (execution.toolName === 'bash') {
-      const cmd = input.command as string;
+      const cmd = stringInput(input.command);
       return cmd.length > 50 ? cmd.slice(0, 50) + '...' : cmd;
     }
     return JSON.stringify(input);
-  }, [execution]);
+  }, [execution, t]);
 
   // Determine if output looks like code
   const isCodeOutput = useMemo(() => {
@@ -145,7 +174,7 @@ function ToolExecutionCard({
             className="text-sm text-slate-600 cursor-pointer hover:text-blue-600"
             onClick={() => {
               const filePath =
-                (execution.input.file_path as string) || (execution.input.path as string);
+                stringInput(execution.input.file_path) || stringInput(execution.input.path);
               if (filePath && onFileClick) {
                 onFileClick(filePath);
               }
@@ -158,12 +187,20 @@ function ToolExecutionCard({
           {execution.durationMs && (
             <Text className="text-xs text-slate-400">{execution.durationMs}ms</Text>
           )}
-          <Tooltip title={copied ? 'Copied!' : 'Copy output'}>
+          <Tooltip
+            title={
+              copied
+                ? t('components.sandboxOutput.copied', { defaultValue: 'Copied!' })
+                : t('components.sandboxOutput.copyOutput', { defaultValue: 'Copy output' })
+            }
+          >
             <Button
               type="text"
               size="small"
               icon={copied ? <Check size={16} /> : <Copy size={16} />}
-              onClick={handleCopy}
+              onClick={() => {
+                void handleCopy();
+              }}
               className="text-slate-400 hover:text-slate-600"
             />
           </Tooltip>
@@ -191,7 +228,7 @@ function ToolExecutionCard({
         ) : (
           <div className="p-3 text-center">
             <Text type="secondary" className="text-sm">
-              No output
+              {t('components.sandboxOutput.noOutput', { defaultValue: 'No output' })}
             </Text>
           </div>
         )}
@@ -203,7 +240,11 @@ function ToolExecutionCard({
           <div className="px-3 py-2 bg-slate-50 flex items-center gap-2">
             <PictureIcon size={16} className="text-blue-500" />
             <Text className="text-xs text-slate-600">
-              {execution.artifacts.length} artifact{execution.artifacts.length > 1 ? 's' : ''}
+              {t('components.sandboxOutput.artifactCount', {
+                defaultValue:
+                  execution.artifacts.length === 1 ? '{{count}} artifact' : '{{count}} artifacts',
+                count: execution.artifacts.length,
+              })}
             </Text>
           </div>
           <div
@@ -232,10 +273,17 @@ export function SandboxOutputViewer({
   onFileClick,
   onArtifactExpand,
 }: SandboxOutputViewerProps) {
+  const { t } = useTranslation();
+
   if (executions.length === 0) {
     return (
       <div className="flex items-center justify-center h-full" style={{ maxHeight }}>
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tool executions yet" />
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t('components.sandboxOutput.empty', {
+            defaultValue: 'No tool executions yet',
+          })}
+        />
       </div>
     );
   }
@@ -256,7 +304,11 @@ export function SandboxOutputViewer({
             {exec.toolName}
           </Tag>
           <Text className="text-sm text-slate-600">{formatTimeOnly(exec.timestamp)}</Text>
-          {exec.error && <Tag color="error">Error</Tag>}
+          {exec.error && (
+            <Tag color="error">
+              {t('components.sandboxOutput.error', { defaultValue: 'Error' })}
+            </Tag>
+          )}
           {exec.artifacts && exec.artifacts.length > 0 && (
             <Tag icon={<PictureIcon size={14} />} color="blue">
               {exec.artifacts.length}

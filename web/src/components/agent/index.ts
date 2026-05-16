@@ -47,7 +47,6 @@ export { TimelineEventItem } from './TimelineEventItem';
 export { ToolExecutionLive, ReasoningLog, FinalReport, FollowUpPills } from './execution';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
 
-
 // Types
 export type { StarterTile } from './chat';
 export type { SidebarConversationStatus, Conversation } from './layout';

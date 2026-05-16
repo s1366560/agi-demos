@@ -83,7 +83,9 @@ export const AgentChatInputArea = ({
       </div>
 
       <InputBar
-        onSend={onSend}
+        onSend={(message, attachments) => {
+          void onSend(message, attachments);
+        }}
         onAbort={onAbort}
         isStreaming={isStreaming}
         disabled={disabled}

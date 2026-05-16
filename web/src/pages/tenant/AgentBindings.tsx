@@ -30,17 +30,29 @@ import {
 } from '../../stores/agentBindings';
 import { useDefinitions, useListDefinitions } from '../../stores/agentDefinitions';
 
-import type { AgentBinding, BindingTraceEntry, TestBindingResponse } from '../../types/multiAgent';
+import type {
+  AgentBinding,
+  BindingTraceEntry,
+  TestBindingRequest,
+  TestBindingResponse,
+} from '../../types/multiAgent';
 import type { ColumnsType } from 'antd/es/table';
 
 const CHANNEL_TYPES = [
-  { value: 'web', label: 'Web Chat' },
-  { value: 'feishu', label: 'Feishu' },
-  { value: 'dingtalk', label: 'DingTalk' },
-  { value: 'wechat', label: 'WeChat' },
-  { value: 'slack', label: 'Slack' },
-  { value: 'api', label: 'API' },
+  { value: 'web', labelKey: 'tenant.agentBindings.channelTypes.web' },
+  { value: 'feishu', labelKey: 'tenant.agentBindings.channelTypes.feishu' },
+  { value: 'dingtalk', labelKey: 'tenant.agentBindings.channelTypes.dingtalk' },
+  { value: 'wechat', labelKey: 'tenant.agentBindings.channelTypes.wechat' },
+  { value: 'slack', labelKey: 'tenant.agentBindings.channelTypes.slack' },
+  { value: 'api', labelKey: 'tenant.agentBindings.channelTypes.api' },
 ];
+
+const optionalString = (value: string | undefined) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const formatProgressPercent = (percent: number | undefined) => `${(percent ?? 0).toFixed(0)}%`;
 
 export const AgentBindings: React.FC = () => {
   const { t } = useTranslation();
@@ -48,7 +60,7 @@ export const AgentBindings: React.FC = () => {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [testForm] = Form.useForm();
+  const [testForm] = Form.useForm<TestBindingRequest>();
   const [testResult, setTestResult] = useState<TestBindingResponse | null>(null);
   const [showTrace, setShowTrace] = useState(false);
   const [isTestLoading, setIsTestLoading] = useState(false);
@@ -89,8 +101,8 @@ export const AgentBindings: React.FC = () => {
   }, [bindings, search, defNameMap]);
 
   useEffect(() => {
-    listBindings();
-    listDefinitions();
+    void listBindings();
+    void listDefinitions();
   }, [listBindings, listDefinitions]);
 
   useEffect(() => {
@@ -108,27 +120,33 @@ export const AgentBindings: React.FC = () => {
     async (id: string, enabled: boolean) => {
       try {
         await toggleBinding(id, enabled);
-        message.success(enabled ? 'Binding enabled' : 'Binding disabled');
+        message.success(
+          enabled
+            ? t('tenant.agentBindings.messages.enabled')
+            : t('tenant.agentBindings.messages.disabled')
+        );
       } catch {
         // handled by store
       }
     },
-    [toggleBinding]
+    [toggleBinding, t]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
       try {
         await deleteBinding(id);
-        message.success('Binding deleted');
+        message.success(t('tenant.agentBindings.messages.deleted'));
       } catch {
         // handled by store
       }
     },
-    [deleteBinding]
+    [deleteBinding, t]
   );
 
-  const handleRefresh = useCallback(() => listBindings(), [listBindings]);
+  const handleRefresh = useCallback(() => {
+    void listBindings();
+  }, [listBindings]);
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -136,7 +154,7 @@ export const AgentBindings: React.FC = () => {
 
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
-    listBindings();
+    void listBindings();
   }, [listBindings]);
 
   const handleTestModalOpen = useCallback(() => {
@@ -156,20 +174,20 @@ export const AgentBindings: React.FC = () => {
       setIsTestLoading(true);
       const result = await bindingsService.test({
         channel_type: values.channel_type,
-        channel_id: values.channel_id || undefined,
-        account_id: values.account_id || undefined,
-        peer_id: values.peer_id || undefined,
+        channel_id: optionalString(values.channel_id),
+        account_id: optionalString(values.account_id),
+        peer_id: optionalString(values.peer_id),
       });
       setTestResult(result);
     } catch (err: unknown) {
       const error = err as { errorFields?: unknown[] | undefined };
       if (!error.errorFields) {
-        message.error('Failed to test routing');
+        message.error(t('tenant.agentBindings.messages.testFailed'));
       }
     } finally {
       setIsTestLoading(false);
     }
-  }, [testForm]);
+  }, [testForm, t]);
 
   const traceColumns: ColumnsType<BindingTraceEntry> = useMemo(
     () => [
@@ -268,7 +286,12 @@ export const AgentBindings: React.FC = () => {
         title: t('tenant.agentBindings.columns.channelType', 'Channel Type'),
         dataIndex: 'channel_type',
         key: 'channel_type',
-        render: (val: string | null) => (val ? <Tag>{val}</Tag> : <Tag color="default">Any</Tag>),
+        render: (val: string | null) =>
+          val ? (
+            <Tag>{val}</Tag>
+          ) : (
+            <Tag color="default">{t('tenant.agentBindings.columns.any')}</Tag>
+          ),
       },
       {
         title: t('tenant.agentBindings.columns.channelId', 'Channel ID'),
@@ -300,8 +323,7 @@ export const AgentBindings: React.FC = () => {
         key: 'specificity_score',
         width: 100,
         align: 'center' as const,
-        sorter: (a: AgentBinding, b: AgentBinding) =>
-          (b.specificity_score ?? 0) - (a.specificity_score ?? 0),
+        sorter: (a: AgentBinding, b: AgentBinding) => b.specificity_score - a.specificity_score,
         render: (val: number) => (
           <Tag color={val >= 6 ? 'green' : val >= 3 ? 'gold' : 'default'}>{val}</Tag>
         ),
@@ -324,20 +346,28 @@ export const AgentBindings: React.FC = () => {
           <Switch
             size="small"
             checked={record.enabled}
-            onChange={(checked) => handleToggle(record.id, checked)}
+            aria-label={t('tenant.agentBindings.toggleBinding', {
+              name: defNameMap.get(record.agent_id) ?? record.agent_id,
+              defaultValue: 'Toggle binding for {{name}}',
+            })}
+            onChange={(checked) => {
+              void handleToggle(record.id, checked);
+            }}
           />
         ),
       },
       {
-        title: '',
+        title: t('common.actions.label'),
         key: 'actions',
         width: 60,
         render: (_: unknown, record: AgentBinding) => (
           <Popconfirm
-            title="Delete this binding?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="Delete"
-            cancelText="Cancel"
+            title={t('tenant.agentBindings.deleteConfirm.title')}
+            onConfirm={() => {
+              void handleDelete(record.id);
+            }}
+            okText={t('common.delete')}
+            cancelText={t('common.cancel')}
           >
             <button
               type="button"
@@ -353,9 +383,9 @@ export const AgentBindings: React.FC = () => {
   );
 
   return (
-    <div className="max-w-full mx-auto w-full flex flex-col gap-5 p-6">
+    <div className="max-w-full mx-auto w-full flex flex-col gap-5 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             {t('tenant.agentBindings.title', 'Agent Bindings')}
           </h1>
@@ -366,21 +396,21 @@ export const AgentBindings: React.FC = () => {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <button
             type="button"
             onClick={handleTestModalOpen}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors sm:w-auto"
           >
             <Route size={16} />
-            {t('tenant.agentBindings.testRouting', 'Test Routing')}
+            {t('tenant.agentBindings.testRoutingButton', 'Test Routing')}
           </button>
           <button
             type="button"
             onClick={() => {
               setIsModalOpen(true);
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors sm:w-auto"
           >
             <Plus size={16} />
             {t('tenant.agentBindings.createNew', 'Create Binding')}
@@ -389,9 +419,7 @@ export const AgentBindings: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
-        <span>
-          {bindings.length} {bindings.length === 1 ? 'binding' : 'bindings'}
-        </span>
+        <span>{t('tenant.agentBindings.stats.count', { count: bindings.length })}</span>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -403,13 +431,15 @@ export const AgentBindings: React.FC = () => {
             onChange={(e) => {
               setSearch(e.target.value);
             }}
-            placeholder={t('common.search', 'Search...')}
+            placeholder={t('tenant.agentBindings.search')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
           />
         </div>
         <button
           type="button"
           onClick={handleRefresh}
+          aria-label={t('tenant.agentBindings.refresh')}
+          title={t('tenant.agentBindings.refresh')}
           className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
         >
           <RefreshCw size={16} />
@@ -447,6 +477,7 @@ export const AgentBindings: React.FC = () => {
           rowKey="id"
           size="small"
           pagination={false}
+          scroll={{ x: 'max-content' }}
           className="dark:[&_.ant-table]:bg-slate-800"
         />
       )}
@@ -462,7 +493,9 @@ export const AgentBindings: React.FC = () => {
         title={t('tenant.agentBindings.testRouting.title', 'Test Routing Resolution')}
         open={isTestModalOpen}
         onCancel={handleTestModalClose}
-        onOk={handleTestSubmit}
+        onOk={() => {
+          void handleTestSubmit();
+        }}
         okText={t('tenant.agentBindings.testRouting.test', 'Test')}
         cancelText={t('common.cancel', 'Cancel')}
         confirmLoading={isTestLoading}
@@ -489,7 +522,7 @@ export const AgentBindings: React.FC = () => {
               </option>
               {CHANNEL_TYPES.map((ct) => (
                 <option key={ct.value} value={ct.value}>
-                  {ct.label}
+                  {t(ct.labelKey)}
                 </option>
               ))}
             </select>
@@ -562,7 +595,7 @@ export const AgentBindings: React.FC = () => {
                       '50%': '#52c41a',
                       '100%': '#1890ff',
                     }}
-                    format={(percent) => `${percent?.toFixed(0)}%`}
+                    format={formatProgressPercent}
                   />
                 </div>
               </div>
@@ -589,18 +622,16 @@ export const AgentBindings: React.FC = () => {
                 {showTrace
                   ? t('tenant.agentBindings.trace.hide', 'Hide Decision Trace')
                   : t('tenant.agentBindings.trace.show', 'Show Decision Trace')}
-                {testResult.trace && (
-                  <span className="text-slate-500 text-xs font-normal ml-1">
-                    (
-                    {t('tenant.agentBindings.trace.candidatesCount', '{{count}} candidates', {
-                      count: testResult.trace.length,
-                    })}
-                    )
-                  </span>
-                )}
+                <span className="text-slate-500 text-xs font-normal ml-1">
+                  (
+                  {t('tenant.agentBindings.trace.candidatesCount', '{{count}} candidates', {
+                    count: testResult.trace.length,
+                  })}
+                  )
+                </span>
               </button>
 
-              {showTrace && testResult.trace && (
+              {showTrace && testResult.trace.length > 0 && (
                 <div className="mt-3 overflow-x-auto">
                   <Table<BindingTraceEntry>
                     dataSource={testResult.trace}

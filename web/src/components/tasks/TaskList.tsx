@@ -13,11 +13,15 @@
 
 import React, { useState, useCallback, useEffect, useMemo, createContext, useContext } from 'react';
 
-import { RefreshCw, Search, MoreVertical, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import { message } from 'antd';
+import { RefreshCw, Search, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
 
 import { formatDateTimeFull } from '@/utils/date';
 
 import { taskAPI } from '../../services/api';
+import { confirmAction } from '../../utils/confirmAction';
 
 interface Task {
   id: string;
@@ -43,6 +47,7 @@ interface Task {
 
 interface TaskListContextValue {
   tasks: Task[];
+  filteredTasks: Task[];
   loading: boolean;
   refreshing: boolean;
   searchQuery: string;
@@ -85,6 +90,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ children }) => {
+  const { t } = useTranslation();
   const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, handleRefresh, refreshing } =
     useTaskListContext();
 
@@ -93,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
       {children || (
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-800">
           <h3 className="text-slate-900 dark:text-white text-base font-bold whitespace-nowrap">
-            Tasks
+            {t('components.taskList.title', 'Tasks')}
           </h3>
           <div className="flex flex-wrap gap-3 w-full sm:w-auto">
             <div className="relative grow sm:grow-0">
@@ -102,7 +108,10 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               </div>
               <input
                 className="block w-full sm:w-64 pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-slate-800 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm dark:text-white transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-                placeholder="Search Task ID or Name..."
+                placeholder={t(
+                  'components.taskList.searchPlaceholder',
+                  'Search Task ID or Name...'
+                )}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => {
@@ -117,15 +126,21 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
                 setStatusFilter(e.target.value);
               }}
             >
-              <option>All Statuses</option>
-              <option>Completed</option>
-              <option>Processing</option>
-              <option>Failed</option>
-              <option>Pending</option>
+              <option value="all">{t('components.taskList.status.all', 'All Statuses')}</option>
+              <option value="completed">
+                {t('components.taskList.status.completed', 'Completed')}
+              </option>
+              <option value="processing">
+                {t('components.taskList.status.processing', 'Processing')}
+              </option>
+              <option value="failed">{t('components.taskList.status.failed', 'Failed')}</option>
+              <option value="pending">{t('components.taskList.status.pending', 'Pending')}</option>
             </select>
             <button
               onClick={handleRefresh}
               disabled={refreshing}
+              aria-label={t('components.taskList.refresh', 'Refresh tasks')}
+              title={t('components.taskList.refresh', 'Refresh tasks')}
               className="p-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
             >
               <RefreshCw
@@ -149,7 +164,10 @@ interface ItemProps {
 }
 
 export const Item: React.FC<ItemProps> = ({ task, children }) => {
+  const { t } = useTranslation();
   const { handleRetry, handleStop, entityId } = useTaskListContext();
+  const normalizedStatus = task.status.toLowerCase();
+  const statusLabel = t(`components.taskList.status.${normalizedStatus}`, task.status);
 
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
@@ -157,12 +175,12 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
         <>
           <td className="px-6 py-4 whitespace-nowrap">
             <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${task.statusColor}`}
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${task.statusColor ?? ''}`}
             >
               <span
-                className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse motion-reduce:animate-none' : ''} ${task.statusDot}`}
+                className={`size-1.5 rounded-full mr-1.5 ${normalizedStatus === 'processing' ? 'animate-pulse motion-reduce:animate-none' : ''} ${task.statusDot ?? ''}`}
               ></span>
-              {task.status}
+              {statusLabel}
             </span>
           </td>
           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300">
@@ -171,7 +189,9 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
           </td>
           {!entityId && (
             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 font-mono">
-              {task.entity_id ? `${task.entity_type}:${task.entity_id.substring(0, 8)}...` : '-'}
+              {task.entity_id
+                ? `${task.entity_type ?? 'entity'}:${task.entity_id.substring(0, 8)}...`
+                : '-'}
             </td>
           )}
           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
@@ -184,23 +204,24 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
             <div className="flex items-center justify-end gap-2">
               {task.canRetry && (
                 <button
-                  onClick={() => handleRetry(task.id)}
+                  onClick={() => {
+                    void handleRetry(task.id);
+                  }}
                   className="text-primary hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-xs mr-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
                 >
-                  Retry
+                  {t('components.taskList.actions.retry', 'Retry')}
                 </button>
               )}
               {task.canStop && (
                 <button
-                  onClick={() => handleStop(task.id)}
+                  onClick={() => {
+                    void handleStop(task.id);
+                  }}
                   className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium text-xs mr-2 flex items-center gap-1 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
                 >
-                  <Ban className="size-3" /> Stop
+                  <Ban className="size-3" /> {t('components.taskList.actions.stop', 'Stop')}
                 </button>
               )}
-              <button className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-white">
-                <MoreVertical className="size-5" />
-              </button>
             </div>
           </td>
         </>
@@ -218,15 +239,18 @@ interface PaginationProps {
 }
 
 export const Pagination: React.FC<PaginationProps> = ({ children }) => {
-  const { filteredTasks, offset, setOffset, limit, tasks } =
-    useTaskListContext() as TaskListContextValue & { filteredTasks: Task[] };
+  const { t } = useTranslation();
+  const { filteredTasks, offset, setOffset, limit, tasks } = useTaskListContext();
 
   return (
     <>
       {children || (
         <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-between">
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            Showing {filteredTasks.length} tasks
+            {t('components.taskList.pagination.showing', {
+              count: filteredTasks.length,
+              defaultValue: 'Showing {{count}} tasks',
+            })}
           </div>
           <div className="flex gap-2">
             <button
@@ -236,7 +260,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
               disabled={offset === 0}
               className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
             >
-              <ChevronLeft className="size-4" /> Previous
+              <ChevronLeft className="size-4" /> {t('common.previous', 'Previous')}
             </button>
             <button
               onClick={() => {
@@ -245,7 +269,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
               disabled={tasks.length < limit}
               className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
             >
-              Next <ChevronRight className="size-4" />
+              {t('common.next', 'Next')} <ChevronRight className="size-4" />
             </button>
           </div>
         </div>
@@ -264,13 +288,15 @@ interface EmptyStateProps {
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ children, colSpan = 6 }) => {
+  const { t } = useTranslation();
+
   return (
     <tr>
       <td colSpan={colSpan} className="px-6 py-12 text-center text-slate-500">
         {children || (
           <div className="flex flex-col items-center gap-2">
             <Search className="size-8 text-slate-300" />
-            <p>No tasks found</p>
+            <p>{t('components.taskList.empty', 'No tasks found')}</p>
           </div>
         )}
       </td>
@@ -283,13 +309,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ children, colSpan = 6 })
 // ============================================
 
 const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded = false }) => {
+  const { t } = useTranslation();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [limit] = useState(50);
   const [offset, setOffset] = useState(0);
 
@@ -299,15 +326,23 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
         limit,
         offset,
         search: searchQuery || undefined,
-        status: statusFilter !== 'All Statuses' ? statusFilter : undefined,
-        task_type: entityType,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        entity_id: entityId,
+        entity_type: entityType,
       });
       const tasks: Task[] = data.map((item) => ({
         id: item.id,
         task_type: item.task_type,
-        name: item.task_type || item.id,
+        name: item.name ?? item.task_type ?? item.id,
         status: item.status,
         created_at: item.created_at,
+        completed_at: item.completed_at,
+        error: item.error,
+        worker_id: item.worker_id,
+        retries: item.retries,
+        duration: item.duration,
+        entity_id: item.entity_id,
+        entity_type: item.entity_type,
       }));
       setTasks(tasks);
       setLoading(false);
@@ -317,12 +352,14 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       setLoading(false);
       setRefreshing(false);
     }
-  }, [limit, offset, searchQuery, statusFilter, entityType]);
+  }, [limit, offset, searchQuery, statusFilter, entityId, entityType]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchTasks();
-    const interval = setInterval(fetchTasks, 5000);
+    void fetchTasks();
+    const interval = setInterval(() => {
+      void fetchTasks();
+    }, 5000);
     return () => {
       clearInterval(interval);
     };
@@ -330,27 +367,37 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchTasks();
+    void fetchTasks();
   };
 
   const handleRetry = async (taskId: string) => {
     try {
       await taskAPI.retryTask(taskId);
-      fetchTasks();
+      await fetchTasks();
     } catch (error) {
       console.error(`Failed to retry task ${taskId}:`, error);
-      alert('Failed to retry task. Please try again.');
+      void message.error(
+        t('components.taskList.messages.retryFailed', 'Failed to retry task. Please try again.')
+      );
     }
   };
 
   const handleStop = async (taskId: string) => {
-    if (!confirm('Are you sure you want to stop this task?')) return;
+    if (
+      !(await confirmAction({
+        title: t('components.taskList.confirmStop', 'Are you sure you want to stop this task?'),
+        danger: true,
+      }))
+    )
+      return;
     try {
       await taskAPI.stopTask(taskId);
-      fetchTasks();
+      await fetchTasks();
     } catch (error) {
       console.error(`Failed to stop task ${taskId}:`, error);
-      alert('Failed to stop task. Please try again.');
+      void message.error(
+        t('components.taskList.messages.stopFailed', 'Failed to stop task. Please try again.')
+      );
     }
   };
 
@@ -382,19 +429,23 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
 
   // Memoize filtered and formatted tasks
   const filteredTasks = useMemo(() => {
-    return tasks.map((task) => ({
-      ...task,
-      statusColor: getStatusColor(task.status),
-      statusDot: getStatusDot(task.status),
-      formattedDate: formatDateTimeFull(task.created_at),
-      shortId: task.id.substring(0, 8),
-      canRetry: task.status === 'Failed',
-      canStop: task.status === 'Pending' || task.status === 'Processing',
-    }));
+    return tasks.map((task) => {
+      const normalizedStatus = task.status.toLowerCase();
+      return {
+        ...task,
+        statusColor: getStatusColor(task.status),
+        statusDot: getStatusDot(task.status),
+        formattedDate: formatDateTimeFull(task.created_at),
+        shortId: task.id.substring(0, 8),
+        canRetry: normalizedStatus === 'failed',
+        canStop: normalizedStatus === 'pending' || normalizedStatus === 'processing',
+      };
+    });
   }, [tasks, getStatusColor, getStatusDot]);
 
   const contextValue: TaskListContextValue = {
     tasks,
+    filteredTasks,
     loading,
     refreshing,
     searchQuery,
@@ -411,9 +462,6 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
     entityType,
     embedded,
   };
-
-  // Provide filteredTasks to child components through context
-  (contextValue as any).filteredTasks = filteredTasks;
 
   if (loading && !tasks.length) {
     return (
@@ -438,36 +486,36 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
                   className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
                   scope="col"
                 >
-                  Status
+                  {t('components.taskList.columns.status', 'Status')}
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
                   scope="col"
                 >
-                  Type
+                  {t('components.taskList.columns.type', 'Type')}
                 </th>
                 {!entityId && (
                   <th
                     className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
                     scope="col"
                   >
-                    Entity
+                    {t('components.taskList.columns.entity', 'Entity')}
                   </th>
                 )}
                 <th
                   className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
                   scope="col"
                 >
-                  Duration
+                  {t('components.taskList.columns.duration', 'Duration')}
                 </th>
                 <th
                   className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
                   scope="col"
                 >
-                  Timestamp
+                  {t('components.taskList.columns.timestamp', 'Timestamp')}
                 </th>
                 <th className="relative px-6 py-3" scope="col">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t('common.actions.label', 'Actions')}</span>
                 </th>
               </tr>
             </thead>

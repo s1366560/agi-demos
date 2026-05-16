@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 export interface HexContextMenuProps {
   q: number;
   r: number;
@@ -11,13 +13,31 @@ export interface HexContextMenuProps {
 }
 
 const ACTIONS = [
-  { key: 'view_details', label: 'View Details' },
-  { key: 'assign_agent', label: 'Assign Agent' },
-  { key: 'add_corridor', label: 'Add Corridor' },
-  { key: 'remove', label: 'Remove', danger: true },
+  {
+    key: 'view_details',
+    labelKey: 'workspaceDetail.hex.actions.viewDetails',
+    fallback: 'View Details',
+  },
+  {
+    key: 'assign_agent',
+    labelKey: 'workspaceDetail.hex.actions.assignAgent',
+    fallback: 'Assign Agent',
+  },
+  {
+    key: 'add_corridor',
+    labelKey: 'workspaceDetail.hex.actions.addCorridor',
+    fallback: 'Add Corridor',
+  },
+  {
+    key: 'remove',
+    labelKey: 'workspaceDetail.hex.actions.remove',
+    fallback: 'Remove',
+    danger: true,
+  },
 ];
 
 export const HexContextMenu: FC<HexContextMenuProps> = ({ q, r, x, y, onClose, onAction }) => {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,18 +47,20 @@ export const HexContextMenu: FC<HexContextMenuProps> = ({ q, r, x, y, onClose, o
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    
-    const firstMenuItem = ref.current?.querySelector('[role="menuitem"]') as HTMLElement;
+
+    const firstMenuItem = ref.current?.querySelector<HTMLElement>('[role="menuitem"]');
     if (firstMenuItem) {
       firstMenuItem.focus();
     }
-    
-    return () => { document.removeEventListener('mousedown', handleClickOutside); };
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [onClose]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!ref.current) return;
-    
+
     if (e.key === 'Escape') {
       onClose();
       return;
@@ -64,13 +86,17 @@ export const HexContextMenu: FC<HexContextMenuProps> = ({ q, r, x, y, onClose, o
     <div
       ref={ref}
       role="menu"
-      aria-label="Hex cell actions"
+      aria-label={t('workspaceDetail.hex.actionsAria', 'Hex cell actions')}
       onKeyDown={handleKeyDown}
       className="fixed z-50 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-40"
       style={{ left: x, top: y }}
     >
       <div className="px-3 py-1.5 text-xs text-slate-400 font-medium">
-        Hex ({q}, {r})
+        {t('workspaceDetail.hex.cellLabel', {
+          q,
+          r,
+          defaultValue: 'Hex ({{q}}, {{r}})',
+        })}
       </div>
       {ACTIONS.map((action) => (
         <button
@@ -85,7 +111,7 @@ export const HexContextMenu: FC<HexContextMenuProps> = ({ q, r, x, y, onClose, o
             onClose();
           }}
         >
-          {action.label}
+          {t(action.labelKey, action.fallback)}
         </button>
       ))}
     </div>

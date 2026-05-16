@@ -81,7 +81,7 @@ export const AgentLayout: React.FC = () => {
   const handleTabClick = (tab: { id: string; path: string }) => {
     if (projectId) {
       const agentBasePath = `${projectBasePath}/agent`;
-      navigate(tab.path ? `${agentBasePath}/${tab.path}` : agentBasePath);
+      void navigate(tab.path ? `${agentBasePath}/${tab.path}` : agentBasePath);
     }
   };
 

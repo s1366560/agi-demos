@@ -72,7 +72,11 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
 
   return (
     <Modal
-      title={skill ? t('skill.submit.titleWithName', { name: skill.name }) : t('skill.submit.titleGeneric')}
+      title={
+        skill
+          ? t('skill.submit.titleWithName', { name: skill.name })
+          : t('skill.submit.titleGeneric')
+      }
       open={open}
       onCancel={onClose}
       onOk={() => {
@@ -84,9 +88,7 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
     >
       <Space orientation="vertical" className="w-full" size="middle">
         <div className={`rounded-[6px] p-3 ${surface}`}>
-          <Text type="secondary">
-            {t('skill.submit.description')}
-          </Text>
+          <Text type="secondary">{t('skill.submit.description')}</Text>
         </div>
         <div>
           <label htmlFor="skill-submit-semver" className="font-medium">

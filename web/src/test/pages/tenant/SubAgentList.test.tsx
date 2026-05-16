@@ -26,8 +26,12 @@ vi.mock('../../../components/subagent/SubAgentModal', () => ({
   SubAgentModal: ({ isOpen, onClose, onSuccess }: any) =>
     isOpen ? (
       <div data-testid="subagent-modal">
-        <button type="button" onClick={onClose}>Close</button>
-        <button type="button" onClick={onSuccess}>Success</button>
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
+        <button type="button" onClick={onSuccess}>
+          Success
+        </button>
       </div>
     ) : null,
 }));

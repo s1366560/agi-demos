@@ -1,10 +1,13 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Moon, Sun, Monitor } from 'lucide-react';
 
 import { useThemeStore } from '@/stores/theme';
 
 export const ThemeToggle: React.FC = () => {
+  const { t } = useTranslation();
   const { theme, setTheme } = useThemeStore();
 
   return (
@@ -14,14 +17,14 @@ export const ThemeToggle: React.FC = () => {
         onClick={() => {
           setTheme('light');
         }}
-        aria-label="Switch to light mode"
+        aria-label={t('theme.switchToLight', { defaultValue: 'Switch to light mode' })}
         aria-pressed={theme === 'light'}
         className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           theme === 'light'
             ? 'bg-white dark:bg-slate-600 text-yellow-500 shadow-sm'
             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
         }`}
-        title="Light Mode"
+        title={t('theme.lightMode', { defaultValue: 'Light Mode' })}
       >
         <Sun size={16} />
       </button>
@@ -30,14 +33,14 @@ export const ThemeToggle: React.FC = () => {
         onClick={() => {
           setTheme('system');
         }}
-        aria-label="Use system theme"
+        aria-label={t('theme.useSystem', { defaultValue: 'Use system theme' })}
         aria-pressed={theme === 'system'}
         className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           theme === 'system'
             ? 'bg-white dark:bg-slate-600 text-blue-500 shadow-sm'
             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
         }`}
-        title="System Mode"
+        title={t('theme.systemMode', { defaultValue: 'System Mode' })}
       >
         <Monitor size={16} />
       </button>
@@ -46,14 +49,14 @@ export const ThemeToggle: React.FC = () => {
         onClick={() => {
           setTheme('dark');
         }}
-        aria-label="Switch to dark mode"
+        aria-label={t('theme.switchToDark', { defaultValue: 'Switch to dark mode' })}
         aria-pressed={theme === 'dark'}
         className={`p-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           theme === 'dark'
             ? 'bg-white dark:bg-slate-600 text-indigo-400 shadow-sm'
             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
         }`}
-        title="Dark Mode"
+        title={t('theme.darkMode', { defaultValue: 'Dark Mode' })}
       >
         <Moon size={16} />
       </button>

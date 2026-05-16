@@ -17,7 +17,7 @@ export interface ChannelConfig {
   webhook_port?: number | undefined;
   webhook_path?: string | undefined;
   domain?: string | undefined;
-  extra_settings?: Record<string, any> | undefined;
+  extra_settings?: Record<string, unknown> | undefined;
   dm_policy: DmPolicy;
   group_policy: GroupPolicy;
   allow_from?: string[] | undefined;
@@ -43,7 +43,7 @@ export interface CreateChannelConfig {
   webhook_port?: number | undefined;
   webhook_path?: string | undefined;
   domain?: string | undefined;
-  extra_settings?: Record<string, any> | undefined;
+  extra_settings?: Record<string, unknown> | undefined;
   description?: string | undefined;
   dm_policy?: DmPolicy | undefined;
   group_policy?: GroupPolicy | undefined;
@@ -64,7 +64,7 @@ export interface UpdateChannelConfig {
   webhook_port?: number | undefined;
   webhook_path?: string | undefined;
   domain?: string | undefined;
-  extra_settings?: Record<string, any> | undefined;
+  extra_settings?: Record<string, unknown> | undefined;
   description?: string | undefined;
   dm_policy?: DmPolicy | undefined;
   group_policy?: GroupPolicy | undefined;
@@ -216,7 +216,7 @@ export interface ChannelMessage {
   sender_name?: string | undefined;
   message_type: string;
   content_text?: string | undefined;
-  content_data?: Record<string, any> | undefined;
+  content_data?: Record<string, unknown> | undefined;
   reply_to?: string | undefined;
   mentions?: string[] | undefined;
   direction: 'inbound' | 'outbound';

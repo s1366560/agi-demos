@@ -1,10 +1,23 @@
-import React, { useEffect, useState, memo } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { Brain, ChevronDown, LayoutGrid, List, MoreVertical, Network, Pencil, Plus, Search, Trash2, User } from 'lucide-react';
+import {
+  Brain,
+  ChevronDown,
+  LayoutGrid,
+  List,
+  MoreVertical,
+  Network,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  User,
+} from 'lucide-react';
 
+import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
 
 import { useProjectStore } from '../../stores/project';
@@ -14,11 +27,23 @@ import type { TFunction } from 'i18next';
 
 // Hoist formatStorage outside component to avoid recreation on every render (rendering-hoist-jsx)
 const formatStorage = (bytes: number): string => {
-  if (bytes === 0) return '0 B';
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  const sizeLabel = sizes[unitIndex] ?? 'TB';
+  const value = Number.parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(1));
+  return `${String(value)} ${sizeLabel}`;
+};
+
+const formatStorageUsagePercent = (bytes: number, maxBytes?: number | null): string => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0%';
+  const fallbackLimit = 1024 * 1024 * 1024;
+  const limit =
+    typeof maxBytes === 'number' && Number.isFinite(maxBytes) && maxBytes > 0
+      ? maxBytes
+      : fallbackLimit;
+  return `${String(Math.min((bytes / limit) * 100, 100))}%`;
 };
 
 // Hoist formatTime outside component to avoid recreation on every render (rendering-hoist-jsx)
@@ -32,11 +57,11 @@ const createFormatTime = (t: TFunction) => {
 
     if (diffInSeconds < 60) return t('common.time.justNow');
     if (diffInSeconds < 3600)
-      return `${Math.floor(diffInSeconds / 60)}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`;
+      return `${String(Math.floor(diffInSeconds / 60))}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`;
     if (diffInSeconds < 86400)
-      return `${Math.floor(diffInSeconds / 3600)}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`;
+      return `${String(Math.floor(diffInSeconds / 3600))}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`;
     if (diffInSeconds < 604800)
-      return `${Math.floor(diffInSeconds / 86400)}${t('common.time.days')} ${t('common.time.ago', { time: '' })}`;
+      return `${String(Math.floor(diffInSeconds / 86400))}${t('common.time.days')} ${t('common.time.ago', { time: '' })}`;
     return formatDateOnly(date);
   };
 };
@@ -54,7 +79,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
 
   useEffect(() => {
     if (currentTenant) {
-      listProjects(currentTenant.id, { search });
+      void listProjects(currentTenant.id, { search });
     }
   }, [currentTenant, search, listProjects]);
 
@@ -63,7 +88,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
 
   const handleDelete = async (projectId: string) => {
     if (!currentTenant) return;
-    if (window.confirm(t('tenant.projects.deleteConfirm'))) {
+    if (await confirmAction({ title: t('tenant.projects.deleteConfirm'), danger: true })) {
       try {
         await deleteProject(currentTenant.id, projectId);
         setActiveMenu(null);
@@ -117,17 +142,26 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
             {t('tenant.projects.filter')}
           </span>
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-sm font-medium whitespace-nowrap transition-colors">
+          <button
+            type="button"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-sm font-medium whitespace-nowrap transition-colors"
+          >
             {t('common.status.all')}
             <ChevronDown size={16} />
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-medium whitespace-nowrap transition-colors">
+          <button
+            type="button"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-medium whitespace-nowrap transition-colors"
+          >
             {t('common.stats.owner')}
             <ChevronDown size={16} />
           </button>
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
             <button
+              type="button"
+              aria-label={t('tenant.projects.viewGrid')}
+              title={t('tenant.projects.viewGrid')}
               onClick={() => {
                 setViewMode('grid');
               }}
@@ -136,6 +170,9 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               <LayoutGrid size={16} className="block" />
             </button>
             <button
+              type="button"
+              aria-label={t('tenant.projects.viewList')}
+              title={t('tenant.projects.viewList')}
               onClick={() => {
                 setViewMode('list');
               }}
@@ -186,11 +223,13 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   </span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                  {/* Placeholder progress bar - 1GB as example reference or just relative to something small */}
                   <div
                     className="bg-primary h-2 rounded-full"
                     style={{
-                      width: `${Math.min(((project.stats?.storage_used || 0) / (1024 * 1024 * 1024)) * 100, 100)}%`,
+                      width: formatStorageUsagePercent(
+                        project.stats?.storage_used ?? 0,
+                        currentTenant.max_storage
+                      ),
                     }}
                   ></div>
                 </div>
@@ -208,13 +247,12 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-auto flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-2">
-                    {/* Mock avatars based on count */}
                     <div className="w-8 h-8 rounded-full border-2 border-white dark:border-surface-dark bg-slate-200 flex items-center justify-center text-xs text-slate-500">
                       <User size={14} />
                     </div>
                   </div>
                   <span className="text-xs text-slate-500">
-                    {project.stats?.member_count || 1} {t('common.stats.members')}
+                    {project.stats?.member_count ?? 0} {t('common.stats.members')}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 relative">
@@ -222,6 +260,9 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     {formatTime(project.stats?.last_active)}
                   </span>
                   <button
+                    type="button"
+                    aria-label={t('tenant.projects.openActions', { name: project.name })}
+                    title={t('tenant.projects.openActions', { name: project.name })}
                     onClick={(e) => {
                       e.preventDefault();
                       setActiveMenu(activeMenu === project.id ? null : project.id);
@@ -246,7 +287,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                       <button
                         onClick={(e) => {
                           e.preventDefault();
-                          handleDelete(project.id);
+                          void handleDelete(project.id);
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                       >
@@ -285,10 +326,10 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400">
-                    Project
+                    {t('tenant.projects.columns.project', { defaultValue: 'Project' })}
                   </th>
                   <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400">
-                    Status
+                    {t('tenant.projects.columns.status', { defaultValue: 'Status' })}
                   </th>
                   <th className="px-6 py-4 font-semibold text-slate-500 dark:text-slate-400">
                     {t('common.stats.usage')}
@@ -331,13 +372,15 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        Active
+                        {t('common.status.active')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1.5 w-32">
                         <div className="flex justify-between text-xs">
-                          <span className="text-slate-500">Storage</span>
+                          <span className="text-slate-500">
+                            {t('tenant.projects.storage', { defaultValue: 'Storage' })}
+                          </span>
                           <span className="font-medium text-slate-900 dark:text-white">
                             {formatStorage(project.stats?.storage_used || 0)}
                           </span>
@@ -346,7 +389,10 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                           <div
                             className="bg-primary h-1.5 rounded-full"
                             style={{
-                              width: `${Math.min(((project.stats?.storage_used || 0) / (1024 * 1024 * 1024)) * 100, 100)}%`,
+                              width: formatStorageUsagePercent(
+                                project.stats?.storage_used ?? 0,
+                                currentTenant.max_storage
+                              ),
                             }}
                           ></div>
                         </div>
@@ -372,7 +418,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                           </div>
                         </div>
                         <span className="text-xs text-slate-500">
-                          {project.stats?.member_count || 1}
+                          {project.stats?.member_count ?? 0}
                         </span>
                       </div>
                     </td>
@@ -382,6 +428,9 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     <td className="px-6 py-4 text-right">
                       <div className="relative">
                         <button
+                          type="button"
+                          aria-label={t('tenant.projects.openActions', { name: project.name })}
+                          title={t('tenant.projects.openActions', { name: project.name })}
                           onClick={(e) => {
                             e.preventDefault();
                             setActiveMenu(activeMenu === project.id ? null : project.id);
@@ -405,7 +454,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                             <button
                               onClick={(e) => {
                                 e.preventDefault();
-                                handleDelete(project.id);
+                                void handleDelete(project.id);
                               }}
                               className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                             >

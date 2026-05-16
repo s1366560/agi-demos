@@ -31,8 +31,8 @@ const ARTIFACT_LABELS: Record<ArtifactType, string> = {
   completion_summary: 'Completion Summary',
 };
 
-export function formatArtifactLabel(artifact: ArtifactType | string): string {
-  return ARTIFACT_LABELS[artifact as ArtifactType] ?? artifact;
+export function formatArtifactLabel(artifact: string): string {
+  return artifact in ARTIFACT_LABELS ? ARTIFACT_LABELS[artifact as ArtifactType] : artifact;
 }
 
 export interface KanbanColumnGateConfig {
@@ -76,13 +76,13 @@ export interface KanbanBoardGateConfig {
 export function evaluateArtifactGate(
   board: KanbanBoardGateConfig,
   currentColumnId: string,
-  summary: ArtifactSummary,
+  summary: ArtifactSummary
 ): ArtifactGateEvaluation {
   const sorted = [...board.columns].sort((a, b) => a.position - b.position);
   const currentIdx = sorted.findIndex((c) => c.id === currentColumnId);
-  const currentColumn = currentIdx >= 0 ? sorted[currentIdx] ?? null : null;
+  const currentColumn = currentIdx >= 0 ? (sorted[currentIdx] ?? null) : null;
   const nextColumn =
-    currentIdx >= 0 && currentIdx + 1 < sorted.length ? sorted[currentIdx + 1] ?? null : null;
+    currentIdx >= 0 && currentIdx + 1 < sorted.length ? (sorted[currentIdx + 1] ?? null) : null;
 
   if (!nextColumn) {
     return {

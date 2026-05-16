@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import {
@@ -29,6 +30,7 @@ import type { CronJobResponse, CronJobCreate, CronJobUpdate, CronRunStatus } fro
 
 export const CronJobs: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const { t } = useTranslation();
   const jobs = useCronJobs();
   const runs = useCronJobRuns();
   const loading = useCronLoading();
@@ -68,14 +70,14 @@ export const CronJobs: React.FC = () => {
     try {
       if (editingJob) {
         await updateJob(projectId, editingJob.id, values as CronJobUpdate);
-        message.success('Scheduled task updated successfully');
+        message.success(t('project.cronJobs.updateSuccess'));
       } else {
         await createJob(projectId, values as CronJobCreate);
-        message.success('Scheduled task created successfully');
+        message.success(t('project.cronJobs.createSuccess'));
       }
       setFormOpen(false);
     } catch (_err) {
-      message.error('Failed to save task');
+      message.error(t('project.cronJobs.saveFailed'));
     }
   };
 
@@ -83,9 +85,13 @@ export const CronJobs: React.FC = () => {
     if (!projectId) return;
     try {
       await toggleJob(projectId, jobId, enabled);
-      message.success(`Task ${enabled ? 'enabled' : 'disabled'}`);
+      message.success(
+        enabled
+          ? t('project.cronJobs.toggleSuccessEnabled')
+          : t('project.cronJobs.toggleSuccessDisabled')
+      );
     } catch (_err) {
-      message.error('Failed to toggle task');
+      message.error(t('project.cronJobs.toggleFailed'));
     }
   };
 
@@ -93,13 +99,13 @@ export const CronJobs: React.FC = () => {
     if (!projectId) return;
     try {
       await triggerRun(projectId, jobId);
-      message.success('Task execution triggered');
+      message.success(t('project.cronJobs.triggerSuccess'));
       // Refresh runs if drawer is open
       if (runsOpen) {
         void fetchRuns(projectId, jobId);
       }
     } catch (_err) {
-      message.error('Failed to trigger task');
+      message.error(t('project.cronJobs.triggerFailed'));
     }
   };
 
@@ -107,9 +113,9 @@ export const CronJobs: React.FC = () => {
     if (!projectId) return;
     try {
       await deleteJob(projectId, jobId);
-      message.success('Task deleted');
+      message.success(t('project.cronJobs.deleteSuccess'));
     } catch (_err) {
-      message.error('Failed to delete task');
+      message.error(t('project.cronJobs.deleteFailed'));
     }
   };
 
@@ -130,50 +136,64 @@ export const CronJobs: React.FC = () => {
 
   const columns = [
     {
-      title: 'Name',
+      title: t('project.cronJobs.columnsName'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: CronJobResponse) => (
         <Tooltip title={record.description}>
-          <span className="font-medium">{text}</span>
+          <span className="block max-w-[220px] truncate font-medium">{text}</span>
         </Tooltip>
       ),
+      width: 240,
     },
     {
-      title: 'Schedule',
+      title: t('project.cronJobs.columnsSchedule'),
       key: 'schedule',
       render: (_: unknown, record: CronJobResponse) => {
         const { kind, config } = record.schedule;
         const scheduleConfig = config as { expression?: string; target_time?: string };
         if (kind === 'cron')
-          return <Tag color="blue">Cron: {scheduleConfig.expression ?? '-'}</Tag>;
-        if (kind === 'every') return <Tag color="purple">Every</Tag>;
-        return <Tag color="cyan">At: {scheduleConfig.target_time ?? '-'}</Tag>;
+          return (
+            <Tag color="blue">
+              {t('project.cronJobs.scheduleCron')}: {scheduleConfig.expression ?? '-'}
+            </Tag>
+          );
+        if (kind === 'every')
+          return <Tag color="purple">{t('project.cronJobs.scheduleEvery')}</Tag>;
+        return (
+          <Tag color="cyan">
+            {t('project.cronJobs.scheduleAt')}: {scheduleConfig.target_time ?? '-'}
+          </Tag>
+        );
       },
+      width: 160,
     },
     {
-      title: 'Payload',
+      title: t('project.cronJobs.columnsPayload'),
       key: 'payload',
       render: (_: unknown, record: CronJobResponse) => {
         return <Tag>{record.payload.kind}</Tag>;
       },
+      width: 140,
     },
     {
-      title: 'Enabled',
+      title: t('project.cronJobs.columnsEnabled'),
       dataIndex: 'enabled',
       key: 'enabled',
       render: (enabled: boolean, record: CronJobResponse) => (
         <Switch
           checked={enabled}
           loading={submitting}
+          aria-label={t('project.cronJobs.toggleJob', { name: record.name })}
           onChange={(checked) => {
             void handleToggle(record.id, checked);
           }}
         />
       ),
+      width: 110,
     },
     {
-      title: 'Actions',
+      title: t('project.cronJobs.columnsActions'),
       key: 'actions',
       render: (_: unknown, record: CronJobResponse) => (
         <Space size="middle">
@@ -184,7 +204,7 @@ export const CronJobs: React.FC = () => {
             }}
             className="p-0"
           >
-            Edit
+            {t('project.cronJobs.edit')}
           </Button>
           <Button
             type="link"
@@ -193,7 +213,7 @@ export const CronJobs: React.FC = () => {
             }}
             className="p-0"
           >
-            History
+            {t('project.cronJobs.history')}
           </Button>
           <Button
             type="link"
@@ -202,77 +222,82 @@ export const CronJobs: React.FC = () => {
             }}
             className="p-0"
           >
-            Run Now
+            {t('project.cronJobs.runNow')}
           </Button>
           <Popconfirm
-            title="Delete this task?"
+            title={t('project.cronJobs.deleteConfirm')}
             onConfirm={() => {
               void handleDelete(record.id);
             }}
           >
             <Button type="link" danger className="p-0">
-              Delete
+              {t('common.delete')}
             </Button>
           </Popconfirm>
         </Space>
       ),
+      width: 250,
     },
   ];
 
   const runColumns = [
     {
-      title: 'Status',
+      title: t('project.cronJobs.runStatus'),
       dataIndex: 'status',
       key: 'status',
       render: (status: CronRunStatus) => <Tag color={getStatusColor(status)}>{status}</Tag>,
     },
     {
-      title: 'Trigger',
+      title: t('project.cronJobs.runTrigger'),
       dataIndex: 'trigger_type',
       key: 'trigger_type',
     },
     {
-      title: 'Started At',
+      title: t('project.cronJobs.runStartedAt'),
       dataIndex: 'started_at',
       key: 'started_at',
       render: (val: string) => new Date(val).toLocaleString(),
     },
     {
-      title: 'Duration (ms)',
+      title: t('project.cronJobs.runDurationMs'),
       dataIndex: 'duration_ms',
       key: 'duration_ms',
     },
     {
-      title: 'Error',
+      title: t('project.cronJobs.runError'),
       dataIndex: 'error_message',
       key: 'error_message',
       render: (val: string | null) => (val ? <span className="text-red-500">{val}</span> : '-'),
     },
   ];
 
+  const jobsPagination = jobs.length > 20 ? { pageSize: 20, showSizeChanger: false } : false;
+  const runsPagination = runs.length > 10 ? { pageSize: 10, showSizeChanger: false } : false;
+
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <Typography.Title level={2} className="!mb-1">
-            Scheduled Tasks
+            {t('project.cronJobs.title')}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            Manage automated, recurring, and scheduled background jobs
-          </Typography.Text>
+          <Typography.Text type="secondary">{t('project.cronJobs.description')}</Typography.Text>
         </div>
         <Button type="primary" onClick={handleCreateNew}>
-          Create Job
+          {t('project.cronJobs.createJob')}
         </Button>
       </div>
 
-      <Table
-        dataSource={jobs}
-        columns={columns}
-        rowKey="id"
-        loading={loading && !submitting}
-        pagination={{ pageSize: 20 }}
-      />
+      <div className="min-w-0 overflow-hidden">
+        <Table
+          dataSource={jobs}
+          columns={columns}
+          rowKey="id"
+          loading={loading && !submitting}
+          pagination={jobsPagination}
+          scroll={{ x: 900 }}
+        />
+      </div>
 
       <CronJobForm
         open={formOpen}
@@ -285,7 +310,7 @@ export const CronJobs: React.FC = () => {
       />
 
       <Drawer
-        title="Run History"
+        title={t('project.cronJobs.runHistoryTitle')}
         size="large"
         onClose={() => {
           setRunsOpen(false);
@@ -297,7 +322,8 @@ export const CronJobs: React.FC = () => {
           columns={runColumns}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={runsPagination}
+          scroll={{ x: 760 }}
         />
       </Drawer>
     </div>

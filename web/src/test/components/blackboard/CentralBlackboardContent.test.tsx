@@ -48,6 +48,10 @@ vi.mock('@/components/blackboard/tabs/CollaborationOverviewTab', () => ({
   CollaborationOverviewTab: () => <div>Collaboration overview</div>,
 }));
 
+vi.mock('@/components/blackboard/tabs/ConversationRosterSection', () => ({
+  ConversationRosterSection: () => <div>Conversation roster section</div>,
+}));
+
 vi.mock('@/components/workspace/genes/GeneList', () => ({
   GeneList: () => <div>Gene list</div>,
 }));
@@ -87,6 +91,10 @@ vi.mock('@/components/workspace/TaskBoard', () => ({
 
 vi.mock('@/components/blackboard/tabs/SharedFileBrowser', () => ({
   SharedFileBrowser: () => <div>Shared files browser</div>,
+}));
+
+vi.mock('@/components/blackboard/tabs/StatusTab', () => ({
+  StatusTab: () => <div>Presence bar</div>,
 }));
 
 vi.mock('@/components/blackboard/WorkstationArrangementBoard', () => ({
@@ -179,6 +187,7 @@ describe('CentralBlackboardContent', () => {
     render(<CentralBlackboardContent {...defaultProps({ activeTab: 'members' })} />);
 
     expect(screen.getByText('Member panel')).toBeInTheDocument();
+    expect(screen.getByText('Conversation roster section')).toBeInTheDocument();
   });
 
   it('renders GeneList when activeTab is genes', () => {
@@ -214,9 +223,7 @@ describe('CentralBlackboardContent', () => {
   it('calls onActiveTabChange when a different tab is clicked', () => {
     const onActiveTabChange = vi.fn();
     render(
-      <CentralBlackboardContent
-        {...defaultProps({ activeTab: 'goals', onActiveTabChange })}
-      />
+      <CentralBlackboardContent {...defaultProps({ activeTab: 'goals', onActiveTabChange })} />
     );
 
     fireEvent.click(getTabByName(/members/i));

@@ -62,10 +62,26 @@ vi.mock('../../../components/graph', () => ({
 vi.mock('../../../components/common', () => ({
   VirtualGrid: ({ items, renderItem, emptyComponent }: any) => (
     <div data-testid="virtual-grid">
-      {items.length > 0 ? items.map((item: any) => renderItem(item)) : emptyComponent}
+      {items.length > 0
+        ? items.map((item: any, index: number) => (
+            <div key={item.uuid ?? item.id ?? index}>{renderItem(item, index)}</div>
+          ))
+        : emptyComponent}
     </div>
   ),
 }));
+
+async function waitForEntityGrid(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
+  });
+}
+
+async function waitForFiltersReady(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByLabelText('project.graph.entities.filter.type')).not.toBeDisabled();
+  });
+}
 
 describe('EntitiesList Compound Component', () => {
   beforeEach(() => {
@@ -90,9 +106,7 @@ describe('EntitiesList Compound Component', () => {
         </EntitiesList>
       );
 
-      await waitFor(() => {
-        expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
-      });
+      await waitForEntityGrid();
     });
 
     it('should support custom limit', async () => {
@@ -102,9 +116,7 @@ describe('EntitiesList Compound Component', () => {
         </EntitiesList>
       );
 
-      await waitFor(() => {
-        expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
-      });
+      await waitForEntityGrid();
     });
   });
 
@@ -120,25 +132,27 @@ describe('EntitiesList Compound Component', () => {
       expect(screen.getByText(/entities.title/i)).toBeInTheDocument();
     });
 
-    it('should not render header when excluded', () => {
+    it('should not render header when excluded', async () => {
       render(
         <EntitiesList>
           <EntitiesList.List />
         </EntitiesList>
       );
 
+      await waitForEntityGrid();
       expect(screen.queryByTestId('entities-header')).not.toBeInTheDocument();
     });
   });
 
   describe('Filters Sub-Component', () => {
-    it('should render filters panel', () => {
+    it('should render filters panel', async () => {
       render(
         <EntitiesList>
           <EntitiesList.Filters />
         </EntitiesList>
       );
 
+      await waitForFiltersReady();
       expect(screen.getByTestId('entities-filters')).toBeInTheDocument();
     });
 
@@ -154,7 +168,7 @@ describe('EntitiesList Compound Component', () => {
   });
 
   describe('Stats Sub-Component', () => {
-    it('should render stats display', () => {
+    it('should render stats display', async () => {
       render(
         <EntitiesList>
           <EntitiesList.Filters />
@@ -162,6 +176,7 @@ describe('EntitiesList Compound Component', () => {
         </EntitiesList>
       );
 
+      await waitForFiltersReady();
       expect(screen.getByTestId('entities-stats')).toBeInTheDocument();
     });
 
@@ -184,9 +199,7 @@ describe('EntitiesList Compound Component', () => {
         </EntitiesList>
       );
 
-      await waitFor(() => {
-        expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
-      });
+      await waitForEntityGrid();
     });
 
     it('should not render list when excluded', () => {
@@ -287,9 +300,10 @@ describe('EntitiesList Compound Component', () => {
   });
 
   describe('Backward Compatibility', () => {
-    it('should work with legacy props when no sub-components provided', () => {
+    it('should work with legacy props when no sub-components provided', async () => {
       render(<EntitiesList projectId="test-project-1" />);
 
+      await waitForEntityGrid();
       // Should render default layout with all components
       expect(screen.getByTestId('entities-header')).toBeInTheDocument();
       expect(screen.getByTestId('entities-filters')).toBeInTheDocument();
@@ -298,14 +312,13 @@ describe('EntitiesList Compound Component', () => {
     it('should support defaultSortBy prop', async () => {
       render(<EntitiesList defaultSortBy="name" />);
 
-      await waitFor(() => {
-        expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
-      });
+      await waitForEntityGrid();
     });
 
-    it('should support limit prop', () => {
+    it('should support limit prop', async () => {
       render(<EntitiesList limit={50} />);
 
+      await waitForEntityGrid();
       expect(screen.getByTestId('entities-filters')).toBeInTheDocument();
     });
   });
@@ -333,15 +346,17 @@ describe('EntitiesList Compound Component', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle missing projectId', () => {
+    it('should handle missing projectId', async () => {
       render(<EntitiesList />);
 
+      await waitForEntityGrid();
       expect(screen.getByTestId('entities-header')).toBeInTheDocument();
     });
 
-    it('should handle empty children', () => {
+    it('should handle empty children', async () => {
       render(<EntitiesList />);
 
+      await waitForEntityGrid();
       // Should render default layout
       expect(screen.getByTestId('entities-header')).toBeInTheDocument();
     });

@@ -46,6 +46,15 @@ vi.mock('../../../services/api', () => ({
   },
 }));
 
+vi.mock('../../../services/projectSandboxService', () => ({
+  projectSandboxService: {
+    getProjectSandbox: vi.fn(() => new Promise(() => {})),
+    getStats: vi.fn(() => new Promise(() => {})),
+    restartSandbox: vi.fn(() => Promise.resolve()),
+    terminateSandbox: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 describe('ProjectSettings Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();

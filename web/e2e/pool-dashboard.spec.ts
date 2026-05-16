@@ -1,24 +1,13 @@
-import { test, expect } from './base';
+import { getAdminAuthToken, getFirstTenantId, loginAsAdmin, test, expect } from './base';
 
 test.describe('Pool Dashboard', () => {
   test.beforeEach(async ({ page }) => {
-    // Set English locale
-    await page.goto('http://localhost:3000');
-    await page.evaluate(() => {
-      localStorage.setItem('i18nextLng', 'en-US');
-    });
-
-    // Login as admin
-    await page.goto('/login');
-    await page.getByLabel(/邮箱/i).fill('admin@memstack.ai');
-    await page.getByLabel(/密码/i).fill('adminpassword');
-    await page.getByRole('button', { name: /登录/i }).click();
-
-    // Wait for login to complete
-    await page.waitForURL((url) => !url.pathname.includes('/login'));
+    const token = await getAdminAuthToken();
+    const tenantId = await getFirstTenantId(token);
+    await loginAsAdmin(page);
 
     // Navigate to pool dashboard
-    await page.goto('/tenant/default/pool');
+    await page.goto(`/tenant/${tenantId}/pool`);
   });
 
   test('should display Pool Dashboard header and title', async ({ page }) => {
@@ -46,9 +35,9 @@ test.describe('Pool Dashboard', () => {
     await expect(page.getByText('Tier Distribution')).toBeVisible();
 
     // Check for tier labels
-    await expect(page.getByText('HOT')).toBeVisible();
-    await expect(page.getByText('WARM')).toBeVisible();
-    await expect(page.getByText('COLD')).toBeVisible();
+    await expect(page.getByText('HOT', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('WARM', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('COLD', { exact: true }).first()).toBeVisible();
   });
 
   test('should show resource usage card', async ({ page }) => {
@@ -56,10 +45,10 @@ test.describe('Pool Dashboard', () => {
     await expect(page.getByText('Resource Usage')).toBeVisible();
 
     // Check for Memory progress indicator
-    await expect(page.locator('text=Memory')).toBeVisible();
+    await expect(page.getByText('Memory', { exact: true }).first()).toBeVisible();
 
     // Check for CPU progress indicator
-    await expect(page.locator('text=CPU')).toBeVisible();
+    await expect(page.getByText('CPU', { exact: true }).first()).toBeVisible();
   });
 
   test('should show prewarm pool card', async ({ page }) => {
@@ -88,16 +77,17 @@ test.describe('Pool Dashboard', () => {
 
   test('should have tier filter dropdown', async ({ page }) => {
     // Check for Select component with tier filter
-    const selectDropdown = page.locator('div').filter({ has: page.getByText('Filter by tier') });
-    await expect(selectDropdown).toBeVisible();
+    const tierFilter = page.getByText('Filter by tier', { exact: true });
+    await expect(tierFilter).toBeVisible();
 
     // Click to open dropdown
-    await page.locator('div').filter({ has: page.getByText('Filter by tier') }).first().click();
+    await page.getByRole('combobox').last().click({ force: true });
 
     // Verify tier options appear
-    await expect(page.getByText('HOT')).toBeVisible();
-    await expect(page.getByText('WARM')).toBeVisible();
-    await expect(page.getByText('COLD')).toBeVisible();
+    const dropdown = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').last();
+    await expect(dropdown.getByText('HOT', { exact: true })).toBeVisible();
+    await expect(dropdown.getByText('WARM', { exact: true })).toBeVisible();
+    await expect(dropdown.getByText('COLD', { exact: true })).toBeVisible();
   });
 
   test('should have auto-refresh toggle and refresh button', async ({ page }) => {
@@ -144,6 +134,6 @@ test.describe('Pool Dashboard', () => {
     const errorAlerts = page.locator('.ant-alert-error');
     // If there are error alerts, the page should still be functional
     // Just verify the page structure is intact
-    await expect(page.locator('div').filter({ has: page.getByText('Agent Pool Dashboard') })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Agent Pool Dashboard' })).toBeVisible();
   });
 });

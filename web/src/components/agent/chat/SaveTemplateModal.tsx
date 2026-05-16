@@ -51,10 +51,10 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
             }}
             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg mb-4 bg-transparent text-sm text-slate-800 dark:text-slate-200"
           >
-            <option value="general">General</option>
-            <option value="analysis">Analysis</option>
-            <option value="code">Coding</option>
-            <option value="writing">Writing</option>
+            <option value="general">{t('agent.templates.general', 'General')}</option>
+            <option value="analysis">{t('agent.templates.analysis', 'Analysis')}</option>
+            <option value="code">{t('agent.templates.coding', 'Coding')}</option>
+            <option value="writing">{t('agent.templates.writing', 'Writing')}</option>
           </select>
           <pre className="text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded mb-4 max-h-32 overflow-auto whitespace-pre-wrap text-slate-600 dark:text-slate-300">
             {content.slice(0, 200)}

@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 /**
  * Distilled from routa's `kanban-status-bar.tsx`. Each slot is independent and
  * hidden when its data is absent — the parent passes only what it knows.
@@ -90,6 +92,7 @@ export const WorkspaceStatusBar: React.FC<WorkspaceStatusBarProps> = ({
   friction,
   className,
 }) => {
+  const { t } = useTranslation();
   const slots = [task, subAgent, llm, sandbox, hitl, skills, friction].filter(
     (slot): slot is StatusSlotData => Boolean(slot)
   );
@@ -99,7 +102,7 @@ export const WorkspaceStatusBar: React.FC<WorkspaceStatusBarProps> = ({
   return (
     <div
       role="status"
-      aria-label="Workspace status"
+      aria-label={t('workspaceDetail.statusBar.aria', 'Workspace status')}
       data-testid="workspace-status-bar"
       className={[
         'flex items-center gap-1 px-3 py-1.5',

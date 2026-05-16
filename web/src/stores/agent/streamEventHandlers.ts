@@ -5,8 +5,10 @@
  * This module creates the AgentStreamHandler used by sendMessage.
  */
 
+import { httpClient } from '../../services/client/httpClient';
 import { normalizeExecutionSummary } from '../../utils/executionSummary';
 import { isCanvasPreviewable } from '../../utils/filePreview';
+import { logger } from '../../utils/logger';
 import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
 import { useAgentDefinitionStore } from '../agentDefinitions';
@@ -56,6 +58,7 @@ import type {
   AgentSpawnedEventData,
   AgentCompletedEventData,
   AgentStoppedEventData,
+  AgentTask,
   GraphRunStartedEventData,
   GraphRunCompletedEventData,
   GraphRunFailedEventData,
@@ -419,7 +422,7 @@ export function createStreamEventHandlers(
         console.warn('[TaskSync] Ignoring malformed task_list_updated payload:', event.data);
         return;
       }
-      console.log('[TaskSync] task_list_updated received:', {
+      logger.debug('[TaskSync] task_list_updated received:', {
         conversationId: handlerConversationId,
         taskCount: data.tasks.length,
       });
@@ -440,7 +443,7 @@ export function createStreamEventHandlers(
         console.warn('[TaskSync] Ignoring malformed task_updated payload:', event.data);
         return;
       }
-      console.log('[TaskSync] task_updated received:', {
+      logger.debug('[TaskSync] task_updated received:', {
         taskId: data.task_id,
         status: data.status,
       });
@@ -1614,7 +1617,7 @@ export function createStreamEventHandlers(
           uiMetadata?: Record<string, unknown> | undefined;
         }
       ) => {
-        const tabKey = resolvedResourceUri ?? appId ?? `app-${String(Date.now())}`;
+        const tabKey = resolvedResourceUri || appId || `app-${String(Date.now())}`;
         const tabId = `mcp-app-${tabKey}`;
         useCanvasStore.getState().openTab({
           id: tabId,
@@ -1653,28 +1656,31 @@ export function createStreamEventHandlers(
             | { ui_metadata?: Record<string, unknown>; tool_name?: string; server_name?: string }
             | undefined;
           // Prefer resourceUri from the event, then from the store, then undefined
-          const resolvedUri = resourceUri ?? (app?.ui_metadata?.resourceUri as string | undefined);
+          const appUiMetadata = app?.ui_metadata;
+          const appToolName = app?.tool_name;
+          const appServerName = app?.server_name;
+          const resolvedUri = resourceUri ?? (appUiMetadata?.resourceUri as string | undefined);
 
           if (resolvedUri || htmlContent) {
             openMCPAppTab(resolvedUri, {
               title:
-                (app?.ui_metadata?.title as string | undefined) ??
-                (uiMetadata.title as string | undefined) ??
-                toolName ??
+                (appUiMetadata?.title as string | undefined) ||
+                (uiMetadata.title as string | undefined) ||
+                toolName ||
                 'MCP App',
-              toolName: app?.tool_name ?? toolName ?? undefined,
-              serverName: app?.server_name ?? serverName ?? undefined,
-              uiMetadata: app?.ui_metadata ?? uiMetadata,
+              toolName: appToolName || toolName || undefined,
+              serverName: appServerName ?? serverName,
+              uiMetadata: appUiMetadata ?? uiMetadata,
             });
           } else if (shouldWaitForStoreLookup) {
             // No URI and no HTML — only open if the app has UI hints
-            const hasUiHint = !!(app?.ui_metadata?.title || app?.tool_name);
+            const hasUiHint = Boolean((appUiMetadata?.title as string | undefined) || appToolName);
             if (hasUiHint) {
               openMCPAppTab(undefined, {
-                title: (app?.ui_metadata?.title as string | undefined) ?? toolName ?? 'MCP App',
-                toolName: app?.tool_name ?? toolName ?? undefined,
-                serverName: app?.server_name ?? serverName ?? undefined,
-                uiMetadata: app?.ui_metadata ?? uiMetadata,
+                title: (appUiMetadata?.title as string | undefined) || toolName || 'MCP App',
+                toolName: appToolName || toolName || undefined,
+                serverName: appServerName ?? serverName,
+                uiMetadata: appUiMetadata ?? uiMetadata,
               });
             }
           }
@@ -1685,7 +1691,7 @@ export function createStreamEventHandlers(
         // Non-UI tools (e.g. echo) produce no htmlContent and no resourceUri,
         // and opening an empty tab causes 'content length: 0' errors.
         openMCPAppTab(resourceUri ?? undefined, {
-          title: (uiMetadata.title as string | undefined) ?? toolName ?? 'MCP App',
+          title: (uiMetadata.title as string | undefined) || toolName || 'MCP App',
           uiMetadata,
         });
       }
@@ -1729,7 +1735,6 @@ export function createStreamEventHandlers(
     onCanvasUpdated: (event: AgentEvent<CanvasUpdatedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
 
       const data = event.data;
       const canvasStore = useCanvasStore.getState();
@@ -1909,7 +1914,6 @@ export function createStreamEventHandlers(
       // Add to timeline
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -1920,10 +1924,9 @@ export function createStreamEventHandlers(
     onMemoryRecalled: (event: AgentEvent<MemoryRecalledEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       updateConversationState(handlerConversationId, {
-        recalledMemories: event.data.memories ?? null,
+        recalledMemories: event.data.memories,
         timeline: updatedTimeline,
       });
     },
@@ -1931,7 +1934,6 @@ export function createStreamEventHandlers(
     onMemoryCaptured: (event: AgentEvent<MemoryCapturedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -1941,15 +1943,15 @@ export function createStreamEventHandlers(
     // ===== Agent Definition Management Handlers =====
 
     onAgentDefinitionCreated: () => {
-      useAgentDefinitionStore.getState().listDefinitions();
+      void useAgentDefinitionStore.getState().listDefinitions();
     },
 
     onAgentDefinitionUpdated: () => {
-      useAgentDefinitionStore.getState().listDefinitions();
+      void useAgentDefinitionStore.getState().listDefinitions();
     },
 
     onAgentDefinitionDeleted: () => {
-      useAgentDefinitionStore.getState().listDefinitions();
+      void useAgentDefinitionStore.getState().listDefinitions();
     },
 
     // ===== Multi-Agent Spawn Tree Handlers =====
@@ -1957,9 +1959,9 @@ export function createStreamEventHandlers(
     onAgentSpawned: (event: AgentEvent<AgentSpawnedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-      const data = event.data;
+      const data = event.data as Partial<AgentSpawnedEventData>;
+      if (!data.agent_id) return;
       const agentNodes = new Map(convState.agentNodes);
       const node: AgentNode = {
         agentId: data.agent_id,
@@ -1995,9 +1997,9 @@ export function createStreamEventHandlers(
     onAgentCompleted: (event: AgentEvent<AgentCompletedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
-      const data = event.data;
+      const data = event.data as Partial<AgentCompletedEventData>;
+      if (!data.agent_id) return;
       const agentNodes = new Map(convState.agentNodes);
       const existing = agentNodes.get(data.agent_id);
       if (existing) {
@@ -2019,7 +2021,6 @@ export function createStreamEventHandlers(
     onAgentStopped: (event: AgentEvent<AgentStoppedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const data = event.data;
       const agentNodes = new Map(convState.agentNodes);
@@ -2040,7 +2041,6 @@ export function createStreamEventHandlers(
     onGraphRunStarted: (event: AgentEvent<GraphRunStartedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore
@@ -2052,7 +2052,6 @@ export function createStreamEventHandlers(
     onGraphRunCompleted: (event: AgentEvent<GraphRunCompletedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore
@@ -2064,7 +2063,6 @@ export function createStreamEventHandlers(
     onGraphRunFailed: (event: AgentEvent<GraphRunFailedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore.getState().runFailed(d.graph_run_id, d.error_message, d.failed_node_id ?? null);
@@ -2074,7 +2072,6 @@ export function createStreamEventHandlers(
     onGraphRunCancelled: (event: AgentEvent<GraphRunCancelledEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore.getState().runCancelled(d.graph_run_id, d.reason);
@@ -2084,7 +2081,6 @@ export function createStreamEventHandlers(
     onGraphNodeStarted: (event: AgentEvent<GraphNodeStartedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore
@@ -2102,7 +2098,6 @@ export function createStreamEventHandlers(
     onGraphNodeCompleted: (event: AgentEvent<GraphNodeCompletedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore
@@ -2114,7 +2109,6 @@ export function createStreamEventHandlers(
     onGraphNodeFailed: (event: AgentEvent<GraphNodeFailedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore.getState().nodeFailed(d.graph_run_id, d.node_id, d.error_message);
@@ -2124,7 +2118,6 @@ export function createStreamEventHandlers(
     onGraphNodeSkipped: (event: AgentEvent<GraphNodeSkippedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore.getState().nodeSkipped(d.graph_run_id, d.node_id, d.reason);
@@ -2134,7 +2127,6 @@ export function createStreamEventHandlers(
     onGraphHandoff: (event: AgentEvent<GraphHandoffEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
-      if (!convState) return;
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const d = event.data;
       useGraphStore
@@ -2224,19 +2216,18 @@ export function createStreamEventHandlers(
       // reconcile with the DB as the source of truth.
       void (async () => {
         try {
-          const { httpClient } = await import('../../services/client/httpClient');
           interface TaskResponse {
             tasks?: unknown[];
           }
           const res = await httpClient.get<TaskResponse>(
             `/agent/plan/tasks/${handlerConversationId}`
           );
-          if (res && Array.isArray(res.tasks) && res.tasks.length > 0) {
+          if (Array.isArray(res.tasks) && res.tasks.length > 0) {
             const { updateConversationState } = get();
             updateConversationState(handlerConversationId, {
-              tasks: res.tasks as import('../../types/agent').AgentTask[],
+              tasks: res.tasks as AgentTask[],
             });
-            console.log(
+            logger.debug(
               '[TaskSync] onComplete fallback: fetched',
               String(res.tasks.length),
               'tasks from API'
@@ -2285,7 +2276,7 @@ export function createStreamEventHandlers(
 
     onAgentGoalCompleted: (event) => {
       const { updateConversationState } = get();
-      const data = event.data ?? {};
+      const data = event.data;
       const summary = typeof data.summary === 'string' ? data.summary : null;
       updateConversationState(handlerConversationId, {
         goalCompletionSummary: summary,
@@ -2294,7 +2285,7 @@ export function createStreamEventHandlers(
 
     onAgentConversationFinished: (event) => {
       const { updateConversationState } = get();
-      const data = event.data ?? {};
+      const data = event.data;
       const reason = typeof data.reason === 'string' ? data.reason : null;
       const rationale = typeof data.rationale === 'string' ? data.rationale : null;
 

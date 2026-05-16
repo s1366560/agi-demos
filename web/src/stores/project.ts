@@ -18,6 +18,8 @@ import { projectAPI } from '../services/api';
 
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
+let latestListProjectsRequest = 0;
+
 interface ApiError {
   response?:
     | {
@@ -87,9 +89,12 @@ export const useProjectStore = create<ProjectState>()(
        * await listProjects('tenant-1', { page: 1, page_size: 20 });
        */
       listProjects: async (tenantId: string, params = {}) => {
+        const requestId = latestListProjectsRequest + 1;
+        latestListProjectsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response: ProjectListResponse = await projectAPI.list(tenantId, params);
+          if (requestId !== latestListProjectsRequest) return;
           set({
             projects: response.projects,
             total: response.total,
@@ -98,6 +103,7 @@ export const useProjectStore = create<ProjectState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListProjectsRequest) return;
           set({
             error: getErrorMessage(error),
             isLoading: false,

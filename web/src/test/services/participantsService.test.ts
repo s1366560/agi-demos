@@ -148,9 +148,8 @@ describe('participantsService', () => {
 
     await participantsService.setFocusedAgent('c1', 'agent-1');
 
-    expect(httpClient.patch).toHaveBeenCalledWith(
-      '/agent/conversations/c1/participants/focused',
-      { agent_id: 'agent-1' }
-    );
+    expect(httpClient.patch).toHaveBeenCalledWith('/agent/conversations/c1/participants/focused', {
+      agent_id: 'agent-1',
+    });
   });
 });

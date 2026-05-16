@@ -46,9 +46,7 @@ vi.mock('../../services/agentService', () => ({
     connect: vi.fn(() => Promise.resolve()),
     isConnected: vi.fn(() => true),
     subscribe: vi.fn(),
-    listConversations: vi.fn(() =>
-      Promise.resolve({ items: [], has_more: false, total: 0 })
-    ),
+    listConversations: vi.fn(() => Promise.resolve({ items: [], has_more: false, total: 0 })),
   },
 }));
 

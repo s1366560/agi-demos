@@ -1,20 +1,25 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
-import { Brain, Search, Plus, Clock, User, Tag, AlertCircle, Eye, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { Brain, Search, Plus, Clock, User, Tag, AlertCircle, Eye, Trash2 } from 'lucide-react';
+
+import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';
 
 import { useMemoryStore } from '../../stores/memory';
 import { useProjectStore } from '../../stores/project';
-import { Memory } from '../../types/memory';
 import { MemoryCreateModal } from '../MemoryCreateModal';
 
 import { MemoryDetailModal } from './MemoryDetailModal';
 
+import type { Memory } from '../../types/memory';
+
 interface MemoryManagerProps {
   onMemorySelect?: ((memory: Memory) => void) | undefined;
 }
+
+type ContentTypeFilter = Memory['content_type'] | 'all';
 
 export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) => {
   const { t } = useTranslation();
@@ -32,7 +37,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
+  const [filterType, setFilterType] = useState<ContentTypeFilter>('all');
   const [filterUser, setFilterUser] = useState<string>('');
   const [dateRange, setDateRange] = useState<{ start?: Date | undefined; end?: Date | undefined }>(
     {}
@@ -41,7 +46,14 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   const loadMemories = useCallback(async () => {
     if (!currentProject) return;
 
-    const params: any = {};
+    type MemoryListParams = NonNullable<Parameters<typeof listMemories>[1]> & {
+      content_type?: Memory['content_type'] | undefined;
+      author_id?: string | undefined;
+      start_date?: string | undefined;
+      end_date?: string | undefined;
+    };
+
+    const params: MemoryListParams = {};
     if (searchTerm) params.search = searchTerm;
     if (filterType !== 'all') params.content_type = filterType;
     if (filterUser) params.author_id = filterUser;
@@ -50,14 +62,14 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
     try {
       await listMemories(currentProject.id, params);
-    } catch (_error) {
-      console.error('Failed to load memories:', error);
+    } catch (loadError: unknown) {
+      console.error('Failed to load memories:', loadError);
     }
-  }, [currentProject, searchTerm, filterType, filterUser, dateRange, listMemories, error]);
+  }, [currentProject, searchTerm, filterType, filterUser, dateRange, listMemories]);
 
   useEffect(() => {
     if (currentProject) {
-      loadMemories();
+      void loadMemories();
     }
   }, [currentProject, loadMemories]);
 
@@ -74,7 +86,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   const handleDeleteMemory = async (memoryId: string) => {
     if (!currentProject) return;
 
-    if (window.confirm(t('memory.manager.deleteConfirm'))) {
+    if (await confirmAction({ title: t('memory.manager.deleteConfirm'), danger: true })) {
       try {
         await deleteMemory(currentProject.id, memoryId);
       } catch (_error) {
@@ -107,8 +119,12 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8">
         <div className="text-center">
           <Brain className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('memory.manager.selectProjectFirstHeading')}</h3>
-          <p className="text-gray-600 dark:text-slate-400">{t('memory.manager.selectProjectHint')}</p>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+            {t('memory.manager.selectProjectFirstHeading')}
+          </h3>
+          <p className="text-gray-600 dark:text-slate-400">
+            {t('memory.manager.selectProjectHint')}
+          </p>
         </div>
       </div>
     );
@@ -130,7 +146,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-gray-600 dark:text-slate-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('memory.manager.title')}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('memory.manager.title')}
+            </h3>
             <span className="text-sm text-gray-500 dark:text-slate-500">
               {t('memory.manager.countSuffix', { count: memories.length })}
             </span>
@@ -156,7 +174,11 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               onChange={(e) => {
                 setSearchTerm(e.target.value);
               }}
-              onKeyPress={(e) => e.key === 'Enter' && loadMemories()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  void loadMemories();
+                }
+              }}
               className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
             />
           </div>
@@ -165,7 +187,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             <select
               value={filterType}
               onChange={(e) => {
-                setFilterType(e.target.value);
+                setFilterType(e.target.value as ContentTypeFilter);
               }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
             >
@@ -191,7 +213,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
           <div className="flex space-x-2">
             <button
-              onClick={loadMemories}
+              onClick={() => {
+                void loadMemories();
+              }}
               className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
             >
               {t('memory.manager.search')}
@@ -224,7 +248,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
         {memories.length === 0 ? (
           <div className="text-center py-8">
             <Brain className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
-            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t('memory.manager.emptyHeading')}</h4>
+            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              {t('memory.manager.emptyHeading')}
+            </h4>
             <p className="text-gray-600 dark:text-slate-400 mb-4">
               {searchTerm || filterType !== 'all' || filterUser
                 ? t('memory.manager.emptyNoMatch')
@@ -243,118 +269,128 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
           </div>
         ) : (
           <div className="space-y-4">
-            {memories.map((memory) => (
-              <div
-                key={memory.id}
-                className={`p-4 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
-                  currentMemory?.id === memory.id
-                    ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
-                onClick={() => {
-                  handleMemorySelect(memory);
-                }}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-3 flex-1">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(memory.content_type)}`}
-                    >
-                      {memory.content_type}
-                    </span>
-                    <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-slate-500">
-                      {memory.author_id && (
+            {memories.map((memory) => {
+              const entities = (memory.entities as Memory['entities'] | undefined) ?? [];
+              const relationships =
+                (memory.relationships as Memory['relationships'] | undefined) ?? [];
+
+              return (
+                <div
+                  key={memory.id}
+                  className={`p-4 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                    currentMemory?.id === memory.id
+                      ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
+                  onClick={() => {
+                    handleMemorySelect(memory);
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3 flex-1">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(memory.content_type)}`}
+                      >
+                        {memory.content_type}
+                      </span>
+                      <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-slate-500">
+                        {memory.author_id && (
+                          <div className="flex items-center space-x-1">
+                            <User className="h-3 w-3" />
+                            <span>{memory.author_id}</span>
+                          </div>
+                        )}
                         <div className="flex items-center space-x-1">
-                          <User className="h-3 w-3" />
-                          <span>{memory.author_id}</span>
+                          <Clock className="h-3 w-3" />
+                          <span>{formatDate(memory.created_at)}</span>
                         </div>
-                      )}
-                      <div className="flex items-center space-x-1">
-                        <Clock className="h-3 w-3" />
-                        <span>{formatDate(memory.created_at)}</span>
                       </div>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewMemory(memory);
+                        }}
+                        className="p-1 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDeleteMemory(memory.id);
+                        }}
+                        className="p-1 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewMemory(memory);
-                      }}
-                      className="p-1 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteMemory(memory.id);
-                      }}
-                      className="p-1 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+
+                  <div className="mb-3">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                      {memory.title}
+                    </h4>
+                    <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-3">
+                      {memory.content}
+                    </p>
                   </div>
+
+                  {entities.length > 0 && (
+                    <div className="mb-2">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <Tag className="h-3 w-3 text-gray-400 dark:text-slate-500" />
+                        <span className="text-xs text-gray-500 dark:text-slate-500">
+                          {t('memory.manager.entitiesLabel')}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {entities.slice(0, 5).map((entity, index) => (
+                          <span
+                            key={index}
+                            className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs rounded-full"
+                          >
+                            {entity.name}
+                          </span>
+                        ))}
+                        {entities.length > 5 && (
+                          <span className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-xs rounded-full">
+                            +{entities.length - 5}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {relationships.length > 0 && (
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1">
+                        <div className="w-3 h-3 bg-purple-500 rounded-full" />
+                        <span className="text-xs text-gray-500 dark:text-slate-500">
+                          {t('memory.manager.relationshipsLabel')}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {relationships.slice(0, 3).map((relationship, index) => (
+                          <span
+                            key={index}
+                            className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-xs rounded-full"
+                          >
+                            {relationship.source_id} → {relationship.target_id}
+                          </span>
+                        ))}
+                        {relationships.length > 3 && (
+                          <span className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-xs rounded-full">
+                            +{relationships.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <div className="mb-3">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
-                    {memory.title}
-                  </h4>
-                  <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-3">
-                    {memory.content}
-                  </p>
-                </div>
-
-                {memory.entities && memory.entities.length > 0 && (
-                  <div className="mb-2">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Tag className="h-3 w-3 text-gray-400 dark:text-slate-500" />
-                      <span className="text-xs text-gray-500 dark:text-slate-500">{t('memory.manager.entitiesLabel')}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {memory.entities.slice(0, 5).map((entity, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs rounded-full"
-                        >
-                          {entity.name}
-                        </span>
-                      ))}
-                      {memory.entities.length > 5 && (
-                        <span className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-xs rounded-full">
-                          +{memory.entities.length - 5}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {memory.relationships && memory.relationships.length > 0 && (
-                  <div>
-                    <div className="flex items-center space-x-2 mb-1">
-                      <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                      <span className="text-xs text-gray-500 dark:text-slate-500">{t('memory.manager.relationshipsLabel')}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {memory.relationships.slice(0, 3).map((relationship, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 text-xs rounded-full"
-                        >
-                          {relationship.source_id} → {relationship.target_id}
-                        </span>
-                      ))}
-                      {memory.relationships.length > 3 && (
-                        <span className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-xs rounded-full">
-                          +{memory.relationships.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -365,9 +401,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
           setIsCreateModalOpen(false);
         }}
         onSuccess={() => {
-          if (currentProject) {
-            loadMemories();
-          }
+          void loadMemories();
         }}
       />
 

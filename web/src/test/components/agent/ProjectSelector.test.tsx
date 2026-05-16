@@ -13,7 +13,7 @@
  * - loadConversations replaces listConversations
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import '@testing-library/jest-dom/vitest';
@@ -265,7 +265,9 @@ describe('ProjectSelector', () => {
       const selector = screen.getByRole('combobox');
 
       // Tab to focus
-      selector.focus();
+      act(() => {
+        selector.focus();
+      });
       expect(selector).toHaveFocus();
     });
   });

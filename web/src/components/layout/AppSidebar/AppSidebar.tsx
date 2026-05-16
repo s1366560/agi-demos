@@ -68,7 +68,9 @@ function SidebarContent({
         isCollapsed ? 'collapsed w-20' : 'w-64'
       }`}
       style={{
-        width: isCollapsed ? `${config.collapsedWidth ?? 80}px` : `${config.width ?? 256}px`,
+        width: isCollapsed
+          ? `${String(config.collapsedWidth ?? 80)}px`
+          : `${String(config.width ?? 256)}px`,
       }}
     >
       {/* Brand Header */}
@@ -108,6 +110,7 @@ export function AppSidebar({
   config,
   basePath,
   variant,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- Backward-compatible alias for older callers.
   context,
   collapsed: controlledCollapsed,
   defaultCollapsed = false,

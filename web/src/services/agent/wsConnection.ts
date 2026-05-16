@@ -1,8 +1,10 @@
 import { logger } from '../../utils/logger';
 import { getAuthToken } from '../../utils/tokenResolver';
-import { createWebSocketUrl } from '../client/urlUtils';
+import { createWebSocketAuthProtocols, createWebSocketUrl } from '../client/urlUtils';
+import { attachWatchdog } from '../client/wsWatchdog';
 
 import type { ServerMessage, WebSocketStatus } from './types';
+import type { Watchdog } from '../client/wsWatchdog';
 
 export interface WebSocketConnectionOptions {
   sessionId: string;
@@ -23,6 +25,7 @@ export class WebSocketConnection {
   private sessionId: string;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private readonly HEARTBEAT_INTERVAL_MS = 30000;
+  private watchdog: Watchdog | null = null;
 
   private connectingPromise: Promise<void> | null = null;
 
@@ -98,12 +101,16 @@ export class WebSocketConnection {
       }
 
       const wsUrl = createWebSocketUrl('/agent/ws', {
-        token,
         session_id: this.sessionId,
       });
 
       try {
-        this.ws = new WebSocket(wsUrl);
+        this.ws = new WebSocket(wsUrl, createWebSocketAuthProtocols(token));
+        this.watchdog?.stop();
+        this.watchdog = attachWatchdog(this.ws, {
+          staleAfterMs: this.HEARTBEAT_INTERVAL_MS * 3,
+          label: 'AgentWS',
+        });
 
         this.ws.onopen = () => {
           logger.debug(`[AgentWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`);
@@ -121,8 +128,12 @@ export class WebSocketConnection {
         };
 
         this.ws.onmessage = (event) => {
+          this.watchdog?.notifyMessage();
           try {
-            const message: ServerMessage = JSON.parse(event.data);
+            if (typeof event.data !== 'string') {
+              throw new Error('Expected text WebSocket message');
+            }
+            const message = JSON.parse(event.data) as ServerMessage;
             this.messageListeners.forEach((listener) => {
               listener(message);
             });
@@ -134,6 +145,7 @@ export class WebSocketConnection {
         this.ws.onclose = (event) => {
           logger.debug('[AgentWS] Disconnected', event.code, event.reason);
           this.setStatus('disconnected');
+          this.stopWatchdog();
 
           if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnect();
@@ -144,15 +156,16 @@ export class WebSocketConnection {
           logger.error('[AgentWS] Error:', error);
           this.setStatus('error');
           this.stopHeartbeat();
+          this.stopWatchdog();
           this.connectingPromise = null;
-          reject(error);
+          reject(error instanceof Error ? error : new Error('WebSocket error'));
         };
       } catch (err) {
         logger.error('[AgentWS] Connection error:', err);
         this.setStatus('error');
         this.connectingPromise = null;
         this.scheduleReconnect();
-        reject(err);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }
@@ -160,6 +173,7 @@ export class WebSocketConnection {
   disconnect(): void {
     this.isManualClose = true;
     this.stopHeartbeat();
+    this.stopWatchdog();
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -183,12 +197,12 @@ export class WebSocketConnection {
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     logger.debug(
-      `[AgentWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      `[AgentWS] Reconnecting in ${String(delay)}ms (attempt ${String(this.reconnectAttempts)}/${String(this.maxReconnectAttempts)})`
     );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
-      this.connect().catch((err) => {
+      this.connect().catch((err: unknown) => {
         logger.error('[AgentWS] Reconnect failed:', err);
       });
     }, delay);
@@ -210,6 +224,11 @@ export class WebSocketConnection {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+  }
+
+  private stopWatchdog(): void {
+    this.watchdog?.stop();
+    this.watchdog = null;
   }
 
   send(message: Record<string, unknown>): boolean {

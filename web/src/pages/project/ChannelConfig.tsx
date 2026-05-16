@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import {
@@ -41,6 +42,8 @@ import type {
   ChannelPluginCatalogItem,
 } from '@/types/channel';
 
+import type { ColumnsType } from 'antd/es/table';
+
 const { Title, Text } = Typography;
 const { Option } = Select;
 
@@ -53,14 +56,14 @@ const CHANNEL_TYPE_META: Record<string, { label: string; color: string }> = {
 };
 
 const CONNECTION_MODES = [
-  { value: 'websocket', label: 'WebSocket (Recommended)' },
-  { value: 'webhook', label: 'Webhook' },
+  { value: 'websocket', labelKey: 'project.channelConfig.connectionModeWebsocket' },
+  { value: 'webhook', labelKey: 'project.channelConfig.connectionModeWebhook' },
 ];
 
 const POLICY_OPTIONS = [
-  { value: 'open', label: 'Open (all allowed)' },
-  { value: 'allowlist', label: 'Allowlist (restricted)' },
-  { value: 'disabled', label: 'Disabled' },
+  { value: 'open', labelKey: 'project.channelConfig.policy.open' },
+  { value: 'allowlist', labelKey: 'project.channelConfig.policy.allowlist' },
+  { value: 'disabled', labelKey: 'project.channelConfig.policy.disabled' },
 ];
 
 const STATUS_REFRESH_INTERVAL = 10_000;
@@ -81,21 +84,25 @@ const humanizeChannelType = (channelType: string): string =>
   channelType
     .split(/[-_]/g)
     .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
 
 const humanizeFieldName = (fieldName: string): string =>
   fieldName
     .split(/[-_]/g)
     .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
 
 const ChannelConfigPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const { t } = useTranslation();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<Record<string, unknown>>();
   const [testingConfig, setTestingConfig] = useState<string | null>(null);
   const [plugins, setPlugins] = useState<RuntimePlugin[]>([]);
   const [pluginDiagnostics, setPluginDiagnostics] = useState<PluginDiagnostic[]>([]);
@@ -122,7 +129,9 @@ const ChannelConfigPage: React.FC = () => {
         testConfig: state.testConfig,
       }))
     );
-  const selectedChannelType = Form.useWatch('channel_type', form);
+  const watchedChannelType: unknown = Form.useWatch('channel_type', form);
+  const selectedChannelType =
+    typeof watchedChannelType === 'string' ? watchedChannelType : undefined;
   const activeChannelSchema = selectedChannelType ? channelSchemas[selectedChannelType] : undefined;
 
   const loadPluginRuntime = useCallback(async () => {
@@ -137,11 +146,15 @@ const ChannelConfigPage: React.FC = () => {
       setPluginDiagnostics(pluginRes.diagnostics);
       setChannelPluginCatalog(catalogRes.items);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to load plugin runtime');
+      message.error(
+        error instanceof Error
+          ? error.message
+          : t('project.channelConfig.errors.failedToLoadPlugins')
+      );
     } finally {
       setPluginsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   const loadChannelSchema = useCallback(
     async (channelType: string) => {
@@ -156,12 +169,16 @@ const ChannelConfigPage: React.FC = () => {
         const schema = await channelService.getChannelPluginSchema(projectId, channelType);
         setChannelSchemas((prev) => ({ ...prev, [channelType]: schema }));
       } catch (error) {
-        message.error(error instanceof Error ? error.message : 'Failed to load channel schema');
+        message.error(
+          error instanceof Error
+            ? error.message
+            : t('project.channelConfig.errors.failedToLoadSchema')
+        );
       } finally {
         setSchemaLoading(false);
       }
     },
-    [channelPluginCatalog, channelSchemas, projectId]
+    [channelPluginCatalog, channelSchemas, projectId, t]
   );
 
   const channelTypeOptions = useMemo(() => {
@@ -184,12 +201,12 @@ const ChannelConfigPage: React.FC = () => {
 
   useEffect(() => {
     if (projectId) {
-      fetchConfigs(projectId);
+      void fetchConfigs(projectId);
     }
   }, [projectId, fetchConfigs]);
 
   useEffect(() => {
-    loadPluginRuntime();
+    void loadPluginRuntime();
   }, [loadPluginRuntime]);
 
   useEffect(() => {
@@ -200,7 +217,6 @@ const ChannelConfigPage: React.FC = () => {
   useEffect(() => {
     if (!isModalVisible || editingConfig || !activeChannelSchema?.defaults) return;
     const defaults = activeChannelSchema.defaults;
-    if (!defaults || typeof defaults !== 'object') return;
 
     const initialValues: Record<string, unknown> = {};
     const initialExtraSettings: Record<string, unknown> = {};
@@ -212,12 +228,13 @@ const ChannelConfigPage: React.FC = () => {
       }
     });
     if (Object.keys(initialExtraSettings).length > 0) {
+      const extraSettings = form.getFieldValue('extra_settings') as unknown;
       initialValues.extra_settings = {
-        ...(form.getFieldValue('extra_settings') || {}),
+        ...(isRecord(extraSettings) ? extraSettings : {}),
         ...initialExtraSettings,
       };
     }
-    form.setFieldsValue(initialValues);
+    form.setFieldsValue(initialValues as Parameters<typeof form.setFieldsValue>[0]);
   }, [activeChannelSchema, editingConfig, form, isModalVisible]);
 
   // Auto-refresh status every 10s
@@ -225,7 +242,7 @@ const ChannelConfigPage: React.FC = () => {
   useEffect(() => {
     if (projectId) {
       intervalRef.current = setInterval(() => {
-        fetchConfigs(projectId);
+        void fetchConfigs(projectId);
       }, STATUS_REFRESH_INTERVAL);
     }
     return () => {
@@ -257,12 +274,12 @@ const ChannelConfigPage: React.FC = () => {
     async (id: string) => {
       try {
         await deleteConfig(id);
-        message.success('Configuration deleted');
+        message.success(t('project.channelConfig.messages.configDeleted'));
       } catch (_error) {
-        message.error('Failed to delete configuration');
+        message.error(t('project.channelConfig.messages.failedToDelete'));
       }
     },
-    [deleteConfig]
+    [deleteConfig, t]
   );
 
   const handleTest = useCallback(
@@ -276,18 +293,18 @@ const ChannelConfigPage: React.FC = () => {
           message.error(result.message);
         }
       } catch (_error) {
-        message.error('Test failed');
+        message.error(t('project.channelConfig.messages.testFailed'));
       } finally {
         setTestingConfig(null);
       }
     },
-    [testConfig]
+    [testConfig, t]
   );
 
   const handleInstallPlugin = useCallback(async () => {
     if (!projectId) return;
     if (!installRequirement.trim()) {
-      message.warning('Please enter a plugin requirement');
+      message.warning(t('project.channelConfig.messages.enterPluginRequirement'));
       return;
     }
     setPluginActionKey('install');
@@ -298,11 +315,15 @@ const ChannelConfigPage: React.FC = () => {
       setInstallRequirement('');
       await loadPluginRuntime();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Plugin install failed');
+      message.error(
+        error instanceof Error
+          ? error.message
+          : t('project.channelConfig.messages.pluginInstallFailed')
+      );
     } finally {
       setPluginActionKey(null);
     }
-  }, [installRequirement, loadPluginRuntime, projectId]);
+  }, [installRequirement, loadPluginRuntime, projectId, t]);
 
   const handleTogglePlugin = useCallback(
     async (plugin: RuntimePlugin, enabled: boolean) => {
@@ -313,19 +334,23 @@ const ChannelConfigPage: React.FC = () => {
           ? await channelService.enablePlugin(projectId, plugin.name)
           : await channelService.disablePlugin(projectId, plugin.name);
         setLastPluginActionDetails(response.details || null);
-        if (enabled) {
-          message.success(`Plugin enabled: ${plugin.name}`);
-        } else {
-          message.success(`Plugin disabled: ${plugin.name}`);
-        }
+        message.success(
+          enabled
+            ? t('project.channelConfig.messages.pluginEnabled', { name: plugin.name })
+            : t('project.channelConfig.messages.pluginDisabled', { name: plugin.name })
+        );
         await loadPluginRuntime();
       } catch (error) {
-        message.error(error instanceof Error ? error.message : 'Plugin action failed');
+        message.error(
+          error instanceof Error
+            ? error.message
+            : t('project.channelConfig.messages.pluginActionFailed')
+        );
       } finally {
         setPluginActionKey(null);
       }
     },
-    [loadPluginRuntime, projectId]
+    [loadPluginRuntime, projectId, t]
   );
 
   const handleReloadPlugins = useCallback(async () => {
@@ -337,11 +362,15 @@ const ChannelConfigPage: React.FC = () => {
       message.success(response.message);
       await loadPluginRuntime();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Plugin reload failed');
+      message.error(
+        error instanceof Error
+          ? error.message
+          : t('project.channelConfig.messages.pluginReloadFailed')
+      );
     } finally {
       setPluginActionKey(null);
     }
-  }, [loadPluginRuntime, projectId]);
+  }, [loadPluginRuntime, projectId, t]);
 
   const handleSubmit = useCallback(
     async (values: CreateChannelConfig | UpdateChannelConfig) => {
@@ -353,55 +382,55 @@ const ChannelConfigPage: React.FC = () => {
             delete updateData.app_secret;
           }
           await updateConfig(editingConfig.id, updateData);
-          message.success('Configuration updated');
+          message.success(t('project.channelConfig.messages.configUpdated'));
         } else {
           if (!projectId) {
-            message.error('Project ID is required');
+            message.error(t('project.channelConfig.messages.projectIdRequired'));
             return;
           }
           await createConfig(projectId, values as CreateChannelConfig);
-          message.success('Configuration created');
+          message.success(t('project.channelConfig.messages.configCreated'));
         }
         setIsModalVisible(false);
         form.resetFields();
       } catch (_error) {
-        message.error('Failed to save configuration');
+        message.error(t('project.channelConfig.messages.failedToSave'));
       }
     },
-    [editingConfig, projectId, createConfig, updateConfig, form]
+    [editingConfig, projectId, createConfig, updateConfig, form, t]
   );
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'connected':
-        return <Badge status="success" text="Connected" />;
+        return <Badge status="success" text={t('project.channelConfig.status.connected')} />;
       case 'error':
-        return <Badge status="error" text="Error" />;
+        return <Badge status="error" text={t('project.channelConfig.status.error')} />;
       case 'circuit_open':
-        return <Badge color="orange" text="Circuit Open" />;
+        return <Badge color="orange" text={t('project.channelConfig.status.circuitOpen')} />;
       default:
-        return <Badge status="default" text="Disconnected" />;
+        return <Badge status="default" text={t('project.channelConfig.status.disconnected')} />;
     }
   };
 
-  const columns = [
+  const columns: ColumnsType<ChannelConfig> = [
     {
-      title: 'Name',
+      title: t('project.channelConfig.columns.name'),
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: ChannelConfig) => (
         <Space>
           <Text strong>{text}</Text>
           {record.enabled ? (
-            <Tag color="success">Enabled</Tag>
+            <Tag color="success">{t('project.channelConfig.status.enabled')}</Tag>
           ) : (
-            <Tag color="default">Disabled</Tag>
+            <Tag color="default">{t('project.channelConfig.status.disabled')}</Tag>
           )}
         </Space>
       ),
     },
     {
-      title: 'Type',
+      title: t('project.channelConfig.columns.type'),
       dataIndex: 'channel_type',
       key: 'channel_type',
       render: (type: string) => {
@@ -414,19 +443,19 @@ const ChannelConfigPage: React.FC = () => {
       },
     },
     {
-      title: 'Connection',
+      title: t('project.channelConfig.columns.connection'),
       dataIndex: 'connection_mode',
       key: 'connection_mode',
       render: (mode: string) => mode.toUpperCase(),
     },
     {
-      title: 'Status',
+      title: t('project.channelConfig.columns.status'),
       dataIndex: 'status',
       key: 'status',
       render: getStatusBadge,
     },
     {
-      title: 'Last Error',
+      title: t('project.channelConfig.columns.lastError'),
       dataIndex: 'last_error',
       key: 'last_error',
       ellipsis: true,
@@ -441,25 +470,27 @@ const ChannelConfigPage: React.FC = () => {
         ) : null,
     },
     {
-      title: 'Created',
+      title: t('project.channelConfig.columns.created'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
-      title: 'Actions',
+      title: t('project.channelConfig.columns.actions'),
       key: 'actions',
-      render: (_: any, record: ChannelConfig) => (
+      render: (_value: unknown, record: ChannelConfig) => (
         <Space>
-          <Tooltip title="Test Connection">
+          <Tooltip title={t('project.channelConfig.actions.testConnection')}>
             <Button
               icon={<RefreshCw size={16} />}
               size="small"
               loading={testingConfig === record.id}
-              onClick={() => handleTest(record.id)}
+              onClick={() => {
+                void handleTest(record.id);
+              }}
             />
           </Tooltip>
-          <Tooltip title="Edit">
+          <Tooltip title={t('project.channelConfig.actions.edit')}>
             <Button
               icon={<Pencil size={16} />}
               size="small"
@@ -469,10 +500,12 @@ const ChannelConfigPage: React.FC = () => {
             />
           </Tooltip>
           <Popconfirm
-            title="Delete configuration?"
-            description="This action cannot be undone."
-            onConfirm={() => handleDelete(record.id)}
-            okText="Delete"
+            title={t('project.channelConfig.deleteConfirmTitle')}
+            description={t('project.channelConfig.deleteConfirmDescription')}
+            onConfirm={() => {
+              void handleDelete(record.id);
+            }}
+            okText={t('common.delete')}
             okButtonProps={{ danger: true }}
           >
             <Button icon={<Trash2 size={16} />} size="small" danger />
@@ -482,29 +515,29 @@ const ChannelConfigPage: React.FC = () => {
     },
   ];
 
-  const pluginColumns = [
+  const pluginColumns: ColumnsType<RuntimePlugin> = [
     {
-      title: 'Plugin',
+      title: t('project.channelConfig.columns.plugin'),
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record: RuntimePlugin) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text strong>{name}</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {record.package || 'local'}
+            {record.package || t('project.channelConfig.pluginSource.local')}
             {record.version ? `@${record.version}` : ''}
           </Text>
         </Space>
       ),
     },
     {
-      title: 'Source',
+      title: t('project.channelConfig.columns.source'),
       dataIndex: 'source',
       key: 'source',
       render: (source: string) => <Tag>{source}</Tag>,
     },
     {
-      title: 'Channels',
+      title: t('project.channelConfig.columns.channels'),
       dataIndex: 'channel_types',
       key: 'channel_types',
       render: (channelTypes: string[]) =>
@@ -517,21 +550,21 @@ const ChannelConfigPage: React.FC = () => {
             ))}
           </Space>
         ) : (
-          <Text type="secondary">Tool-only plugin</Text>
+          <Text type="secondary">{t('project.channelConfig.pluginType.toolOnly')}</Text>
         ),
     },
     {
-      title: 'Status',
+      title: t('project.channelConfig.columns.status'),
       key: 'status',
       render: (_: unknown, record: RuntimePlugin) =>
         record.enabled ? (
-          <Badge status="success" text="Enabled" />
+          <Badge status="success" text={t('project.channelConfig.status.enabled')} />
         ) : (
-          <Badge status="default" text="Disabled" />
+          <Badge status="default" text={t('project.channelConfig.status.disabled')} />
         ),
     },
     {
-      title: 'Actions',
+      title: t('project.channelConfig.columns.actions'),
       key: 'actions',
       render: (_: unknown, record: RuntimePlugin) => (
         <Space>
@@ -539,9 +572,11 @@ const ChannelConfigPage: React.FC = () => {
             <Button
               size="small"
               loading={pluginActionKey === `${record.name}:disable`}
-              onClick={() => handleTogglePlugin(record, false)}
+              onClick={() => {
+                void handleTogglePlugin(record, false);
+              }}
             >
-              Disable
+              {t('project.channelConfig.actions.disable')}
             </Button>
           ) : (
             <Button
@@ -549,9 +584,11 @@ const ChannelConfigPage: React.FC = () => {
               type="primary"
               ghost
               loading={pluginActionKey === `${record.name}:enable`}
-              onClick={() => handleTogglePlugin(record, true)}
+              onClick={() => {
+                void handleTogglePlugin(record, true);
+              }}
             >
-              Enable
+              {t('project.channelConfig.actions.enable')}
             </Button>
           )}
         </Space>
@@ -564,7 +601,7 @@ const ChannelConfigPage: React.FC = () => {
     const properties = activeChannelSchema.config_schema?.properties || {};
     const requiredFields = new Set(activeChannelSchema.config_schema?.required || []);
     const uiHints = activeChannelSchema.config_ui_hints || {};
-    const secretPaths = new Set(activeChannelSchema.secret_paths || []);
+    const secretPaths = new Set(activeChannelSchema.secret_paths);
 
     return Object.entries(properties).map(([fieldName, fieldSchema]) => {
       if (['channel_type', 'name', 'enabled'].includes(fieldName)) {
@@ -577,11 +614,13 @@ const ChannelConfigPage: React.FC = () => {
       const formFieldName = CHANNEL_SETTING_FIELDS.has(fieldName)
         ? fieldName
         : ['extra_settings', fieldName];
-      const label = hint.label || fieldSchema?.title || humanizeFieldName(fieldName);
-      const placeholder = hint.placeholder || fieldSchema?.description;
-      const rules = isRequired ? [{ required: true, message: `Please enter ${label}` }] : [];
+      const label = hint.label || fieldSchema.title || humanizeFieldName(fieldName);
+      const placeholder = hint.placeholder || fieldSchema.description;
+      const rules = isRequired
+        ? [{ required: true, message: t('project.channelConfig.pleaseEnter', { field: label }) }]
+        : [];
 
-      if (fieldSchema?.type === 'boolean') {
+      if (fieldSchema.type === 'boolean') {
         return (
           <Form.Item key={fieldName} name={formFieldName} label={label} valuePropName="checked">
             <Switch />
@@ -589,7 +628,7 @@ const ChannelConfigPage: React.FC = () => {
         );
       }
 
-      if (fieldSchema?.enum && fieldSchema.enum.length > 0) {
+      if (fieldSchema.enum && fieldSchema.enum.length > 0) {
         return (
           <Form.Item key={fieldName} name={formFieldName} label={label} rules={rules}>
             <Select
@@ -602,7 +641,7 @@ const ChannelConfigPage: React.FC = () => {
         );
       }
 
-      if (fieldSchema?.type === 'integer' || fieldSchema?.type === 'number') {
+      if (fieldSchema.type === 'integer' || fieldSchema.type === 'number') {
         return (
           <Form.Item key={fieldName} name={formFieldName} label={label} rules={rules}>
             <InputNumber
@@ -621,7 +660,9 @@ const ChannelConfigPage: React.FC = () => {
             <Input.Password
               placeholder={
                 editingConfig
-                  ? `Leave unchanged to keep existing secret (${SECRET_UNCHANGED_SENTINEL})`
+                  ? t('project.channelConfig.leaveUnchanged', {
+                      sentinel: SECRET_UNCHANGED_SENTINEL,
+                    })
                   : placeholder
               }
             />
@@ -631,7 +672,7 @@ const ChannelConfigPage: React.FC = () => {
         </Form.Item>
       );
     });
-  }, [activeChannelSchema, editingConfig]);
+  }, [activeChannelSchema, editingConfig, t]);
 
   return (
     <div style={{ padding: 24 }}>
@@ -641,14 +682,14 @@ const ChannelConfigPage: React.FC = () => {
           <Space>
             <MessageSquare size={20} />
             <Title level={4} style={{ margin: 0 }}>
-              Plugin Hub
+              {t('project.channelConfig.pluginHub')}
             </Title>
           </Space>
         }
         extra={
           <Space>
             <Input
-              placeholder="my-plugin-package==0.1.0"
+              placeholder={t('project.channelConfig.pluginRequirementPlaceholder')}
               value={installRequirement}
               onChange={(event) => {
                 setInstallRequirement(event.target.value);
@@ -658,23 +699,26 @@ const ChannelConfigPage: React.FC = () => {
             <Button
               type="primary"
               loading={pluginActionKey === 'install'}
-              onClick={handleInstallPlugin}
+              onClick={() => {
+                void handleInstallPlugin();
+              }}
             >
-              Install
+              {t('project.channelConfig.actions.install')}
             </Button>
             <Button
               icon={<RefreshCw size={16} />}
               loading={pluginActionKey === 'reload'}
-              onClick={handleReloadPlugins}
+              onClick={() => {
+                void handleReloadPlugins();
+              }}
             >
-              Reload
+              {t('project.channelConfig.actions.reload')}
             </Button>
           </Space>
         }
       >
         <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
-          Discover, install, enable/disable, and manage channel plugins before creating channel
-          configurations.
+          {t('project.channelConfig.pluginHubDescription')}
         </Text>
 
         {channelPluginCatalog.length > 0 && (
@@ -689,7 +733,8 @@ const ChannelConfigPage: React.FC = () => {
 
         {pluginDiagnostics.length > 0 && (
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-            Diagnostics: {pluginDiagnostics.map((item) => item.code).join(', ')}
+            {t('project.channelConfig.diagnostics')}:{' '}
+            {pluginDiagnostics.map((item) => item.code).join(', ')}
           </Text>
         )}
         {lastPluginActionDetails?.control_plane_trace && (
@@ -711,9 +756,9 @@ const ChannelConfigPage: React.FC = () => {
               ))}
               {lastPluginActionDetails.channel_reload_plan && (
                 <Text type="secondary">
-                  reload:{' '}
+                  {t('project.channelConfig.reloadPlanLabel')}:{' '}
                   {Object.entries(lastPluginActionDetails.channel_reload_plan)
-                    .map(([key, value]) => `${key}=${value}`)
+                    .map(([key, value]) => `${key}=${value.toString()}`)
                     .join(', ')}
                 </Text>
               )}
@@ -735,19 +780,18 @@ const ChannelConfigPage: React.FC = () => {
           <Space>
             <MessageSquare size={20} />
             <Title level={4} style={{ margin: 0 }}>
-              Channel Configurations
+              {t('project.channelConfig.channelConfigurations')}
             </Title>
           </Space>
         }
         extra={
           <Button type="primary" icon={<Plus size={16} />} onClick={handleAdd}>
-            Add Channel
+            {t('project.channelConfig.actions.addChannel')}
           </Button>
         }
       >
         <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
-          Configure IM platform integrations (Feishu, DingTalk, WeCom) to enable AI agent
-          communication through chat platforms.
+          {t('project.channelConfig.channelConfigurationsDescription')}
         </Text>
 
         <Table
@@ -760,7 +804,11 @@ const ChannelConfigPage: React.FC = () => {
       </Card>
 
       <Modal
-        title={editingConfig ? 'Edit Channel Configuration' : 'Add Channel Configuration'}
+        title={
+          editingConfig
+            ? t('project.channelConfig.editChannelConfig')
+            : t('project.channelConfig.addChannelConfig')
+        }
         open={isModalVisible}
         onCancel={() => {
           setIsModalVisible(false);
@@ -769,12 +817,14 @@ const ChannelConfigPage: React.FC = () => {
           form.submit();
         }}
         width={720}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={form}
           layout="vertical"
-          onFinish={handleSubmit}
+          onFinish={(values) => {
+            void handleSubmit(values as CreateChannelConfig | UpdateChannelConfig);
+          }}
           initialValues={{
             channel_type: 'feishu',
             connection_mode: 'websocket',
@@ -784,8 +834,12 @@ const ChannelConfigPage: React.FC = () => {
             rate_limit_per_minute: 60,
           }}
         >
-          <Form.Item name="channel_type" label="Channel Type" rules={[{ required: true }]}>
-            <Select placeholder="Select channel type">
+          <Form.Item
+            name="channel_type"
+            label={t('project.channelConfig.channelType')}
+            rules={[{ required: true }]}
+          >
+            <Select placeholder={t('project.channelConfig.selectChannelType')}>
               {channelTypeOptions.map((type) => (
                 <Option key={type.value} value={type.value}>
                   <Tag color={type.color}>{type.label}</Tag>
@@ -796,13 +850,17 @@ const ChannelConfigPage: React.FC = () => {
 
           <Form.Item
             name="name"
-            label="Name"
-            rules={[{ required: true, message: 'Please enter a name' }]}
+            label={t('project.channelConfig.name')}
+            rules={[{ required: true, message: t('project.channelConfig.pleaseEnterName') }]}
           >
-            <Input placeholder="e.g., Company Feishu Bot" />
+            <Input placeholder={t('project.channelConfig.configNamePlaceholder')} />
           </Form.Item>
 
-          <Form.Item name="enabled" label="Enabled" valuePropName="checked">
+          <Form.Item
+            name="enabled"
+            label={t('project.channelConfig.status.enabled')}
+            valuePropName="checked"
+          >
             <Switch />
           </Form.Item>
 
@@ -810,7 +868,7 @@ const ChannelConfigPage: React.FC = () => {
             <>
               {schemaLoading && (
                 <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                  Loading plugin schema...
+                  {t('project.channelConfig.loadingSchema')}
                 </Text>
               )}
               {dynamicSchemaFields}
@@ -819,13 +877,13 @@ const ChannelConfigPage: React.FC = () => {
             <>
               <Form.Item
                 name="connection_mode"
-                label="Connection Mode"
+                label={t('project.channelConfig.connectionMode')}
                 rules={[{ required: true }]}
               >
                 <Select>
                   {CONNECTION_MODES.map((mode) => (
                     <Option key={mode.value} value={mode.value}>
-                      {mode.label}
+                      {t(mode.labelKey)}
                     </Option>
                   ))}
                 </Select>
@@ -833,64 +891,77 @@ const ChannelConfigPage: React.FC = () => {
 
               <Form.Item
                 name="app_id"
-                label="App ID"
-                rules={[{ required: true, message: 'Please enter App ID' }]}
+                label={t('project.channelConfig.appId')}
+                rules={[{ required: true, message: t('project.channelConfig.pleaseEnterAppId') }]}
               >
                 <Input placeholder="cli_xxx" />
               </Form.Item>
 
               <Form.Item
                 name="app_secret"
-                label={`App Secret ${editingConfig ? '(leave blank to keep unchanged)' : ''}`}
+                label={
+                  editingConfig
+                    ? t('project.channelConfig.appSecretKeepUnchanged')
+                    : t('project.channelConfig.appSecret')
+                }
                 rules={
-                  editingConfig ? [] : [{ required: true, message: 'Please enter App Secret' }]
+                  editingConfig
+                    ? []
+                    : [{ required: true, message: t('project.channelConfig.pleaseEnterAppSecret') }]
                 }
               >
-                <Input.Password placeholder="Enter app secret" />
+                <Input.Password placeholder={t('project.channelConfig.enterAppSecret')} />
               </Form.Item>
 
-              <Form.Item name="encrypt_key" label="Encrypt Key (Optional)">
-                <Input.Password placeholder="For webhook verification" />
+              <Form.Item name="encrypt_key" label={t('project.channelConfig.encryptKeyOptional')}>
+                <Input.Password placeholder={t('project.channelConfig.forWebhookVerification')} />
               </Form.Item>
 
-              <Form.Item name="verification_token" label="Verification Token (Optional)">
-                <Input.Password placeholder="For webhook verification" />
+              <Form.Item
+                name="verification_token"
+                label={t('project.channelConfig.verificationTokenOptional')}
+              >
+                <Input.Password placeholder={t('project.channelConfig.forWebhookVerification')} />
               </Form.Item>
 
-              <Form.Item name="webhook_url" label="Webhook URL (Optional)">
+              <Form.Item name="webhook_url" label={t('project.channelConfig.webhookUrlOptional')}>
                 <Input placeholder="https://your-domain.com/webhook" />
               </Form.Item>
 
-              <Form.Item name="domain" label="Domain" initialValue="feishu">
+              <Form.Item
+                name="domain"
+                label={t('project.channelConfig.domainLabel')}
+                initialValue="feishu"
+              >
                 <Select>
-                  <Option value="feishu">Feishu (China)</Option>
-                  <Option value="lark">Lark (International)</Option>
+                  <Option value="feishu">{t('project.channelConfig.domain.feishuChina')}</Option>
+                  <Option value="lark">{t('project.channelConfig.domain.larkIntl')}</Option>
                 </Select>
               </Form.Item>
             </>
           )}
 
-          <Form.Item name="description" label="Description (Optional)">
-            <Input.TextArea rows={2} placeholder="Optional description" />
+          <Form.Item name="description" label={t('project.channelConfig.descriptionOptional')}>
+            <Input.TextArea rows={2} placeholder={t('project.channelConfig.optionalDescription')} />
           </Form.Item>
 
-          <Divider>Access Control</Divider>
+          <Divider>{t('project.channelConfig.accessControl')}</Divider>
 
-          <Form.Item name="dm_policy" label="DM Policy">
+          <Form.Item name="dm_policy" label={t('project.channelConfig.dmPolicy')}>
             <Select>
               {POLICY_OPTIONS.map((opt) => (
                 <Option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </Option>
               ))}
             </Select>
           </Form.Item>
 
-          <Form.Item name="group_policy" label="Group Policy">
+          <Form.Item name="group_policy" label={t('project.channelConfig.groupPolicy')}>
             <Select>
               {POLICY_OPTIONS.map((opt) => (
                 <Option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </Option>
               ))}
             </Select>
@@ -898,24 +969,24 @@ const ChannelConfigPage: React.FC = () => {
 
           <Form.Item
             name="allow_from"
-            label="DM Allowlist (User IDs)"
-            tooltip="User IDs allowed to DM the bot. Use * for all."
+            label={t('project.channelConfig.dmAllowlist')}
+            tooltip={t('project.channelConfig.dmAllowlistTooltip')}
           >
-            <Select mode="tags" placeholder="Enter user IDs (e.g., ou_xxx)" />
+            <Select mode="tags" placeholder={t('project.channelConfig.enterUserIds')} />
           </Form.Item>
 
           <Form.Item
             name="group_allow_from"
-            label="Group Allowlist (Chat IDs)"
-            tooltip="Group chat IDs where the bot can respond. Use * for all."
+            label={t('project.channelConfig.groupAllowlist')}
+            tooltip={t('project.channelConfig.groupAllowlistTooltip')}
           >
-            <Select mode="tags" placeholder="Enter group chat IDs (e.g., oc_xxx)" />
+            <Select mode="tags" placeholder={t('project.channelConfig.enterGroupChatIds')} />
           </Form.Item>
 
           <Form.Item
             name="rate_limit_per_minute"
-            label="Rate Limit (per minute per chat)"
-            tooltip="0 = unlimited"
+            label={t('project.channelConfig.rateLimit')}
+            tooltip={t('project.channelConfig.rateLimitTooltip')}
           >
             <InputNumber min={0} max={1000} style={{ width: '100%' }} />
           </Form.Item>

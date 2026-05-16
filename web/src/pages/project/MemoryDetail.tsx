@@ -1,10 +1,20 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
-
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
-import { Download, FileEdit, FileText, History, Loader2, Network, Pencil, RefreshCw, Share2, Trash2 } from 'lucide-react';
+import {
+  Download,
+  FileEdit,
+  FileText,
+  History,
+  Loader2,
+  Network,
+  Pencil,
+  RefreshCw,
+  Share2,
+  Trash2,
+} from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
@@ -23,6 +33,11 @@ interface ProcessingProgress {
   progress: number;
   message: string;
   taskId: string;
+}
+
+function getMemoryMetadataTags(metadata: Record<string, unknown>): string[] {
+  const tags = metadata.tags;
+  return Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : [];
 }
 
 export const MemoryDetail: React.FC = () => {
@@ -107,7 +122,7 @@ export const MemoryDetail: React.FC = () => {
         }
       }
     };
-    fetchMemory();
+    void fetchMemory();
   }, [projectId, memoryId, subscribeToMemoryTask]);
 
   if (!projectId || !memoryId) {
@@ -147,10 +162,10 @@ export const MemoryDetail: React.FC = () => {
     setIsDeleting(true);
     try {
       await memoryAPI.delete(projectId, memoryId);
-      navigate(`${projectBasePath}/memories`);
+      void navigate(`${projectBasePath}/memories`);
     } catch (error) {
       console.error('Failed to delete memory:', error);
-      alert(t('project.memories.detail.delete_failed'));
+      message?.error(t('project.memories.detail.delete_failed'));
       setIsDeleting(false);
       setDeleteModalOpen(false);
     }
@@ -190,7 +205,9 @@ export const MemoryDetail: React.FC = () => {
           onClose={() => {
             setDeleteModalOpen(false);
           }}
-          onConfirm={handleDelete}
+          onConfirm={() => {
+            void handleDelete();
+          }}
           title={t('project.memories.delete.title')}
           message={t('project.memories.delete.confirmation')}
           isDeleting={isDeleting}
@@ -203,7 +220,9 @@ export const MemoryDetail: React.FC = () => {
             setEditModalOpen(false);
           }}
           memory={memory}
-          onUpdate={refreshMemory}
+          onUpdate={() => {
+            void refreshMemory();
+          }}
           projectId={projectId}
         />
       )}
@@ -240,14 +259,17 @@ export const MemoryDetail: React.FC = () => {
                       : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                 }`}
               >
-                {memory.processing_status || t('common.status.pending')}
+                {memory.processing_status}
               </span>
             </div>
           </div>
           {/* Toolbar Actions */}
           <div className="flex items-center gap-1">
-            <button type="button"
-              onClick={handleReprocess}
+            <button
+              type="button"
+              onClick={() => {
+                void handleReprocess();
+              }}
               disabled={
                 isReprocessing ||
                 memory.processing_status === 'PROCESSING' ||
@@ -260,7 +282,7 @@ export const MemoryDetail: React.FC = () => {
                   ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
                   : 'text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
               }`}
-              title={t('project.memories.actions.reprocess') || 'Reprocess'}
+              title={t('project.memories.actions.reprocess', 'Reprocess')}
             >
               {isReprocessing ? (
                 <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
@@ -268,34 +290,38 @@ export const MemoryDetail: React.FC = () => {
                 <RefreshCw size={16} />
               )}
             </button>
-            <button type="button"
+            <button
+              type="button"
               onClick={() => {
                 setEditModalOpen(true);
               }}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-              title="Edit"
+              title={t('common.edit', 'Edit')}
             >
               <Pencil size={20} />
             </button>
-            <button type="button"
+            <button
+              type="button"
               onClick={() => {
                 setDeleteModalOpen(true);
               }}
               className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-              title="Delete"
+              title={t('common.delete', 'Delete')}
             >
               <Trash2 size={20} />
             </button>
             <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-            <button type="button"
+            <button
+              type="button"
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-              title="Share"
+              title={t('memory.detail.shareTitle', 'Share')}
             >
               <Share2 size={20} />
             </button>
-            <button type="button"
+            <button
+              type="button"
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-              title="Export"
+              title={t('memory.detail.exportTitle', 'Export')}
             >
               <Download size={20} />
             </button>
@@ -304,18 +330,18 @@ export const MemoryDetail: React.FC = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark">
-          <div className="max-w-5xl mx-auto p-6 md:p-8 flex flex-col gap-6">
+          <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-8">
             {/* Memory Card */}
             <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
               {/* Profile Header Section */}
               <div className="p-6 md:p-8 pb-0">
-                <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
-                  <div className="flex gap-5 items-center">
-                    <div className="relative">
+                <div className="flex min-w-0 flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+                  <div className="flex min-w-0 items-center gap-5">
+                    <div className="relative shrink-0">
                       <div className="bg-center bg-no-repeat bg-cover rounded-full h-16 w-16 md:h-20 md:w-20 ring-4 ring-slate-50 dark:ring-slate-800 shadow-sm bg-slate-200 flex items-center justify-center text-slate-400">
                         <FileText size={28} />
                       </div>
-                      <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-900 rounded-full p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                      <div className="absolute bottom-0 right-0 rounded-full border border-slate-100 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                         <div
                           className={`rounded-full h-3 w-3 ${memory.status === 'DISABLED' ? 'bg-red-500' : 'bg-green-500'}`}
                           title={
@@ -326,15 +352,15 @@ export const MemoryDetail: React.FC = () => {
                         ></div>
                       </div>
                     </div>
-                    <div className="flex flex-col justify-center gap-1">
-                      <h1 className="text-slate-900 dark:text-white text-2xl md:text-3xl font-bold leading-tight tracking-tight">
+                    <div className="flex min-w-0 flex-col justify-center gap-1">
+                      <h1 className="break-words text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white md:text-3xl">
                         {memory.title || t('common.untitled')}
                       </h1>
                       <p className="text-slate-500 dark:text-slate-400 text-sm md:text-base font-normal flex items-center gap-2 flex-wrap">
                         <span>
                           {t('project.memories.detail.type')}:{' '}
                           <span className="text-slate-900 dark:text-slate-200 font-medium capitalize">
-                            {memory.content_type || t('common.unknown')}
+                            {memory.content_type}
                           </span>
                         </span>
                         <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
@@ -342,11 +368,12 @@ export const MemoryDetail: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  <button type="button"
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditModalOpen(true);
                     }}
-                    className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm shadow-primary/20"
+                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm shadow-primary/20 transition-colors hover:bg-primary-dark md:w-auto"
                   >
                     <FileEdit size={18} />
                     {t('project.memories.detail.edit_memory')}
@@ -362,16 +389,21 @@ export const MemoryDetail: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-2">
-                        <Loader2 size={20} className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none" />
+                        <Loader2
+                          size={20}
+                          className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none"
+                        />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                          {t('project.memories.detail.processing') || 'Processing Memory'}
+                          {t('project.memories.detail.processing', 'Processing Memory')}
                         </h3>
                         <p className="text-xs text-slate-600 dark:text-slate-400">
                           {processingProgress?.message ||
-                            t('project.memories.detail.extracting_knowledge') ||
-                            'Extracting knowledge...'}
+                            t(
+                              'project.memories.detail.extracting_knowledge',
+                              'Extracting knowledge...'
+                            )}
                         </p>
                       </div>
                     </div>
@@ -385,7 +417,7 @@ export const MemoryDetail: React.FC = () => {
                   <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
-                      style={{ width: `${processingProgress?.progress ?? 0}%` }}
+                      style={{ width: `${String(processingProgress?.progress ?? 0)}%` }}
                     />
                   </div>
                 </div>
@@ -394,7 +426,8 @@ export const MemoryDetail: React.FC = () => {
               {/* Tabs */}
               <div className="mt-8 px-6 md:px-8 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex gap-8 overflow-x-auto">
-                  <button type="button"
+                  <button
+                    type="button"
                     onClick={() => {
                       setActiveTab('content');
                     }}
@@ -406,7 +439,8 @@ export const MemoryDetail: React.FC = () => {
                   >
                     {t('project.memories.detail.tabs.content')}
                   </button>
-                  <button type="button"
+                  <button
+                    type="button"
                     onClick={() => {
                       setActiveTab('metadata');
                     }}
@@ -418,7 +452,8 @@ export const MemoryDetail: React.FC = () => {
                   >
                     {t('project.memories.detail.tabs.metadata')}
                   </button>
-                  <button type="button"
+                  <button
+                    type="button"
                     onClick={() => {
                       setActiveTab('raw');
                     }}
@@ -430,7 +465,8 @@ export const MemoryDetail: React.FC = () => {
                   >
                     {t('project.memories.detail.tabs.raw')}
                   </button>
-                  <button type="button"
+                  <button
+                    type="button"
                     onClick={() => {
                       setActiveTab('tasks');
                     }}
@@ -470,7 +506,7 @@ export const MemoryDetail: React.FC = () => {
                         {t('project.memories.detail.metadata.custom')}
                       </span>
                       <pre className="text-xs font-mono overflow-auto">
-                        {JSON.stringify(memory.metadata || {}, null, 2)}
+                        {JSON.stringify(memory.metadata, null, 2)}
                       </pre>
                     </div>
                   </div>
@@ -490,7 +526,7 @@ export const MemoryDetail: React.FC = () => {
                   <History size={16} />
                   {t('common.created_at')} {formatDateTime(memory.created_at)}
                 </div>
-                <div>ID: {memory.id ? memory.id.slice(0, 12) : 'N/A'}...</div>
+                <div>ID: {memory.id.slice(0, 12)}...</div>
               </div>
             </div>
             {/* Spacer for bottom scroll */}
@@ -514,14 +550,15 @@ export const MemoryDetail: React.FC = () => {
               {t('project.memories.detail.sidebar.tags')}
             </h3>
             <div className="flex flex-wrap gap-2">
-              {memory.metadata?.tags?.map((tag: string) => (
+              {getMemoryMetadataTags(memory.metadata).map((tag) => (
                 <span
                   key={tag}
                   className="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer transition-colors dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 >
                   #{tag}
                 </span>
-              )) || (
+              ))}
+              {getMemoryMetadataTags(memory.metadata).length === 0 && (
                 <span className="text-xs text-slate-500">
                   {t('project.memories.detail.sidebar.no_tags')}
                 </span>

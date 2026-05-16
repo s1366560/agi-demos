@@ -35,7 +35,6 @@ declare module '@/vendor/kasmvnc/core/rfb.js' {
   }
 
   export interface CredentialsRequiredEvent extends RFBEventDetail {
-     
     detail: Record<string, never>;
   }
 

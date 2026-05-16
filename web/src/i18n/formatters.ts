@@ -33,16 +33,12 @@ export function useCurrentLocale(): string {
   return useMemo(() => normalizeLocale(i18n.language), [i18n.language]);
 }
 
-export function useLocaleDateFormat(
-  options?: Intl.DateTimeFormatOptions,
-): Intl.DateTimeFormat {
+export function useLocaleDateFormat(options?: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
   const locale = useCurrentLocale();
   return useMemo(() => new Intl.DateTimeFormat(locale, options), [locale, options]);
 }
 
-export function useLocaleNumberFormat(
-  options?: Intl.NumberFormatOptions,
-): Intl.NumberFormat {
+export function useLocaleNumberFormat(options?: Intl.NumberFormatOptions): Intl.NumberFormat {
   const locale = useCurrentLocale();
   return useMemo(() => new Intl.NumberFormat(locale, options), [locale, options]);
 }

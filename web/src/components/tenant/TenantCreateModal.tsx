@@ -7,6 +7,8 @@ import { X, Building2, AlertCircle } from 'lucide-react';
 
 import { useTenantStore } from '../../stores/tenant';
 
+import type { TenantCreate } from '../../types/memory';
+
 interface TenantCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -20,10 +22,10 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const { createTenant, isLoading, error } = useTenantStore();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<TenantCreate>({
     name: '',
     description: '',
-    plan: 'free' as const,
+    plan: 'free',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,9 +36,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
       onClose();
       setFormData({ name: '', description: '', plan: 'free' });
     } catch (_error) {
-      void message.error(
-        _error instanceof Error ? _error.message : 'Failed to create workspace'
-      );
+      void message.error(_error instanceof Error ? _error.message : 'Failed to create workspace');
       console.error('TenantCreateModal: create failed', _error);
     }
   };
@@ -54,18 +54,27 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('tenant.createModal.title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('tenant.createModal.title')}
+            </h2>
           </div>
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            aria-label="Close create workspace dialog"
+            aria-label={t('tenant.createModal.closeAria', {
+              defaultValue: 'Close create workspace dialog',
+            })}
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+          className="p-6 space-y-4"
+        >
           {error && (
             <div
               className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md"
@@ -137,7 +146,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               id="tenant-create-plan"
               value={formData.plan}
               onChange={(e) => {
-                setFormData({ ...formData, plan: e.target.value as any });
+                setFormData({ ...formData, plan: e.target.value });
               }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
               disabled={isLoading}

@@ -48,18 +48,18 @@ export const templateService = {
       params.set('category', category);
     }
     const res = await apiFetch.get(`/agent/templates?${params.toString()}`);
-    return res.json();
+    return (await res.json()) as PromptTemplateData[];
   },
 
   async create(tenantId: string, data: CreateTemplateRequest): Promise<PromptTemplateData> {
     const params = new URLSearchParams({ tenant_id: tenantId });
     const res = await apiFetch.post(`/agent/templates?${params.toString()}`, data);
-    return res.json();
+    return (await res.json()) as PromptTemplateData;
   },
 
   async update(templateId: string, data: UpdateTemplateRequest): Promise<PromptTemplateData> {
     const res = await apiFetch.put(`/agent/templates/${templateId}`, data);
-    return res.json();
+    return (await res.json()) as PromptTemplateData;
   },
 
   async delete(templateId: string): Promise<void> {

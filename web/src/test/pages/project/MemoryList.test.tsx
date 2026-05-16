@@ -74,6 +74,35 @@ describe('MemoryList', () => {
     });
   });
 
+  it('keeps the virtualized table horizontally scrollable on narrow screens', async () => {
+    vi.mocked(memoryAPI.list).mockResolvedValue({
+      memories: [
+        {
+          id: 'm1',
+          title: 'A very long memory title that should not force mobile cells to overlap',
+          content: 'Content 1',
+          created_at: '2023-01-01',
+          processing_status: 'COMPLETED',
+          status: 'ENABLED',
+        } as Memory,
+      ],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+
+    renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
+
+    expect(await screen.findByText(/A very long memory title/)).toBeInTheDocument();
+
+    expect(screen.getByTestId('memory-list-horizontal-scroll')).toHaveClass('overflow-x-auto');
+    expect(screen.getByTestId('memory-list-vertical-scroll')).toHaveClass(
+      'overflow-y-auto',
+      'min-w-[920px]'
+    );
+    expect(document.querySelector('table')).toHaveClass('min-w-[920px]');
+  });
+
   it('displays processing status badges correctly', async () => {
     vi.mocked(memoryAPI.list).mockResolvedValue({
       memories: [

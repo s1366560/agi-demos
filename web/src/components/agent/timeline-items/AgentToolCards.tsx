@@ -1,6 +1,19 @@
 import { memo, useState } from 'react';
 
-import { Rocket, CircleStop, Send, Users, Bot, Network, Terminal, History, AlertCircle, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import {
+  Rocket,
+  CircleStop,
+  Send,
+  Users,
+  Bot,
+  Network,
+  Terminal,
+  History,
+  AlertCircle,
+  Check,
+} from 'lucide-react';
 
 import { AgentSection } from '../chat/MessageStream';
 
@@ -29,6 +42,8 @@ interface StatusBadgeProps {
 }
 
 function StatusBadge({ status, label, duration }: StatusBadgeProps) {
+  const { t } = useTranslation();
+
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${String(ms)}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
@@ -39,7 +54,7 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
     return (
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-2xs font-bold uppercase tracking-wider">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-        {label ?? 'Running'}
+        {label ?? t('agent.agentToolCards.status.running')}
       </span>
     );
   }
@@ -47,14 +62,14 @@ function StatusBadge({ status, label, duration }: StatusBadgeProps) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-2xs font-bold uppercase tracking-wider">
         <AlertCircle size={12} />
-        {label ?? 'Error'}
+        {label ?? t('agent.agentToolCards.status.error')}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-2xs font-bold uppercase tracking-wider">
       <Check size={12} />
-      {label ?? 'Done'}
+      {label ?? t('agent.agentToolCards.status.done')}
       {duration !== undefined && (
         <span className="ml-0.5 opacity-70">({formatDuration(duration)})</span>
       )}
@@ -89,10 +104,11 @@ interface AgentSpawnCardProps {
 }
 
 function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnCardProps) {
+  const { t } = useTranslation();
   const agentName =
     (result?.['agent_name'] as string | undefined) ??
     (params['agent_id'] as string | undefined) ??
-    'Agent';
+    t('agent.agentToolCards.agentFallback');
   const sessionId = result?.['session_id'] as string | undefined;
   const mode =
     (result?.['mode'] as string | undefined) ?? (params['mode'] as string | undefined) ?? 'run';
@@ -103,7 +119,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
       <div className="flex items-center gap-2.5 px-3 py-2 bg-emerald-100/60 dark:bg-emerald-900/30">
         <Rocket size={16} className="text-emerald-600 dark:text-emerald-400" />
         <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">
-          Spawn Agent
+          {t('agent.agentToolCards.spawnAgent')}
         </span>
         <span className="text-2xs text-emerald-600/70 dark:text-emerald-400/60 bg-emerald-200/60 dark:bg-emerald-800/40 px-1.5 py-0.5 rounded">
           {mode}
@@ -115,7 +131,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
       <div className="px-3 py-2 space-y-1.5">
         <div className="flex items-center gap-2">
           <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
-            Agent
+            {t('agent.agentToolCards.agent')}
           </span>
           <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
             {agentName}
@@ -124,7 +140,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
         {sessionId && (
           <div className="flex items-center gap-2">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0">
-              Session
+              {t('agent.agentToolCards.session')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
               {sessionId.slice(0, 12)}...
@@ -134,7 +150,7 @@ function AgentSpawnCard({ params, result, status, error, duration }: AgentSpawnC
         {message && (
           <div className="flex items-start gap-2 mt-1">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-12 shrink-0 pt-0.5">
-              Task
+              {t('agent.agentToolCards.task')}
             </span>
             <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed">
               {truncate(message, 200)}
@@ -160,6 +176,7 @@ interface AgentStopCardProps {
 }
 
 function AgentStopCard({ params, result, status, error, duration }: AgentStopCardProps) {
+  const { t } = useTranslation();
   const sessionId = params['session_id'] as string | undefined;
   const cascade = params['cascade'] as boolean | undefined;
   const stopped = result?.['stopped_sessions'] as string[] | undefined;
@@ -169,10 +186,12 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
     <div className="rounded-lg border border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-red-100/60 dark:bg-red-900/30">
         <CircleStop size={16} className="text-red-600 dark:text-red-400" />
-        <span className="text-xs font-semibold text-red-800 dark:text-red-200">Stop Agent</span>
+        <span className="text-xs font-semibold text-red-800 dark:text-red-200">
+          {t('agent.agentToolCards.stopAgent')}
+        </span>
         {cascade && (
           <span className="text-2xs text-red-600/70 dark:text-red-400/60 bg-red-200/60 dark:bg-red-800/40 px-1.5 py-0.5 rounded">
-            cascade
+            {t('agent.agentToolCards.cascade')}
           </span>
         )}
         <div className="ml-auto">
@@ -183,7 +202,7 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
         {sessionId && (
           <div className="flex items-center gap-2">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-14 shrink-0">
-              Session
+              {t('agent.agentToolCards.session')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
               {sessionId.slice(0, 12)}...
@@ -193,10 +212,10 @@ function AgentStopCard({ params, result, status, error, duration }: AgentStopCar
         {status === 'success' && (
           <div className="flex items-center gap-2">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-14 shrink-0">
-              Stopped
+              {t('agent.agentToolCards.stopped')}
             </span>
             <span className="text-xs text-slate-600 dark:text-slate-300">
-              {count} session{count !== 1 ? 's' : ''}
+              {t('agent.agentToolCards.sessionCount', { count })}
             </span>
           </div>
         )}
@@ -219,6 +238,7 @@ interface AgentSendCardProps {
 }
 
 function AgentSendCard({ params, result, status, error, duration }: AgentSendCardProps) {
+  const { t } = useTranslation();
   const agentId = params['agent_id'] as string | undefined;
   const message = params['message'] as string | undefined;
   const targetSession =
@@ -228,7 +248,9 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
     <div className="rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden">
       <div className="flex items-center gap-2.5 px-3 py-2 bg-blue-100/60 dark:bg-blue-900/30">
         <Send size={16} className="text-blue-600 dark:text-blue-400" />
-        <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Send Message</span>
+        <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">
+          {t('agent.agentToolCards.sendMessage')}
+        </span>
         <div className="ml-auto">
           <StatusBadge status={status} duration={duration} />
         </div>
@@ -237,7 +259,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         {agentId && (
           <div className="flex items-center gap-2">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0">
-              To
+              {t('agent.agentToolCards.to')}
             </span>
             <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
               {truncate(agentId, 24)}
@@ -247,7 +269,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         {targetSession && (
           <div className="flex items-center gap-2">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0">
-              Sess
+              {t('agent.agentToolCards.sessionShort')}
             </span>
             <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
               {targetSession.slice(0, 12)}...
@@ -257,7 +279,7 @@ function AgentSendCard({ params, result, status, error, duration }: AgentSendCar
         {message && (
           <div className="flex items-start gap-2 mt-1">
             <span className="text-2xs uppercase tracking-wider text-slate-400 dark:text-slate-500 w-8 shrink-0 pt-0.5">
-              Msg
+              {t('agent.agentToolCards.messageShort')}
             </span>
             <span className="text-xs-plus text-slate-600 dark:text-slate-300 leading-relaxed">
               {truncate(message, 200)}
@@ -282,6 +304,7 @@ interface AgentListCardProps {
 }
 
 function AgentListCard({ result, status, error, duration }: AgentListCardProps) {
+  const { t } = useTranslation();
   const agents = Array.isArray(result) ? result : [];
 
   return (
@@ -289,7 +312,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
       <div className="flex items-center gap-2.5 px-3 py-2 bg-violet-100/60 dark:bg-violet-900/30">
         <Users size={16} className="text-violet-600 dark:text-violet-400" />
         <span className="text-xs font-semibold text-violet-800 dark:text-violet-200">
-          Available Agents
+          {t('agent.agentToolCards.availableAgents')}
         </span>
         {agents.length > 0 && (
           <span className="text-2xs text-violet-600/70 dark:text-violet-400/60 bg-violet-200/60 dark:bg-violet-800/40 px-1.5 py-0.5 rounded">
@@ -307,7 +330,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
             const name =
               (a['display_name'] as string | undefined) ??
               (a['name'] as string | undefined) ??
-              'Unknown';
+              t('agent.agentToolCards.unknown');
             const canSpawn = a['can_spawn'] as boolean | undefined;
             const id = (a['id'] as string | undefined) ?? String(i);
             return (
@@ -321,7 +344,7 @@ function AgentListCard({ result, status, error, duration }: AgentListCardProps) 
                 </span>
                 {canSpawn && (
                   <span className="text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded">
-                    spawnable
+                    {t('agent.agentToolCards.spawnable')}
                   </span>
                 )}
               </div>
@@ -348,6 +371,7 @@ interface AgentSessionsCardProps {
 }
 
 function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCardProps) {
+  const { t } = useTranslation();
   const sessions = Array.isArray(result) ? result : [];
 
   return (
@@ -355,7 +379,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
       <div className="flex items-center gap-2.5 px-3 py-2 bg-amber-100/60 dark:bg-amber-900/30">
         <Network size={16} className="text-amber-600 dark:text-amber-400" />
         <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
-          Active Sessions
+          {t('agent.agentToolCards.activeSessions')}
         </span>
         {sessions.length > 0 && (
           <span className="text-2xs text-amber-600/70 dark:text-amber-400/60 bg-amber-200/60 dark:bg-amber-800/40 px-1.5 py-0.5 rounded">
@@ -373,6 +397,14 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
             const childId = (s['child_session_id'] as string | undefined) ?? String(i);
             const agentId = s['child_agent_id'] as string | undefined;
             const st = (s['status'] as string | undefined) ?? 'unknown';
+            const statusLabel =
+              st === 'running'
+                ? t('agent.agentToolCards.sessionStatus.running')
+                : st === 'completed'
+                  ? t('agent.agentToolCards.sessionStatus.completed')
+                  : st === 'unknown'
+                    ? t('agent.agentToolCards.sessionStatus.unknown')
+                    : st;
             const mode = s['mode'] as string | undefined;
             const taskSummary = s['task_summary'] as string | undefined;
             return (
@@ -402,7 +434,7 @@ function AgentSessionsCard({ result, status, error, duration }: AgentSessionsCar
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                       }`}
                     >
-                      {st}
+                      {statusLabel}
                     </span>
                     {mode && (
                       <span className="text-[9px] text-slate-400 dark:text-slate-500">{mode}</span>
@@ -439,6 +471,7 @@ interface AgentHistoryCardProps {
 }
 
 function AgentHistoryCard({ params, result, status, error, duration }: AgentHistoryCardProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const messages = Array.isArray(result) ? result : [];
   const sessionId = params['session_id'] as string | undefined;
@@ -449,7 +482,7 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
       <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-100/60 dark:bg-slate-800/30">
         <History size={16} className="text-slate-600 dark:text-slate-400" />
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-          Session History
+          {t('agent.agentToolCards.sessionHistory')}
         </span>
         {sessionId && (
           <code className="text-2xs text-slate-500 dark:text-slate-400 font-mono bg-slate-200/60 dark:bg-slate-700/40 px-1.5 py-0.5 rounded">
@@ -458,7 +491,7 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
         )}
         {messages.length > 0 && (
           <span className="text-2xs text-slate-500 dark:text-slate-400">
-            {messages.length} msg{messages.length !== 1 ? 's' : ''}
+            {t('agent.agentToolCards.messageCount', { count: messages.length })}
           </span>
         )}
         <div className="ml-auto">
@@ -507,7 +540,9 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
               }}
               className="text-2xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer px-2 py-0.5"
             >
-              {expanded ? 'Show less' : `Show ${String(messages.length - 3)} more...`}
+              {expanded
+                ? t('agent.agentToolCards.showLess')
+                : t('agent.agentToolCards.showMore', { count: messages.length - 3 })}
             </button>
           )}
         </div>

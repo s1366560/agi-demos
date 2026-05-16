@@ -10,8 +10,19 @@
 
 import { useState } from 'react';
 
-import { Check, Hourglass, X, Circle, ChevronDown, ChevronUp, Brain, ChevronRight, Wrench } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
+import {
+  Check,
+  Hourglass,
+  X,
+  Circle,
+  ChevronDown,
+  ChevronUp,
+  Brain,
+  ChevronRight,
+  Wrench,
+} from 'lucide-react';
 
 import { ToolExecutionDetail } from './ToolExecutionDetail';
 
@@ -36,14 +47,20 @@ export interface TimelineNodeProps {
  */
 function formatDuration(ms: number | undefined): string {
   if (!ms) return '';
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return `${String(ms)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
 /**
  * Get status icon and styles
  */
-function getStatusConfig(status: TimelineStep['status']): { icon: LucideIcon; bgColor: string; textColor: string; borderColor: string; pulse: boolean } {
+function getStatusConfig(status: TimelineStep['status']): {
+  icon: LucideIcon;
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
+  pulse: boolean;
+} {
   switch (status) {
     case 'completed':
       return {
@@ -90,12 +107,19 @@ export function TimelineNode({
   isLast: _isLast,
   onToggle,
 }: TimelineNodeProps) {
+  const { t } = useTranslation();
   const [showAllThoughts, setShowAllThoughts] = useState(false);
   const statusConfig = getStatusConfig(step.status);
   const StatusIcon = statusConfig.icon;
 
   const hasContent = step.thoughts.length > 0 || step.toolExecutions.length > 0;
   const displayThoughts = showAllThoughts ? step.thoughts : step.thoughts.slice(-3);
+  const statusLabel = {
+    completed: t('components.timelineNode.status.completed', { defaultValue: 'Completed' }),
+    running: t('components.timelineNode.status.running', { defaultValue: 'Running' }),
+    failed: t('components.timelineNode.status.failed', { defaultValue: 'Failed' }),
+    pending: t('components.timelineNode.status.pending', { defaultValue: 'Pending' }),
+  }[step.status];
 
   return (
     <div className="relative pl-14 pb-6" data-step-number={step.stepNumber}>
@@ -115,7 +139,7 @@ export function TimelineNode({
 
       {/* Node Content Card */}
       <div
-        className={`bg-white dark:bg-surface-dark border rounded-xl overflow-hidden
+        className={`bg-white dark:bg-surface-dark border rounded-md overflow-hidden
           ${isCurrent ? 'border-blue-300 dark:border-blue-700 shadow-md' : 'border-slate-200 dark:border-border-dark'}
         `}
       >
@@ -128,7 +152,11 @@ export function TimelineNode({
           <div className="flex items-center gap-3">
             <div>
               <h4 className="text-sm font-semibold text-slate-900 dark:text-white text-left">
-                Step {step.stepNumber + 1}: {step.description}
+                {t('components.timelineNode.stepTitle', {
+                  defaultValue: 'Step {{stepNumber}}: {{description}}',
+                  stepNumber: step.stepNumber + 1,
+                  description: step.description,
+                })}
               </h4>
               <div className="flex items-center gap-2 mt-0.5">
                 {/* Status Badge */}
@@ -143,10 +171,7 @@ export function TimelineNode({
                           : 'text-slate-400'
                   }`}
                 >
-                  {step.status === 'completed' && 'Completed'}
-                  {step.status === 'running' && 'Running'}
-                  {step.status === 'failed' && 'Failed'}
-                  {step.status === 'pending' && 'Pending'}
+                  {statusLabel}
                 </span>
 
                 {/* Duration */}
@@ -162,7 +187,10 @@ export function TimelineNode({
                   <>
                     <span className="text-slate-300 dark:text-slate-600">•</span>
                     <span className="text-xs text-slate-500">
-                      {step.toolExecutions.length} tool{step.toolExecutions.length > 1 ? 's' : ''}
+                      {t('components.timelineNode.toolCount', {
+                        defaultValue: '{{count}} tools',
+                        count: step.toolExecutions.length,
+                      })}
                     </span>
                   </>
                 )}
@@ -171,9 +199,12 @@ export function TimelineNode({
           </div>
 
           {/* Expand/Collapse Icon */}
-          {hasContent && (
-            isExpanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />
-          )}
+          {hasContent &&
+            (isExpanded ? (
+              <ChevronUp size={20} className="text-slate-400" />
+            ) : (
+              <ChevronDown size={20} className="text-slate-400" />
+            ))}
         </button>
 
         {/* Expanded Content */}
@@ -185,7 +216,9 @@ export function TimelineNode({
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Brain size={14} />
-                    Thinking Process
+                    {t('components.timelineNode.thinkingProcess', {
+                      defaultValue: 'Thinking Process',
+                    })}
                   </h5>
                   {step.thoughts.length > 3 && (
                     <button
@@ -196,7 +229,12 @@ export function TimelineNode({
                       }}
                       className="text-xs text-primary hover:underline"
                     >
-                      {showAllThoughts ? 'Show Less' : `Show All (${step.thoughts.length})`}
+                      {showAllThoughts
+                        ? t('components.timelineNode.showLess', { defaultValue: 'Show Less' })
+                        : t('components.timelineNode.showAll', {
+                            defaultValue: 'Show All ({{count}})',
+                            count: step.thoughts.length,
+                          })}
                     </button>
                   )}
                 </div>
@@ -206,10 +244,7 @@ export function TimelineNode({
                       key={thought}
                       className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400"
                     >
-                      <ChevronRight
-                        size={16}
-                        className="text-slate-400 mt-0.5 flex-shrink-0"
-                      />
+                      <ChevronRight size={16} className="text-slate-400 mt-0.5 flex-shrink-0" />
                       <span className="break-words">{thought}</span>
                     </div>
                   ))}
@@ -222,7 +257,9 @@ export function TimelineNode({
               <div className="pt-2">
                 <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                   <Wrench size={14} />
-                  Tool Executions
+                  {t('components.timelineNode.toolExecutions', {
+                    defaultValue: 'Tool Executions',
+                  })}
                 </h5>
                 <div className="space-y-3">
                   {step.toolExecutions.map((execution) => (

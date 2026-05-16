@@ -70,7 +70,7 @@ const VARIANT_CONFIG = {
 } as const;
 
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return `${String(ms)}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;
 }
@@ -99,10 +99,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = memo(
             className={`w-1.5 h-1.5 rounded-full ${config.dotColor} animate-pulse motion-reduce:animate-none`}
           />
         ) : (
-          <Icon
-            size={size === 'sm' ? 11 : 14}
-            className={showAnimation ? 'animate-spin motion-reduce:animate-none' : ''}
-          />
+          <Icon size={size === 'sm' ? 11 : 14} />
         )}
         <span>{label ?? status}</span>
         {duration !== undefined && status === 'success' && (

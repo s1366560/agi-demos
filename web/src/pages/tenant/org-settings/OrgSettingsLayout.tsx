@@ -16,7 +16,11 @@ import { useTenantStore } from '@/stores/tenant';
 
 type SettingsTab = 'info' | 'members' | 'clusters' | 'audit' | 'registry' | 'smtp' | 'genes';
 
-const TABS: { key: SettingsTab; icon: React.ComponentType<{ size?: number }>; labelKey: string }[] = [
+const TABS: {
+  key: SettingsTab;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  labelKey: string;
+}[] = [
   { key: 'info', icon: Building2, labelKey: 'tenant.orgSettings.info.title' },
   { key: 'members', icon: Users, labelKey: 'tenant.orgSettings.members.title' },
   { key: 'clusters', icon: Cloud, labelKey: 'tenant.orgSettings.clusters.title' },
@@ -35,7 +39,7 @@ export const OrgSettingsLayout: React.FC = () => {
 
   // Extract current tab from URL
   const pathParts = location.pathname.split('/');
-  const currentTab = (pathParts[pathParts.length - 1] as SettingsTab) || 'info';
+  const currentTab = pathParts[pathParts.length - 1] as SettingsTab;
 
   const handleTabChange = useCallback(
     (tab: SettingsTab) => {
@@ -66,28 +70,28 @@ export const OrgSettingsLayout: React.FC = () => {
       </div>
 
       {/* Main content with sidebar */}
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         {/* Sidebar navigation */}
-        <div className="w-56 shrink-0">
+        <div className="w-full lg:w-56 lg:shrink-0">
           <nav className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-            <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+            <ul className="flex overflow-x-auto divide-x divide-slate-100 dark:divide-slate-700 lg:block lg:divide-x-0 lg:divide-y">
               {TABS.map((tab) => {
                 const isActive = currentTab === tab.key;
                 const TabIcon = tab.icon;
                 return (
-                  <li key={tab.key}>
+                  <li key={tab.key} className="shrink-0 lg:shrink">
                     <button
                       type="button"
                       onClick={() => {
                         handleTabChange(tab.key);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      className={`flex h-full min-w-max items-center gap-2 border-b-2 px-4 py-3 text-left transition-colors lg:w-full lg:gap-3 lg:border-b-0 lg:border-l-2 ${
                         isActive
-                          ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 border-l-2 border-primary-500'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                          ? 'border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'
+                          : 'border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'
                       }`}
                     >
-                      <TabIcon size={20} />
+                      <TabIcon size={20} className="shrink-0" />
                       <span className="text-sm font-medium">{t(tab.labelKey)}</span>
                     </button>
                   </li>

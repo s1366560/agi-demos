@@ -124,7 +124,7 @@ describe('isStoryReadyToAdvance', () => {
         story,
         issues: [],
         rawYaml: '',
-      }),
+      })
     ).toBe(false);
   });
 });

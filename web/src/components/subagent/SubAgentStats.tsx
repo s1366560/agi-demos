@@ -46,12 +46,12 @@ export const SubAgentStats = memo<SubAgentStatsProps>(
         />
         <StatsCard
           title={t('tenant.subagents.stats.enabled', 'Active')}
-          value={`${enabledCount} / ${total}`}
+          value={`${String(enabledCount)} / ${String(total)}`}
           icon={<CheckCircle2 size={20} className="text-emerald-500" />}
         />
         <StatsCard
           title={t('tenant.subagents.stats.successRate', 'Success Rate')}
-          value={`${avgSuccessRate}%`}
+          value={`${String(avgSuccessRate)}%`}
           icon={<TrendingUp size={20} className="text-blue-500" />}
         />
         <StatsCard

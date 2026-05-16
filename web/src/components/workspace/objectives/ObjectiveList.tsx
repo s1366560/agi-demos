@@ -61,10 +61,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
     <section>
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Target
-            size={16}
-            className="text-text-muted dark:text-text-muted"
-          />
+          <Target size={16} className="text-text-muted dark:text-text-muted" />
           <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
             {t('blackboard.objectivesTitle', 'Goals')}
           </h3>

@@ -5,8 +5,15 @@
 
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Popconfirm, Switch, Tooltip } from 'antd';
-import { Clock, Info, Pencil, Trash2, Wrench ,
+import {
+  Clock,
+  Info,
+  Pencil,
+  Trash2,
+  Wrench,
   CheckCircle,
   Square,
   StopCircle,
@@ -25,41 +32,75 @@ import { Clock, Info, Pencil, Trash2, Wrench ,
   Loader2,
   AlertCircle,
   Globe,
-  User} from 'lucide-react';
+  User,
+} from 'lucide-react';
 
 import { RUNTIME_STATUS_STYLES, SERVER_TYPE_STYLES, CARD_STYLES } from './styles';
 import { getRuntimeStatus } from './types';
 
 import type { MCPServerResponse } from '@/types/agent';
 
+import type { TFunction } from 'i18next';
 
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
+
+const DEFAULT_RUNTIME_STATUS_STYLE = {
+  color: 'text-slate-500 dark:text-slate-400',
+  bgColor: 'bg-slate-50 dark:bg-slate-800/50',
+  borderColor: 'border-slate-200 dark:border-slate-700',
+  dotColor: 'bg-slate-400',
+  icon: 'stop_circle',
+  label: 'Stopped',
+} satisfies NonNullable<(typeof RUNTIME_STATUS_STYLES)[string]>;
 
 export interface McpServerCardV2Props {
   server: MCPServerResponse;
@@ -76,24 +117,24 @@ export interface McpServerCardV2Props {
   errorAppCount?: number | undefined;
 }
 
-function formatLastSync(dateStr?: string): string {
-  if (!dateStr) return 'Never synced';
+function formatLastSync(dateStr: string | undefined, t: TFunction): string {
+  if (!dateStr) return t('mcp.serverCard.sync.never');
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('mcp.serverCard.sync.justNow');
+  if (mins < 60) return t('mcp.serverCard.sync.minutesAgo', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return t('mcp.serverCard.sync.hoursAgo', { count: hrs });
+  return t('mcp.serverCard.sync.daysAgo', { count: Math.floor(hrs / 24) });
 }
 
-function formatConfigPreview(server: MCPServerResponse): string {
+function formatConfigPreview(server: MCPServerResponse, t: TFunction): string {
   const config = server.transport_config;
   if (server.server_type === 'stdio') {
     const cmd = config.command;
-    if (Array.isArray(cmd)) return cmd.join(' ') || 'N/A';
-    return (cmd as string) || 'N/A';
+    if (Array.isArray(cmd)) return cmd.join(' ') || t('mcp.serverCard.notAvailable');
+    return (cmd as string) || t('mcp.serverCard.notAvailable');
   }
-  return (config.url as string) || 'N/A';
+  return (config.url as string) || t('mcp.serverCard.notAvailable');
 }
 
 export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
@@ -110,10 +151,11 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
     appCount = 0,
     readyAppCount = 0,
   }) => {
+    const { t } = useTranslation();
     const status = getRuntimeStatus(server);
-    const runtimeStyle = RUNTIME_STATUS_STYLES[status] ?? RUNTIME_STATUS_STYLES.stopped!;
-    const typeStyle = SERVER_TYPE_STYLES[server.server_type] ?? SERVER_TYPE_STYLES.stdio;
-    const toolCount = server.discovered_tools?.length || 0;
+    const runtimeStyle = RUNTIME_STATUS_STYLES[status] ?? DEFAULT_RUNTIME_STATUS_STYLE;
+    const typeStyle = SERVER_TYPE_STYLES[server.server_type];
+    const toolCount = server.discovered_tools.length;
 
     const hasError = status === 'error' || server.sync_error;
     const runtimeError = hasError
@@ -150,18 +192,24 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                   </h3>
                   {!server.enabled && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
-                      Disabled
+                      {t('common.status.disabled')}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                  {formatConfigPreview(server)}
+                  {formatConfigPreview(server, t)}
                 </p>
               </div>
             </div>
 
             {/* Toggle Switch */}
-            <Tooltip title={server.enabled ? 'Disable server' : 'Enable server'}>
+            <Tooltip
+              title={
+                server.enabled
+                  ? t('mcp.serverCard.disableTooltip')
+                  : t('mcp.serverCard.enableTooltip')
+              }
+            >
               <Switch
                 size="small"
                 checked={server.enabled}
@@ -179,9 +227,13 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           <div
             className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border mb-3 ${runtimeStyle.bgColor} ${runtimeStyle.borderColor}`}
           >
-            {renderDynamicIcon(runtimeStyle.icon, 16, `${runtimeStyle.color} ${status === 'starting' ? 'animate-spin motion-reduce:animate-none' : ''}`)}
+            {renderDynamicIcon(
+              runtimeStyle.icon,
+              16,
+              `${runtimeStyle.color} ${status === 'starting' ? 'animate-spin motion-reduce:animate-none' : ''}`
+            )}
             <span className={`text-xs font-medium ${runtimeStyle.color}`}>
-              {runtimeStyle.label}
+              {t(`mcp.serverCard.runtimeStatus.${status}`, runtimeStyle.label)}
             </span>
             {status === 'error' && runtimeError && (
               <Tooltip title={runtimeError}>
@@ -194,29 +246,37 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           <div className="grid grid-cols-3 gap-2 mb-3">
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <p className="text-lg font-bold text-slate-900 dark:text-white">{toolCount}</p>
-              <p className="text-2xs text-slate-500 dark:text-slate-400">Tools</p>
+              <p className="text-2xs text-slate-500 dark:text-slate-400">
+                {t('mcp.serverCard.stats.tools')}
+              </p>
             </div>
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <p className="text-lg font-bold text-slate-900 dark:text-white">{appCount || 0}</p>
-              <p className="text-2xs text-slate-500 dark:text-slate-400">Apps</p>
+              <p className="text-2xs text-slate-500 dark:text-slate-400">
+                {t('mcp.serverCard.stats.apps')}
+              </p>
             </div>
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
               <p className="text-lg font-bold text-slate-900 dark:text-white">
                 {readyAppCount || 0}
               </p>
-              <p className="text-2xs text-slate-500 dark:text-slate-400">Ready</p>
+              <p className="text-2xs text-slate-500 dark:text-slate-400">
+                {t('mcp.serverCard.stats.ready')}
+              </p>
             </div>
           </div>
 
           {/* Last Sync */}
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3">
             <Clock size={14} />
-            <span>Synced {formatLastSync(server.last_sync_at)}</span>
+            <span>
+              {t('mcp.serverCard.sync.label', { value: formatLastSync(server.last_sync_at, t) })}
+            </span>
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Tooltip title="Sync tools">
+            <Tooltip title={t('mcp.serverCard.actions.syncTooltip')}>
               <button
                 onClick={() => {
                   onSync(server);
@@ -224,12 +284,16 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 disabled={isSyncing}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
-                {renderDynamicIcon(isSyncing ? 'progress_activity' : 'sync', 16, isSyncing ? 'animate-spin motion-reduce:animate-none' : '')}
-                Sync
+                {renderDynamicIcon(
+                  isSyncing ? 'progress_activity' : 'sync',
+                  16,
+                  isSyncing ? 'animate-spin motion-reduce:animate-none' : ''
+                )}
+                {t('mcp.serverCard.actions.sync')}
               </button>
             </Tooltip>
 
-            <Tooltip title="Test connection">
+            <Tooltip title={t('mcp.serverCard.actions.testTooltip')}>
               <button
                 onClick={() => {
                   onTest(server);
@@ -237,12 +301,16 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                 disabled={isTesting}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
-                {renderDynamicIcon(isTesting ? 'progress_activity' : 'science', 16, isTesting ? 'animate-spin motion-reduce:animate-none' : '')}
-                Test
+                {renderDynamicIcon(
+                  isTesting ? 'progress_activity' : 'science',
+                  16,
+                  isTesting ? 'animate-spin motion-reduce:animate-none' : ''
+                )}
+                {t('mcp.serverCard.actions.test')}
               </button>
             </Tooltip>
 
-            <Tooltip title="View tools">
+            <Tooltip title={t('mcp.serverCard.actions.viewToolsTooltip')}>
               <button
                 onClick={() => {
                   onShowTools(server);
@@ -263,13 +331,13 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
             </button>
 
             <Popconfirm
-              title="Delete Server"
-              description="Are you sure you want to delete this server?"
+              title={t('mcp.serverCard.delete.title')}
+              description={t('mcp.serverCard.delete.description')}
               onConfirm={() => {
                 onDelete(server.id);
               }}
-              okText="Delete"
-              cancelText="Cancel"
+              okText={t('common.delete')}
+              cancelText={t('common.cancel')}
               okButtonProps={{ danger: true }}
             >
               <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors">

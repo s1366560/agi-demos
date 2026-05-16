@@ -40,11 +40,11 @@ function formatRelative(now: number, iso: string): string {
   if (Number.isNaN(diff) || diff < 0) return 'now';
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${String(mins)}m`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
+  if (hrs < 24) return `${String(hrs)}h`;
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d`;
+  if (days < 30) return `${String(days)}d`;
   return new Date(iso).toLocaleDateString();
 }
 
@@ -74,14 +74,20 @@ export function NotificationDropdown({
     const id = setInterval(() => {
       void fetchNotifications();
     }, pollIntervalMs);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+    };
   }, [fetchNotifications, pollIntervalMs]);
 
   // Tick "now" while open so relative times stay fresh.
   useEffect(() => {
     if (!open) return undefined;
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      setNow(Date.now());
+    }, 30_000);
+    return () => {
+      clearInterval(id);
+    };
   }, [open]);
 
   // Click outside / Escape to close.
@@ -113,7 +119,7 @@ export function NotificationDropdown({
       if (actionUrl.startsWith('http')) {
         window.open(actionUrl, '_blank', 'noopener,noreferrer');
       } else {
-        navigate(actionUrl);
+        void navigate(actionUrl);
       }
     }
   };
@@ -122,7 +128,9 @@ export function NotificationDropdown({
     <div ref={containerRef} className={`relative ${className ?? ''}`.trim()}>
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => {
+          setOpen((prev) => !prev);
+        }}
         aria-label={t('notifications.title', 'Notifications')}
         aria-haspopup="true"
         aria-expanded={open}
@@ -155,7 +163,9 @@ export function NotificationDropdown({
               {unreadCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => void markAllAsRead()}
+                  onClick={() => {
+                    void markAllAsRead();
+                  }}
                   className="text-[11px] text-blue-600 hover:underline dark:text-blue-400"
                 >
                   {t('notifications.markAllRead', 'Mark all read')}
@@ -166,7 +176,7 @@ export function NotificationDropdown({
                   type="button"
                   onClick={() => {
                     setOpen(false);
-                    navigate(viewAllPath);
+                    void navigate(viewAllPath);
                   }}
                   className="text-[11px] text-slate-500 hover:underline dark:text-slate-400"
                 >
@@ -197,12 +207,12 @@ export function NotificationDropdown({
                   >
                     <button
                       type="button"
-                      onClick={() => void handleItemClick(n.id, n.action_url)}
+                      onClick={() => {
+                        void handleItemClick(n.id, n.action_url);
+                      }}
                       className="flex flex-1 items-start gap-2 px-3 py-2.5 text-left"
                     >
-                      <span className="mt-0.5 shrink-0">
-                        {TYPE_ICON[n.type] ?? TYPE_ICON.info}
-                      </span>
+                      <span className="mt-0.5 shrink-0">{TYPE_ICON[n.type] ?? TYPE_ICON.info}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">

@@ -5,6 +5,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message } from 'antd';
 import {
   Activity,
@@ -39,7 +41,6 @@ import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { mcpAPI } from '@/services/mcpService';
 
-
 import { McpAppsTabV2 } from './McpAppsTabV2';
 import { McpLogsTabV2 } from './McpLogsTabV2';
 import { McpPromptsTabV2 } from './McpPromptsTabV2';
@@ -51,29 +52,52 @@ import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
 
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
 
@@ -120,6 +144,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
 // ============================================================================
 
 export const McpServerListV2: React.FC = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<McpTabKey>('servers');
   const [isReconciling, setIsReconciling] = useState(false);
 
@@ -182,10 +207,12 @@ export const McpServerListV2: React.FC = () => {
     setIsReconciling(true);
     try {
       await mcpAPI.reconcileProject(servers[0]?.project_id || 'default');
-      message.success('Servers reconciled');
+      message.success(t('mcp.serverList.reconcileSuccess'));
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } }; message?: string };
-      message.error(error.response?.data?.detail ?? error.message ?? 'Reconciliation failed');
+      message.error(
+        error.response?.data?.detail ?? error.message ?? t('mcp.serverList.reconcileFailed')
+      );
     } finally {
       setIsReconciling(false);
     }
@@ -197,10 +224,10 @@ export const McpServerListV2: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            MCP Servers
+            {t('mcp.serverList.title')}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Manage MCP servers, tools, and applications
+            {t('mcp.serverList.subtitle')}
           </p>
         </div>
         <button
@@ -209,46 +236,46 @@ export const McpServerListV2: React.FC = () => {
           disabled={isReconciling}
           className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
         >
-          {renderDynamicIcon(isReconciling ? 'progress_activity' : 'sync', 20, isReconciling ? 'animate-spin motion-reduce:animate-none' : '')}
-          Reconcile
+          {renderDynamicIcon(
+            isReconciling ? 'progress_activity' : 'sync',
+            20,
+            isReconciling ? 'animate-spin motion-reduce:animate-none' : ''
+          )}
+          {t('mcp.servers.reconcileButton')}
         </button>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
-          title="Total Servers"
+          title={t('mcp.serverList.stats.totalServers')}
           value={stats.serverStats.total}
           icon={<Server size={24} className="text-blue-600 dark:text-blue-400" />}
           bgColor="bg-blue-500"
           textColor="text-slate-900 dark:text-white"
           iconBg="bg-blue-100 dark:bg-blue-900/30"
-          subtitle={`${String(stats.serverStats.running)} running`}
+          subtitle={t('mcp.serverList.stats.running', { count: stats.serverStats.running })}
         />
         <StatsCard
-          title="Tools"
+          title={t('mcp.serverList.stats.tools')}
           value={stats.toolStats.total}
-          icon={
-            <Wrench size={24} className="text-purple-600 dark:text-purple-400" />
-          }
+          icon={<Wrench size={24} className="text-purple-600 dark:text-purple-400" />}
           bgColor="bg-purple-500"
           textColor="text-slate-900 dark:text-white"
           iconBg="bg-purple-100 dark:bg-purple-900/30"
-          subtitle={`${String(stats.toolStats.available)} available`}
+          subtitle={t('mcp.serverList.stats.available', { count: stats.toolStats.available })}
         />
         <StatsCard
-          title="Applications"
+          title={t('mcp.serverList.stats.applications')}
           value={stats.appStats.total}
-          icon={
-            <Grid3x3 size={24} className="text-emerald-600 dark:text-emerald-400" />
-          }
+          icon={<Grid3x3 size={24} className="text-emerald-600 dark:text-emerald-400" />}
           bgColor="bg-emerald-500"
           textColor="text-slate-900 dark:text-white"
           iconBg="bg-emerald-100 dark:bg-emerald-900/30"
-          subtitle={`${String(stats.appStats.ready)} ready`}
+          subtitle={t('mcp.serverList.stats.ready', { count: stats.appStats.ready })}
         />
         <StatsCard
-          title="Health"
+          title={t('mcp.serverList.stats.health')}
           value={stats.serverStats.error > 0 ? stats.serverStats.error : stats.serverStats.running}
           icon={
             stats.serverStats.error > 0 ? (
@@ -268,15 +295,23 @@ export const McpServerListV2: React.FC = () => {
               ? 'bg-amber-100 dark:bg-amber-900/30'
               : 'bg-emerald-100 dark:bg-emerald-900/30'
           }
-          subtitle={stats.serverStats.error > 0 ? 'errors' : 'healthy'}
+          subtitle={
+            stats.serverStats.error > 0
+              ? t('mcp.serverList.stats.errors')
+              : t('mcp.serverList.stats.healthy')
+          }
         />
       </div>
 
       {/* Tabs */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
         {/* Tab Navigation */}
-        <div className="border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2 px-4" aria-label="Tabs" role="tablist">
+        <div className="overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+          <div
+            className="flex min-w-max items-center gap-2 px-4"
+            aria-label={t('mcp.serverList.tabs.aria')}
+            role="tablist"
+          >
             <button
               type="button"
               role="tab"
@@ -292,7 +327,7 @@ export const McpServerListV2: React.FC = () => {
               }`}
             >
               <Server size={18} />
-              Servers
+              {t('mcp.serverList.tabs.servers')}
             </button>
             <button
               type="button"
@@ -309,7 +344,7 @@ export const McpServerListV2: React.FC = () => {
               }`}
             >
               <Wrench size={18} />
-              Tools
+              {t('mcp.serverList.tabs.tools')}
             </button>
             <button
               type="button"
@@ -326,7 +361,7 @@ export const McpServerListV2: React.FC = () => {
               }`}
             >
               <Grid3x3 size={18} />
-              Applications
+              {t('mcp.serverList.tabs.apps')}
             </button>
             <button
               type="button"
@@ -343,7 +378,7 @@ export const McpServerListV2: React.FC = () => {
               }`}
             >
               <MessageCircle size={18} />
-              Prompts
+              {t('mcp.serverList.tabs.prompts')}
             </button>
             <button
               type="button"
@@ -360,7 +395,7 @@ export const McpServerListV2: React.FC = () => {
               }`}
             >
               <Terminal size={18} />
-              Logs
+              {t('mcp.serverList.tabs.logs')}
             </button>
           </div>
         </div>

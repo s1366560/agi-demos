@@ -5,8 +5,10 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { Spin, Input, Select, Tag } from 'antd';
-import { Search, MessageSquare, Server, ChevronDown, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import { Alert, Input, Select, Spin, Tag } from 'antd';
+import { ChevronDown, ChevronRight, MessageSquare, Search, Server } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useProjectStore } from '@/stores/project';
@@ -35,11 +37,13 @@ interface PromptWithServer extends PromptInfo {
 }
 
 export const McpPromptsTabV2: React.FC = () => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [serverFilter, setServerFilter] = useState<string>('all');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [allPrompts, setAllPrompts] = useState<PromptWithServer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const servers = useMCPStore((s) => s.servers);
   const listServers = useMCPStore((s) => s.listServers);
@@ -48,7 +52,7 @@ export const McpPromptsTabV2: React.FC = () => {
   // Ensure servers are loaded
   useEffect(() => {
     if (servers.length === 0 && currentProject?.id) {
-      listServers({ project_id: currentProject.id });
+      void listServers({ project_id: currentProject.id });
     }
   }, [servers.length, currentProject?.id, listServers]);
 
@@ -56,31 +60,34 @@ export const McpPromptsTabV2: React.FC = () => {
   useEffect(() => {
     const fetchPrompts = async () => {
       setIsLoading(true);
+      setErrorMessage(null);
       const results: PromptWithServer[] = [];
+      let failedCount = 0;
 
       const enabledServers = servers.filter((s) => s.enabled);
       const settled = await Promise.allSettled(
         enabledServers.map(async (server) => {
-          try {
-            const resp = await mcpAPI.getPrompts(server.id);
-            return (resp.prompts ?? []).map((p) => ({
-              ...p,
-              serverName: server.name,
-              serverId: server.id,
-            }));
-          } catch {
-            return [];
-          }
+          const resp = await mcpAPI.getPrompts(server.id);
+          return resp.prompts.map((p) => ({
+            ...p,
+            serverName: server.name,
+            serverId: server.id,
+          }));
         })
       );
 
       for (const result of settled) {
         if (result.status === 'fulfilled') {
           results.push(...result.value);
+        } else {
+          failedCount += 1;
         }
       }
 
       setAllPrompts(results);
+      setErrorMessage(
+        failedCount > 0 ? t('mcp.prompts.partialFailure', { count: failedCount }) : null
+      );
       setIsLoading(false);
     };
 
@@ -91,7 +98,7 @@ export const McpPromptsTabV2: React.FC = () => {
         setIsLoading(false);
       });
     }
-  }, [servers]);
+  }, [servers, t]);
 
   const filteredPrompts = useMemo(() => {
     return allPrompts.filter((prompt) => {
@@ -111,10 +118,10 @@ export const McpPromptsTabV2: React.FC = () => {
 
   const serverOptions = useMemo(
     () => [
-      { label: 'All Servers', value: 'all' },
-      ...servers.map((s) => ({ label: s.name, value: s.id })),
+      { label: t('mcp.prompts.allServers'), value: 'all' },
+      ...servers.filter((s) => s.enabled).map((s) => ({ label: s.name, value: s.id })),
     ],
-    [servers]
+    [servers, t]
   );
 
   const serversWithPrompts = new Set(allPrompts.map((p) => p.serverId)).size;
@@ -123,55 +130,62 @@ export const McpPromptsTabV2: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <Spin size="large" />
-        <p className="text-sm text-slate-400 mt-4">Loading prompts...</p>
+        <p className="text-sm text-slate-400 mt-4">{t('mcp.prompts.loading')}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      {/* Header Stats */}
       <div className={`${CARD_STYLES.base} p-4 shadow-sm`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 flex items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/30">
                 <MessageSquare size={20} className="text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {allPrompts.length}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Total Prompts</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('mcp.prompts.totalPrompts')}
+                </p>
               </div>
             </div>
             <div className="w-px h-10 bg-slate-200 dark:bg-slate-700" />
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 flex items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-200 bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/30">
                 <Server size={20} className="text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {serversWithPrompts}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Servers with Prompts</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('mcp.prompts.serversWithPrompts')}
+                </p>
               </div>
             </div>
           </div>
           {filteredPrompts.length !== allPrompts.length && (
             <span className="text-sm text-slate-500 dark:text-slate-400">
-              Showing {filteredPrompts.length} / {allPrompts.length}
+              {t('mcp.prompts.showCount', {
+                shown: filteredPrompts.length,
+                total: allPrompts.length,
+              })}
             </span>
           )}
         </div>
       </div>
 
-      {/* Toolbar */}
+      {errorMessage && <Alert type="warning" showIcon title={errorMessage} />}
+
       <div className={`${CARD_STYLES.base} p-4 shadow-sm`}>
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <AntSearch
-              placeholder="Search prompt name or description..."
+              placeholder={t('mcp.prompts.searchPlaceholder')}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -185,14 +199,13 @@ export const McpPromptsTabV2: React.FC = () => {
             value={serverFilter}
             onChange={setServerFilter}
             className="w-full sm:w-52"
-            placeholder="Filter by server"
+            placeholder={t('mcp.prompts.filterByServer')}
             options={serverOptions}
-            suffixIcon={<Server size={14} className="text-slate-400" />}
+            suffix={<Server size={14} className="text-slate-400" />}
           />
         </div>
       </div>
 
-      {/* Prompt List */}
       {filteredPrompts.length === 0 ? (
         <div
           className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}
@@ -201,20 +214,21 @@ export const McpPromptsTabV2: React.FC = () => {
             <MessageSquare size={28} className="text-slate-300 dark:text-slate-500" />
           </div>
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
-            {allPrompts.length === 0 ? 'No Prompts Found' : 'No Matching Prompts'}
+            {allPrompts.length === 0
+              ? t('mcp.prompts.emptyNoPrompts')
+              : t('mcp.prompts.emptyNoMatch')}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-            {allPrompts.length === 0
-              ? 'MCP servers have not exposed any prompts'
-              : 'Try adjusting your search or filter'}
+            {allPrompts.length === 0 ? t('mcp.prompts.hintSync') : t('mcp.prompts.hintAdjust')}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {filteredPrompts.map((prompt, idx) => {
-            const key = `${prompt.serverId}-${prompt.name}-${idx}`;
+            const key = `${prompt.serverId}-${prompt.name}-${idx.toString()}`;
             const isExpanded = expandedKey === key;
-            const hasArgs = (prompt.arguments?.length ?? 0) > 0;
+            const args = prompt.arguments ?? [];
+            const hasArgs = args.length > 0;
 
             return (
               <div
@@ -223,12 +237,13 @@ export const McpPromptsTabV2: React.FC = () => {
               >
                 <button
                   type="button"
+                  aria-expanded={isExpanded}
                   className="w-full p-4 flex items-start gap-3 text-left"
                   onClick={() => {
                     setExpandedKey(isExpanded ? null : key);
                   }}
                 >
-                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/30">
                     <MessageSquare size={16} className="text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -238,7 +253,7 @@ export const McpPromptsTabV2: React.FC = () => {
                       </span>
                       {hasArgs && (
                         <Tag color="blue" className="text-xs">
-                          {prompt.arguments!.length} arg{prompt.arguments!.length !== 1 ? 's' : ''}
+                          {t('mcp.prompts.argCount', { count: args.length })}
                         </Tag>
                       )}
                     </div>
@@ -259,16 +274,18 @@ export const McpPromptsTabV2: React.FC = () => {
                 {isExpanded && hasArgs && (
                   <div className="border-t border-slate-200 dark:border-slate-700 px-4 py-3 bg-slate-50 dark:bg-slate-800/50">
                     <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                      Arguments
+                      {t('mcp.prompts.arguments')}
                     </p>
                     <div className="space-y-2">
-                      {prompt.arguments!.map((arg) => (
+                      {args.map((arg) => (
                         <div key={arg.name} className="flex items-start gap-2 text-sm">
                           <code className="text-xs font-mono bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
                             {arg.name}
                           </code>
                           {arg.required && (
-                            <span className="text-red-500 text-xs font-medium">required</span>
+                            <span className="text-red-500 text-xs font-medium">
+                              {t('mcp.prompts.required')}
+                            </span>
                           )}
                           {arg.description && (
                             <span className="text-slate-500 dark:text-slate-400 text-xs">

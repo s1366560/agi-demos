@@ -35,7 +35,7 @@ export interface SkillSubmission {
   source_skill_id: string | null;
   proposed_semver: string;
   submission_note: string | null;
-  status: SubmissionStatus | string;
+  status: string;
   reviewer_id: string | null;
   review_note: string | null;
   reviewed_at: string | null;
@@ -70,7 +70,7 @@ export const curatedSkillAPI = {
   fork: (id: string, body: CuratedForkRequest) =>
     httpClient.post<{ skill_id: string; parent_curated_id: string }>(
       `/skills/curated/${id}/fork`,
-      body,
+      body
     ),
 
   submit: (skillId: string, body: SkillSubmitPayload) =>
@@ -90,16 +90,10 @@ export const curatedSkillAPI = {
     }),
 
   adminApprove: (submissionId: string, body: ReviewPayload = {}) =>
-    httpClient.post<CuratedSkill>(
-      `/admin/skill-submissions/${submissionId}/approve`,
-      body,
-    ),
+    httpClient.post<CuratedSkill>(`/admin/skill-submissions/${submissionId}/approve`, body),
 
   adminReject: (submissionId: string, body: ReviewPayload = {}) =>
-    httpClient.post<SkillSubmission>(
-      `/admin/skill-submissions/${submissionId}/reject`,
-      body,
-    ),
+    httpClient.post<SkillSubmission>(`/admin/skill-submissions/${submissionId}/reject`, body),
 };
 
 export default curatedSkillAPI;

@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input, Modal, Select } from 'antd';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 
 import { useLazyMessage, LazyEmpty, LazySpin, LazyDrawer } from '@/components/ui/lazyAntd';
 
@@ -72,7 +72,7 @@ export const DecisionRecords: React.FC = () => {
     setIsResolving(true);
     try {
       await resolveApproval(tenantId, resolvingRecord.id, { decision: resolveAction });
-      message?.success('Decision recorded successfully');
+      message?.success(t('tenant.decisionRecords.messages.resolved'));
       setIsResolveModalOpen(false);
       setResolvingRecord(null);
       handleRefresh();
@@ -110,6 +110,12 @@ export const DecisionRecords: React.FC = () => {
     }
   };
 
+  const getOutcomeLabel = (outcome: string) =>
+    t(`tenant.decisionRecords.outcomes.${outcome}`, outcome);
+
+  const getDecisionTypeLabel = (decisionType: string) =>
+    t(`tenant.decisionRecords.types.${decisionType}`, decisionType);
+
   if (!tenantId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -122,16 +128,18 @@ export const DecisionRecords: React.FC = () => {
     <div className="max-w-full mx-auto w-full flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Decision Records</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Review agent approval requests and historical decisions.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            {t('tenant.decisionRecords.title')}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">{t('tenant.decisionRecords.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isLoading}
+            aria-label={t('tenant.decisionRecords.refresh')}
+            title={t('tenant.decisionRecords.refresh')}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={16} />
@@ -143,36 +151,48 @@ export const DecisionRecords: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 max-w-xs">
             <Search
-              placeholder="Filter by Workspace ID"
+              placeholder={t('tenant.decisionRecords.filters.workspaceId')}
               value={workspaceFilter}
               onChange={(e) => {
                 setWorkspaceFilter(e.target.value);
               }}
               allowClear
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
             />
           </div>
           <div className="flex-1 max-w-xs">
             <Search
-              placeholder="Filter by Agent ID"
+              placeholder={t('tenant.decisionRecords.filters.agentId')}
               value={agentFilter}
               onChange={(e) => {
                 setAgentFilter(e.target.value);
               }}
               allowClear
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
             />
           </div>
           <div className="flex-1 max-w-xs">
             <Select
               className="w-full"
-              placeholder="Decision Type"
+              placeholder={t('tenant.decisionRecords.filters.decisionType')}
               value={typeFilter}
               onChange={(val) => {
                 setTypeFilter(val);
               }}
               allowClear
             >
-              <Option value="permission">Permission</Option>
-              <Option value="action">Action</Option>
+              <Option value="permission">{t('tenant.decisionRecords.types.permission')}</Option>
+              <Option value="action">{t('tenant.decisionRecords.types.action')}</Option>
             </Select>
           </div>
         </div>
@@ -184,7 +204,7 @@ export const DecisionRecords: React.FC = () => {
         </div>
       ) : decisions.length === 0 ? (
         <div className="flex items-center justify-center py-20">
-          <LazyEmpty description="No decision records found" />
+          <LazyEmpty description={t('tenant.decisionRecords.empty')} />
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -193,22 +213,22 @@ export const DecisionRecords: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Decision Type
+                    {t('tenant.decisionRecords.columns.decisionType')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Agent Instance
+                    {t('tenant.decisionRecords.columns.agentInstance')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Outcome
+                    {t('tenant.decisionRecords.columns.outcome')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Context
+                    {t('tenant.decisionRecords.columns.context')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Created At
+                    {t('tenant.decisionRecords.columns.createdAt')}
                   </th>
                   <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Actions
+                    {t('common.actions.label')}
                   </th>
                 </tr>
               </thead>
@@ -219,7 +239,7 @@ export const DecisionRecords: React.FC = () => {
                     className="hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors"
                   >
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-medium capitalize">
-                      {record.decision_type}
+                      {getDecisionTypeLabel(record.decision_type)}
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">
                       {record.agent_instance_id}
@@ -230,7 +250,7 @@ export const DecisionRecords: React.FC = () => {
                           record.outcome
                         )}`}
                       >
-                        {record.outcome}
+                        {getOutcomeLabel(record.outcome)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400 truncate max-w-xs">
@@ -249,7 +269,7 @@ export const DecisionRecords: React.FC = () => {
                             }}
                             className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 text-sm font-medium"
                           >
-                            Resolve
+                            {t('tenant.decisionRecords.actions.resolve')}
                           </button>
                         )}
                         <button
@@ -259,7 +279,7 @@ export const DecisionRecords: React.FC = () => {
                           }}
                           className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium"
                         >
-                          Details
+                          {t('tenant.decisionRecords.actions.details')}
                         </button>
                       </div>
                     </td>
@@ -272,19 +292,19 @@ export const DecisionRecords: React.FC = () => {
       )}
 
       <LazyDrawer
-        title="Decision Record Details"
+        title={t('tenant.decisionRecords.drawer.title')}
         open={selectedRecord !== null}
         onClose={() => {
           setSelectedRecord(null);
         }}
-        width={500}
+        size={500}
       >
         {selectedRecord && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Record ID
+                  {t('tenant.decisionRecords.drawer.recordId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono break-all">
                   {selectedRecord.id}
@@ -292,23 +312,23 @@ export const DecisionRecords: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Outcome
+                  {t('tenant.decisionRecords.drawer.outcome')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white capitalize">
-                  {selectedRecord.outcome}
+                  {getOutcomeLabel(selectedRecord.outcome)}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Decision Type
+                  {t('tenant.decisionRecords.drawer.decisionType')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white capitalize">
-                  {selectedRecord.decision_type}
+                  {getDecisionTypeLabel(selectedRecord.decision_type)}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Workspace ID
+                  {t('tenant.decisionRecords.drawer.workspaceId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono break-all">
                   {selectedRecord.workspace_id}
@@ -316,7 +336,7 @@ export const DecisionRecords: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Agent Instance ID
+                  {t('tenant.decisionRecords.drawer.agentInstanceId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono break-all">
                   {selectedRecord.agent_instance_id}
@@ -324,7 +344,7 @@ export const DecisionRecords: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Reviewer ID
+                  {t('tenant.decisionRecords.drawer.reviewerId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white">
                   {selectedRecord.reviewer_id || '-'}
@@ -332,7 +352,7 @@ export const DecisionRecords: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Created At
+                  {t('tenant.decisionRecords.drawer.createdAt')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white">
                   {formatTimestamp(selectedRecord.created_at)}
@@ -340,7 +360,7 @@ export const DecisionRecords: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Resolved At
+                  {t('tenant.decisionRecords.drawer.resolvedAt')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white">
                   {selectedRecord.resolved_at ? formatTimestamp(selectedRecord.resolved_at) : '-'}
@@ -351,7 +371,7 @@ export const DecisionRecords: React.FC = () => {
             {selectedRecord.context_summary && (
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Context Summary
+                  {t('tenant.decisionRecords.drawer.contextSummary')}
                 </p>
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   {selectedRecord.context_summary}
@@ -362,7 +382,7 @@ export const DecisionRecords: React.FC = () => {
             {selectedRecord.review_comment && (
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Review Comment
+                  {t('tenant.decisionRecords.drawer.reviewComment')}
                 </p>
                 <p className="text-sm text-slate-600 dark:text-slate-300">
                   {selectedRecord.review_comment}
@@ -370,10 +390,10 @@ export const DecisionRecords: React.FC = () => {
               </div>
             )}
 
-            {selectedRecord.proposal && Object.keys(selectedRecord.proposal).length > 0 && (
+            {Object.keys(selectedRecord.proposal).length > 0 && (
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
-                  Proposal Details
+                  {t('tenant.decisionRecords.drawer.proposalDetails')}
                 </p>
                 <pre className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto max-h-80">
                   {JSON.stringify(selectedRecord.proposal, null, 2)}
@@ -385,23 +405,28 @@ export const DecisionRecords: React.FC = () => {
       </LazyDrawer>
 
       <Modal
-        title="Resolve Approval Request"
+        title={t('tenant.decisionRecords.resolve.title')}
         open={isResolveModalOpen}
         onCancel={() => {
           setIsResolveModalOpen(false);
           setResolvingRecord(null);
         }}
-        onOk={handleResolveSubmit}
+        onOk={() => {
+          void handleResolveSubmit();
+        }}
         confirmLoading={isResolving}
+        okText={t('tenant.decisionRecords.resolve.ok')}
+        cancelText={t('common.cancel')}
       >
         <div className="mt-4 flex flex-col gap-4">
           <p className="text-sm text-slate-600">
-            Select an action for the pending request from agent{' '}
-            <strong>{resolvingRecord?.agent_instance_id}</strong>.
+            {t('tenant.decisionRecords.resolve.descriptionPrefix')}{' '}
+            <strong>{resolvingRecord?.agent_instance_id}</strong>
+            {t('tenant.decisionRecords.resolve.descriptionSuffix')}
           </p>
           <div>
             <label htmlFor="resolve-action" className="block text-sm font-medium mb-1">
-              Decision
+              {t('tenant.decisionRecords.resolve.decision')}
             </label>
             <Select
               id="resolve-action"
@@ -411,9 +436,13 @@ export const DecisionRecords: React.FC = () => {
                 setResolveAction(val);
               }}
             >
-              <Option value="allow_once">Allow Once</Option>
-              <Option value="allow_always">Allow Always</Option>
-              <Option value="deny">Deny</Option>
+              <Option value="allow_once">
+                {t('tenant.decisionRecords.resolve.actions.allow_once')}
+              </Option>
+              <Option value="allow_always">
+                {t('tenant.decisionRecords.resolve.actions.allow_always')}
+              </Option>
+              <Option value="deny">{t('tenant.decisionRecords.resolve.actions.deny')}</Option>
             </Select>
           </div>
         </div>

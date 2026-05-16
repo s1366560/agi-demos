@@ -10,7 +10,7 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
+  role: 'owner' | 'admin' | 'member' | 'viewer' | 'editor';
   created_at: string;
   last_login?: string | undefined;
   is_active: boolean;
@@ -20,7 +20,7 @@ interface EditUserModalProps {
   user: User;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (userId: string, updates: { role: string }) => void;
+  onSave: (userId: string, updates: { role: string }) => void | Promise<void>;
   context: 'tenant' | 'project';
   contextId: string;
 }
@@ -34,7 +34,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   contextId: _contextId,
 }) => {
   const { t } = useTranslation();
-  const [role, setRole] = useState(user.role);
+  const [role, setRole] = useState<string>(user.role);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -61,10 +61,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           { value: 'owner', label: t('tenant.users.roles.owner') },
           { value: 'admin', label: t('tenant.users.roles.admin') },
           { value: 'member', label: t('tenant.users.roles.member') },
+          { value: 'editor', label: t('tenant.users.roles.editor') },
+          { value: 'viewer', label: t('tenant.users.roles.viewer') },
         ]
       : [
           { value: 'admin', label: t('tenant.users.roles.admin') },
-          { value: 'editor', label: t('tenant.users.roles.editor') },
+          { value: 'member', label: t('tenant.users.roles.member') },
           { value: 'viewer', label: t('tenant.users.roles.viewer') },
         ];
 
@@ -76,7 +78,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             {t('tenant.users.actions.edit')}
           </h2>
           <button
+            type="button"
             onClick={onClose}
+            aria-label={t('common.close')}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <X className="h-5 w-5" />
@@ -105,7 +109,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <select
               value={role}
               onChange={(e) => {
-                setRole(e.target.value as any);
+                setRole(e.target.value);
               }}
               disabled={user.role === 'owner' || isSaving}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
@@ -157,7 +161,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => {
+              void handleSave();
+            }}
             disabled={isSaving || user.role === 'owner'}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >

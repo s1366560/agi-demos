@@ -25,6 +25,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
+/* eslint-disable @typescript-eslint/no-deprecated -- WorkPlan remains for legacy execution events. */
 import type { WorkPlan, TimelineStep, ToolExecution, ToolCall } from '../../types/agent';
 
 /**
@@ -148,7 +149,7 @@ export const initialState = {
  * Generate a unique tool ID
  */
 function generateToolId(): string {
-  return `tool-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  return `tool-${String(Date.now())}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
 /**
@@ -160,7 +161,7 @@ function generateToolId(): string {
 function isObservationError(observation: string): boolean {
   // Only consider it an error if it explicitly contains 'failed'
   // (not just starts with 'error:' which could be valid output)
-  const lowerObs = observation?.toLowerCase() || '';
+  const lowerObs = observation.toLowerCase();
   return lowerObs.includes('execution failed') || lowerObs.includes('tool failed');
 }
 
@@ -310,7 +311,7 @@ export const useExecutionStore = create<ExecutionState>()(
           const targetStepNumber = stepNumber ?? state.currentStepNumber;
 
           // Only update if we have a valid step number
-          if (targetStepNumber === null || targetStepNumber === undefined) {
+          if (targetStepNumber === null) {
             return {};
           }
 
@@ -452,7 +453,7 @@ export const useExecutionStore = create<ExecutionState>()(
             targetExecution?.stepNumber ?? state.currentToolExecution?.stepNumber;
 
           let updatedTimeline = state.executionTimeline;
-          if (targetStepNumber !== null && targetStepNumber !== undefined) {
+          if (targetStepNumber !== undefined) {
             updatedTimeline = state.executionTimeline.map((step) =>
               step.stepNumber === targetStepNumber
                 ? {

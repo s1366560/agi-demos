@@ -139,13 +139,9 @@ export const useConversationsStore = create<ConversationsState>()(
           set({ conversationsLoading: true, conversationsError: null });
         }
         try {
-          const response = await agentService.listConversations(
-            projectId,
-            status,
-            limit,
-            0,
-            signal
-          );
+          const response = signal
+            ? await agentService.listConversations(projectId, status, limit, 0, signal)
+            : await agentService.listConversations(projectId, status, limit, 0);
           set({
             conversations: response.items,
             hasMoreConversations: response.has_more,

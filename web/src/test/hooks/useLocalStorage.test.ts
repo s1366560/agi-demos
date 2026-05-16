@@ -258,15 +258,32 @@ describe('useLocalStorage', () => {
 
     it('should work with undefined as initial value', () => {
       const key = uniqueKey();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const { result } = renderHook(() => useLocalStorage<string | undefined>(key, undefined));
 
       expect(result.current.value).toBeUndefined();
+      expect(localStorage.getItem(key)).toBeNull();
+      expect(warnSpy).not.toHaveBeenCalled();
 
       act(() => {
         result.current.setValue('defined');
       });
 
       expect(result.current.value).toBe('defined');
+    });
+
+    it('should remove localStorage entry when value is set to undefined', () => {
+      const key = uniqueKey();
+      const { result } = renderHook(() => useLocalStorage<string | undefined>(key, 'initial'));
+
+      expect(localStorage.getItem(key)).toBe(JSON.stringify('initial'));
+
+      act(() => {
+        result.current.setValue(undefined);
+      });
+
+      expect(result.current.value).toBeUndefined();
+      expect(localStorage.getItem(key)).toBeNull();
     });
   });
 
@@ -377,15 +394,17 @@ describe('useLocalStorage', () => {
       const key = uniqueKey();
       let callCount = 0;
 
-      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(
-        function (this: Storage, k: string, v: string) {
-          callCount++;
-          if (callCount > 1) {
-            throw new DOMException('QuotaExceededError');
-          }
-          Object.getPrototypeOf(Storage.prototype).setItem?.call?.(this, k, v);
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        k: string,
+        v: string
+      ) {
+        callCount++;
+        if (callCount > 1) {
+          throw new DOMException('QuotaExceededError');
         }
-      );
+        Object.getPrototypeOf(Storage.prototype).setItem?.call?.(this, k, v);
+      });
 
       const { result } = renderHook(() => useLocalStorage(key, 'initial'));
 

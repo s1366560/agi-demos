@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-import { X, Settings, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { X, Settings, Trash2 } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 
@@ -22,8 +23,8 @@ interface ProjectSettingsModalProps {
   project: Project;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (projectId: string, updates: Partial<Project>) => void;
-  onDelete?: ((projectId: string) => void) | undefined;
+  onSave: (projectId: string, updates: Partial<Project>) => void | Promise<void>;
+  onDelete?: ((projectId: string) => void | Promise<void>) | undefined;
 }
 
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
@@ -55,7 +56,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   const [description, setDescription] = useState(project.description || '');
   const [isPublic, setIsPublic] = useState(project.is_public);
   const [agentMode, setAgentMode] = useState<AgentConversationMode>(
-    project.agent_conversation_mode ?? 'single_agent',
+    project.agent_conversation_mode ?? 'single_agent'
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -108,7 +109,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Settings className="h-5 w-5 text-gray-600 dark:text-slate-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('project.settings.title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('project.settings.title')}
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -243,11 +246,15 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={handleDelete}
+                      onClick={() => {
+                        void handleDelete();
+                      }}
                       disabled={isDeleting}
                       className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isDeleting ? t('project.settings.deleting') : t('project.settings.confirmDelete')}
+                      {isDeleting
+                        ? t('project.settings.deleting')
+                        : t('project.settings.confirmDelete')}
                     </button>
                   </div>
                 </div>
@@ -278,7 +285,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => {
+              void handleSave();
+            }}
             disabled={isSaving || !name.trim()}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >

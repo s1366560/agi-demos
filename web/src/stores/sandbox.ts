@@ -14,7 +14,6 @@ import { projectSandboxService } from '../services/projectSandboxService';
 import { sandboxSSEService } from '../services/sandboxSSEService';
 import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
 import { logger } from '../utils/logger';
-import { getAuthToken } from '../utils/tokenResolver';
 
 import { useCanvasStore } from './canvasStore';
 import { useLayoutModeStore } from './layoutMode';
@@ -49,6 +48,11 @@ export interface HttpServiceStatus {
   autoOpen: boolean;
   restartToken: string | null;
   updatedAt: string;
+}
+
+interface SandboxStoreEvent {
+  type: string;
+  data: unknown;
 }
 
 export interface SandboxState {
@@ -121,7 +125,7 @@ export interface SandboxState {
   stopTerminal: () => Promise<void>;
 
   // SSE event handler
-  handleSSEEvent: (event: { type: string; data: any }) => void;
+  handleSSEEvent: (event: SandboxStoreEvent) => void;
 
   // Tool execution actions
   setCurrentTool: (tool: CurrentTool | null) => void;
@@ -165,17 +169,86 @@ const initialState = {
   error: null as string | null,
 };
 
-function appendTokenAndRestart(
-  url: string,
-  restartToken?: string | null,
-  includeToken = false
-): string {
-  const token = includeToken ? getAuthToken() : null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getField(record: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function getStringField(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+  const value = getField(record, ...keys);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getNumberField(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+  const value = getField(record, ...keys);
+  return typeof value === 'number' ? value : undefined;
+}
+
+function getBooleanField(record: Record<string, unknown>, ...keys: string[]): boolean | undefined {
+  const value = getField(record, ...keys);
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function getRecordArrayField(
+  record: Record<string, unknown>,
+  key: string
+): Array<Record<string, unknown>> {
+  const value = record[key];
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+const ARTIFACT_CATEGORIES = new Set<Artifact['category']>([
+  'image',
+  'video',
+  'audio',
+  'document',
+  'code',
+  'data',
+  'archive',
+  'other',
+]);
+
+function getArtifactCategory(value: unknown): Artifact['category'] {
+  return typeof value === 'string' && ARTIFACT_CATEGORIES.has(value as Artifact['category'])
+    ? (value as Artifact['category'])
+    : 'other';
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (isRecord(error)) {
+    return getStringField(error, 'message');
+  }
+  return undefined;
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (isRecord(error)) {
+    return getStringField(error, 'code');
+  }
+  return undefined;
+}
+
+function getToolContentText(content: Array<{ text?: string | undefined }>): string {
+  return content
+    .map((item) => item.text ?? '')
+    .filter((text) => text.length > 0)
+    .join('\n');
+}
+
+function appendRestartToken(url: string, restartToken?: string | null): string {
   const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
   const parsed = new URL(url, base);
-  if (token) {
-    parsed.searchParams.set('token', token);
-  }
   if (restartToken) {
     parsed.searchParams.set('_ms_restart', restartToken);
   }
@@ -272,15 +345,16 @@ export const useSandboxStore = create<SandboxState>()(
           set({ connectionStatus: 'connecting' });
           const sandbox = await projectSandboxService.ensureSandbox(targetProjectId);
 
-          // Build proxy URLs with token for authentication
-          // iframe/WebSocket don't automatically send cookies, so we pass token in URL
-          const token = getAuthToken();
-          const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+          if (sandbox.desktop_url || sandbox.websocket_url) {
+            await projectSandboxService.ensureProxyAuthCookie(targetProjectId);
+          }
+
+          // Browser iframe and WebSocket proxy requests authenticate with a scoped cookie.
           const proxyDesktopUrl = sandbox.desktop_url
-            ? `/api/v1/projects/${targetProjectId}/sandbox/desktop/proxy/vnc.html${tokenParam}`
+            ? `/api/v1/projects/${targetProjectId}/sandbox/desktop/proxy/vnc.html`
             : null;
           const desktopWsUrl = sandbox.desktop_url
-            ? buildDesktopWebSocketUrl(targetProjectId, token || undefined)
+            ? buildDesktopWebSocketUrl(targetProjectId)
             : null;
           // Terminal uses the existing WebSocket endpoint
           // The TerminalImpl component will build the correct WebSocket URL
@@ -314,17 +388,19 @@ export const useSandboxStore = create<SandboxState>()(
 
           logger.info(`[SandboxStore] Sandbox ensured: ${sandbox.sandbox_id} (${sandbox.status})`);
           return sandbox.sandbox_id;
-        } catch (error: any) {
+        } catch (error: unknown) {
           logger.error('[SandboxStore] Failed to ensure sandbox:', error);
 
           // Provide more specific error messages for common issues
           let errorMessage = 'Failed to connect to sandbox';
-          if (error.message?.includes('timeout')) {
+          const message = getErrorMessage(error);
+          const code = getErrorCode(error);
+          if (message?.includes('timeout')) {
             errorMessage =
               'Sandbox creation timed out. The service may be starting up, please try again in a moment.';
-          } else if (error.message?.includes('Network Error')) {
+          } else if (message?.includes('Network Error')) {
             errorMessage = 'Network error. Please check your connection and try again.';
-          } else if (error.code === 'ECONNABORTED') {
+          } else if (code === 'ECONNABORTED') {
             errorMessage = 'Connection aborted. Sandbox creation may still be in progress.';
           }
 
@@ -352,19 +428,12 @@ export const useSandboxStore = create<SandboxState>()(
             timeout,
           });
 
-          // Extract text content from result
-          let content = '';
-          if (result?.content && Array.isArray(result.content) && result.content.length > 0) {
-            content = result.content
-              .map((c: any) => (c && typeof c.text === 'string' ? c.text : ''))
-              .filter(Boolean)
-              .join('\n');
-          }
+          const content = getToolContentText(result.content);
 
           return {
-            success: !result?.is_error,
+            success: !result.is_error,
             content,
-            isError: result?.is_error ?? true,
+            isError: result.is_error,
           };
         } catch (error) {
           logger.error('[SandboxStore] Tool execution failed:', error);
@@ -518,25 +587,25 @@ export const useSandboxStore = create<SandboxState>()(
 
       // SSE event handler for desktop/terminal events
       handleSSEEvent: (event) => {
-        const { type, data } = event;
+        const { type, data: rawData } = event;
+        const data = isRecord(rawData) ? rawData : {};
         const { activeProjectId } = get();
 
         // Build desktop WebSocket URL from project context
         const buildWsUrl = () => {
           if (!activeProjectId) return null;
-          const token = getAuthToken();
-          return buildDesktopWebSocketUrl(activeProjectId, token || undefined);
+          return buildDesktopWebSocketUrl(activeProjectId);
         };
 
         switch (type) {
           case 'desktop_started': {
             const status: DesktopStatus = {
               running: true,
-              url: data.url || null,
+              url: getStringField(data, 'url') ?? null,
               wsUrl: buildWsUrl(),
-              display: data.display || ':0',
-              resolution: data.resolution || '1280x720',
-              port: data.port || 6080,
+              display: getStringField(data, 'display') ?? ':0',
+              resolution: getStringField(data, 'resolution') ?? '1280x720',
+              port: getNumberField(data, 'port') ?? 6080,
             };
             set({ desktopStatus: status });
             break;
@@ -557,13 +626,14 @@ export const useSandboxStore = create<SandboxState>()(
           }
 
           case 'desktop_status': {
+            const running = getBooleanField(data, 'running') ?? false;
             const status: DesktopStatus = {
-              running: data.running || false,
-              url: data.url || null,
-              wsUrl: data.running ? buildWsUrl() : null,
-              display: data.display || '',
-              resolution: data.resolution || '',
-              port: data.port || 0,
+              running,
+              url: getStringField(data, 'url') ?? null,
+              wsUrl: running ? buildWsUrl() : null,
+              display: getStringField(data, 'display') ?? '',
+              resolution: getStringField(data, 'resolution') ?? '',
+              port: getNumberField(data, 'port') ?? 0,
             };
             set({ desktopStatus: status });
             break;
@@ -572,10 +642,10 @@ export const useSandboxStore = create<SandboxState>()(
           case 'terminal_started': {
             const status: TerminalStatus = {
               running: true,
-              url: data.url || null,
-              port: data.port || 7681,
-              sessionId: data.session_id || null,
-              pid: data.pid || null,
+              url: getStringField(data, 'url') ?? null,
+              port: getNumberField(data, 'port') ?? 7681,
+              sessionId: getStringField(data, 'session_id') ?? null,
+              pid: getNumberField(data, 'pid') ?? null,
             };
             set({ terminalStatus: status });
             break;
@@ -596,11 +666,11 @@ export const useSandboxStore = create<SandboxState>()(
 
           case 'terminal_status': {
             const status: TerminalStatus = {
-              running: data.running || false,
-              url: data.url || null,
-              port: data.port || 0,
-              sessionId: data.session_id || null,
-              pid: data.pid || null,
+              running: getBooleanField(data, 'running') ?? false,
+              url: getStringField(data, 'url') ?? null,
+              port: getNumberField(data, 'port') ?? 0,
+              sessionId: getStringField(data, 'session_id') ?? null,
+              pid: getNumberField(data, 'pid') ?? null,
             };
             set({ terminalStatus: status });
             break;
@@ -610,39 +680,39 @@ export const useSandboxStore = create<SandboxState>()(
           case 'http_service_updated':
           case 'http_service_stopped':
           case 'http_service_error': {
-            const serviceId = (data.service_id || data.serviceId) as string | undefined;
+            const serviceId = getStringField(data, 'service_id', 'serviceId');
             if (!serviceId) {
               break;
             }
 
-            const sourceType =
-              ((data.source_type || data.sourceType) as
-                | 'sandbox_internal'
-                | 'external_url'
-                | undefined) || 'sandbox_internal';
+            const rawSourceType = getStringField(data, 'source_type', 'sourceType');
+            const sourceType: HttpServiceStatus['sourceType'] =
+              rawSourceType === 'external_url' ? 'external_url' : 'sandbox_internal';
             const eventStatus =
               type === 'http_service_stopped'
                 ? 'stopped'
                 : type === 'http_service_error'
                   ? 'error'
                   : 'running';
-            const previewUrl = (data.preview_url ||
-              data.previewUrl ||
-              data.service_url ||
-              data.serviceUrl) as string | undefined;
+            const previewUrl = getStringField(
+              data,
+              'preview_url',
+              'previewUrl',
+              'service_url',
+              'serviceUrl'
+            );
 
             if (!previewUrl) {
               break;
             }
 
-            const restartToken = (data.restart_token || data.restartToken) as string | undefined;
-            const autoOpen = (data.auto_open ?? data.autoOpen ?? true) as boolean;
-            const serviceName = (data.service_name || data.serviceName || serviceId) as string;
-            const updatedAt = (data.updated_at ||
-              data.updatedAt ||
-              new Date().toISOString()) as string;
-            const wsPreviewUrl = (data.ws_preview_url || data.wsPreviewUrl) as string | undefined;
-            const serviceUrl = (data.service_url || data.serviceUrl || previewUrl) as string;
+            const restartToken = getStringField(data, 'restart_token', 'restartToken');
+            const autoOpen = getBooleanField(data, 'auto_open', 'autoOpen') ?? true;
+            const serviceName = getStringField(data, 'service_name', 'serviceName') ?? serviceId;
+            const updatedAt =
+              getStringField(data, 'updated_at', 'updatedAt') ?? new Date().toISOString();
+            const wsPreviewUrl = getStringField(data, 'ws_preview_url', 'wsPreviewUrl');
+            const serviceUrl = getStringField(data, 'service_url', 'serviceUrl') ?? previewUrl;
 
             const serviceStatus: HttpServiceStatus = {
               serviceId,
@@ -667,11 +737,7 @@ export const useSandboxStore = create<SandboxState>()(
             if ((type === 'http_service_started' || type === 'http_service_updated') && autoOpen) {
               const projectScope = activeProjectId || 'unknown-project';
               const tabId = `sandbox-http:${projectScope}:${serviceId}`;
-              const previewTabUrl = appendTokenAndRestart(
-                previewUrl,
-                restartToken,
-                sourceType === 'sandbox_internal'
-              );
+              const previewTabUrl = appendRestartToken(previewUrl, restartToken);
 
               useCanvasStore.getState().openTab({
                 id: tabId,
@@ -695,79 +761,108 @@ export const useSandboxStore = create<SandboxState>()(
 
           // Artifact events
           case 'artifact_created': {
+            const artifactId = getStringField(data, 'artifact_id');
+            const filename = getStringField(data, 'filename');
+            const mimeType = getStringField(data, 'mime_type') ?? 'application/octet-stream';
+            if (!artifactId || !filename) {
+              break;
+            }
+
             // Create pending artifact
             const artifact: Artifact = {
-              id: data.artifact_id,
+              id: artifactId,
               projectId: '', // Will be set on ready
               tenantId: '',
-              sandboxId: data.sandbox_id,
-              toolExecutionId: data.tool_execution_id,
-              filename: data.filename,
-              mimeType: data.mime_type,
-              category: data.category as Artifact['category'],
-              sizeBytes: data.size_bytes,
+              sandboxId: getStringField(data, 'sandbox_id'),
+              toolExecutionId: getStringField(data, 'tool_execution_id'),
+              filename,
+              mimeType,
+              category: getArtifactCategory(getField(data, 'category')),
+              sizeBytes: getNumberField(data, 'size_bytes') ?? 0,
               status: 'uploading',
-              sourceTool: data.source_tool,
-              sourcePath: data.source_path,
+              sourceTool: getStringField(data, 'source_tool'),
+              sourcePath: getStringField(data, 'source_path'),
               createdAt: new Date().toISOString(),
             };
             get().addArtifact(artifact);
-            logger.debug('[SandboxStore] Artifact created', { artifactId: data.artifact_id });
+            logger.debug('[SandboxStore] Artifact created', { artifactId });
             break;
           }
 
           case 'artifact_ready': {
+            const artifactId = getStringField(data, 'artifact_id');
+            if (!artifactId) {
+              break;
+            }
+
             // Update artifact with URL
-            get().updateArtifact(data.artifact_id, {
-              url: data.url,
-              previewUrl: data.preview_url,
+            get().updateArtifact(artifactId, {
+              url: getStringField(data, 'url'),
+              previewUrl: getStringField(data, 'preview_url'),
               status: 'ready',
-              metadata: data.metadata,
+              metadata: isRecord(data.metadata) ? data.metadata : undefined,
             });
             logger.debug('[SandboxStore] Artifact ready', {
-              artifactId: data.artifact_id,
-              url: data.url,
+              artifactId,
+              url: getStringField(data, 'url'),
             });
             break;
           }
 
           case 'artifact_error': {
-            get().updateArtifact(data.artifact_id, {
+            const artifactId = getStringField(data, 'artifact_id');
+            if (!artifactId) {
+              break;
+            }
+
+            get().updateArtifact(artifactId, {
               status: 'error',
-              errorMessage: data.error,
+              errorMessage: getStringField(data, 'error'),
             });
             logger.warn('[SandboxStore] Artifact error', {
-              artifactId: data.artifact_id,
-              error: data.error,
+              artifactId,
+              error: getStringField(data, 'error'),
             });
             break;
           }
 
           case 'artifacts_batch': {
             // Add multiple artifacts at once
-            if (data.artifacts && Array.isArray(data.artifacts)) {
-              for (const info of data.artifacts) {
+            const artifacts = getRecordArrayField(data, 'artifacts');
+            if (artifacts.length > 0) {
+              for (const info of artifacts) {
+                const artifactId = getStringField(info, 'id');
+                const filename = getStringField(info, 'filename');
+                const mimeType =
+                  getStringField(info, 'mimeType', 'mime_type') ?? 'application/octet-stream';
+                if (!artifactId || !filename) {
+                  continue;
+                }
+
+                const url = getStringField(info, 'url');
                 const artifact: Artifact = {
-                  id: info.id,
+                  id: artifactId,
                   projectId: '',
                   tenantId: '',
-                  sandboxId: data.sandbox_id,
-                  toolExecutionId: data.tool_execution_id,
-                  filename: info.filename,
-                  mimeType: info.mimeType || info.mime_type,
-                  category: (info.category as Artifact['category']) || 'other',
-                  sizeBytes: info.sizeBytes || info.size_bytes || 0,
-                  url: info.url,
-                  previewUrl: info.previewUrl || info.preview_url,
-                  status: info.url ? 'ready' : 'pending',
-                  sourceTool: info.sourceTool || info.source_tool || data.source_tool,
-                  metadata: info.metadata,
+                  sandboxId: getStringField(data, 'sandbox_id'),
+                  toolExecutionId: getStringField(data, 'tool_execution_id'),
+                  filename,
+                  mimeType,
+                  category: getArtifactCategory(getField(info, 'category')),
+                  sizeBytes: getNumberField(info, 'sizeBytes', 'size_bytes') ?? 0,
+                  url,
+                  previewUrl: getStringField(info, 'previewUrl', 'preview_url'),
+                  status: url ? 'ready' : 'pending',
+                  sourceTool:
+                    getStringField(info, 'sourceTool', 'source_tool') ??
+                    getStringField(data, 'source_tool'),
+                  metadata: isRecord(info.metadata) ? info.metadata : undefined,
                   createdAt: new Date().toISOString(),
                 };
                 get().addArtifact(artifact);
               }
               logger.debug('[SandboxStore] Artifacts batch added', {
-                count: data.artifacts.length,
+                count: artifacts.length,
               });
             }
             break;
@@ -819,7 +914,7 @@ export const useSandboxStore = create<SandboxState>()(
 
           // Add to executions (pending state)
           const execution: ToolExecution = {
-            id: callId || `${toolName}-${Date.now()}`,
+            id: callId || `${toolName}-${String(Date.now())}`,
             toolName,
             input,
             timestamp: Date.now(),

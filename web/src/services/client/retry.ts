@@ -8,7 +8,7 @@
  * - Integration with ApiError.isRetryable()
  */
 
-import { ApiError } from './ApiError';
+import { ApiError, ApiErrorType } from './ApiError';
 
 /**
  * Retry configuration options
@@ -65,14 +65,11 @@ export const DEFAULT_RETRY_CONFIG: {
  */
 export function calculateDelay(attempt: number, config: RetryConfig = {}): number {
   const {
-    initialDelay: _initialDelay = DEFAULT_RETRY_CONFIG.initialDelay,
-    maxDelay: _maxDelay = DEFAULT_RETRY_CONFIG.maxDelay,
-    backoffMultiplier: _backoffMultiplier = DEFAULT_RETRY_CONFIG.backoffMultiplier,
+    initialDelay = DEFAULT_RETRY_CONFIG.initialDelay,
+    maxDelay = DEFAULT_RETRY_CONFIG.maxDelay,
+    backoffMultiplier = DEFAULT_RETRY_CONFIG.backoffMultiplier,
     jitter = DEFAULT_RETRY_CONFIG.jitter,
   } = config;
-  const initialDelay = _initialDelay ?? DEFAULT_RETRY_CONFIG.initialDelay;
-  const maxDelay = _maxDelay ?? DEFAULT_RETRY_CONFIG.maxDelay;
-  const backoffMultiplier = _backoffMultiplier ?? DEFAULT_RETRY_CONFIG.backoffMultiplier;
 
   // Calculate exponential backoff: initialDelay * (multiplier ^ attempt)
   const exponentialDelay = initialDelay * Math.pow(backoffMultiplier, attempt);
@@ -109,8 +106,7 @@ export function isRetryableError(error: ApiError, config: RetryConfig = {}): boo
   }
 
   // Check if status code is in retryable list
-  const { retryableStatusCodes = DEFAULT_RETRY_CONFIG.retryableStatusCodes } = config;
-  const codes = retryableStatusCodes ?? DEFAULT_RETRY_CONFIG.retryableStatusCodes;
+  const codes = config.retryableStatusCodes ?? DEFAULT_RETRY_CONFIG.retryableStatusCodes;
   if (error.statusCode && codes.has(error.statusCode)) {
     return true;
   }
@@ -129,8 +125,7 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   config: RetryConfig = {}
 ): Promise<T> {
-  const { maxRetries: _maxRetries = DEFAULT_RETRY_CONFIG.maxRetries } = config;
-  const maxRetries = _maxRetries ?? DEFAULT_RETRY_CONFIG.maxRetries;
+  const { maxRetries = DEFAULT_RETRY_CONFIG.maxRetries } = config;
 
   let lastError: Error | undefined;
 
@@ -138,13 +133,11 @@ export async function retryWithBackoff<T>(
     try {
       return await fn();
     } catch (error) {
-      lastError = error as Error;
-
-      // Check if we should retry
       const apiError = error instanceof ApiError ? error : parseErrorAsApiError(error);
+      lastError = error instanceof Error ? error : apiError;
 
       if (!isRetryableError(apiError, config)) {
-        throw error; // Not retryable, fail immediately
+        throw lastError;
       }
 
       // Don't delay after the last attempt
@@ -155,7 +148,7 @@ export async function retryWithBackoff<T>(
     }
   }
 
-  throw lastError;
+  throw lastError ?? new ApiError(ApiErrorType.UNKNOWN, 'UNKNOWN_ERROR', 'Retry failed');
 }
 
 /**
@@ -182,8 +175,8 @@ function parseErrorAsApiError(error: unknown): ApiError {
   // For non-ApiError errors, create a generic one
   // Import parseError dynamically to avoid circular dependency
   if (error instanceof Error) {
-    return new ApiError('NETWORK' as any, 'UNKNOWN_ERROR', error.message);
+    return new ApiError(ApiErrorType.NETWORK, 'UNKNOWN_ERROR', error.message);
   }
 
-  return new ApiError('NETWORK' as any, 'UNKNOWN_ERROR', String(error));
+  return new ApiError(ApiErrorType.NETWORK, 'UNKNOWN_ERROR', String(error));
 }

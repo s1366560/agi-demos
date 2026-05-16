@@ -68,6 +68,23 @@ export function normalizeStyle(input: unknown): CSSProperties {
   return normalizedStyle as CSSProperties;
 }
 
+function toDisplayString(value: unknown): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveBindingPath(
   input: unknown,
   node: A2UINodeLike,
@@ -99,11 +116,10 @@ export function resolveBoundStringValue(
     const resolvedPath = actions.resolvePath(normalized.path, node.dataContextPath);
     const currentValue = actions.getData(node, resolvedPath, surfaceId);
     if (Array.isArray(currentValue) && currentValue.length > 0 && currentValue[0] != null) {
-      return String(currentValue[0]);
+      return toDisplayString(currentValue[0]);
     }
-    if (currentValue != null) {
-      return String(currentValue);
-    }
+    const boundValue = toDisplayString(currentValue);
+    return boundValue ?? normalized.literalString;
   }
 
   if (typeof normalized.literalString === 'string') {
@@ -126,7 +142,7 @@ export function resolveBoundNumberValue(
   if (normalized.path) {
     const resolvedPath = actions.resolvePath(normalized.path, node.dataContextPath);
     const currentValue = actions.getData(node, resolvedPath, surfaceId);
-    const scalarValue = Array.isArray(currentValue) ? currentValue[0] : currentValue;
+    const scalarValue: unknown = Array.isArray(currentValue) ? currentValue[0] : currentValue;
     const parsedValue =
       typeof scalarValue === 'number'
         ? scalarValue

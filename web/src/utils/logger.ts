@@ -32,14 +32,11 @@ export interface Logger {
  */
 const isDevelopment = (): boolean => {
   // Vite sets MODE automatically
-  if (import.meta.env) {
-    return import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test';
-  }
+  const isViteDev = import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test';
   // Fallback to NODE_ENV for Node.js environments
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
-    return ['development', 'test'].includes(process.env.NODE_ENV);
-  }
-  return false;
+  const isNodeDev =
+    typeof process !== 'undefined' && ['development', 'test'].includes(process.env.NODE_ENV ?? '');
+  return isViteDev || isNodeDev;
 };
 
 const dev = isDevelopment();

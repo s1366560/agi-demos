@@ -65,7 +65,10 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
               </button>
               {onRegenerate && (
                 <button
-                  onClick={handleRegenerate}
+                  type="button"
+                  onClick={() => {
+                    void handleRegenerate();
+                  }}
                   disabled={regenerating}
                   className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"
                   title={t('agent.summary.regenerate', 'Regenerate summary')}
@@ -78,7 +81,9 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
                 </button>
               )}
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">{summary}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+              {summary}
+            </p>
           </div>
         </div>
       </div>

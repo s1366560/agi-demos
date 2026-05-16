@@ -6,7 +6,6 @@ import { LineChart, FileText, ShieldCheck, ArrowLeftRight } from 'lucide-react';
  * Matches design from docs/statics/project workbench/agent/start/
  */
 
-
 export interface StarterTile {
   id: string;
   title: string;
@@ -25,7 +24,6 @@ export interface IdleStateProps {
   /** Optional subtitle */
   subtitle?: string | undefined;
 }
-
 
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number }>> = {
   analytics: LineChart,

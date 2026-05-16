@@ -99,7 +99,7 @@ export const useVoiceCallStore = create<VoiceCallState>()(
     (set) => ({
       ...initialState,
 
-      startCall: async (conversationId: string, projectId: string, mode: CallMode) => {
+      startCall: (conversationId: string, projectId: string, mode: CallMode) => {
         set({
           status: 'connecting',
           error: null,
@@ -114,11 +114,13 @@ export const useVoiceCallStore = create<VoiceCallState>()(
         // Actual WS connection is handled by useVoiceChat hook in the component.
         // The hook reads conversationId/projectId from the store.
         // We just set status to 'connecting' and let the hook take over.
+        return Promise.resolve();
       },
 
-      endCall: async () => {
+      endCall: () => {
         // Just reset state. The useVoiceChat hook watches status and disconnects.
         set({ ...initialState });
+        return Promise.resolve();
       },
 
       setConnected: () => {

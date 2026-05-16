@@ -49,7 +49,8 @@ import { httpClient } from '../../services/client/httpClient';
 import { getAuthToken } from '@/utils/tokenResolver';
 
 capturedRequestInterceptor = mockAxiosInstance.interceptors.request.use.mock.calls[0]?.[0] ?? null;
-capturedResponseInterceptor = mockAxiosInstance.interceptors.response.use.mock.calls[0]?.[0] ?? null;
+capturedResponseInterceptor =
+  mockAxiosInstance.interceptors.response.use.mock.calls[0]?.[0] ?? null;
 
 describe('httpClient', () => {
   beforeEach(() => {

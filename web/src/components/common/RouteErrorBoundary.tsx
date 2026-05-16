@@ -42,9 +42,9 @@ function RouteErrorFallback({
 
   const handleGoBack = () => {
     if (fallbackPath) {
-      navigate(fallbackPath);
+      void navigate(fallbackPath);
     } else {
-      navigate(-1);
+      void navigate(-1);
     }
   };
 

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -73,6 +74,37 @@ export interface CentralBlackboardContentProps {
   onDeleteReply: (postId: string, replyId: string) => Promise<void>;
 }
 
+interface BlackboardTabPanelProps {
+  activeTab: BlackboardTab;
+  children: ReactNode;
+}
+
+function BlackboardTabPanel({ activeTab, children }: BlackboardTabPanelProps) {
+  const activeTabMeta = BLACKBOARD_TAB_META[activeTab];
+
+  return (
+    <div
+      key={activeTab}
+      id={`blackboard-panel-${activeTab}`}
+      role="tabpanel"
+      aria-labelledby={`blackboard-tab-${activeTab}`}
+      data-blackboard-boundary={activeTabMeta.boundary}
+      data-blackboard-authority={activeTabMeta.authority}
+      className="px-4 py-4 focus-visible:outline-none sm:px-6 sm:py-5 md:min-h-0 md:flex-1 md:overflow-y-auto"
+    >
+      {children}
+    </div>
+  );
+}
+
+function BlackboardSectionSurface({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+      {children}
+    </div>
+  );
+}
+
 export function CentralBlackboardContent({
   tenantId,
   projectId,
@@ -144,9 +176,7 @@ export function CentralBlackboardContent({
             is_active: payload.is_active,
           }
         );
-        message?.success(
-          t('workspaceDetail.genes.updateSuccess', 'Gene updated')
-        );
+        message?.success(t('workspaceDetail.genes.updateSuccess', 'Gene updated'));
       } else {
         await workspaceActions.createGene(tenantId, projectId, workspaceId, {
           name: payload.name,
@@ -156,9 +186,7 @@ export function CentralBlackboardContent({
           version: payload.version,
           is_active: payload.is_active,
         });
-        message?.success(
-          t('workspaceDetail.genes.createSuccess', 'Gene created')
-        );
+        message?.success(t('workspaceDetail.genes.createSuccess', 'Gene created'));
       }
       closeGeneEditor();
     } catch {
@@ -237,11 +265,10 @@ export function CentralBlackboardContent({
       ),
     [t, topologyNodes]
   );
-  const activeTabMeta = BLACKBOARD_TAB_META[activeTab];
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark md:flex-row">
+      <div className="flex flex-col rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark md:min-h-0 md:flex-1 md:flex-row md:overflow-hidden">
         <div className="md:hidden">
           <BlackboardTabBar
             activeTab={activeTab}
@@ -261,15 +288,7 @@ export function CentralBlackboardContent({
           />
         </aside>
 
-        <div
-          key={activeTab}
-          id={`blackboard-panel-${activeTab}`}
-          role="tabpanel"
-          aria-labelledby={`blackboard-tab-${activeTab}`}
-          data-blackboard-boundary={activeTabMeta.boundary}
-          data-blackboard-authority={activeTabMeta.authority}
-          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 focus-visible:outline-none sm:px-6 sm:py-5"
-        >
+        <BlackboardTabPanel activeTab={activeTab}>
           {activeTab === 'goals' && (
             <GoalsTab
               objectives={objectives}
@@ -333,14 +352,14 @@ export function CentralBlackboardContent({
           )}
 
           {activeTab === 'members' && (
-            <div className="rounded-lg border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+            <BlackboardSectionSurface>
               <MemberPanel tenantId={tenantId} projectId={projectId} workspaceId={workspaceId} />
               <ConversationRosterSection projectId={projectId} workspaceId={workspaceId} />
-            </div>
+            </BlackboardSectionSurface>
           )}
 
           {activeTab === 'genes' && (
-            <div className="rounded-lg border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+            <BlackboardSectionSurface>
               <div className="mb-3 flex items-center justify-end gap-2">
                 <Button
                   icon={<DownloadCloud size={14} />}
@@ -365,7 +384,7 @@ export function CentralBlackboardContent({
                   void actions.handleToggleGeneActive(geneId, isActive);
                 }}
               />
-            </div>
+            </BlackboardSectionSurface>
           )}
 
           {activeTab === 'files' && (
@@ -423,7 +442,7 @@ export function CentralBlackboardContent({
               workspaceId={workspaceId}
             />
           )}
-        </div>
+        </BlackboardTabPanel>
       </div>
 
       <ObjectiveCreateModal

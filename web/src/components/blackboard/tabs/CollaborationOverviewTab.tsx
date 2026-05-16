@@ -39,7 +39,7 @@ export function CollaborationOverviewTab({
     useShallow((state) => ({
       messages: state.chatMessages,
       loadMessages: state.loadChatMessages,
-    })),
+    }))
   );
 
   const [filterAgent, setFilterAgent] = useState<string>('all');
@@ -52,8 +52,7 @@ export function CollaborationOverviewTab({
     let filtered = messages.filter((m: WorkspaceMessage) => m.sender_type === 'agent');
     if (filterAgent !== 'all') {
       filtered = filtered.filter(
-        (m: WorkspaceMessage) =>
-          m.sender_id === filterAgent || m.mentions.includes(filterAgent),
+        (m: WorkspaceMessage) => m.sender_id === filterAgent || m.mentions.includes(filterAgent)
       );
     }
     return filtered.slice().reverse();
@@ -105,7 +104,7 @@ export function CollaborationOverviewTab({
           <p className="mt-0.5 text-sm text-text-secondary dark:text-text-muted">
             {t(
               'blackboard.collaboration.subtitle',
-              'Overview of messages exchanged between agents in this workspace.',
+              'Overview of messages exchanged between agents in this workspace.'
             )}
           </p>
           <div className="mt-2">
@@ -119,12 +118,12 @@ export function CollaborationOverviewTab({
           <Filter className="h-4 w-4 text-text-secondary dark:text-text-muted" />
           <select
             value={filterAgent}
-            onChange={(e) => { setFilterAgent(e.target.value); }}
+            onChange={(e) => {
+              setFilterAgent(e.target.value);
+            }}
             className="rounded-md border border-border-light bg-surface-light px-2 py-1 text-sm text-text-primary outline-none focus:ring-1 focus:ring-primary dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse"
           >
-            <option value="all">
-              {t('blackboard.collaboration.allAgents', 'All Agents')}
-            </option>
+            <option value="all">{t('blackboard.collaboration.allAgents', 'All Agents')}</option>
             {agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.display_name}
@@ -218,7 +217,7 @@ export function CollaborationOverviewTab({
           <div className="mt-3 text-sm text-text-secondary dark:text-text-muted">
             {t(
               'blackboard.collaboration.noMessages',
-              'No agent communication yet. Messages will appear here when agents interact.',
+              'No agent communication yet. Messages will appear here when agents interact.'
             )}
           </div>
         </div>

@@ -41,7 +41,11 @@ export function parseSandboxStateData(message: ServerMessage): SandboxStateData 
     // Redis stream format: data contains { type, data, timestamp }
     const outerData = (message as { data?: Record<string, unknown> | undefined }).data || {};
     eventType = typeof outerData.type === 'string' ? outerData.type : 'unknown';
-    data = (outerData.data as Record<string, unknown>) || {};
+    const outerPayload = outerData.data;
+    data =
+      outerPayload && typeof outerPayload === 'object' && !Array.isArray(outerPayload)
+        ? (outerPayload as Record<string, unknown>)
+        : {};
   } else {
     // broadcast_sandbox_state format: data contains event fields directly
     data = (message as { data?: Record<string, unknown> | undefined }).data || {};

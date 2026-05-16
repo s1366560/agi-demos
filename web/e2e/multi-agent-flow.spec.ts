@@ -5,8 +5,8 @@
  * surfaces shipped in Track B phase-2. Full UI-level coverage
  * (``@mention picker chips``, ``room-HITL accept flow``) depends on
  * wiring ``ConversationParticipantsPanel`` / ``MentionPicker`` /
- * ``HITLCenterPanel`` into ``AgentWorkspace`` — it is captured here
- * as ``test.skip`` placeholders to be enabled once the wiring lands.
+ * ``HITLCenterPanel`` into ``AgentWorkspace``. This suite keeps API-level
+ * smoke coverage for the backend plumbing those UI flows depend on.
  *
  * Scenarios validated (real HTTP, real backend):
  *
@@ -248,10 +248,9 @@ test.describe('multi-agent conversation flow (API)', () => {
 });
 
 test.describe('multi-agent UI flows (smoke — API plumbing)', () => {
-  // These scenarios were originally stubbed as ``test.skip`` pending
-  // full Playwright browser flows (autonomous mode toggle, @mention
-  // picker chip, HITLCenterPanel accept button). The browser-level UI
-  // flows are still deferred — see ``files/p3-autonomous-ui-plan.md``.
+  // These scenarios provide API-level smoke coverage for browser flows
+  // such as the autonomous mode toggle, @mention picker chip, and
+  // HITLCenterPanel accept button.
   //
   // Here we enable them with API-level smoke coverage that exercises
   // the backend plumbing the UI flows depend on. This is the same

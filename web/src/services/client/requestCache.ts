@@ -14,8 +14,8 @@
 /**
  * Cache entry structure
  */
-interface CacheEntry<T> {
-  data: T;
+interface CacheEntry {
+  data: unknown;
   expiresAt: number;
 }
 
@@ -32,7 +32,7 @@ export interface CacheStats {
  * Request cache implementation
  */
 class RequestCacheImpl {
-  private cache: Map<string, CacheEntry<unknown>> = new Map();
+  private cache: Map<string, CacheEntry> = new Map();
   private _hits: number = 0;
   private _misses: number = 0;
   private _defaultTTL: number = 60000; // 60 seconds default
@@ -74,7 +74,7 @@ class RequestCacheImpl {
   /**
    * Get a value from cache
    */
-  get<T>(key: string): T | undefined {
+  get(key: string): unknown {
     if (!this.enabled) {
       return undefined;
     }
@@ -93,13 +93,13 @@ class RequestCacheImpl {
     }
 
     this._hits++;
-    return entry.data as T;
+    return entry.data;
   }
 
   /**
    * Set a value in cache with optional TTL
    */
-  set<T>(key: string, data: T, ttl?: number): void {
+  set(key: string, data: unknown, ttl?: number): void {
     if (!this.enabled) {
       return;
     }

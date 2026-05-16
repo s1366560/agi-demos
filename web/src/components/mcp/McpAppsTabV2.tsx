@@ -35,7 +35,7 @@ export const McpAppsTabV2: React.FC = () => {
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetchApps(currentProject?.id);
+    void fetchApps(currentProject?.id);
   }, [currentProject?.id, fetchApps]);
 
   const appList = useMemo(() => {
@@ -46,7 +46,7 @@ export const McpAppsTabV2: React.FC = () => {
       (app) =>
         app.tool_name.toLowerCase().includes(q) ||
         app.server_name.toLowerCase().includes(q) ||
-        (app.ui_metadata?.title || '').toLowerCase().includes(q)
+        (app.ui_metadata.title || '').toLowerCase().includes(q)
     );
   }, [apps, search]);
 
@@ -94,7 +94,7 @@ export const McpAppsTabV2: React.FC = () => {
     const tabId = `mcp-app-${app.id}`;
     useCanvasStore.getState().openTab({
       id: tabId,
-      title: app.ui_metadata?.title || app.tool_name,
+      title: app.ui_metadata.title || app.tool_name,
       type: 'mcp-app' as const,
       content: '',
       mcpAppId: app.id,
@@ -103,7 +103,7 @@ export const McpAppsTabV2: React.FC = () => {
   }, []);
 
   const handleRefresh = useCallback(() => {
-    fetchApps(currentProject?.id);
+    void fetchApps(currentProject?.id);
   }, [currentProject?.id, fetchApps]);
 
   // Status counts
@@ -143,7 +143,9 @@ export const McpAppsTabV2: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {appList.length}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mcp.apps.totalApps')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('mcp.apps.totalApps')}
+                </p>
               </div>
             </div>
 
@@ -205,9 +207,7 @@ export const McpAppsTabV2: React.FC = () => {
           <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
             {t('mcp.apps.empty')}
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t('mcp.apps.emptyHint')}
-          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('mcp.apps.emptyHint')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -215,8 +215,12 @@ export const McpAppsTabV2: React.FC = () => {
             <McpAppCardV2
               key={app.id}
               app={app}
-              onDelete={handleDelete}
-              onRetry={handleRetry}
+              onDelete={(appId) => {
+                void handleDelete(appId);
+              }}
+              onRetry={(appId) => {
+                void handleRetry(appId);
+              }}
               onOpenInCanvas={handleOpenInCanvas}
               deleting={deleting}
               retrying={retrying}

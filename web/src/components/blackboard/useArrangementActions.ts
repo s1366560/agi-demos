@@ -71,12 +71,39 @@ interface UseArrangementActionsParams {
   nodeByCoord: Map<string, TopologyNode>;
   setSelection: (s: SelectionState | null) => void;
   setMoveMode: (m: MoveMode) => void;
-  bindAgent: (tenantId: string, projectId: string, workspaceId: string, data: BindAgentData) => Promise<WorkspaceAgent>;
-  updateAgentBinding: (tenantId: string, projectId: string, workspaceId: string, workspaceAgentId: string, data: UpdateAgentData) => Promise<WorkspaceAgent>;
-  unbindAgent: (tenantId: string, projectId: string, workspaceId: string, workspaceAgentId: string) => Promise<void>;
-  moveAgent: (tenantId: string, projectId: string, workspaceId: string, workspaceAgentId: string, q: number, r: number) => Promise<WorkspaceAgent>;
+  bindAgent: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    data: BindAgentData
+  ) => Promise<WorkspaceAgent>;
+  updateAgentBinding: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string,
+    data: UpdateAgentData
+  ) => Promise<WorkspaceAgent>;
+  unbindAgent: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string
+  ) => Promise<void>;
+  moveAgent: (
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    workspaceAgentId: string,
+    q: number,
+    r: number
+  ) => Promise<WorkspaceAgent>;
   createTopologyNode: (workspaceId: string, data: CreateNodeData) => Promise<TopologyNode>;
-  updateTopologyNode: (workspaceId: string, nodeId: string, data: UpdateNodeData) => Promise<TopologyNode>;
+  updateTopologyNode: (
+    workspaceId: string,
+    nodeId: string,
+    data: UpdateNodeData
+  ) => Promise<TopologyNode>;
   deleteTopologyNode: (workspaceId: string, nodeId: string) => Promise<void>;
   onOpenBlackboard: () => void;
 }
@@ -91,8 +118,15 @@ export interface ArrangementActions {
   setAddAgentOpen: (v: boolean) => void;
   handleMoveSelection: (q: number, r: number) => Promise<void>;
   handleActivateHex: (q: number, r: number) => Promise<void>;
-  handleCreateNode: (nodeType: TopologyNode['node_type'], targetHex?: { q: number; r: number }) => Promise<void>;
-  handleAddAgent: (data: { agent_id: string; display_name?: string; description?: string }) => Promise<void>;
+  handleCreateNode: (
+    nodeType: TopologyNode['node_type'],
+    targetHex?: { q: number; r: number }
+  ) => Promise<void>;
+  handleAddAgent: (data: {
+    agent_id: string;
+    display_name?: string;
+    description?: string;
+  }) => Promise<void>;
   handleSaveSelection: () => Promise<void>;
   handleDeleteSelection: () => Promise<void>;
   beginMoveMode: () => void;
@@ -137,7 +171,10 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
           hasHex(agent.hex_q) && hasHex(agent.hex_r) ? coordKey(agent.hex_q, agent.hex_r) : null;
         if (occupiedByOther(q, r, currentKey)) {
           message?.warning(
-            t('blackboard.arrangement.messages.slotUnavailable', 'That workstation is already occupied.')
+            t(
+              'blackboard.arrangement.messages.slotUnavailable',
+              'That workstation is already occupied.'
+            )
           );
           return;
         }
@@ -162,18 +199,19 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         return;
       }
 
-      if (params.moveMode.kind !== 'node') {
-        return;
-      }
       const movingNodeId = params.moveMode.nodeId;
       const node = params.nodes.find((item) => item.id === movingNodeId);
       if (!node) {
         return;
       }
-      const currentKey = hasHex(node.hex_q) && hasHex(node.hex_r) ? coordKey(node.hex_q, node.hex_r) : null;
+      const currentKey =
+        hasHex(node.hex_q) && hasHex(node.hex_r) ? coordKey(node.hex_q, node.hex_r) : null;
       if (occupiedByOther(q, r, currentKey)) {
         message?.warning(
-          t('blackboard.arrangement.messages.slotUnavailable', 'That workstation is already occupied.')
+          t(
+            'blackboard.arrangement.messages.slotUnavailable',
+            'That workstation is already occupied.'
+          )
         );
         return;
       }
@@ -195,9 +233,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         setPendingAction(null);
       }
     },
-    [params.agents, message, params.moveAgent, params.moveMode, params.nodes, occupiedByOther,
-      params.projectId, t, params.tenantId, params.updateTopologyNode, params.workspaceId,
-      params.setSelection, params.setMoveMode]
+    [message, occupiedByOther, params, t]
   );
 
   const handleActivateHex = useCallback(
@@ -228,13 +264,16 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
 
       params.setSelection({ kind: 'empty', q, r });
     },
-    [params.agentByCoord, handleMoveSelection, params.moveMode, params.nodeByCoord, params.onOpenBlackboard, params.setSelection]
+    [handleMoveSelection, params]
   );
 
   const handleCreateNode = useCallback(
     async (nodeType: TopologyNode['node_type'], targetHex?: { q: number; r: number }) => {
       const target =
-        targetHex ?? (params.selection?.kind === 'empty' ? { q: params.selection.q, r: params.selection.r } : null);
+        targetHex ??
+        (params.selection?.kind === 'empty'
+          ? { q: params.selection.q, r: params.selection.r }
+          : null);
 
       if (!target) {
         return;
@@ -264,7 +303,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         setPendingAction(null);
       }
     },
-    [params.createTopologyNode, message, params.selection, t, params.workspaceId, params.setSelection]
+    [message, params, t]
   );
 
   const handleAddAgent = useCallback(
@@ -282,7 +321,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         t('blackboard.arrangement.messages.agentPlaced', 'Agent placed on the workstation.')
       );
     },
-    [params.bindAgent, message, params.projectId, params.selection, t, params.tenantId, params.workspaceId, params.setSelection]
+    [message, params, t]
   );
 
   const handleSaveSelection = useCallback(async () => {
@@ -325,24 +364,25 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
           title: labelDraft.trim() || params.selectedNode.title,
           data: nextData,
         });
-        message?.success(
-          t('blackboard.arrangement.messages.nodeUpdated', 'Seat details updated.')
-        );
+        message?.success(t('blackboard.arrangement.messages.nodeUpdated', 'Seat details updated.'));
       } catch (error) {
         message?.error(getErrorMessage(error));
       } finally {
         setPendingAction(null);
       }
     }
-  }, [colorDraft, labelDraft, message, params.projectId, params.selectedAgent, params.selectedNode,
-    params.selection, t, params.tenantId, params.updateAgentBinding, params.updateTopologyNode,
-    params.workspaceId]);
+  }, [colorDraft, labelDraft, message, params, t]);
 
   const handleDeleteSelection = useCallback(async () => {
     if (params.selection?.kind === 'agent' && params.selectedAgent) {
       setPendingAction('delete-agent');
       try {
-        await params.unbindAgent(params.tenantId, params.projectId, params.workspaceId, params.selectedAgent.id);
+        await params.unbindAgent(
+          params.tenantId,
+          params.projectId,
+          params.workspaceId,
+          params.selectedAgent.id
+        );
         params.setSelection(null);
         params.setMoveMode(null);
         message?.success(
@@ -371,9 +411,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
         setPendingAction(null);
       }
     }
-  }, [params.deleteTopologyNode, message, params.projectId, params.selectedAgent,
-    params.selectedNode, params.selection, t, params.tenantId, params.unbindAgent,
-    params.workspaceId, params.setSelection, params.setMoveMode]);
+  }, [message, params, t]);
 
   const beginMoveMode = useCallback(() => {
     if (params.selection?.kind === 'agent') {
@@ -383,7 +421,7 @@ export function useArrangementActions(params: UseArrangementActionsParams): Arra
     if (params.selection?.kind === 'node') {
       params.setMoveMode({ kind: 'node', nodeId: params.selection.nodeId });
     }
-  }, [params.selection, params.setMoveMode]);
+  }, [params]);
 
   return {
     pendingAction,

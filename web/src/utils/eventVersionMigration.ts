@@ -38,6 +38,10 @@ interface VersionMigration {
  */
 const migrationRegistry = new Map<AgentEventType, VersionMigration[]>();
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Register a migration for an event type
  */
@@ -97,7 +101,11 @@ function findMigrationPath(
   const visited = new Set<string>([fromVersion]);
 
   while (queue.length > 0) {
-    const { version, path } = queue.shift()!;
+    const next = queue.shift();
+    if (!next) {
+      break;
+    }
+    const { version, path } = next;
 
     const edges = adjacency.get(version) || [];
     for (const edge of edges) {
@@ -208,7 +216,7 @@ export function initializeBuiltinMigrations(): void {
           ...d,
           thinking_chain: d.thinking_chain || [], // Add thinking chain
           metadata: {
-            ...((d.metadata as Record<string, unknown>) || {}),
+            ...(isRecord(d.metadata) ? d.metadata : {}),
             migrated_from: '1.1',
           },
         };
@@ -225,7 +233,7 @@ export function initializeBuiltinMigrations(): void {
         const d = data as Record<string, unknown>;
         return {
           ...d,
-          execution_id: d.execution_id || `exec_${Date.now()}`,
+          execution_id: d.execution_id || `exec_${String(Date.now())}`,
         };
       },
     },
@@ -259,7 +267,7 @@ export function initializeBuiltinMigrations(): void {
       to: '1.1',
       migrate: (data) => {
         const d = data as Record<string, unknown>;
-        const steps = (d.steps as Array<Record<string, unknown>>) || [];
+        const steps = Array.isArray(d.steps) ? d.steps.filter(isRecord) : [];
         return {
           ...d,
           steps: steps.map((step, index) => ({

@@ -229,11 +229,12 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
   size = 'md',
   className = '',
 }) => {
-  const config = PROVIDER_CONFIG[providerType] || PROVIDER_CONFIG.openai;
+  const config = PROVIDER_CONFIG[providerType];
+  const sizeClass = SIZE_MAP[size] ?? 'w-10 h-10 text-xl';
 
   return (
     <div
-      className={`${SIZE_MAP[size]} rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center shadow-lg ${className}`}
+      className={`${sizeClass} rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center shadow-lg ${className}`}
     >
       <span className="filter drop-shadow-md">{config.icon}</span>
     </div>

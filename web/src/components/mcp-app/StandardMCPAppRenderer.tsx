@@ -26,6 +26,7 @@ import React, {
 } from 'react';
 
 import ReactDOM from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 import { Alert, Button, Spin } from 'antd';
 import { RefreshCw } from 'lucide-react';
@@ -38,6 +39,8 @@ import { mcpAppAPI } from '@/services/mcpAppService';
 
 import { useMCPClient } from '@/hooks/useMCPClient';
 
+import { logger } from '@/utils/logger';
+
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 import { buildHostStyles } from './hostStyles';
@@ -47,7 +50,11 @@ import type {
   MCPAppDisplayMode,
   MCPAppCapabilities,
   MCPAppTool,
+  MCPAppToolCallResponse,
 } from '@/types/mcpApp';
+
+import type { AppRendererHandle, AppRendererProps, McpUiHostContext } from '@mcp-ui/client';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Prefix for synthetic (auto-discovered) MCP App IDs that have no DB record.
@@ -64,6 +71,75 @@ const LazyAppRenderer = React.lazy(async () => {
 
 /** Valid display modes for MCP App ui/request-display-mode handling */
 const VALID_DISPLAY_MODES: readonly MCPAppDisplayMode[] = ['inline', 'fullscreen', 'pip'];
+
+type AppMessageHandler = NonNullable<AppRendererProps['onMessage']>;
+type AppSizeChangedHandler = NonNullable<AppRendererProps['onSizeChanged']>;
+type AppOpenLinkHandler = NonNullable<AppRendererProps['onOpenLink']>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isDisplayMode(value: unknown): value is MCPAppDisplayMode {
+  return typeof value === 'string' && VALID_DISPLAY_MODES.includes(value as MCPAppDisplayMode);
+}
+
+function toCallToolResult(value: unknown): CallToolResult {
+  if (isRecord(value) && Array.isArray(value.content)) {
+    return value as CallToolResult;
+  }
+
+  const text =
+    typeof value === 'string'
+      ? value
+      : (() => {
+          try {
+            return JSON.stringify(value, null, 2);
+          } catch {
+            return String(value);
+          }
+        })();
+
+  return {
+    content: [{ type: 'text', text }],
+  };
+}
+
+function createToolCallResult(
+  content: MCPAppToolCallResponse['content'],
+  isError: boolean
+): CallToolResult {
+  return {
+    content: content as CallToolResult['content'],
+    isError,
+  };
+}
+
+function getMessageText(params: unknown): string | undefined {
+  if (!isRecord(params)) return undefined;
+
+  const content = params.content;
+  if (Array.isArray(content)) {
+    const contentBlocks = content as unknown[];
+    const textBlock = contentBlocks.find((block) => {
+      return isRecord(block) && block.type === 'text' && typeof block.text === 'string';
+    });
+    return isRecord(textBlock) && typeof textBlock.text === 'string' ? textBlock.text : undefined;
+  }
+
+  if (isRecord(content) && typeof content.text === 'string') {
+    return content.text;
+  }
+
+  return undefined;
+}
+
+function getMessageRole(params: unknown): string {
+  if (!isRecord(params) || typeof params.role !== 'string') {
+    return 'user';
+  }
+  return params.role;
+}
 
 /** Imperative handle exposed to parent for lifecycle management */
 export interface StandardMCPAppRendererHandle {
@@ -85,7 +161,7 @@ export interface StandardMCPAppRendererProps {
   /** Tool input arguments */
   toolInput?: Record<string, unknown> | undefined;
   /** Tool execution result (loosely typed - cast to CallToolResult internally) */
-  toolResult?: unknown | undefined;
+  toolResult?: unknown;
   /** Whether tool execution was cancelled (SEP-1865 ui/notifications/tool-cancelled) */
   toolCancelled?: boolean | undefined;
   /** Project ID for backend proxy calls */
@@ -152,6 +228,14 @@ export const StandardMCPAppRenderer = forwardRef<
     },
     ref
   ) => {
+    const { t } = useTranslation();
+    const translate = useCallback(
+      (key: string, fallback: string) => {
+        const value = t(key, fallback);
+        return value === key ? fallback : value;
+      },
+      [t]
+    );
     // Fall back to current project from store when prop is not provided
     // Also try conversation's project_id as a second fallback (for page refresh scenarios)
     const storeProjectId = useProjectStore((state) => state.currentProject?.id);
@@ -218,7 +302,7 @@ export const StandardMCPAppRenderer = forwardRef<
       !useDirectClient && !isInGracePeriod && !isConnecting && mcpStatus === 'error';
     const shouldUseHttpToolCall = shouldUseFallback || !mcpClient;
 
-    const appRendererRef = useRef<any>(null);
+    const appRendererRef = useRef<AppRendererHandle | null>(null);
     const computedTheme = useThemeStore((s) => s.computedTheme);
 
     // Helper: send a JSON-RPC request to the guest app iframe and await the response.
@@ -278,7 +362,7 @@ export const StandardMCPAppRenderer = forwardRef<
       () => ({
         teardown: () => {
           try {
-            appRendererRef.current?.teardownResource?.();
+            appRendererRef.current?.teardownResource();
           } catch {
             // Ignore errors during teardown
           }
@@ -451,48 +535,51 @@ export const StandardMCPAppRenderer = forwardRef<
     // Only provided after app initialization to avoid "Not connected" errors
     // from @mcp-ui/client's internal setHostContext -> notification call.
     // When hostContext prop changes, @mcp-ui/client sends ui/notifications/host-context-changed.
-    const hostContext = useMemo(
-      () =>
-        appInitialized
-          ? {
-              theme: computedTheme,
-              styles: hostStyles,
-              platform: 'web' as const,
-              userAgent: 'memstack',
-              displayMode: displayMode,
-              availableDisplayModes: ['inline', 'fullscreen', 'pip'],
-              locale: navigator.language,
-              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              // SEP-1865 P0-2: Advertise host capabilities to the guest app.
-              // McpUiHostContext has [key: string]: unknown so extra keys are safe.
-              hostCapabilities: {
-                openLinks: {},
-                serverTools: { listChanged: false },
-                serverResources: { listChanged: false },
-                logging: {},
-              },
-              containerDimensions:
-                containerSize.width > 0
-                  ? { width: containerSize.width, maxHeight: containerSize.height }
-                  : undefined,
-            }
-          : undefined,
-      [
-        appInitialized,
-        computedTheme,
-        hostStyles,
-        containerSize.width,
-        containerSize.height,
-        displayMode,
-      ]
-    );
+    const hostContext = useMemo<McpUiHostContext | undefined>(() => {
+      if (!appInitialized) return undefined;
+
+      const containerDimensions =
+        containerSize.width > 0
+          ? ({
+              width: containerSize.width,
+              maxHeight: containerSize.height,
+            } satisfies NonNullable<McpUiHostContext['containerDimensions']>)
+          : undefined;
+
+      return {
+        theme: computedTheme,
+        styles: hostStyles as NonNullable<McpUiHostContext['styles']>,
+        platform: 'web' as const,
+        userAgent: 'memstack',
+        displayMode: displayMode,
+        availableDisplayModes: ['inline', 'fullscreen', 'pip'],
+        locale: navigator.language,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        // SEP-1865 P0-2: Advertise host capabilities to the guest app.
+        // McpUiHostContext has [key: string]: unknown so extra keys are safe.
+        hostCapabilities: {
+          openLinks: {},
+          serverTools: { listChanged: false },
+          serverResources: { listChanged: false },
+          logging: {},
+        },
+        ...(containerDimensions ? { containerDimensions } : {}),
+      };
+    }, [
+      appInitialized,
+      computedTheme,
+      hostStyles,
+      containerSize.width,
+      containerSize.height,
+      displayMode,
+    ]);
 
     // Handler for resources/read requests (when html prop is not provided)
     // @mcp-ui/client expects the MCP format { contents: [{ uri, mimeType, text }] }
     // It will extract the text internally
-    const handleReadResource = useCallback(
-      async (params: { uri: string }) => {
-        console.log('[StandardMCPAppRenderer] handleReadResource called:', {
+    const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
+      async (params) => {
+        logger.debug('[StandardMCPAppRenderer] handleReadResource called:', {
           uri: params.uri,
           effectiveProjectId,
           serverName,
@@ -506,7 +593,7 @@ export const StandardMCPAppRenderer = forwardRef<
 
         try {
           const result = await mcpAppAPI.readResource(params.uri, effectiveProjectId, serverName);
-          console.log('[StandardMCPAppRenderer] readResource result:', result);
+          logger.debug('[StandardMCPAppRenderer] readResource result:', result);
 
           // Return the full MCP format - @mcp-ui/client will extract the text
           // The API returns { contents: [{ uri, mimeType, text }] }
@@ -521,11 +608,8 @@ export const StandardMCPAppRenderer = forwardRef<
 
     // Handler for tool calls from the guest app back to its MCP server
 
-    const handleCallTool = useCallback(
-      async (params: {
-        name: string;
-        arguments?: Record<string, unknown> | undefined;
-      }): Promise<any> => {
+    const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
+      async (params) => {
         if (!effectiveProjectId) {
           throw new Error('projectId required for tool calls');
         }
@@ -551,12 +635,9 @@ export const StandardMCPAppRenderer = forwardRef<
               );
               const result = await mcpAppAPI.proxyToolCall(realApp.id, {
                 tool_name: params.name,
-                arguments: params.arguments || {},
+                arguments: params.arguments ?? {},
               });
-              return {
-                content: result.content || [],
-                isError: result.is_error,
-              };
+              return createToolCallResult(result.content, result.is_error);
             }
           } catch (err) {
             console.warn(
@@ -570,24 +651,18 @@ export const StandardMCPAppRenderer = forwardRef<
             project_id: effectiveProjectId,
             server_name: serverName,
             tool_name: params.name,
-            arguments: params.arguments || {},
+            arguments: params.arguments ?? {},
           });
-          return {
-            content: result.content || [],
-            isError: result.is_error,
-          };
+          return createToolCallResult(result.content, result.is_error);
         }
 
         // Fast path: use appId directly if available (DB-backed app)
         if (appId) {
           const result = await mcpAppAPI.proxyToolCall(appId, {
             tool_name: params.name,
-            arguments: params.arguments || {},
+            arguments: params.arguments ?? {},
           });
-          return {
-            content: result.content || [],
-            isError: result.is_error,
-          };
+          return createToolCallResult(result.content, result.is_error);
         }
 
         // Fallback: find the app by server/tool name
@@ -600,12 +675,9 @@ export const StandardMCPAppRenderer = forwardRef<
               project_id: effectiveProjectId,
               server_name: serverName,
               tool_name: params.name,
-              arguments: params.arguments || {},
+              arguments: params.arguments ?? {},
             });
-            return {
-              content: result.content || [],
-              isError: result.is_error,
-            };
+            return createToolCallResult(result.content, result.is_error);
           }
           return {
             content: [{ type: 'text' as const, text: `No app found for tool ${toolName}` }],
@@ -614,23 +686,28 @@ export const StandardMCPAppRenderer = forwardRef<
         }
         const result = await mcpAppAPI.proxyToolCall(app.id, {
           tool_name: params.name,
-          arguments: params.arguments || {},
+          arguments: params.arguments ?? {},
         });
-        return {
-          content: result.content || [],
-          isError: result.is_error,
-        };
+        return createToolCallResult(result.content, result.is_error);
       },
       [effectiveProjectId, serverName, toolName, appId]
     );
 
     // Handler for resources/list requests from the guest app
-    const handleListResources = useCallback(async () => {
+    const handleListResources = useCallback<
+      NonNullable<AppRendererProps['onListResources']>
+    >(async () => {
       if (!effectiveProjectId) {
         return { resources: [] };
       }
       try {
-        return await mcpAppAPI.listResources(effectiveProjectId, serverName);
+        const result = await mcpAppAPI.listResources(effectiveProjectId, serverName);
+        return {
+          resources: result.resources.map((resource) => ({
+            ...resource,
+            name: resource.name ?? resource.uri,
+          })),
+        };
       } catch {
         return { resources: [] };
       }
@@ -641,33 +718,30 @@ export const StandardMCPAppRenderer = forwardRef<
     //
     // @mcp-ui/client validates ui/message with schema: { role: 'user', content: ContentBlock[] }
     // where content is an ARRAY of content blocks. We extract the first text block.
-    const handleMessage = useCallback(
-      async (params: any) => {
+    const handleMessage: AppMessageHandler = useCallback(
+      (params: unknown) => {
         // Route ui/update-model-context
-        if (params?.method === 'ui/update-model-context' && params?.context) {
-          onUpdateModelContext?.(params.context);
-          return {};
+        if (isRecord(params) && params.method === 'ui/update-model-context') {
+          const context: unknown = params.context;
+          if (isRecord(context)) {
+            onUpdateModelContext?.(context);
+          }
+          return Promise.resolve({});
         }
         // Route regular ui/message
         // content can be either:
         //   - An array of ContentBlock: [{type:'text', text:'...'}] (per @mcp-ui/client spec)
         //   - A single object: {type:'text', text:'...'} (legacy/simplified format)
         if (onMessage) {
-          let text: string | undefined;
-          if (Array.isArray(params?.content)) {
-            const textBlock = params.content.find((b: any) => b?.type === 'text' && b?.text);
-            text = textBlock?.text;
-          } else if (typeof params?.content?.text === 'string') {
-            text = params.content.text;
-          }
+          const text = getMessageText(params);
           if (text) {
             onMessage({
-              role: params.role || 'user',
+              role: getMessageRole(params),
               content: { type: 'text', text },
             });
           }
         }
-        return {};
+        return Promise.resolve({});
       },
       [onMessage, onUpdateModelContext]
     );
@@ -675,14 +749,28 @@ export const StandardMCPAppRenderer = forwardRef<
     // Handler for ui/notifications/size-changed from the app (SEP-1865)
     // Also fires immediately when the bridge is working — used as an early
     // "ready" signal to unblock hostContext delivery before the fallback timer.
-    const handleSizeChanged = useCallback(
-      (params: any) => {
+    const handleSizeChanged = useCallback<AppSizeChangedHandler>(
+      (params) => {
         // Bridge is confirmed live: app can only send notifications after connect()
         setAppInitialized(true);
-        onSizeChanged?.({ width: params?.width, height: params?.height });
+        onSizeChanged?.({ width: params.width, height: params.height });
       },
       [onSizeChanged]
     );
+
+    const handleOpenLink = useCallback<AppOpenLinkHandler>(({ url }) => {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url, window.location.origin);
+      } catch {
+        return Promise.resolve({});
+      }
+      if (!['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
+        return Promise.resolve({});
+      }
+      window.open(parsedUrl.toString(), '_blank', 'noopener,noreferrer');
+      return Promise.resolve({});
+    }, []);
 
     const handleError = useCallback((err: Error) => {
       console.error('[StandardMCPAppRenderer] Error:', err);
@@ -692,7 +780,7 @@ export const StandardMCPAppRenderer = forwardRef<
     // Debug log for props being passed to AppRenderer
     // MUST be called before any conditional returns to satisfy React hooks rules
     useEffect(() => {
-      console.log('[StandardMCPAppRenderer] Props for AppRenderer:', {
+      logger.debug('[StandardMCPAppRenderer] Props for AppRenderer:', {
         effectiveHtml: effectiveHtml ? `${effectiveHtml.slice(0, 50)}...` : undefined,
         effectiveUri,
         effectiveProjectId,
@@ -714,17 +802,14 @@ export const StandardMCPAppRenderer = forwardRef<
         if (data.jsonrpc !== '2.0' || data.method !== 'ui/request-display-mode') return;
 
         // Validate params.mode
-        const params = data.params as Record<string, unknown> | undefined;
+        const params = isRecord(data.params) ? data.params : undefined;
         const requestedMode = params?.mode;
-        if (
-          typeof requestedMode !== 'string' ||
-          !VALID_DISPLAY_MODES.includes(requestedMode as MCPAppDisplayMode)
-        ) {
+        if (!isDisplayMode(requestedMode)) {
           return;
         }
 
         // Update local state
-        setDisplayMode(requestedMode as MCPAppDisplayMode);
+        setDisplayMode(requestedMode);
 
         // Send JSON-RPC success response back to the source iframe
         if (event.source) {
@@ -765,8 +850,11 @@ export const StandardMCPAppRenderer = forwardRef<
           if (pending) {
             pendingRpcRequests.current.delete(data.id);
             if ('error' in data) {
-              const err = data.error as { message?: string } | undefined;
-              pending.reject(new Error(err?.message ?? 'RPC error'));
+              const message =
+                isRecord(data.error) && typeof data.error.message === 'string'
+                  ? data.error.message
+                  : 'RPC error';
+              pending.reject(new Error(message));
             } else {
               pending.resolve(data.result);
             }
@@ -776,8 +864,8 @@ export const StandardMCPAppRenderer = forwardRef<
 
         // Case 2: ui/initialize request from the guest -- extract appCapabilities
         if (data.method === 'ui/initialize') {
-          const params = data.params as Record<string, unknown> | undefined;
-          if (params?.appCapabilities) {
+          const params = isRecord(data.params) ? data.params : undefined;
+          if (isRecord(params?.appCapabilities)) {
             setAppCapabilities(params.appCapabilities as MCPAppCapabilities);
           }
           return;
@@ -785,8 +873,8 @@ export const StandardMCPAppRenderer = forwardRef<
 
         // Case 3: ui/notifications/initialized notification -- secondary signal
         if (data.method === 'ui/notifications/initialized') {
-          const params = data.params as Record<string, unknown> | undefined;
-          if (params?.appCapabilities) {
+          const params = isRecord(data.params) ? data.params : undefined;
+          if (isRecord(params?.appCapabilities)) {
             setAppCapabilities(params.appCapabilities as MCPAppCapabilities);
           }
         }
@@ -801,7 +889,12 @@ export const StandardMCPAppRenderer = forwardRef<
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center gap-3 p-4" style={{ height }}>
-          <Alert type="error" title="Failed to load MCP App" description={error} showIcon />
+          <Alert
+            type="error"
+            title={translate('components.mcpApp.renderer.loadFailed', 'Failed to load MCP App')}
+            description={error}
+            showIcon
+          />
           <Button
             icon={<RefreshCw size={14} />}
             onClick={() => {
@@ -809,7 +902,7 @@ export const StandardMCPAppRenderer = forwardRef<
             }}
             size="small"
           >
-            Retry
+            {translate('common.retry', 'Retry')}
           </Button>
         </div>
       );
@@ -823,7 +916,10 @@ export const StandardMCPAppRenderer = forwardRef<
           <Alert
             type="info"
             title={toolName}
-            description="This MCP tool does not provide a UI resource. Showing tool result below."
+            description={translate(
+              'components.mcpApp.renderer.noUiResource',
+              'This MCP tool does not provide a UI resource. Showing tool result below.'
+            )}
             showIcon
             className="mb-3"
           />
@@ -871,28 +967,18 @@ export const StandardMCPAppRenderer = forwardRef<
               {...(effectiveUri != null ? { toolResourceUri: effectiveUri } : {})}
               {...(toolInput != null ? { toolInput } : {})}
               {...(toolCancelled != null ? { toolCancelled } : {})}
-              {...(toolResult != null ? { toolResult: toolResult as any } : {})}
-              {...(hostContext != null ? { hostContext: hostContext as any } : {})}
-              {...(!shouldUseFallback && mcpClient ? { client: mcpClient as any } : {})}
-              {...(effectiveUri ? { onReadResource: handleReadResource as any } : {})}
-              {...(shouldUseHttpToolCall ? { onCallTool: handleCallTool as any } : {})}
-              {...(shouldUseFallback ? { onListResources: handleListResources as any } : {})}
-              onMessage={handleMessage as any}
-              onSizeChanged={handleSizeChanged as any}
+              {...(toolResult != null ? { toolResult: toCallToolResult(toolResult) } : {})}
+              {...(hostContext != null ? { hostContext } : {})}
+              {...(!shouldUseFallback && mcpClient
+                ? { client: mcpClient as unknown as NonNullable<AppRendererProps['client']> }
+                : {})}
+              {...(effectiveUri ? { onReadResource: handleReadResource } : {})}
+              {...(shouldUseHttpToolCall ? { onCallTool: handleCallTool } : {})}
+              {...(shouldUseFallback ? { onListResources: handleListResources } : {})}
+              onMessage={handleMessage}
+              onSizeChanged={handleSizeChanged}
               onError={handleError}
-              onOpenLink={async ({ url }) => {
-                let parsedUrl: URL;
-                try {
-                  parsedUrl = new URL(url, window.location.origin);
-                } catch {
-                  return {};
-                }
-                if (!['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
-                  return {};
-                }
-                window.open(parsedUrl.toString(), '_blank', 'noopener,noreferrer');
-                return {};
-              }}
+              onOpenLink={handleOpenLink}
             />
           </React.Suspense>
         </ErrorBoundary>

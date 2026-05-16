@@ -67,7 +67,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
     return (
       <section
         data-testid="conversation-roster-section"
-        aria-label="conversation rosters"
+        aria-label={t('blackboard.rosters.aria', { defaultValue: 'Conversation rosters' })}
         className={className ?? 'mt-6'}
       >
         <header className="mb-3 flex items-center justify-between">
@@ -130,10 +130,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                   className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="text-xs text-[#999]"
-                    >
+                    <span aria-hidden="true" className="text-xs text-[#999]">
                       {isOpen ? '▾' : '▸'}
                     </span>
                     <span className="truncate text-sm font-medium text-[#171717]">
@@ -142,9 +139,7 @@ export const ConversationRosterSection = memo<ConversationRosterSectionProps>(
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
                     {c.conversation_mode && (
-                      <span className={modeBadge}>
-                        {c.conversation_mode.replace(/_/g, ' ')}
-                      </span>
+                      <span className={modeBadge}>{c.conversation_mode.replace(/_/g, ' ')}</span>
                     )}
                   </span>
                 </button>

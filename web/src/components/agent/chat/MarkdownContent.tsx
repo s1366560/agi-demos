@@ -6,7 +6,7 @@
  * - Proper styling for links and images
  * - Syntax highlighting support (via prose classes)
  * - Code block actions (Copy, Open in Canvas)
- * - Lazy loading for heavy components (mermaid, math)
+ * - Lazy loading for heavy plugins (mermaid, math)
  * - Memoization for performance
  *
  * This component can be reused in:
@@ -23,19 +23,17 @@
  * <MarkdownContent content="**Result:** Done" className="text-xs" />
  */
 
-import { isValidElement, memo, useMemo, lazy, Suspense } from 'react';
+import { isValidElement, memo, useMemo } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 
+import { looksLikeCanonicalStory, parseCanonicalStory } from '../canonicalStory/canonicalStory';
 import { CanonicalStoryCard } from '../canonicalStory/CanonicalStoryCard';
-import {
-  looksLikeCanonicalStory,
-  parseCanonicalStory,
-} from '../canonicalStory/canonicalStory';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
+import { CodeBlock } from './CodeBlock';
 import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
 
 /**
@@ -46,11 +44,15 @@ import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
  */
 function extractCanonicalStoryYaml(children: ReactNode): string | null {
   let codeEl: ReactElement<{ className?: string; children?: ReactNode }> | null = null;
-  if (isValidElement(children)) {
-    codeEl = children as ReactElement<{ className?: string; children?: ReactNode }>;
+  if (isValidElement<{ className?: string; children?: ReactNode }>(children)) {
+    codeEl = children;
   } else if (Array.isArray(children)) {
-    const found = children.find((c) => isValidElement(c));
-    if (found) codeEl = found as ReactElement<{ className?: string; children?: ReactNode }>;
+    const childNodes = children as ReactNode[];
+    const found = childNodes.find(
+      (child): child is ReactElement<{ className?: string; children?: ReactNode }> =>
+        isValidElement<{ className?: string; children?: ReactNode }>(child)
+    );
+    if (found) codeEl = found;
   }
   if (!codeEl) return null;
   const className = codeEl.props.className ?? '';
@@ -80,56 +82,18 @@ export interface MarkdownContentProps {
   prose?: boolean | undefined;
   /** Whether to show code block actions (copy, open in canvas) */
   codeActions?: boolean | undefined;
-  /** Loading fallback for lazy components */
-  loadingFallback?: React.ReactNode | undefined;
 }
-
-/**
- * Loading fallback for lazy-loaded components.
- */
-const CodeBlockLoadingFallback: React.FC = () => (
-  <div className="my-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse motion-reduce:animate-none">
-    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-2" />
-    <div className="space-y-1">
-      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded" />
-      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-5/6" />
-      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-4/6" />
-    </div>
-  </div>
-);
-
-/**
- * Lazy-loaded CodeBlock with Suspense.
- * Code blocks are heavy due to syntax highlighting, so we lazy load them.
- */
-// Define the lazy component outside to prevent recreation
-const LazyCodeBlock = lazy(() =>
-  import('./CodeBlock').then((module) => ({ default: module.CodeBlock }))
-);
-
-const CodeBlockWithSuspense: React.FC<{
-  children?: React.ReactNode | undefined;
-  codeActions?: boolean | undefined;
-  loadingFallback?: React.ReactNode | undefined;
-}> = ({ children, codeActions = false, loadingFallback }) => {
-  return (
-    <Suspense fallback={loadingFallback || <CodeBlockLoadingFallback />}>
-      {/* @ts-expect-error -- Dynamic component props type check issue */}
-      <LazyCodeBlock codeActions={codeActions}>{children}</LazyCodeBlock>
-    </Suspense>
-  );
-};
 
 /**
  * MarkdownContent component
  *
  * Optimizations:
  * - React.memo prevents re-renders when props haven't changed
- * - Lazy loading for heavy components (CodeBlock)
+ * - Lazy loading for heavy Markdown plugins
  * - useMemo for plugin initialization
  */
 export const MarkdownContent = memo<MarkdownContentProps>(
-  ({ content, className = '', prose = true, codeActions = false, loadingFallback }) => {
+  ({ content, className = '', prose = true, codeActions = false }) => {
     const combinedClassName = prose ? `${MARKDOWN_PROSE_CLASSES} ${className}`.trim() : className;
 
     // Stable components reference
@@ -146,17 +110,13 @@ export const MarkdownContent = memo<MarkdownContentProps>(
             );
           }
           if (codeActions) {
-            return (
-              <CodeBlockWithSuspense codeActions={codeActions} loadingFallback={loadingFallback}>
-                {children}
-              </CodeBlockWithSuspense>
-            );
+            return <CodeBlock>{children}</CodeBlock>;
           }
           return <pre>{children}</pre>;
         },
       };
       return baseStoryAware;
-    }, [codeActions, loadingFallback]);
+    }, [codeActions]);
 
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
 
@@ -178,8 +138,7 @@ export const MarkdownContent = memo<MarkdownContentProps>(
       prevProps.content === nextProps.content &&
       prevProps.className === nextProps.className &&
       prevProps.prose === nextProps.prose &&
-      prevProps.codeActions === nextProps.codeActions &&
-      prevProps.loadingFallback === nextProps.loadingFallback
+      prevProps.codeActions === nextProps.codeActions
     );
   }
 );

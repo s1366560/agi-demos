@@ -8,6 +8,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { memoryAPI } from '../../../services/api';
+
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ projectId: 'test-project-1' }),
@@ -89,10 +91,11 @@ const mockMemories = [
   },
 ];
 
-vi.mock('../../../../services/api', () => ({
+vi.mock('../../../services/api', () => ({
   memoryAPI: {
-    list: vi.fn(() => Promise.resolve({ memories: mockMemories })),
+    list: vi.fn(),
     delete: vi.fn(() => Promise.resolve()),
+    reprocess: vi.fn(() => Promise.resolve()),
   },
 }));
 
@@ -110,6 +113,12 @@ vi.mock('../../../../hooks/useTaskSSE', () => ({
 describe('MemoryList Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(memoryAPI.list).mockResolvedValue({
+      memories: mockMemories,
+      total: mockMemories.length,
+      page: 1,
+      page_size: 100,
+    });
   });
 
   // ============================================================================
@@ -189,8 +198,7 @@ describe('MemoryList Compound Component', () => {
       });
     });
 
-    it.skip('should render memory rows', async () => {
-      // SKIP: Virtual list integration requires more complex test setup
+    it('should render memory rows', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
@@ -274,28 +282,35 @@ describe('MemoryList Compound Component', () => {
       index: 0,
     };
 
-    it('should render memory title', async () => {
+    const renderMemoryRow = async (props: any = defaultProps) => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
-      render(<MemoryList.MemoryRow {...defaultProps} />);
+      return render(
+        <table>
+          <tbody>
+            <MemoryList.MemoryRow {...props} />
+          </tbody>
+        </table>
+      );
+    };
+
+    it('should render memory title', async () => {
+      await renderMemoryRow();
       expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
     });
 
     it('should render content type', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
-      render(<MemoryList.MemoryRow {...defaultProps} />);
+      await renderMemoryRow();
       expect(screen.getByText('text')).toBeInTheDocument();
     });
 
     it('should render status badge', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
-      render(<MemoryList.MemoryRow {...defaultProps} />);
+      await renderMemoryRow();
       expect(screen.getByText('Completed')).toBeInTheDocument();
     });
 
     it('should call onDelete when delete button clicked', async () => {
-      const { MemoryList } = await import('../../../pages/project/MemoryList');
       const onDelete = vi.fn();
-      render(<MemoryList.MemoryRow {...{ ...defaultProps, onDelete }} />);
+      await renderMemoryRow({ ...defaultProps, onDelete });
       const deleteButton = screen.getByTitle('Delete memory');
       fireEvent.click(deleteButton);
       expect(onDelete).toHaveBeenCalledWith(mockMemories[0]);
@@ -352,8 +367,7 @@ describe('MemoryList Compound Component', () => {
   // ============================================================================
 
   describe('DeleteModal Sub-Component', () => {
-    it.skip('should render modal when open', async () => {
-      // SKIP: Text is split across elements
+    it('should render modal when open', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(
         <MemoryList.DeleteModal
@@ -364,7 +378,9 @@ describe('MemoryList Compound Component', () => {
         />
       );
       expect(screen.getByText('Delete Memory')).toBeInTheDocument();
-      expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
+      expect(
+        screen.getByText((_content, element) => element?.textContent === '"Meeting Notes"')
+      ).toBeInTheDocument();
     });
 
     it('should call onConfirm when confirm button clicked', async () => {
@@ -405,8 +421,7 @@ describe('MemoryList Compound Component', () => {
   // ============================================================================
 
   describe('Integration', () => {
-    it.skip('should filter memories by search term', async () => {
-      // SKIP: Virtual list integration test
+    it('should filter memories by search term', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
@@ -420,17 +435,19 @@ describe('MemoryList Compound Component', () => {
       });
     });
 
-    it.skip('should open delete modal when delete clicked', async () => {
-      // SKIP: Virtual list integration test
+    it('should open delete modal when delete clicked', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
         expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
       });
-      const deleteButton = screen.getByTitle('Delete memory');
+      const deleteButton = screen.getAllByTitle('Delete memory')[0];
       fireEvent.click(deleteButton);
       await waitFor(() => {
-        expect(screen.getByText(/delete/i)).toBeInTheDocument();
+        expect(screen.getByText('Delete Memory')).toBeInTheDocument();
+        expect(
+          screen.getByText((_content, element) => element?.textContent === '"Meeting Notes"')
+        ).toBeInTheDocument();
       });
     });
   });

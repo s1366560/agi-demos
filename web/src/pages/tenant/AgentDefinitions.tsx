@@ -65,7 +65,7 @@ export const AgentDefinitions: React.FC = () => {
   }, [definitions, filters, search, statusFilter, sortField]);
 
   useEffect(() => {
-    listDefinitions();
+    void listDefinitions();
   }, [listDefinitions]);
 
   useEffect(() => {
@@ -100,27 +100,37 @@ export const AgentDefinitions: React.FC = () => {
     async (id: string, enabled: boolean) => {
       try {
         await toggleEnabled(id, enabled);
-        message.success(enabled ? 'Agent enabled' : 'Agent disabled');
+        message.success(
+          enabled
+            ? t('tenant.agentDefinitions.messages.enabled', { defaultValue: 'Agent enabled' })
+            : t('tenant.agentDefinitions.messages.disabled', { defaultValue: 'Agent disabled' })
+        );
       } catch {
         // Error handled by store
       }
     },
-    [toggleEnabled]
+    [toggleEnabled, t]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
       try {
         await deleteDefinition(id);
-        message.success('Agent definition deleted');
+        message.success(
+          t('tenant.agentDefinitions.messages.deleted', {
+            defaultValue: 'Agent definition deleted',
+          })
+        );
       } catch {
         // Error handled by store
       }
     },
-    [deleteDefinition]
+    [deleteDefinition, t]
   );
 
-  const handleRefresh = useCallback(() => listDefinitions(), [listDefinitions]);
+  const handleRefresh = useCallback(() => {
+    void listDefinitions();
+  }, [listDefinitions]);
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -130,7 +140,7 @@ export const AgentDefinitions: React.FC = () => {
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingDef(null);
-    listDefinitions();
+    void listDefinitions();
   }, [listDefinitions]);
 
   const getCardMenuItems = useCallback(
@@ -149,7 +159,9 @@ export const AgentDefinitions: React.FC = () => {
         label: t('common.delete', 'Delete'),
         icon: <Trash2 size={14} />,
         danger: true,
-        onClick: () => handleDelete(def.id),
+        onClick: () => {
+          void handleDelete(def.id);
+        },
       },
     ],
     [handleEdit, handleDelete, t]
@@ -183,10 +195,18 @@ export const AgentDefinitions: React.FC = () => {
       {/* Stats bar */}
       <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
         <span>
-          {definitions.length} {definitions.length === 1 ? 'agent' : 'agents'}
+          {t('tenant.agentDefinitions.stats.agents', {
+            count: definitions.length,
+            defaultValue: '{{count}} agents',
+          })}
         </span>
         <span className="text-slate-300 dark:text-slate-600">|</span>
-        <span>{enabledCount} enabled</span>
+        <span>
+          {t('tenant.agentDefinitions.stats.enabled', {
+            count: enabledCount,
+            defaultValue: '{{count}} enabled',
+          })}
+        </span>
       </div>
 
       {/* Filters */}
@@ -218,7 +238,9 @@ export const AgentDefinitions: React.FC = () => {
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
               }`}
             >
-              {sf.charAt(0).toUpperCase() + sf.slice(1)}
+              {t(`tenant.agentDefinitions.filters.${sf}`, {
+                defaultValue: sf.charAt(0).toUpperCase() + sf.slice(1),
+              })}
             </button>
           ))}
         </div>
@@ -230,14 +252,26 @@ export const AgentDefinitions: React.FC = () => {
           }}
           className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
         >
-          <option value="name">Name</option>
-          <option value="recent">Recent</option>
-          <option value="invocations">Invocations</option>
+          <option value="name">
+            {t('tenant.agentDefinitions.sort.name', { defaultValue: 'Name' })}
+          </option>
+          <option value="recent">
+            {t('tenant.agentDefinitions.sort.recent', { defaultValue: 'Recent' })}
+          </option>
+          <option value="invocations">
+            {t('tenant.agentDefinitions.sort.invocations', { defaultValue: 'Invocations' })}
+          </option>
         </select>
 
         <button
           type="button"
           onClick={handleRefresh}
+          aria-label={t('tenant.agentDefinitions.refresh', {
+            defaultValue: 'Refresh agent definitions',
+          })}
+          title={t('tenant.agentDefinitions.refresh', {
+            defaultValue: 'Refresh agent definitions',
+          })}
           className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
         >
           <RefreshCw size={16} />
@@ -289,11 +323,25 @@ export const AgentDefinitions: React.FC = () => {
                   <Switch
                     size="small"
                     checked={def.enabled}
-                    onChange={(checked) => handleToggle(def.id, checked)}
+                    aria-label={t('tenant.agentDefinitions.toggleAgent', {
+                      name: def.display_name ?? def.name,
+                      defaultValue: 'Toggle {{name}}',
+                    })}
+                    onChange={(checked) => {
+                      void handleToggle(def.id, checked);
+                    }}
                   />
                   <Dropdown menu={{ items: getCardMenuItems(def) ?? [] }} trigger={['click']}>
                     <button
                       type="button"
+                      aria-label={t('tenant.agentDefinitions.openActions', {
+                        name: def.display_name ?? def.name,
+                        defaultValue: 'Open actions for {{name}}',
+                      })}
+                      title={t('tenant.agentDefinitions.openActions', {
+                        name: def.display_name ?? def.name,
+                        defaultValue: 'Open actions for {{name}}',
+                      })}
                       className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       <MoreVertical size={14} />
@@ -307,14 +355,16 @@ export const AgentDefinitions: React.FC = () => {
                   {def.system_prompt
                     ? def.system_prompt.substring(0, 120) +
                       (def.system_prompt.length > 120 ? '...' : '')
-                    : 'No system prompt'}
+                    : t('tenant.agentDefinitions.noSystemPrompt', {
+                        defaultValue: 'No system prompt',
+                      })}
                 </p>
 
                 <div className="flex flex-wrap gap-1">
                   {def.model && <Tag className="text-2xs">{def.model}</Tag>}
                   {def.can_spawn && (
                     <Tag color="blue" className="text-2xs">
-                      Spawn
+                      {t('tenant.agentDefinitions.capabilities.spawn', { defaultValue: 'Spawn' })}
                     </Tag>
                   )}
                   {def.agent_to_agent_enabled && (
@@ -330,9 +380,19 @@ export const AgentDefinitions: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-xs-plus text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-700">
-                  <span>{def.total_invocations} invocations</span>
+                  <span>
+                    {t('tenant.agentDefinitions.metrics.invocations', {
+                      count: def.total_invocations,
+                      defaultValue: '{{count}} invocations',
+                    })}
+                  </span>
                   {def.success_rate !== null && (
-                    <span>{Math.round(def.success_rate * 100)}% success</span>
+                    <span>
+                      {t('tenant.agentDefinitions.metrics.success', {
+                        percent: Math.round(def.success_rate * 100),
+                        defaultValue: '{{percent}}% success',
+                      })}
+                    </span>
                   )}
                 </div>
               </div>

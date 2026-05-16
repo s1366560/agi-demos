@@ -5,7 +5,7 @@ export function useHexSelection() {
 
   const isSelected = useCallback(
     (q: number, r: number) => {
-      return selectedHexes.has(`${q},${r}`);
+      return selectedHexes.has(`${q.toString()},${r.toString()}`);
     },
     [selectedHexes]
   );
@@ -13,7 +13,7 @@ export function useHexSelection() {
   const toggleSelect = useCallback((q: number, r: number) => {
     setSelectedHexes((prev) => {
       const next = new Set(prev);
-      const key = `${q},${r}`;
+      const key = `${q.toString()},${r.toString()}`;
       if (next.has(key)) {
         next.delete(key);
       } else {
@@ -24,7 +24,7 @@ export function useHexSelection() {
   }, []);
 
   const selectSingle = useCallback((q: number, r: number) => {
-    setSelectedHexes(new Set([`${q},${r}`]));
+    setSelectedHexes(new Set([`${q.toString()},${r.toString()}`]));
   }, []);
 
   const clearSelection = useCallback(() => {

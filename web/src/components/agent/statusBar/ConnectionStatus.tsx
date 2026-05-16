@@ -14,20 +14,25 @@ export interface ConnectionStatusProps {
   t: TFunction;
 }
 
-export const ConnectionStatus: FC<ConnectionStatusProps> = ({ isLoading, status }) => {
+export const ConnectionStatus: FC<ConnectionStatusProps> = ({ isLoading, status, t }) => {
   return (
     <LazyTooltip
       title={
         <div className="space-y-1">
           <div>
             {isLoading
-              ? 'Loading...'
+              ? t('agent.statusBar.connection.loading', 'Loading...')
               : status.connection.websocket
-                ? 'WebSocket Connected'
-                : 'Ready'}
+                ? t('agent.statusBar.connection.websocketConnected', 'WebSocket Connected')
+                : t('agent.statusBar.connection.ready', 'Ready')}
           </div>
           {status.resources.activeCalls > 0 && (
-            <div>Active tool calls: {status.resources.activeCalls}</div>
+            <div>
+              {t('agent.statusBar.connection.activeToolCalls', {
+                count: status.resources.activeCalls,
+                defaultValue: 'Active tool calls: {{count}}',
+              })}
+            </div>
           )}
         </div>
       }
@@ -37,23 +42,27 @@ export const ConnectionStatus: FC<ConnectionStatusProps> = ({ isLoading, status 
           <Loader2 size={12} className="animate-spin motion-reduce:animate-none" />
         ) : status.resources.activeCalls > 0 ? (
           <>
-            <Activity
-              size={12}
-              className="text-info animate-pulse motion-reduce:animate-none"
-            />
+            <Activity size={12} className="text-info animate-pulse motion-reduce:animate-none" />
             <span className="hidden sm:inline text-info">
-              {status.resources.activeCalls} active
+              {t('agent.statusBar.connection.activeCount', {
+                count: status.resources.activeCalls,
+                defaultValue: '{{count}} active',
+              })}
             </span>
           </>
         ) : status.connection.websocket ? (
           <>
             <Wifi size={12} className="text-success" />
-            <span className="hidden sm:inline text-success">Online</span>
+            <span className="hidden sm:inline text-success">
+              {t('agent.statusBar.connection.online', 'Online')}
+            </span>
           </>
         ) : (
           <>
             <Wifi size={12} />
-            <span className="hidden sm:inline">Ready</span>
+            <span className="hidden sm:inline">
+              {t('agent.statusBar.connection.ready', 'Ready')}
+            </span>
           </>
         )}
       </div>

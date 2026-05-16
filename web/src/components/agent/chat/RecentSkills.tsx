@@ -31,7 +31,12 @@ export const RecentSkills = memo<RecentSkillsProps>(({ projectId, onSkillClick }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const msg = err instanceof Error ? err.message : 'Failed to load recent skills';
+          const msg =
+            err instanceof Error
+              ? err.message
+              : t('agent.projectContext.recentSkillsLoadFailed', {
+                  defaultValue: 'Failed to load recent skills',
+                });
           setError(msg);
           console.error('RecentSkills: fetch failed', err);
         }
@@ -39,12 +44,10 @@ export const RecentSkills = memo<RecentSkillsProps>(({ projectId, onSkillClick }
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, t]);
 
   if (error) {
-    return (
-      <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{error}</div>
-    );
+    return <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{error}</div>;
   }
 
   if (skills.length === 0) return null;

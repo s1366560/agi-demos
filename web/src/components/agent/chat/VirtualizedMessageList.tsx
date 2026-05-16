@@ -20,6 +20,8 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { SkeletonLoader } from '@/components/common/SkeletonLoader';
@@ -92,6 +94,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   emptyState,
   loadingState,
 }) => {
+  const { t } = useTranslation();
   // Parent ref for virtualizer
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -190,8 +193,10 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
       <div className={`flex items-center justify-center h-full ${className}`}>
         {emptyState || (
           <div className="text-center text-slate-500 dark:text-slate-400">
-            <p className="text-lg font-medium">No messages yet</p>
-            <p className="text-sm mt-1">Start a conversation!</p>
+            <p className="text-lg font-medium">{t('agent.chat.empty.title', 'No messages yet')}</p>
+            <p className="text-sm mt-1">
+              {t('agent.chat.empty.subtitle', 'Start a conversation!')}
+            </p>
           </div>
         )}
       </div>
@@ -213,14 +218,14 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     <div
       ref={parentRef}
       className={`overflow-auto ${className}`}
-      style={{ height: typeof height === 'string' ? height : `${height}px` }}
+      style={{ height: typeof height === 'string' ? height : `${String(height)}px` }}
       role="log"
-      aria-label="Chat messages"
+      aria-label={t('agent.chat.messagesAria', 'Chat messages')}
       aria-live="polite"
     >
       <div
         style={{
-          height: `${virtualizer.getTotalSize()}px`,
+          height: `${String(virtualizer.getTotalSize())}px`,
           width: '100%',
           position: 'relative',
         }}
@@ -240,7 +245,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
                 top: 0,
                 left: 0,
                 width: '100%',
-                transform: `translateY(${virtualRow.start}px)`,
+                transform: `translateY(${String(virtualRow.start)}px)`,
               }}
             >
               <MessageRenderer

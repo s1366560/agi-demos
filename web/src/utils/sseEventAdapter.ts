@@ -173,6 +173,22 @@ function isMcpResult(value: unknown): value is McpResult {
   );
 }
 
+function stringifyObservationValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (isMcpResult(value)) {
+    const content = value.content;
+    return content !== undefined && content.length > 0
+      ? (content[0]?.text ?? JSON.stringify(value))
+      : JSON.stringify(value);
+  }
+  return JSON.stringify(value);
+}
+
 /**
  * MCP UI metadata structure (raw from backend)
  */
@@ -268,25 +284,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
       const data = event.data as ObserveEventData;
       // Get observation value - support both 'observation' (legacy) and 'result' (new) fields
       // Also handle case where result is an object (e.g., from export_artifact)
-      let observationValue: string | undefined;
-      const dataWithResult = data as ObserveEventData & { result?: unknown };
-      const rawResult = dataWithResult.result ?? data.observation;
-      if (typeof rawResult === 'string') {
-        observationValue = rawResult;
-      } else if (rawResult !== null && rawResult !== undefined) {
-        // If result is an object, try to extract meaningful text or stringify it
-        if (isMcpResult(rawResult)) {
-          // MCP-style result with content array
-          const content = rawResult.content;
-          if (content && content.length > 0) {
-            observationValue = content[0]?.text ?? JSON.stringify(rawResult);
-          } else {
-            observationValue = JSON.stringify(rawResult);
-          }
-        } else {
-          observationValue = JSON.stringify(rawResult);
-        }
-      }
+      const observationValue = stringifyObservationValue(data.result ?? data.observation);
 
       // Determine if this is an error:
       // Only check if 'error' field is present in data
@@ -894,29 +892,29 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
       return null;
 
     case 'memory_recalled': {
-      const data = event.data as MemoryRecalledEventData;
+      const data = event.data as Partial<MemoryRecalledEventData>;
       return {
         id: generateTimelineEventId('memory_recalled'),
         type: 'memory_recalled' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        memories: data.memories || [],
-        count: data.count || 0,
-        searchMs: data.search_ms || 0,
+        memories: data.memories ?? [],
+        count: data.count ?? 0,
+        searchMs: data.search_ms ?? 0,
       };
     }
 
     case 'memory_captured': {
-      const data = event.data as MemoryCapturedEventData;
+      const data = event.data as Partial<MemoryCapturedEventData>;
       return {
         id: generateTimelineEventId('memory_captured'),
         type: 'memory_captured' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        capturedCount: data.captured_count || 0,
-        categories: data.categories || [],
+        capturedCount: data.captured_count ?? 0,
+        categories: data.categories ?? [],
       };
     }
 
@@ -949,49 +947,49 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'agent_spawned': {
-      const data = event.data as AgentSpawnedEventData;
+      const data = event.data as Partial<AgentSpawnedEventData>;
       return {
         id: generateTimelineEventId('agent_spawned'),
         type: 'agent_spawned' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        agentId: data.agent_id || '',
+        agentId: data.agent_id ?? '',
         agentName: data.agent_name ?? null,
         parentAgentId: data.parent_agent_id ?? null,
         childSessionId: data.child_session_id ?? null,
-        mode: data.mode || 'autonomous',
+        mode: data.mode ?? 'autonomous',
         taskSummary: data.task_summary ?? null,
       };
     }
 
     case 'agent_completed': {
-      const data = event.data as AgentCompletedEventData;
+      const data = event.data as Partial<AgentCompletedEventData>;
       return {
         id: generateTimelineEventId('agent_completed'),
         type: 'agent_completed' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        agentId: data.agent_id || '',
+        agentId: data.agent_id ?? '',
         agentName: data.agent_name ?? null,
         parentAgentId: data.parent_agent_id ?? null,
         sessionId: data.session_id ?? null,
         result: data.result ?? null,
-        success: data.success || false,
-        artifacts: data.artifacts || [],
+        success: data.success ?? false,
+        artifacts: data.artifacts ?? [],
       };
     }
 
     case 'agent_stopped': {
-      const data = event.data as AgentStoppedEventData;
+      const data = event.data as Partial<AgentStoppedEventData>;
       return {
         id: generateTimelineEventId('agent_stopped'),
         type: 'agent_stopped' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        agentId: data.agent_id || '',
+        agentId: data.agent_id ?? '',
         agentName: data.agent_name ?? null,
         reason: data.reason ?? null,
         stoppedBy: data.stopped_by ?? null,

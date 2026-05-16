@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
+import { message } from 'antd';
 import {
   X,
   Brain,
@@ -14,18 +17,49 @@ import {
   Save,
   XCircle,
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { formatDateTimeFull } from '@/utils/date';
 
 import { memoryService } from '../../services/memoryService';
-import { Memory } from '../../types/memory';
+
+import type { Memory } from '../../types/memory';
 
 interface MemoryDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   memory: Memory | null;
 }
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' ? message : '';
+  }
+  return '';
+};
+
+const formatMetadataValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (typeof value === 'symbol') return value.toString();
+  if (typeof value === 'function') return '[Function]';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return '';
+};
+
+const getViewCount = (metadata: Record<string, unknown>): number => {
+  const value = metadata.view_count;
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return 0;
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   isOpen,
@@ -83,9 +117,10 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
       setIsEditing(false);
       // Reload page or trigger refresh to show updated data
       window.location.reload();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to update memory:', err);
-      if (err.message && err.message.includes('409')) {
+      const errorMessage = getErrorMessage(err);
+      if (errorMessage.includes('409')) {
         setError(t('memory.detail.versionConflict'));
       } else {
         setError(t('memory.detail.saveFailed'));
@@ -109,10 +144,10 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      alert(t('memory.detail.linkCopied'));
+      void message.success(t('memory.detail.linkCopied'));
     } catch (err) {
       console.error('Failed to copy link:', err);
-      alert(t('memory.detail.linkCopyFailed'));
+      void message.error(t('memory.detail.linkCopyFailed'));
     }
   };
 
@@ -129,13 +164,25 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const hasEntities = memory.entities.length > 0;
+  const hasRelationships = memory.relationships.length > 0;
+  const hasMetadata = Object.keys(memory.metadata).length > 0;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div role="dialog" aria-modal="true" aria-labelledby="memory-detail-title" className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="memory-detail-title"
+        className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden"
+      >
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 id="memory-detail-title" className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2
+              id="memory-detail-title"
+              className="text-lg font-semibold text-gray-900 dark:text-white"
+            >
               {isEditing ? t('memory.detail.editTitle') : t('memory.detail.title')}
             </h2>
           </div>
@@ -143,10 +190,12 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             {isEditing ? (
               <>
                 <button
-                  onClick={handleSave}
+                  onClick={() => {
+                    void handleSave();
+                  }}
                   disabled={isLoading}
                   className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
-                  aria-label="Save"
+                  aria-label={t('memory.detail.saveAria')}
                   title={t('memory.detail.saveTitle')}
                 >
                   {isLoading ? (
@@ -159,7 +208,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   onClick={handleCancel}
                   disabled={isLoading}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
-                  aria-label="Cancel editing"
+                  aria-label={t('memory.detail.cancelAria')}
                   title={t('memory.detail.cancelTitle')}
                 >
                   <XCircle className="h-4 w-4" />
@@ -170,15 +219,17 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <button
                   onClick={handleEdit}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label="Edit"
+                  aria-label={t('memory.detail.editAria')}
                   title={t('memory.detail.editTitleTooltip')}
                 >
                   <Edit3 className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={handleShare}
+                  onClick={() => {
+                    void handleShare();
+                  }}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-green-600 dark:hover:text-green-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label="Share"
+                  aria-label={t('memory.detail.shareAria')}
                   title={t('memory.detail.shareTitle')}
                 >
                   <Share2 className="h-4 w-4" />
@@ -186,7 +237,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 <button
                   onClick={handleDownload}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label="Download"
+                  aria-label={t('memory.detail.downloadAria')}
                   title={t('memory.detail.downloadTitle')}
                 >
                   <Download className="h-4 w-4" />
@@ -195,7 +246,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             )}
             <button
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t('memory.detail.closeAria')}
               className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               <X className="h-5 w-5" />
@@ -221,7 +272,9 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     }}
                     className="flex-1 text-xl font-semibold text-gray-900 dark:text-white bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder={t('memory.detail.titlePlaceholder')}
-                    aria-label="Edit memory title"
+                    aria-label={t('memory.detail.editTitleAria', {
+                      defaultValue: 'Edit memory title',
+                    })}
                   />
                 ) : (
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -234,24 +287,32 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                 {memory.author_id && (
                   <div className="flex items-center space-x-1">
                     <User className="h-4 w-4" />
-                    <span>{t('memory.detail.userPrefix')} {memory.author_id}</span>
+                    <span>
+                      {t('memory.detail.userPrefix')} {memory.author_id}
+                    </span>
                   </div>
                 )}
                 <div className="flex items-center space-x-1">
                   <Calendar className="h-4 w-4" />
-                  <span>{t('memory.detail.createdPrefix')} {formatDate(memory.created_at)}</span>
+                  <span>
+                    {t('memory.detail.createdPrefix')} {formatDate(memory.created_at)}
+                  </span>
                 </div>
                 {memory.updated_at !== memory.created_at && (
                   <div className="flex items-center space-x-1">
                     <Calendar className="h-4 w-4" />
-                    <span>{t('memory.detail.updatedPrefix')} {formatDate(memory.updated_at || '')}</span>
+                    <span>
+                      {t('memory.detail.updatedPrefix')} {formatDate(memory.updated_at || '')}
+                    </span>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="mb-6">
-              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.contentHeading')}</h4>
+              <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                {t('memory.detail.contentHeading')}
+              </h4>
               {isEditing ? (
                 <div>
                   <textarea
@@ -261,7 +322,9 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                     }}
                     className="w-full h-64 px-4 py-3 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-slate-200 whitespace-pre-wrap leading-relaxed resize-y"
                     placeholder={t('memory.detail.contentPlaceholder')}
-                    aria-label="Edit memory content"
+                    aria-label={t('memory.detail.editContentAria', {
+                      defaultValue: 'Edit memory content',
+                    })}
                   />
                   {error && (
                     <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md">
@@ -278,9 +341,11 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               )}
             </div>
 
-            {memory.entities && memory.entities.length > 0 && (
+            {hasEntities && (
               <div className="mb-6">
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.entitiesHeading')}</h4>
+                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                  {t('memory.detail.entitiesHeading')}
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {memory.entities.map((entity, index) => (
                     <div
@@ -296,7 +361,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                           {entity.type}
                         </span>
                       </div>
-                      {entity.properties && Object.keys(entity.properties).length > 0 && (
+                      {Object.keys(entity.properties).length > 0 && (
                         <p className="text-sm text-green-700 dark:text-green-300">
                           {JSON.stringify(entity.properties)}
                         </p>
@@ -307,9 +372,11 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               </div>
             )}
 
-            {memory.relationships && memory.relationships.length > 0 && (
+            {hasRelationships && (
               <div className="mb-6">
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.relationshipsHeading')}</h4>
+                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                  {t('memory.detail.relationshipsHeading')}
+                </h4>
                 <div className="space-y-3">
                   {memory.relationships.map((relationship, index) => (
                     <div
@@ -332,29 +399,28 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                             <span className="text-xs text-purple-600 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40 px-2 py-1 rounded-full">
                               {relationship.type}
                             </span>
-                            {relationship.confidence && (
-                              <span className="text-xs text-purple-500 dark:text-purple-400">
-                                {t('memory.detail.confidencePrefix')} {relationship.confidence}
-                              </span>
-                            )}
+                            <span className="text-xs text-purple-500 dark:text-purple-400">
+                              {t('memory.detail.confidencePrefix')} {relationship.confidence}
+                            </span>
                           </div>
                         </div>
                       </div>
-                      {relationship.properties &&
-                        Object.keys(relationship.properties).length > 0 && (
-                          <p className="text-sm text-purple-700 dark:text-purple-300 mt-2">
-                            {JSON.stringify(relationship.properties)}
-                          </p>
-                        )}
+                      {Object.keys(relationship.properties).length > 0 && (
+                        <p className="text-sm text-purple-700 dark:text-purple-300 mt-2">
+                          {JSON.stringify(relationship.properties)}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {memory.metadata && Object.keys(memory.metadata).length > 0 && (
+            {hasMetadata && (
               <div className="mb-6">
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">{t('memory.detail.metadataHeading')}</h4>
+                <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                  {t('memory.detail.metadataHeading')}
+                </h4>
                 <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 border border-gray-100 dark:border-slate-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {Object.entries(memory.metadata).map(([key, value]) => (
@@ -364,7 +430,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                           {key}:
                         </span>
                         <span className="text-sm text-gray-600 dark:text-slate-400">
-                          {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                          {formatMetadataValue(value)}
                         </span>
                       </div>
                     ))}
@@ -377,11 +443,15 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               <div className="flex items-center justify-between text-sm text-gray-500 dark:text-slate-400">
                 <div className="flex items-center space-x-4">
                   <span>ID: {memory.id}</span>
-                  <span>{t('memory.detail.projectPrefix')} {memory.project_id}</span>
+                  <span>
+                    {t('memory.detail.projectPrefix')} {memory.project_id}
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Eye className="h-4 w-4" />
-                  <span>{t('memory.detail.viewCountPrefix')} {memory.metadata?.view_count || 0}</span>
+                  <span>
+                    {t('memory.detail.viewCountPrefix')} {getViewCount(memory.metadata)}
+                  </span>
                 </div>
               </div>
             </div>

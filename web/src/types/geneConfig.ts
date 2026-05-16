@@ -200,22 +200,33 @@ const cloneValue = (value: unknown): unknown => {
   return value;
 };
 
-const coerceFieldValue = (
-  field: GeneConfigFieldDef,
-  raw: unknown
-): GeneConfigFieldValue => {
+const stringifyFieldValue = (value: unknown): string => {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+};
+
+const coerceFieldValue = (field: GeneConfigFieldDef, raw: unknown): GeneConfigFieldValue => {
   switch (field.type) {
     case 'string':
     case 'text':
     case 'select':
-      return typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+      return stringifyFieldValue(raw);
     case 'number': {
+      const defaultNumber = typeof field.defaultValue === 'number' ? field.defaultValue : 0;
       if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
       if (typeof raw === 'string' && raw.trim() !== '') {
         const parsed = Number(raw);
-        return Number.isFinite(parsed) ? parsed : (field.defaultValue as number) ?? 0;
+        return Number.isFinite(parsed) ? parsed : defaultNumber;
       }
-      return (field.defaultValue as number) ?? 0;
+      return defaultNumber;
     }
     case 'boolean':
       return Boolean(raw);
@@ -329,14 +340,14 @@ export const validateGeneConfig = (
         errors.push({
           fieldKey: field.key,
           messageKey: 'workspaceDetail.genes.config.errors.min',
-          fallbackMessage: `${field.fallbackLabel} must be >= ${field.min}`,
+          fallbackMessage: `${field.fallbackLabel} must be >= ${String(field.min)}`,
         });
       }
       if (field.max !== undefined && value > field.max) {
         errors.push({
           fieldKey: field.key,
           messageKey: 'workspaceDetail.genes.config.errors.max',
-          fallbackMessage: `${field.fallbackLabel} must be <= ${field.max}`,
+          fallbackMessage: `${field.fallbackLabel} must be <= ${String(field.max)}`,
         });
       }
     }
@@ -356,7 +367,7 @@ export const parseRawConfigJson = (
     return { ok: true, value: {} };
   }
   try {
-    const parsed = JSON.parse(trimmed);
+    const parsed: unknown = JSON.parse(trimmed);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { ok: false, error: 'Config must be a JSON object' };
     }

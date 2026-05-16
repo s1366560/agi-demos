@@ -119,6 +119,13 @@ interface CardColors {
   hoverBorder: string;
 }
 
+const DEFAULT_CARD_COLORS: CardColors = {
+  gradient: 'from-slate-500/8 to-slate-500/4',
+  iconColor: 'text-slate-500',
+  border: 'border-slate-200 dark:border-slate-700/50',
+  hoverBorder: 'hover:border-slate-300 dark:hover:border-slate-600',
+};
+
 const CARD_COLOR_MAP: Record<string, CardColors> = {
   primary: {
     gradient: 'from-primary/8 to-primary/4',
@@ -150,16 +157,11 @@ const CARD_COLOR_MAP: Record<string, CardColors> = {
     border: 'border-slate-200 dark:border-slate-700/50',
     hoverBorder: 'hover:border-slate-300 dark:hover:border-slate-600',
   },
-  slate: {
-    gradient: 'from-slate-500/8 to-slate-500/4',
-    iconColor: 'text-slate-500',
-    border: 'border-slate-200 dark:border-slate-700/50',
-    hoverBorder: 'hover:border-slate-300 dark:hover:border-slate-600',
-  },
+  slate: DEFAULT_CARD_COLORS,
 };
 
 function getCardColors(color: string): CardColors {
-  return CARD_COLOR_MAP[color] ?? CARD_COLOR_MAP.slate!;
+  return CARD_COLOR_MAP[color] ?? DEFAULT_CARD_COLORS;
 }
 
 // ============================================================================
@@ -264,7 +266,7 @@ const EmptyStateCardsComponent: FC<EmptyStateCardsProps> = ({
       )}
 
       {/* Suggestion Cards */}
-      {cards && cards.length > 0 && (
+      {cards.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl w-full relative z-10">
           {cards.map((card) => {
             const colors = getCardColors(card.color);

@@ -10,7 +10,7 @@ describe('inferToolName', () => {
 
   it('infers codebase-retrieval from information_request', () => {
     expect(inferToolName('unknown', { information_request: 'how does X work' })).toBe(
-      'codebase-retrieval',
+      'codebase-retrieval'
     );
   });
 
@@ -27,9 +27,9 @@ describe('inferToolName', () => {
   });
 
   it('infers replace_string_in_file from edit shape', () => {
-    expect(
-      inferToolName('unknown', { filePath: '/x', oldString: 'a', newString: 'b' }),
-    ).toBe('replace_string_in_file');
+    expect(inferToolName('unknown', { filePath: '/x', oldString: 'a', newString: 'b' })).toBe(
+      'replace_string_in_file'
+    );
   });
 
   it('infers run_in_terminal from command + mode', () => {

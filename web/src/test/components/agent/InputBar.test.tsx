@@ -100,4 +100,17 @@ describe('InputBar autocomplete overlays', () => {
     expect(screen.getByText('docs')).toBeInTheDocument();
     expect(input.closest('.overflow-visible')).toBeInTheDocument();
   });
+
+  it('keeps toolbar actions separated on narrow viewports', () => {
+    render(
+      <InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} onTogglePlanMode={vi.fn()} />
+    );
+
+    expect(screen.getByTestId('input-toolbar')).toHaveClass('flex-col', 'sm:flex-row');
+    expect(screen.getByTestId('input-toolbar-actions')).toHaveClass(
+      'w-full',
+      'justify-end',
+      'sm:w-auto'
+    );
+  });
 });

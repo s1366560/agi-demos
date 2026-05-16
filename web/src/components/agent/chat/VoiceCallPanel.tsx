@@ -53,7 +53,7 @@ function useDrag(ref: React.RefObject<HTMLElement | null>) {
       const initX = window.innerWidth - 420;
       const initY = window.innerHeight - 520;
       posRef.current = { x: Math.max(16, initX), y: Math.max(16, initY) };
-      el.style.transform = `translate(${posRef.current.x}px, ${posRef.current.y}px)`;
+      el.style.transform = `translate(${String(posRef.current.x)}px, ${String(posRef.current.y)}px)`;
     });
 
     const onMouseDown = (e: MouseEvent) => {
@@ -72,7 +72,7 @@ function useDrag(ref: React.RefObject<HTMLElement | null>) {
       const newX = Math.max(0, Math.min(window.innerWidth - 100, e.clientX - startRef.current.x));
       const newY = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - startRef.current.y));
       posRef.current = { x: newX, y: newY };
-      el.style.transform = `translate(${newX}px, ${newY}px)`;
+      el.style.transform = `translate(${String(newX)}px, ${String(newY)}px)`;
     };
 
     const onMouseUp = () => {
@@ -309,7 +309,9 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
       onTtsEnd: () => {
         setAiSpeaking(false);
       },
-      onTtsAudio: (data) => enqueueChunk(data),
+      onTtsAudio: (data) => {
+        void enqueueChunk(data);
+      },
       onError: (err) => {
         useVoiceCallStore.setState({ status: 'error', error: err });
       },
@@ -338,7 +340,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
   useEffect(() => {
     if (isConnected) {
       setConnected();
-      startRecording();
+      void startRecording();
     }
   }, [isConnected, setConnected, startRecording]);
 
@@ -353,30 +355,35 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
   // Enumerate devices on connect
   useEffect(() => {
     if (isConnected) {
-      navigator.mediaDevices.enumerateDevices().then((devices) => {
-        const audioInputs: DeviceInfo[] = devices
-          .filter((d) => d.kind === 'audioinput')
-          .map((d) => ({
-            deviceId: d.deviceId,
-            label: d.label || `Mic ${d.deviceId.slice(0, 4)}`,
-            kind: 'audioinput' as const,
-          }));
-        const audioOutputs: DeviceInfo[] = devices
-          .filter((d) => d.kind === 'audiooutput')
-          .map((d) => ({
-            deviceId: d.deviceId,
-            label: d.label || `Speaker ${d.deviceId.slice(0, 4)}`,
-            kind: 'audiooutput' as const,
-          }));
-        const videoInputs: DeviceInfo[] = devices
-          .filter((d) => d.kind === 'videoinput')
-          .map((d) => ({
-            deviceId: d.deviceId,
-            label: d.label || `Camera ${d.deviceId.slice(0, 4)}`,
-            kind: 'videoinput' as const,
-          }));
-        setDevices({ audioInputs, audioOutputs, videoInputs });
-      });
+      void navigator.mediaDevices
+        .enumerateDevices()
+        .then((devices) => {
+          const audioInputs: DeviceInfo[] = devices
+            .filter((d) => d.kind === 'audioinput')
+            .map((d) => ({
+              deviceId: d.deviceId,
+              label: d.label || `Mic ${d.deviceId.slice(0, 4)}`,
+              kind: 'audioinput' as const,
+            }));
+          const audioOutputs: DeviceInfo[] = devices
+            .filter((d) => d.kind === 'audiooutput')
+            .map((d) => ({
+              deviceId: d.deviceId,
+              label: d.label || `Speaker ${d.deviceId.slice(0, 4)}`,
+              kind: 'audiooutput' as const,
+            }));
+          const videoInputs: DeviceInfo[] = devices
+            .filter((d) => d.kind === 'videoinput')
+            .map((d) => ({
+              deviceId: d.deviceId,
+              label: d.label || `Camera ${d.deviceId.slice(0, 4)}`,
+              kind: 'videoinput' as const,
+            }));
+          setDevices({ audioInputs, audioOutputs, videoInputs });
+        })
+        .catch(() => {
+          setDevices({ audioInputs: [], audioOutputs: [], videoInputs: [] });
+        });
     }
   }, [isConnected, setDevices]);
 
@@ -386,7 +393,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
     if (isMuted) {
       stopRecording();
     } else if (!isRecording) {
-      startRecording();
+      void startRecording();
     }
   }, [isMuted, isConnected, isRecording, stopRecording, startRecording]);
 
@@ -443,7 +450,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
     disconnect();
     stopAudio();
     clearAudio();
-    endCall();
+    void endCall();
     onClose();
   }, [disconnect, stopAudio, clearAudio, endCall, onClose]);
 
@@ -608,7 +615,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
           <button
             type="button"
             onClick={storeToggleMute}
-            title={isMuted ? 'Unmute' : 'Mute'}
+            title={
+              isMuted
+                ? t('agent.voiceCall.unmute', { defaultValue: 'Unmute' })
+                : t('agent.voiceCall.mute', { defaultValue: 'Mute' })
+            }
             className={`
               w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${isMuted ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'bg-slate-700 text-white hover:bg-slate-600'}
@@ -621,7 +632,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
           <button
             type="button"
             onClick={storeToggleCamera}
-            title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+            title={
+              isCameraOn
+                ? t('agent.voiceCall.turnOffCamera', { defaultValue: 'Turn off camera' })
+                : t('agent.voiceCall.turnOnCamera', { defaultValue: 'Turn on camera' })
+            }
             className={`
               w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${isCameraOn ? 'bg-blue-500/20 text-blue-500 hover:bg-blue-500/30' : 'bg-slate-700 text-white hover:bg-slate-600'}
@@ -643,7 +658,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
                 storeToggleCamera();
               }
             }}
-            title={callMode === 'audio' ? 'Switch to video' : 'Switch to audio'}
+            title={
+              callMode === 'audio'
+                ? t('agent.voiceCall.switchToVideo', { defaultValue: 'Switch to video' })
+                : t('agent.voiceCall.switchToAudio', { defaultValue: 'Switch to audio' })
+            }
             className="w-11 h-11 rounded-full bg-slate-700 text-white hover:bg-slate-600 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]"
           >
             <Video size={20} />
@@ -655,7 +674,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             onClick={() => {
               setShowDeviceSettings(!showDeviceSettings);
             }}
-            title="Device settings"
+            title={t('agent.voiceCall.deviceSettings', { defaultValue: 'Device settings' })}
             className={`
               w-11 h-11 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,opacity,transform]
               ${showDeviceSettings ? 'bg-slate-600 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}
@@ -668,7 +687,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
           <button
             type="button"
             onClick={handleEndCall}
-            title="End call"
+            title={t('agent.voiceCall.endCall', { defaultValue: 'End call' })}
             className="w-14 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:scale-105"
           >
             <PhoneOff size={22} />

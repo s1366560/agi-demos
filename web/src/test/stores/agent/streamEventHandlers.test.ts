@@ -901,10 +901,7 @@ describe('streamEventHandlers', () => {
     expect(tab?.a2uiHitlRequestId).toBeUndefined();
   });
 
-  it.each([
-    'chart_top_level_datasets',
-    'widget_html_preview',
-  ])(
+  it.each(['chart_top_level_datasets', 'widget_html_preview'])(
     'should map native canvas block contract case %s into the expected tab type and update path',
     (caseId) => {
       const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
@@ -958,42 +955,42 @@ describe('streamEventHandlers', () => {
     }
   );
 
-  it.each([
-    'chart_top_level_datasets',
-    'widget_html_preview',
-  ])('should open a native tab from update-only canvas events for %s', (caseId) => {
-    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
-    const fixtureCase = getNativeBlockFixtureCase(caseId);
-    const blockId = `block-${caseId}-update-only`;
-    const updatedContent = serializeNativeBlockContent(
-      fixtureCase.updatedContent ?? fixtureCase.content
-    );
-    const updatedTitle = fixtureCase.updatedTitle ?? `${fixtureCase.title} Updated`;
+  it.each(['chart_top_level_datasets', 'widget_html_preview'])(
+    'should open a native tab from update-only canvas events for %s',
+    (caseId) => {
+      const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+      const fixtureCase = getNativeBlockFixtureCase(caseId);
+      const blockId = `block-${caseId}-update-only`;
+      const updatedContent = serializeNativeBlockContent(
+        fixtureCase.updatedContent ?? fixtureCase.content
+      );
+      const updatedTitle = fixtureCase.updatedTitle ?? `${fixtureCase.title} Updated`;
 
-    handlers.onCanvasUpdated!({
-      type: 'canvas_updated',
-      data: {
-        conversation_id: conversationId,
-        block_id: blockId,
-        action: 'updated',
-        block: {
-          id: blockId,
-          block_type: fixtureCase.blockType,
-          title: updatedTitle,
-          content: updatedContent,
-          metadata: {},
-          version: 2,
-        },
-      } as any,
-    });
+      handlers.onCanvasUpdated!({
+        type: 'canvas_updated',
+        data: {
+          conversation_id: conversationId,
+          block_id: blockId,
+          action: 'updated',
+          block: {
+            id: blockId,
+            block_type: fixtureCase.blockType,
+            title: updatedTitle,
+            content: updatedContent,
+            metadata: {},
+            version: 2,
+          },
+        } as any,
+      });
 
-    const tab = useCanvasStore.getState().tabs.find((item) => item.id === blockId);
-    expect(tab?.type).toBe(fixtureCase.expected.frontendTabType);
-    expect(tab?.title).toBe(updatedTitle);
-    expect(tab?.content).toBe(updatedContent);
-    expect(mockState.timeline.some((item: any) => item.type === 'canvas_updated')).toBe(true);
-    expect(useLayoutModeStore.getState().mode).toBe('canvas');
-  });
+      const tab = useCanvasStore.getState().tabs.find((item) => item.id === blockId);
+      expect(tab?.type).toBe(fixtureCase.expected.frontendTabType);
+      expect(tab?.title).toBe(updatedTitle);
+      expect(tab?.content).toBe(updatedContent);
+      expect(mockState.timeline.some((item: any) => item.type === 'canvas_updated')).toBe(true);
+      expect(useLayoutModeStore.getState().mode).toBe('canvas');
+    }
+  );
 
   it('should buffer and flush onThoughtDelta', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);

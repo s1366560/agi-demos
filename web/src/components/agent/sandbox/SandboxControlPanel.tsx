@@ -6,6 +6,8 @@
 
 import { useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Card, Space, Button, Badge, Typography, Divider, Tooltip } from 'antd';
 import { Monitor, Code, PlayCircle, Square, Link } from 'lucide-react';
 
@@ -43,9 +45,13 @@ interface ServiceStatusProps {
 }
 
 function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: ServiceStatusProps) {
+  const { t } = useTranslation();
   const isRunning = status?.running ?? false;
   const icon = type === 'desktop' ? <Monitor size={16} /> : <Code size={16} />;
-  const name = type === 'desktop' ? 'Remote Desktop' : 'Web Terminal';
+  const name =
+    type === 'desktop'
+      ? t('components.sandboxControl.remoteDesktop', { defaultValue: 'Remote Desktop' })
+      : t('components.sandboxControl.webTerminal', { defaultValue: 'Web Terminal' });
 
   return (
     <Card
@@ -54,7 +60,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
         type === 'desktop' ? 'bg-blue-50 dark:bg-blue-950' : 'bg-green-50 dark:bg-green-950'
       }
     >
-      <Space direction="vertical" className="w-full" style={{ width: '100%' }}>
+      <Space orientation="vertical" className="w-full" style={{ width: '100%' }}>
         {/* Header */}
         <div className="flex items-center justify-between">
           <Space>
@@ -62,11 +68,20 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
             <Text strong>{name}</Text>
           </Space>
           {isLoading ? (
-            <Badge status="processing" text="Starting..." />
+            <Badge
+              status="processing"
+              text={t('components.sandboxControl.starting', { defaultValue: 'Starting...' })}
+            />
           ) : isRunning ? (
-            <Badge status="success" text="Running" />
+            <Badge
+              status="success"
+              text={t('components.sandboxControl.running', { defaultValue: 'Running' })}
+            />
           ) : (
-            <Badge status="default" text="Stopped" />
+            <Badge
+              status="default"
+              text={t('components.sandboxControl.stopped', { defaultValue: 'Stopped' })}
+            />
           )}
         </div>
 
@@ -85,25 +100,33 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
               )}
               {type === 'desktop' && 'resolution' in status && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Resolution:</span>
+                  <span className="text-gray-500">
+                    {t('components.sandboxControl.resolution', { defaultValue: 'Resolution:' })}
+                  </span>
                   <span className="text-gray-700">{status.resolution}</span>
                 </div>
               )}
               {'display' in status && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Display:</span>
+                  <span className="text-gray-500">
+                    {t('components.sandboxControl.display', { defaultValue: 'Display:' })}
+                  </span>
                   <span className="text-gray-700">{status.display}</span>
                 </div>
               )}
               {'port' in status && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Port:</span>
+                  <span className="text-gray-500">
+                    {t('components.sandboxControl.port', { defaultValue: 'Port:' })}
+                  </span>
                   <span className="text-gray-700">{status.port}</span>
                 </div>
               )}
               {'sessionId' in status && status.sessionId && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Session:</span>
+                  <span className="text-gray-500">
+                    {t('components.sandboxControl.session', { defaultValue: 'Session:' })}
+                  </span>
                   <span className="text-gray-700">{status.sessionId.slice(0, 8)}...</span>
                 </div>
               )}
@@ -115,7 +138,12 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
         <Divider className="my-2" />
         <div className="flex justify-end">
           {isRunning ? (
-            <Tooltip title={`Stop ${name.toLowerCase()}`}>
+            <Tooltip
+              title={t('components.sandboxControl.stopService', {
+                defaultValue: 'Stop {{name}}',
+                name: name.toLowerCase(),
+              })}
+            >
               <Button
                 type="primary"
                 danger
@@ -124,11 +152,16 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
                 onClick={onStop}
                 disabled={isLoading}
               >
-                Stop
+                {t('components.sandboxControl.stop', { defaultValue: 'Stop' })}
               </Button>
             </Tooltip>
           ) : (
-            <Tooltip title={`Start ${name.toLowerCase()}`}>
+            <Tooltip
+              title={t('components.sandboxControl.startService', {
+                defaultValue: 'Start {{name}}',
+                name: name.toLowerCase(),
+              })}
+            >
               <Button
                 type="primary"
                 size="small"
@@ -136,7 +169,7 @@ function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: Service
                 onClick={onStart}
                 loading={isLoading}
               >
-                Start
+                {t('components.sandboxControl.start', { defaultValue: 'Start' })}
               </Button>
             </Tooltip>
           )}
@@ -173,7 +206,7 @@ export function SandboxControlPanel({
   }, [onTerminalStop]);
 
   return (
-    <Space direction="vertical" size="middle" className="w-full">
+    <Space orientation="vertical" size="middle" className="w-full">
       {/* Desktop Status Card */}
       <ServiceStatusCard
         type="desktop"

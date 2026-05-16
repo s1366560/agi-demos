@@ -6,8 +6,8 @@
  * Used as a `components.pre` override in ReactMarkdown instances.
  */
 
-import { memo, useState, useCallback, useRef, useEffect } from 'react';
-import type { ReactElement, ReactNode, HTMLAttributes } from 'react';
+import { memo, useState, useCallback, useRef, useEffect, isValidElement } from 'react';
+import type { ReactNode, HTMLAttributes } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -20,24 +20,36 @@ import { useSyntaxHighlighter } from '../canvas/useSyntaxHighlighter';
 
 import { MermaidBlock } from './MermaidBlock';
 
+function reactNodeToText(value: ReactNode | undefined): string {
+  if (value === null || value === undefined || typeof value === 'boolean') return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    const nodes = value as ReactNode[];
+    return nodes.map((item) => reactNodeToText(item)).join('');
+  }
+  return '';
+}
+
+function getFirstReactNode(value: ReactNode): ReactNode {
+  if (!Array.isArray(value)) return value;
+  const nodes = value as ReactNode[];
+  return nodes[0];
+}
+
 function extractCodeContent(children: ReactNode): { text: string; language?: string | undefined } {
   if (!children) return { text: '' };
 
-  const child = Array.isArray(children) ? children[0] : children;
-  if (child && typeof child === 'object' && 'props' in (child as ReactElement)) {
-    const codeEl = child as ReactElement<
-      HTMLAttributes<HTMLElement> & { children?: ReactNode | undefined }
-    >;
-    const className = (codeEl.props?.className as string) || '';
+  const child = getFirstReactNode(children);
+  if (isValidElement<HTMLAttributes<HTMLElement> & { children?: ReactNode | undefined }>(child)) {
+    const className = child.props.className ?? '';
     const langMatch = className.match(/language-(\w+)/);
-    const text =
-      typeof codeEl.props?.children === 'string'
-        ? codeEl.props.children
-        : String(codeEl.props?.children ?? '');
+    const text = reactNodeToText(child.props.children);
     return { text: text.replace(/\n$/, ''), language: langMatch?.[1] };
   }
 
-  return { text: String(children) };
+  return { text: reactNodeToText(children) };
 }
 
 export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children, ...props }) => {
@@ -68,7 +80,7 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
   }, [text]);
 
   const handleOpenInCanvas = useCallback(() => {
-    const id = `code-${Date.now()}`;
+    const id = `code-${String(Date.now())}`;
     const title = language ? `snippet.${language}` : 'snippet.txt';
 
     useCanvasStore.getState().openTab({
@@ -112,7 +124,9 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
             </button>
             <button
               type="button"
-              onClick={handleCopy}
+              onClick={() => {
+                void handleCopy();
+              }}
               className="p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-600/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               title={
                 copied
@@ -157,7 +171,9 @@ export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children,
           </button>
           <button
             type="button"
-            onClick={handleCopy}
+            onClick={() => {
+              void handleCopy();
+            }}
             className="p-1 rounded bg-slate-700/80 hover:bg-slate-600 transition-colors text-slate-400 hover:text-slate-200"
             title={
               copied

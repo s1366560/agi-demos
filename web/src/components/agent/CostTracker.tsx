@@ -11,7 +11,6 @@ import { useTranslation } from 'react-i18next';
 
 import { DollarSign, Zap } from 'lucide-react';
 
-
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import { formatTimeOnly } from '@/utils/date';
@@ -74,21 +73,35 @@ export const CostTrackerCompact: React.FC<CostTrackerProps> = ({
   return (
     <Tooltip
       title={
-        <Space direction="vertical" size={4}>
-          <div>{t('agent.costTracker.inputTokens', { value: costTracking.inputTokens.toLocaleString() })}</div>
-          <div>{t('agent.costTracker.outputTokens', { value: costTracking.outputTokens.toLocaleString() })}</div>
-          <div>{t('agent.costTracker.totalTokens', { value: costTracking.totalTokens.toLocaleString() })}</div>
+        <Space orientation="vertical" size={4}>
+          <div>
+            {t('agent.costTracker.inputTokens', {
+              value: costTracking.inputTokens.toLocaleString(),
+            })}
+          </div>
+          <div>
+            {t('agent.costTracker.outputTokens', {
+              value: costTracking.outputTokens.toLocaleString(),
+            })}
+          </div>
+          <div>
+            {t('agent.costTracker.totalTokens', {
+              value: costTracking.totalTokens.toLocaleString(),
+            })}
+          </div>
           <div>{t('agent.costTracker.costLabel', { value: formatCost(costTracking.costUsd) })}</div>
-          {showModel && <div>{t('agent.costTracker.modelLabel', { model: costTracking.model })}</div>}
+          {showModel && (
+            <div>{t('agent.costTracker.modelLabel', { model: costTracking.model })}</div>
+          )}
         </Space>
       }
     >
       <Space size={4} style={{ cursor: 'help' }}>
-        <Zap style={{ color: colors.warning}} size={12} />
+        <Zap style={{ color: colors.warning }} size={12} />
         <Text type="secondary" style={{ fontSize: 12 }}>
           {formatTokenCount(costTracking.totalTokens)}
         </Text>
-        <DollarSign style={{ color: colors.success}} size={12} />
+        <DollarSign style={{ color: colors.success }} size={12} />
         <Text type="secondary" style={{ fontSize: 12 }}>
           {formatCost(costTracking.costUsd)}
         </Text>
@@ -125,7 +138,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
 
   return (
     <div style={{ padding: '12px 16px' }}>
-      <Space direction="vertical" style={{ width: '100%' }} size="small">
+      <Space orientation="vertical" style={{ width: '100%' }} size="small">
         {/* Model */}
         {showModel && (
           <div>
@@ -146,7 +159,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
             showInfo={false}
             size="small"
             strokeColor={colors.info}
-            trailColor={colors.borderDark}
+            railColor={colors.borderDark}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
             <Space size={16}>

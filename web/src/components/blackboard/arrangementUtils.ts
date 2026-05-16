@@ -14,10 +14,7 @@ export type SelectionState =
   | { kind: 'agent'; agentId: string }
   | { kind: 'node'; nodeId: string };
 
-export type MoveMode =
-  | { kind: 'agent'; agentId: string }
-  | { kind: 'node'; nodeId: string }
-  | null;
+export type MoveMode = { kind: 'agent'; agentId: string } | { kind: 'node'; nodeId: string } | null;
 
 export type PlacedAgent = WorkspaceAgent & { hex_q: number; hex_r: number };
 
@@ -51,14 +48,38 @@ export const COLOR_SWATCHS = [
 ];
 
 export const KEYBOARD_HINTS = [
-  { keys: 'Arrow keys', labelKey: 'blackboard.arrangement.shortcuts.navigate', defaultLabel: 'Move focus' },
-  { keys: 'Shift + Arrows', labelKey: 'blackboard.arrangement.shortcuts.pan', defaultLabel: 'Pan canvas' },
-  { keys: 'Enter / Space', labelKey: 'blackboard.arrangement.shortcuts.activate', defaultLabel: 'Inspect focused hex' },
+  {
+    keys: 'Arrow keys',
+    labelKey: 'blackboard.arrangement.shortcuts.navigate',
+    defaultLabel: 'Move focus',
+  },
+  {
+    keys: 'Shift + Arrows',
+    labelKey: 'blackboard.arrangement.shortcuts.pan',
+    defaultLabel: 'Pan canvas',
+  },
+  {
+    keys: 'Enter / Space',
+    labelKey: 'blackboard.arrangement.shortcuts.activate',
+    defaultLabel: 'Inspect focused hex',
+  },
   { keys: '+ / -', labelKey: 'blackboard.arrangement.shortcuts.zoom', defaultLabel: 'Zoom' },
   { keys: '0', labelKey: 'blackboard.arrangement.shortcuts.reset', defaultLabel: 'Reset view' },
-  { keys: 'A / C / H', labelKey: 'blackboard.arrangement.shortcuts.place', defaultLabel: 'Place items' },
-  { keys: 'M / Delete', labelKey: 'blackboard.arrangement.shortcuts.edit', defaultLabel: 'Move or remove selected item' },
-  { keys: '2 / 3 / Esc', labelKey: 'blackboard.arrangement.shortcuts.mode', defaultLabel: 'Switch modes or clear selection' },
+  {
+    keys: 'A / C / H',
+    labelKey: 'blackboard.arrangement.shortcuts.place',
+    defaultLabel: 'Place items',
+  },
+  {
+    keys: 'M / Delete',
+    labelKey: 'blackboard.arrangement.shortcuts.edit',
+    defaultLabel: 'Move or remove selected item',
+  },
+  {
+    keys: '2 / 3 / Esc',
+    labelKey: 'blackboard.arrangement.shortcuts.mode',
+    defaultLabel: 'Switch modes or clear selection',
+  },
 ] as const;
 
 export const HEX_KEY_OFFSETS = {
@@ -103,7 +124,12 @@ export function isEditableTarget(target: EventTarget | null): boolean {
     return false;
   }
   const tagName = element.tagName.toLowerCase();
-  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || element.isContentEditable;
+  return (
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select' ||
+    element.isContentEditable
+  );
 }
 
 export function getNodeAccent(node: TopologyNode): string {

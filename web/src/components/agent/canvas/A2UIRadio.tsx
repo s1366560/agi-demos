@@ -100,29 +100,32 @@ export const A2UIRadio = memo(function A2UIRadio({
   const actions = useA2UIActions();
   const { version } = useA2UIState();
 
-  const props = (node.properties ?? {});
-  const bindingInput =
-    props.value ??
-    props.selection ??
-    props.selected ??
-    props.selections ??
-    (props.path ? { path: props.path } : undefined);
-  const description = useMemo(
-    () => resolveDisplayString(props.description, node, surfaceId, actions),
-    [actions, node, props.description, surfaceId, version]
+  const props = node.properties ?? {};
+  const bindingInput = useMemo(
+    () =>
+      props.value ??
+      props.selection ??
+      props.selected ??
+      props.selections ??
+      (props.path ? { path: props.path } : undefined),
+    [props.path, props.selected, props.selection, props.selections, props.value]
   );
-  const options = useMemo(
-    () => normalizeRadioOptions(props.options, node, surfaceId, actions),
-    [actions, node, props.options, surfaceId, version]
-  );
+  const description = useMemo(() => {
+    void version;
+    return resolveDisplayString(props.description, node, surfaceId, actions);
+  }, [actions, node, props.description, surfaceId, version]);
+  const options = useMemo(() => {
+    void version;
+    return normalizeRadioOptions(props.options, node, surfaceId, actions);
+  }, [actions, node, props.options, surfaceId, version]);
   const boundPath = useMemo(
     () => resolveBindingPath(bindingInput, node, actions),
     [actions, bindingInput, node]
   );
-  const resolvedValue = useMemo(
-    () => resolveBoundStringValue(bindingInput, node, surfaceId, actions),
-    [actions, bindingInput, node, surfaceId, version]
-  );
+  const resolvedValue = useMemo(() => {
+    void version;
+    return resolveBoundStringValue(bindingInput, node, surfaceId, actions);
+  }, [actions, bindingInput, node, surfaceId, version]);
   const [localValue, setLocalValue] = useState<string | undefined>(resolvedValue);
 
   useEffect(() => {

@@ -21,7 +21,7 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(
   ({ suggestions, onSelect, visible = true }) => {
     const { t } = useTranslation();
 
-    if (!visible || !suggestions || suggestions.length === 0) return null;
+    if (!visible || suggestions.length === 0) return null;
 
     return (
       <div className="flex items-start gap-3 mb-6 animate-fade-in-up">

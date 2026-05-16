@@ -71,8 +71,6 @@ export function buildWebSocketUrl(
     case 'mcp':
       path = `${basePath}/sandbox/${sandboxId}/mcp`;
       break;
-    default:
-      throw new Error(`Unknown service type: ${service}`);
   }
 
   const url = new URL(path, `${protocol}//${host}`);
@@ -80,9 +78,7 @@ export function buildWebSocketUrl(
   // Add query parameters
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, value);
-      }
+      url.searchParams.set(key, value);
     });
   }
 
@@ -115,20 +111,15 @@ export function buildDesktopUrl(sandboxId: string, path?: string): string {
  * Build WebSocket URL for desktop VNC connection via @novnc/novnc
  *
  * @param projectId - Project identifier
- * @param token - Auth token for query parameter authentication
  * @returns Complete WebSocket URL for VNC connection
  */
-export function buildDesktopWebSocketUrl(projectId: string, token?: string): string {
+export function buildDesktopWebSocketUrl(projectId: string): string {
   const protocol = getWebSocketProtocol();
   const host = getApiHost();
   const basePath = getApiBasePath();
 
   const path = `${basePath}/projects/${projectId}/sandbox/desktop/proxy/websockify`;
-  const url = new URL(path, `${protocol}//${host}`);
-  if (token) {
-    url.searchParams.set('token', token);
-  }
-  return url.toString();
+  return new URL(path, `${protocol}//${host}`).toString();
 }
 
 /**
@@ -141,7 +132,7 @@ export function buildDesktopWebSocketUrl(projectId: string, token?: string): str
  */
 export function buildDirectDesktopUrl(host: string, port: number, path = 'vnc.html'): string {
   const protocol = window.location.protocol;
-  return `${protocol}//${host}:${port}/${path}`;
+  return `${protocol}//${host}:${String(port)}/${path}`;
 }
 
 /**

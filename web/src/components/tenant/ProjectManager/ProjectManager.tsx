@@ -13,6 +13,8 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { projectService } from '@/services/projectService';
 
+import { confirmAction } from '@/utils/confirmAction';
+
 import { ProjectManagerContext } from './context';
 import { Item } from './Item';
 import { List } from './List';
@@ -57,7 +59,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
   // Load projects when tenant changes
   useEffect(() => {
     if (currentTenant) {
-      listProjects(currentTenant.id);
+      void listProjects(currentTenant.id);
     }
   }, [currentTenant, listProjects]);
 
@@ -75,7 +77,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
     async (projectId: string) => {
       if (!currentTenant) return;
 
-      if (window.confirm(t('tenant.projectManager.deleteConfirm'))) {
+      if (await confirmAction({ title: t('tenant.projectManager.deleteConfirm'), danger: true })) {
         try {
           await deleteProject(currentTenant.id, projectId);
         } catch {
@@ -196,47 +198,38 @@ export const Root: React.FC<ProjectManagerProps> = ({
     }
 
     // Full variant - auto-render all sub-components
-    if (variant === 'full') {
-      // No tenant state
-      if (!currentTenant) {
-        return <Empty variant="no-tenant" />;
-      }
+    if (!currentTenant) {
+      return <Empty variant="no-tenant" />;
+    }
 
-      // Loading state
-      if (isLoading) {
-        return <Loading />;
-      }
+    if (isLoading) {
+      return <Loading />;
+    }
 
-      // Error state
-      if (error) {
-        return <Error error={error} onDismiss={clearError} />;
-      }
+    if (error) {
+      return <Error error={error} onDismiss={clearError} />;
+    }
 
-      // Empty state
-      if (filteredProjects.length === 0) {
-        return (
-          <Empty
-            variant={searchTerm ? 'no-results' : 'no-projects'}
-            showCreateButton={!searchTerm}
-            onCreateClick={() => {
-              setIsCreateModalOpen(true);
-            }}
-          />
-        );
-      }
-
-      // Render all components
+    if (filteredProjects.length === 0) {
       return (
-        <>
-          <Search />
-          <List>{(project) => <Item key={project.id} project={project} />}</List>
-          <CreateModal />
-          {selectedProjectForSettings && <SettingsModal project={selectedProjectForSettings} />}
-        </>
+        <Empty
+          variant={searchTerm ? 'no-results' : 'no-projects'}
+          showCreateButton={!searchTerm}
+          onCreateClick={() => {
+            setIsCreateModalOpen(true);
+          }}
+        />
       );
     }
 
-    return null;
+    return (
+      <>
+        <Search />
+        <List>{(project) => <Item key={project.id} project={project} />}</List>
+        <CreateModal />
+        {selectedProjectForSettings && <SettingsModal project={selectedProjectForSettings} />}
+      </>
+    );
   };
 
   return (

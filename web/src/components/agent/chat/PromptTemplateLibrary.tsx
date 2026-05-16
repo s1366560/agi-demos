@@ -206,7 +206,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
     // Fetch custom templates on open
     useEffect(() => {
       if (visible && currentTenant?.id) {
-        fetchTemplates(currentTenant.id);
+        void fetchTemplates(currentTenant.id);
       }
     }, [visible, currentTenant?.id, fetchTemplates]);
 
@@ -302,7 +302,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
     const handleDeleteCustom = useCallback(
       (e: React.MouseEvent, templateId: string) => {
         e.stopPropagation();
-        deleteTemplate(templateId);
+        void deleteTemplate(templateId);
       },
       [deleteTemplate]
     );
@@ -332,7 +332,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           <button
             type="button"
             onClick={handleClose}
-            aria-label="Close template library"
+            aria-label={t('agent.templates.closeLibrary', 'Close template library')}
             className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors"
           >
             <X size={14} />
@@ -386,11 +386,11 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           >
             <User size={12} className="inline mr-1" />
             {t('agent.templates.myTemplates', 'My Templates')}
-           {customTemplates.length > 0 && (
-               <span className="ml-1 text-2xs bg-slate-200 dark:bg-slate-600 rounded-full px-1.5">
-                 {customTemplates.length}
-               </span>
-             )}
+            {customTemplates.length > 0 && (
+              <span className="ml-1 text-2xs bg-slate-200 dark:bg-slate-600 rounded-full px-1.5">
+                {customTemplates.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -464,7 +464,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           customLoading ? (
             <div className="px-4 py-8 text-center text-sm text-slate-400">
               <Loader2 size={16} className="inline animate-spin motion-reduce:animate-none mr-2" />
-              Loading...
+              {t('common.loading', 'Loading...')}
             </div>
           ) : filteredCustom.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-slate-400">
@@ -473,8 +473,10 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           ) : (
             <div className="py-1">
               {filteredCustom.map((tmpl) => {
-                const cat = (tmpl.category as TemplateCategory) || 'general';
-                const cfg = categoryConfig[cat] || categoryConfig.general;
+                const cfg =
+                  tmpl.category in categoryConfig
+                    ? categoryConfig[tmpl.category as TemplateCategory]
+                    : categoryConfig.general;
                 return (
                   <button
                     key={tmpl.id}
@@ -508,7 +510,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                           handleDeleteCustom(e, tmpl.id);
                         }}
                         className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-                        aria-label="Delete"
+                        aria-label={t('common.delete', 'Delete')}
                       >
                         <Trash2 size={12} />
                       </button>

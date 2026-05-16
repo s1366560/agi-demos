@@ -5,6 +5,8 @@
  * success/failure rates, tool usage, and performance metrics.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import { BarChart3, PlayCircle, CheckCircle, AlertCircle, Timer, Wrench } from 'lucide-react';
 
 import { useThemeColors } from '@/hooks/useThemeColor';
@@ -19,14 +21,20 @@ import {
   Tag,
 } from '@/components/ui/lazyAntd';
 
-
 import type { ExecutionStatsResponse } from '../../types/agent';
+import type { TFunction } from 'i18next';
 
 interface ExecutionStatsCardProps {
   stats: ExecutionStatsResponse;
 }
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
+  const { t } = useTranslation();
   const colors = useThemeColors({
     success: '--color-success',
     successDark: '--color-success-dark',
@@ -50,7 +58,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
 
   const toolColumns = [
     {
-      title: 'Tool',
+      title: tFallback(t, 'agent.executionStats.tool', 'Tool'),
       dataIndex: 'tool',
       key: 'tool',
       render: (tool: string) => (
@@ -60,13 +68,13 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
       ),
     },
     {
-      title: 'Usage Count',
+      title: tFallback(t, 'agent.executionStats.usageCount', 'Usage Count'),
       dataIndex: 'count',
       key: 'count',
       align: 'right' as const,
     },
     {
-      title: 'Percentage',
+      title: tFallback(t, 'agent.executionStats.percentage', 'Percentage'),
       dataIndex: 'percentage',
       key: 'percentage',
       align: 'right' as const,
@@ -79,7 +87,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
           <BarChart3 size={20} className="text-blue-600" />
-          Execution Statistics
+          {tFallback(t, 'agent.executionStats.title', 'Execution Statistics')}
         </h3>
       </div>
 
@@ -88,7 +96,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
         <LazyCol xs={24} sm={12} lg={6}>
           <LazyCard className="bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
             <LazyStatistic
-              title="Total Executions"
+              title={tFallback(t, 'agent.executionStats.totalExecutions', 'Total Executions')}
               value={stats.total_executions}
               prefix={<PlayCircle size={20} className="text-slate-600" />}
             />
@@ -98,7 +106,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
         <LazyCol xs={24} sm={12} lg={6}>
           <LazyCard className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700">
             <LazyStatistic
-              title="Completed"
+              title={tFallback(t, 'agent.executionStats.completed', 'Completed')}
               value={stats.completed_count}
               prefix={<CheckCircle size={20} className="text-green-600" />}
               suffix={<span className="text-sm text-slate-500">({successRate.toFixed(1)}%)</span>}
@@ -109,7 +117,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
         <LazyCol xs={24} sm={12} lg={6}>
           <LazyCard className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700">
             <LazyStatistic
-              title="Failed"
+              title={tFallback(t, 'agent.executionStats.failed', 'Failed')}
               value={stats.failed_count}
               prefix={<AlertCircle size={20} className="text-red-600" />}
               suffix={<span className="text-sm text-slate-500">({failureRate.toFixed(1)}%)</span>}
@@ -120,7 +128,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
         <LazyCol xs={24} sm={12} lg={6}>
           <LazyCard className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700">
             <LazyStatistic
-              title="Avg Duration"
+              title={tFallback(t, 'agent.executionStats.avgDuration', 'Avg Duration')}
               value={stats.average_duration_ms.toFixed(0)}
               suffix="ms"
               prefix={<Timer size={20} className="text-amber-600" />}
@@ -133,7 +141,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Success Rate
+            {tFallback(t, 'agent.executionStats.successRate', 'Success Rate')}
           </span>
           <span className="text-sm text-slate-500">{successRate.toFixed(1)}%</span>
         </div>
@@ -152,7 +160,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
         <div>
           <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
             <Wrench size={16} />
-            Tool Usage Distribution
+            {tFallback(t, 'agent.executionStats.toolUsageDistribution', 'Tool Usage Distribution')}
           </h4>
           <LazyTable
             dataSource={toolUsageData}

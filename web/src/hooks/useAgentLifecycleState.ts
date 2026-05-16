@@ -105,7 +105,7 @@ export function useAgentLifecycleState({
       }
     };
 
-    connectAndSubscribe();
+    void connectAndSubscribe();
 
     // Listen to agentService connection status changes
     const unsubscribeStatusListener = agentService.onStatusChange((status) => {
@@ -147,7 +147,9 @@ export function useAgentLifecycleState({
           label: t('agent.lifecycle.ready.label'),
           color: 'text-emerald-500',
           icon: 'CheckCircle',
-          description: t('agent.lifecycle.ready.description', { count: lifecycleState.toolCount || 0 }),
+          description: t('agent.lifecycle.ready.description', {
+            count: lifecycleState.toolCount || 0,
+          }),
         };
 
       case 'executing':

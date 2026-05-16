@@ -6,17 +6,12 @@ import { useTranslation } from 'react-i18next';
 import { Button } from 'antd';
 import { Plus, Trash2 } from 'lucide-react';
 
-import {
-  useWorkspaceAgents,
-  useWorkspaceMembers,
-  useWorkspaceActions,
-} from '@/stores/workspace';
+import { useWorkspaceAgents, useWorkspaceMembers, useWorkspaceActions } from '@/stores/workspace';
 
 import { HostedProjectionBadge } from '@/components/blackboard/HostedProjectionBadge';
 import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import { AddAgentModal } from './AddAgentModal';
-
 
 export interface MemberPanelProps {
   tenantId: string;
@@ -59,13 +54,20 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
         fallbackLabel="workspace membership projection"
       />
 
-      <h3 className="mt-3 mb-3 font-semibold text-slate-900 dark:text-white">{t('workspaceDetail.members.title')}</h3>
+      <h3 className="mt-3 mb-3 font-semibold text-slate-900 dark:text-white">
+        {t('workspaceDetail.members.title')}
+      </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <h4 className="text-sm font-medium mb-2">{t('workspaceDetail.members.membersLabel')} ({members.length})</h4>
+          <h4 className="text-sm font-medium mb-2">
+            {t('workspaceDetail.members.membersLabel')} ({members.length})
+          </h4>
           <ul className="space-y-1">
             {members.map((member) => (
-              <li key={member.id} className="text-sm border dark:border-slate-700 rounded px-2 py-1">
+              <li
+                key={member.id}
+                className="text-sm border dark:border-slate-700 rounded px-2 py-1"
+              >
                 {member.user_email ?? member.user_id} · {member.role}
               </li>
             ))}
@@ -73,12 +75,16 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
         </div>
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-medium">{t('workspaceDetail.members.agentsLabel')} ({agents.length})</h4>
+            <h4 className="text-sm font-medium">
+              {t('workspaceDetail.members.agentsLabel')} ({agents.length})
+            </h4>
             <Button
               type="text"
               size="small"
               icon={<Plus size={16} />}
-              onClick={() => { setShowAddAgent(true); }}
+              onClick={() => {
+                setShowAddAgent(true);
+              }}
             >
               {t('workspaceDetail.members.add')}
             </Button>
@@ -92,7 +98,9 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
                 <span>{agent.display_name || agent.agent_id}</span>
                 <LazyPopconfirm
                   title={t('workspaceDetail.members.removeAgentConfirm')}
-                  onConfirm={() => { void handleRemoveAgent(agent.id); }}
+                  onConfirm={() => {
+                    void handleRemoveAgent(agent.id);
+                  }}
                   okText={t('workspaceDetail.members.remove')}
                   cancelText={t('workspaceDetail.members.cancel')}
                 >
@@ -112,7 +120,9 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
 
       <AddAgentModal
         open={showAddAgent}
-        onClose={() => { setShowAddAgent(false); }}
+        onClose={() => {
+          setShowAddAgent(false);
+        }}
         onSubmit={handleAddAgent}
       />
     </section>

@@ -1,13 +1,17 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import type { FC } from 'react';
 
 import { Loader2, CheckCircle2, AlertCircle, PauseCircle, Power, Cpu } from 'lucide-react';
 
 import type { InstanceStatus } from '@/services/poolService';
 
-import type { ProjectAgentLifecycleState, UnifiedAgentStatus as AgentStatus } from '@/hooks/useUnifiedAgentStatus';
+import type {
+  ProjectAgentLifecycleState,
+  UnifiedAgentStatus as AgentStatus,
+} from '@/hooks/useUnifiedAgentStatus';
 
 import { LazyTooltip } from '@/components/ui/lazyAntd';
-
 
 import type { TFunction } from 'i18next';
 import type { LucideIcon } from 'lucide-react';
@@ -15,7 +19,9 @@ import type { LucideIcon } from 'lucide-react';
 /**
  * Map pool instance status to lifecycle state
  */
-export function mapPoolStatusToLifecycle(status: InstanceStatus | undefined): ProjectAgentLifecycleState {
+export function mapPoolStatusToLifecycle(
+  status: InstanceStatus | undefined
+): ProjectAgentLifecycleState {
   if (!status) return 'uninitialized';
 
   switch (status) {
@@ -120,7 +126,9 @@ export const LifecycleStatePill: FC<LifecycleStatePillProps> = ({
       title={
         <div className="space-y-2 max-w-xs">
           <div className="font-medium">{t(`agent.lifecycle.states.${lifecycleState}`)}</div>
-          <div className="text-xs opacity-80">{t(`agent.lifecycle.descriptions.${lifecycleState}`)}</div>
+          <div className="text-xs opacity-80">
+            {t(`agent.lifecycle.descriptions.${lifecycleState}`)}
+          </div>
           {error && (
             <div className="text-xs text-status-text-error-dark pt-1 border-t border-border-dark mt-1">
               {t('agent.lifecycle.error.prefix')}: {error}

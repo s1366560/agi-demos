@@ -33,7 +33,7 @@ export function toPercent(raw: unknown): number {
  */
 export function deriveObjectiveProgressPct(
   objective: CyberObjective,
-  tasks: WorkspaceTask[] | undefined,
+  tasks: WorkspaceTask[] | undefined
 ): number {
   const stored = toPercent(objective.progress);
   if (stored > 0) {
@@ -42,12 +42,12 @@ export function deriveObjectiveProgressPct(
   if (!tasks || tasks.length === 0) {
     return 0;
   }
-  const rootTask = tasks.find((task) => task.metadata?.objective_id === objective.id);
+  const rootTask = tasks.find((task) => task.metadata.objective_id === objective.id);
   if (!rootTask) {
     return 0;
   }
   const descendants = tasks.filter(
-    (task) => task.id === rootTask.id || task.metadata?.root_goal_task_id === rootTask.id,
+    (task) => task.id === rootTask.id || task.metadata.root_goal_task_id === rootTask.id
   );
   if (descendants.length === 0) {
     return 0;

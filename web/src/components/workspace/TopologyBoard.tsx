@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { useWorkspaceTopology } from '@/stores/workspace';
 
 interface TopologyBoardProps {
@@ -5,11 +7,12 @@ interface TopologyBoardProps {
 }
 
 export function TopologyBoard({ workspaceId }: TopologyBoardProps) {
+  const { t } = useTranslation();
   const { nodes, edges } = useWorkspaceTopology();
 
   return (
     <section className="rounded-lg border border-slate-200 p-4 bg-white">
-      <h3 className="font-semibold text-slate-900 mb-3">Topology</h3>
+      <h3 className="font-semibold text-slate-900 mb-3">{t('blackboard.tabs.topology')}</h3>
       <div className="text-xs text-slate-500 mb-2">workspace: {workspaceId}</div>
       <div className="grid grid-cols-2 gap-3">
         <div>

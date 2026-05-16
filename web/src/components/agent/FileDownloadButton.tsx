@@ -10,7 +10,6 @@ import React from 'react';
 import { Button, Tooltip } from 'antd';
 import { Download, File, FileText } from 'lucide-react';
 
-
 interface FileDownloadButtonProps {
   /** The filename to display */
   filename: string;
@@ -22,7 +21,7 @@ interface FileDownloadButtonProps {
 
 const formatFileSize = (bytes?: number): string => {
   if (bytes === undefined) return '';
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
@@ -40,7 +39,7 @@ const getFileIcon = (filename: string) => {
 export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({ filename, url, size }) => {
   const handleDownload = () => {
     // Open in new tab - browser will handle download based on Content-Disposition
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const sizeText = formatFileSize(size);

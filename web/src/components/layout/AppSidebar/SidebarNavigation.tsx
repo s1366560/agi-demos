@@ -9,7 +9,7 @@ import { ChevronDown } from 'lucide-react';
 import { useSidebarContext } from './SidebarContext';
 import { SidebarNavItem } from './SidebarNavItem';
 
-import type { SidebarConfig } from '@/config/navigation';
+import type { NavGroup, SidebarConfig } from '@/config/navigation';
 
 export interface SidebarNavigationProps {
   /** Navigation configuration */
@@ -24,13 +24,7 @@ function NavGroupSection({
   isOpen,
   onToggle,
 }: {
-  group: {
-    id: string;
-    title: string;
-    items: any[];
-    collapsible?: boolean | undefined;
-    defaultOpen?: boolean | undefined;
-  };
+  group: NavGroup;
   isOpen: boolean;
   onToggle?: (() => void) | undefined;
 }) {
@@ -56,11 +50,9 @@ function NavGroupSection({
   if (group.collapsible === false) {
     return (
       <div className="space-y-1">
-        {group.title && !isCollapsed && (
-          <p className="px-3 text-2xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            {t(group.title)}
-          </p>
-        )}
+        <p className="px-3 text-2xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          {t(group.title)}
+        </p>
         <div className="space-y-1">
           {group.items.map((item) => (
             <SidebarNavItem
@@ -80,19 +72,17 @@ function NavGroupSection({
   return (
     <div className="space-y-1">
       {/* Group header with collapse toggle */}
-      {group.title && !isCollapsed && (
-        <button
-          onClick={onToggle}
-          className="flex items-center justify-between w-full px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-          type="button"
-        >
-          <span>{t(group.title)}</span>
-          <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
-        </button>
-      )}
+      <button
+        onClick={onToggle}
+        className="flex items-center justify-between w-full px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+        type="button"
+      >
+        <span>{t(group.title)}</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+      </button>
 
       {/* Group items */}
-      {(!isCollapsed || isOpen) && (
+      {isOpen && (
         <div className="space-y-1">
           {group.items.map((item) => (
             <SidebarNavItem

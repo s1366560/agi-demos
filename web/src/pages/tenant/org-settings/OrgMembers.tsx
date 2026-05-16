@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input } from 'antd';
-import { UserMinus, UserPlus, Users } from 'lucide-react';
+import { Search as SearchIcon, UserMinus, UserPlus, Users } from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
@@ -74,7 +74,7 @@ export const OrgMembers: React.FC = () => {
         setMembers(result);
       }
     };
-    loadMembers();
+    void loadMembers();
   }, [currentTenant, listMembers]);
 
   // Filter members by search and role
@@ -108,7 +108,7 @@ export const OrgMembers: React.FC = () => {
   );
 
   const handleRoleChange = useCallback(
-    async (member: UserTenant, newRole: UserTenant['role']) => {
+    (member: UserTenant, newRole: UserTenant['role']) => {
       // Optimistic update
       setMembers((prev) =>
         prev.map((m) => (m.user_id === member.user_id ? { ...m, role: newRole } : m))
@@ -221,7 +221,7 @@ export const OrgMembers: React.FC = () => {
             className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4"
           >
             <div className="flex items-center gap-3">
-              <stat.icon size={20} className={stat.color || ""} />
+              <stat.icon size={20} className={stat.color || ''} />
               <div>
                 <p className="text-xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{stat.label}</p>
@@ -240,7 +240,13 @@ export const OrgMembers: React.FC = () => {
             setSearch(e.target.value);
           }}
           allowClear
-          className="max-w-sm"
+          enterButton={
+            <>
+              <span className="sr-only">{t('common.search', 'Search')}</span>
+              <SearchIcon size={16} aria-hidden="true" />
+            </>
+          }
+          className="w-full max-w-sm"
         />
         <LazySelect
           value={roleFilter}
@@ -267,94 +273,96 @@ export const OrgMembers: React.FC = () => {
             <LazyEmpty description={t('tenant.orgSettings.members.noMembers')} />
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('tenant.orgSettings.members.colUser')}
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('tenant.orgSettings.members.colRole')}
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('tenant.orgSettings.members.colJoined')}
-                </th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('common.actions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {filteredMembers.map((member) => (
-                <tr
-                  key={member.user_id}
-                  className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-sm font-medium text-slate-600 dark:text-slate-300">
-                        {getAvatar(member)}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {member.user_name ?? member.user_id}
-                        </p>
-                        {member.user_email && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {member.user_email}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {member.role === 'owner' ? (
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(member.role)}`}
-                      >
-                        {member.role}
-                      </span>
-                    ) : (
-                      <LazySelect
-                        value={member.role}
-                        onChange={(val: string) =>
-                          handleRoleChange(member, val as UserTenant['role'])
-                        }
-                        options={ROLE_OPTIONS.filter((r) => r.value !== 'owner')}
-                        size="small"
-                        className="w-28"
-                        disabled={isSubmitting}
-                      />
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
-                    {member.joined_at
-                      ? new Date(member.joined_at).toLocaleDateString()
-                      : new Date(member.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {member.role !== 'owner' && (
-                      <LazyPopconfirm
-                        title={t('tenant.orgSettings.members.removeConfirm')}
-                        onConfirm={() => handleRemove(member)}
-                        okText={t('common.confirm')}
-                        cancelText={t('common.cancel')}
-                      >
-                        <button
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
-                          type="button"
-                          disabled={isSubmitting}
-                        >
-                          <UserMinus size={16} />
-                          {t('common.remove')}
-                        </button>
-                      </LazyPopconfirm>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-[42rem] w-full">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {t('tenant.orgSettings.members.colUser')}
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {t('tenant.orgSettings.members.colRole')}
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {t('tenant.orgSettings.members.colJoined')}
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {t('common.actions.label')}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredMembers.map((member) => (
+                  <tr
+                    key={member.user_id}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-sm font-medium text-slate-600 dark:text-slate-300">
+                          {getAvatar(member)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {member.user_name ?? member.user_id}
+                          </p>
+                          {member.user_email && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {member.user_email}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {member.role === 'owner' ? (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(member.role)}`}
+                        >
+                          {member.role}
+                        </span>
+                      ) : (
+                        <LazySelect
+                          value={member.role}
+                          onChange={(val: string) => {
+                            handleRoleChange(member, val as UserTenant['role']);
+                          }}
+                          options={ROLE_OPTIONS.filter((r) => r.value !== 'owner')}
+                          size="small"
+                          className="w-28"
+                          disabled={isSubmitting}
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+                      {member.joined_at
+                        ? new Date(member.joined_at).toLocaleDateString()
+                        : new Date(member.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {member.role !== 'owner' && (
+                        <LazyPopconfirm
+                          title={t('tenant.orgSettings.members.removeConfirm')}
+                          onConfirm={() => handleRemove(member)}
+                          okText={t('common.confirm')}
+                          cancelText={t('common.cancel')}
+                        >
+                          <button
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                            type="button"
+                            disabled={isSubmitting}
+                          >
+                            <UserMinus size={16} />
+                            {t('common.remove')}
+                          </button>
+                        </LazyPopconfirm>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

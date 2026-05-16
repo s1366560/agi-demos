@@ -19,7 +19,6 @@
 
 import React, { useEffect, useState, useCallback, memo } from 'react';
 
-
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
@@ -44,6 +43,14 @@ const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
 } as const;
+
+function getResponseStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
+  const response = (error as { response?: unknown }).response;
+  if (!response || typeof response !== 'object' || !('status' in response)) return undefined;
+  const status = (response as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
 
 /**
  * TenantLayout component
@@ -73,7 +80,7 @@ export const TenantLayout: React.FC = memo(() => {
 
   const handleLogout = useCallback(() => {
     logout();
-    navigate('/login');
+    void navigate('/login');
   }, [logout, navigate]);
 
   const handleCreateTenant = useCallback(async () => {
@@ -91,7 +98,7 @@ export const TenantLayout: React.FC = memo(() => {
    */
   const handleTenantAccessError = useCallback(
     async (error: unknown, requestedTenantId: string) => {
-      const status = (error as any)?.response?.status;
+      const status = getResponseStatus(error);
 
       if (status === HTTP_STATUS.FORBIDDEN || status === HTTP_STATUS.NOT_FOUND) {
         console.warn(
@@ -106,7 +113,7 @@ export const TenantLayout: React.FC = memo(() => {
             const firstAccessibleTenant = tenants[0];
             if (firstAccessibleTenant) {
               setCurrentTenant(firstAccessibleTenant);
-              navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
+              void navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
             }
           } else {
             setNoTenants(true);
@@ -178,7 +185,7 @@ export const TenantLayout: React.FC = memo(() => {
   // Sync tenant ID from URL with store - flattened for better performance
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    initializeTenantAndProject();
+    void initializeTenantAndProject();
   }, [initializeTenantAndProject]);
 
   // Sync project ID from URL with store
@@ -229,7 +236,7 @@ export const TenantLayout: React.FC = memo(() => {
               }}
               className="btn-primary w-full py-3"
             >
-              {t('tenant.create')}
+              {t('tenant.create.action')}
             </button>
             <button type="button" onClick={handleLogout} className="btn-secondary w-full py-3">
               {t('common.logout')}
@@ -242,7 +249,9 @@ export const TenantLayout: React.FC = memo(() => {
           onClose={() => {
             setIsCreateModalOpen(false);
           }}
-          onSuccess={handleCreateTenant}
+          onSuccess={() => {
+            void handleCreateTenant();
+          }}
         />
       </div>
     );
@@ -351,7 +360,9 @@ export const TenantLayout: React.FC = memo(() => {
         onClose={() => {
           setIsCreateModalOpen(false);
         }}
-        onSuccess={handleCreateTenant}
+        onSuccess={() => {
+          void handleCreateTenant();
+        }}
       />
 
       {/* Background SubAgent Panel */}

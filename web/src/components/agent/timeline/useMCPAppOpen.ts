@@ -100,7 +100,7 @@ export const useMCPAppOpen = (step: TimelineStep) => {
         }
       }
 
-      const resourceUri = match?.ui_metadata?.resourceUri;
+      const resourceUri = match?.ui_metadata.resourceUri;
       const tabKey = resourceUri || match?.id || step.id;
       const tabId = `mcp-app-${tabKey}`;
 
@@ -109,7 +109,7 @@ export const useMCPAppOpen = (step: TimelineStep) => {
 
       canvasState.openTab({
         id: tabId,
-        title: (match?.ui_metadata?.title as string) || getToolLabel(step.toolName),
+        title: (match?.ui_metadata.title as string) || getToolLabel(step.toolName),
         type: 'mcp-app' as const,
         content: '',
         mcpResourceUri: resourceUri,

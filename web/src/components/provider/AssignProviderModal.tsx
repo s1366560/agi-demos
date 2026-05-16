@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { AlertCircle, Loader2, X } from 'lucide-react';
 
 import { providerAPI } from '../../services/api';
-import { ProviderConfig } from '../../types/memory';
+
+import type { ProviderConfig } from '../../types/memory';
+
+type OperationType = 'llm' | 'embedding' | 'rerank';
 
 interface AssignProviderModalProps {
   isOpen: boolean;
@@ -24,9 +29,8 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
   initialOperationType = 'llm',
   initialPriority = 0,
 }) => {
-  const [operationType, setOperationType] = useState<'llm' | 'embedding' | 'rerank'>(
-    initialOperationType
-  );
+  const { t } = useTranslation();
+  const [operationType, setOperationType] = useState<OperationType>(initialOperationType);
   const [priority, setPriority] = useState(initialPriority);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +45,9 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
     try {
       await providerAPI.assignToTenant(provider.id, tenantId, priority, operationType);
       onSuccess();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to assign provider:', err);
-      setError(err.message || 'Failed to assign provider');
+      setError(err instanceof Error ? err.message : t('components.provider.assign.assignFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -56,22 +60,35 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="assign-provider-title" className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="assign-provider-title"
+          className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden"
+        >
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-            <h2 id="assign-provider-title" className="text-lg font-semibold text-slate-900 dark:text-white">
-              Assign Provider
+            <h2
+              id="assign-provider-title"
+              className="text-lg font-semibold text-slate-900 dark:text-white"
+            >
+              {t('components.provider.assign.title')}
             </h2>
             <button
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t('common.close')}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
               <X size={20} />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form
+            onSubmit={(e) => {
+              void handleSubmit(e);
+            }}
+            className="p-6 space-y-4"
+          >
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm flex items-center gap-2">
                 <AlertCircle size={16} />
@@ -81,33 +98,43 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
 
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                Assign <strong>{provider.name}</strong> to the current tenant.
+                {t('components.provider.assign.descriptionPrefix')} <strong>{provider.name}</strong>{' '}
+                {t('components.provider.assign.descriptionSuffix')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Operation Type
+                {t('components.provider.assign.operationType')}
               </label>
               <select
                 value={operationType}
                 onChange={(e) => {
-                  setOperationType(e.target.value as any);
+                  const nextOperationType = e.target.value;
+                  if (
+                    nextOperationType === 'llm' ||
+                    nextOperationType === 'embedding' ||
+                    nextOperationType === 'rerank'
+                  ) {
+                    setOperationType(nextOperationType);
+                  }
                 }}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
               >
-                <option value="llm">LLM (Chat/Completion)</option>
-                <option value="embedding">Embedding</option>
-                <option value="rerank">Rerank</option>
+                <option value="llm">{t('components.provider.operationTypes.llm')}</option>
+                <option value="embedding">
+                  {t('components.provider.operationTypes.embedding')}
+                </option>
+                <option value="rerank">{t('components.provider.operationTypes.rerank')}</option>
               </select>
               <p className="text-xs text-slate-500">
-                The type of operation this provider will handle.
+                {t('components.provider.assign.operationTypeHelp')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Priority
+                {t('components.provider.assign.priority')}
               </label>
               <input
                 type="number"
@@ -119,7 +146,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
               />
               <p className="text-xs text-slate-500">
-                Higher priority providers are tried first (default: 0).
+                {t('components.provider.assign.priorityHelp')}
               </p>
             </div>
 
@@ -129,7 +156,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
                 onClick={onClose}
                 className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -139,7 +166,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
                 {isSubmitting && (
                   <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
                 )}
-                Assign
+                {t('components.provider.assign.submit')}
               </button>
             </div>
           </form>

@@ -5,7 +5,6 @@ import { Bot } from 'lucide-react';
  * TextItems - Streaming text delta and text end event rendering
  */
 
-
 import {
   ASSISTANT_AVATAR_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,

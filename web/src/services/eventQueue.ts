@@ -9,6 +9,8 @@
  * @module services/eventQueue
  */
 
+import { logger } from '../utils/logger';
+
 /**
  * Queued event with metadata
  */
@@ -94,10 +96,9 @@ export class EventQueue {
    * Handlers are called in the order they were registered.
    */
   on(eventType: string, handler: EventHandler): void {
-    if (!this.handlers.has(eventType)) {
-      this.handlers.set(eventType, []);
-    }
-    this.handlers.get(eventType)!.push(handler);
+    const handlers = this.handlers.get(eventType) ?? [];
+    handlers.push(handler);
+    this.handlers.set(eventType, handlers);
   }
 
   /**
@@ -146,7 +147,9 @@ export class EventQueue {
       this.queue.splice(insertIndex, 0, event);
 
       if (this.debug) {
-        console.log(`[EventQueue] Inserted priority event "${type}" at index ${insertIndex}`);
+        logger.debug(
+          `[EventQueue] Inserted priority event "${type}" at index ${String(insertIndex)}`
+        );
       }
     } else {
       // Non-priority events go to the end
@@ -185,9 +188,9 @@ export class EventQueue {
     }
     this.processScheduled = true;
     // Use Promise.resolve().then() for microtask scheduling
-    Promise.resolve().then(() => {
+    void Promise.resolve().then(() => {
       this.processScheduled = false;
-      this.processQueue();
+      void this.processQueue();
     });
   }
 
@@ -202,13 +205,16 @@ export class EventQueue {
     this.processing = true;
 
     while (this.queue.length > 0) {
-      const event = this.queue.shift()!;
+      const event = this.queue.shift();
+      if (!event) {
+        break;
+      }
 
       // Track processed order for diagnostics
       this.processedOrder.push(event.type);
 
       if (this.debug) {
-        console.log(`[EventQueue] Processing event "${event.type}"`, {
+        logger.debug(`[EventQueue] Processing event "${event.type}"`, {
           conversationId: event.conversationId,
           queueRemaining: this.queue.length,
         });

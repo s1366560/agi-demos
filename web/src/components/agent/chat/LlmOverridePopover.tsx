@@ -1,5 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { InputNumber, Popover, Slider } from 'antd';
 import { Settings2 } from 'lucide-react';
 
@@ -11,14 +13,22 @@ import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import type { LLMConfigOverrides } from '@/types/memory';
 
+import type { TFunction } from 'i18next';
+
 interface LlmOverridePopoverProps {
   conversationId: string | null;
   disabled?: boolean;
   capabilities?: ActiveModelCapabilities;
 }
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
   ({ conversationId, disabled, capabilities }) => {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [localOverrides, setLocalOverrides] = useState<LLMConfigOverrides>({});
 
@@ -96,11 +106,13 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="font-bold text-slate-800 dark:text-slate-100">LLM Parameters</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100">
+              {tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}
+            </span>
             {modelName && (
-             <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-50">
-                 {modelName}
-               </span>
+              <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-50">
+                {modelName}
+              </span>
             )}
           </div>
           {isActive && (
@@ -109,7 +121,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
               onClick={handleReset}
               className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
             >
-              Reset
+              {tFallback(t, 'agent.llmOverride.reset', 'Reset')}
             </button>
           )}
         </div>
@@ -119,7 +131,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           {supportsTemperature && (
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                Temperature
+                {tFallback(t, 'agent.llmOverride.temperature', 'Temperature')}
               </span>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
@@ -151,7 +163,9 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           {/* Top P */}
           {supportsTopP && (
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Top P</span>
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                {tFallback(t, 'agent.llmOverride.topP', 'Top P')}
+              </span>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
                   <Slider
@@ -182,14 +196,17 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           {/* Max Tokens (always shown -- every model has output token limits) */}
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              Max Tokens
+              {tFallback(t, 'agent.llmOverride.maxTokens', 'Max Tokens')}
             </span>
             <InputNumber<number>
               min={1}
               max={maxOutputTokens}
               size="small"
               className="w-full"
-              placeholder={`e.g. 4096 (max ${String(maxOutputTokens)})`}
+              placeholder={t('agent.llmOverride.maxTokensPlaceholder', {
+                defaultValue: 'e.g. 4096 (max {{max}})',
+                max: maxOutputTokens,
+              })}
               value={localOverrides.max_tokens ?? null}
               onChange={(val) => {
                 handleParamChange('max_tokens', val);
@@ -201,7 +218,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           {supportsFrequencyPenalty && (
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                Freq. Penalty
+                {tFallback(t, 'agent.llmOverride.frequencyPenalty', 'Freq. Penalty')}
               </span>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
@@ -234,7 +251,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           {supportsPresencePenalty && (
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                Pres. Penalty
+                {tFallback(t, 'agent.llmOverride.presencePenalty', 'Pres. Penalty')}
               </span>
               <div className="flex items-center gap-3">
                 <div className="flex-1">
@@ -266,7 +283,11 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
           {/* No controls available message */}
           {!hasAnyControl && (
             <div className="text-xs text-slate-400 dark:text-slate-500 text-center py-2">
-              No tunable parameters for this model
+              {tFallback(
+                t,
+                'agent.llmOverride.noTunableParameters',
+                'No tunable parameters for this model'
+              )}
             </div>
           )}
         </div>
@@ -285,7 +306,7 @@ export const LlmOverridePopover = memo<LlmOverridePopoverProps>(
         destroyOnHidden
       >
         <div>
-          <LazyTooltip title="LLM Parameters">
+          <LazyTooltip title={tFallback(t, 'agent.llmOverride.title', 'LLM Parameters')}>
             <LazyButton
               type="text"
               size="small"

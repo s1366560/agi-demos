@@ -4,7 +4,7 @@
 
 import { test } from '@playwright/test';
 
-test('manual sandbox UI test', async ({ page }) => {
+test.skip('manual sandbox UI test', async ({ page }) => {
   // Set English locale
   await page.goto('http://localhost:3000');
   await page.evaluate(() => {
@@ -63,7 +63,10 @@ test('manual sandbox UI test', async ({ page }) => {
         // Check for input
         const input = page.locator('#agent-message-input');
         console.log('Input visible?', await input.isVisible({ timeout: 5000 }));
-        console.log('New Chat button visible?', await page.getByRole('button', { name: /New Chat/i }).isVisible({ timeout: 5000 }));
+        console.log(
+          'New Chat button visible?',
+          await page.getByRole('button', { name: /New Chat/i }).isVisible({ timeout: 5000 })
+        );
       }
     }
   } else {

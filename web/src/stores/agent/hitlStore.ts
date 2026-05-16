@@ -89,10 +89,7 @@ export const useAgentHITLStore = create<AgentHITLState>()(
       },
 
       loadPendingHITL: async (conversationId: string) => {
-        logger.debug(
-          '[hitlStore] Loading pending HITL requests for conversation:',
-          conversationId
-        );
+        logger.debug('[hitlStore] Loading pending HITL requests for conversation:', conversationId);
         try {
           const response = await agentService.getPendingHITLRequests(conversationId);
           logger.debug('[hitlStore] Pending HITL response:', response);
@@ -111,33 +108,49 @@ export const useAgentHITLStore = create<AgentHITLState>()(
             );
 
             switch (request.request_type) {
-              case 'clarification':
+              case 'clarification': {
+                const clarificationType =
+                  typeof request.metadata?.clarification_type === 'string'
+                    ? (request.metadata.clarification_type as ClarificationType)
+                    : 'custom';
+                const allowCustom =
+                  typeof request.metadata?.allow_custom === 'boolean'
+                    ? request.metadata.allow_custom
+                    : true;
                 set({
                   pendingClarification: {
                     request_id: request.id,
                     question: request.question,
-                    clarification_type:
-                      (request.metadata?.clarification_type as ClarificationType) || 'custom',
+                    clarification_type: clarificationType,
                     options: (request.options as ClarificationOption[] | undefined) || [],
-                    allow_custom: (request.metadata?.allow_custom as boolean) ?? true,
+                    allow_custom: allowCustom,
                     context: request.context || {},
                   },
                 });
                 break;
+              }
 
-              case 'decision':
+              case 'decision': {
+                const decisionType =
+                  typeof request.metadata?.decision_type === 'string'
+                    ? (request.metadata.decision_type as DecisionType)
+                    : 'custom';
+                const allowCustom =
+                  typeof request.metadata?.allow_custom === 'boolean'
+                    ? request.metadata.allow_custom
+                    : true;
                 set({
                   pendingDecision: {
                     request_id: request.id,
                     question: request.question,
-                    decision_type:
-                      (request.metadata?.decision_type as DecisionType) || 'custom',
+                    decision_type: decisionType,
                     options: (request.options as DecisionOption[] | undefined) || [],
-                    allow_custom: (request.metadata?.allow_custom as boolean) ?? true,
+                    allow_custom: allowCustom,
                     context: request.context || {},
                   },
                 });
                 break;
+              }
 
               case 'env_var': {
                 const fields = (request.options as EnvVarField[] | undefined) || [];
@@ -164,21 +177,36 @@ export const useAgentHITLStore = create<AgentHITLState>()(
       },
 
       // Setter actions for bridge from agentV3.ts
-      setPendingClarification: (value) => { set({ pendingClarification: value }); },
-      setPendingDecision: (value) => { set({ pendingDecision: value }); },
-      setPendingEnvVarRequest: (value) => { set({ pendingEnvVarRequest: value }); },
-      setPendingPermission: (value) => { set({ pendingPermission: value }); },
-      setDoomLoopDetected: (value) => { set({ doomLoopDetected: value }); },
-      setCostTracking: (value) => { set({ costTracking: value }); },
-      setSuggestions: (value) => { set({ suggestions: value }); },
-      setPinnedEventIds: (value) => { set({ pinnedEventIds: value }); },
+      setPendingClarification: (value) => {
+        set({ pendingClarification: value });
+      },
+      setPendingDecision: (value) => {
+        set({ pendingDecision: value });
+      },
+      setPendingEnvVarRequest: (value) => {
+        set({ pendingEnvVarRequest: value });
+      },
+      setPendingPermission: (value) => {
+        set({ pendingPermission: value });
+      },
+      setDoomLoopDetected: (value) => {
+        set({ doomLoopDetected: value });
+      },
+      setCostTracking: (value) => {
+        set({ costTracking: value });
+      },
+      setSuggestions: (value) => {
+        set({ suggestions: value });
+      },
+      setPinnedEventIds: (value) => {
+        set({ pinnedEventIds: value });
+      },
 
       syncFromConversation: (fields) => {
         const updates: Partial<AgentHITLState> = {};
         if (fields.pendingClarification !== undefined)
           updates.pendingClarification = fields.pendingClarification;
-        if (fields.pendingDecision !== undefined)
-          updates.pendingDecision = fields.pendingDecision;
+        if (fields.pendingDecision !== undefined) updates.pendingDecision = fields.pendingDecision;
         if (fields.pendingEnvVarRequest !== undefined)
           updates.pendingEnvVarRequest = fields.pendingEnvVarRequest;
         if (fields.pendingPermission !== undefined)

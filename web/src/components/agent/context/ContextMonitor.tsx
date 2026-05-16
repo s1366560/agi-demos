@@ -60,7 +60,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
   const currentTokens = status?.currentTokens ?? 0;
   const tokenBudget = status?.tokenBudget ?? 128000;
   const compressionLevel = status?.compressionLevel ?? 'none';
-  const totalSaved = status?.compressionHistory?.total_tokens_saved ?? 0;
+  const totalSaved = status ? status.compressionHistory.total_tokens_saved : 0;
 
   const progressColor = useMemo(() => getOccupancyColor(occupancy), [occupancy]);
   const levelLabel = levelLabels[compressionLevel] ?? compressionLevel;

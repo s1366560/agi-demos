@@ -35,7 +35,7 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
         workspaces: state.workspaces,
         loadWorkspaceSurface: state.loadWorkspaceSurface,
         loadWorkspaces: state.loadWorkspaces,
-      })),
+      }))
     );
 
   // Load workspace list if empty
@@ -61,7 +61,9 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
       }
     };
     document.addEventListener('mousedown', handler);
-    return () => { document.removeEventListener('mousedown', handler); };
+    return () => {
+      document.removeEventListener('mousedown', handler);
+    };
   }, [pickerOpen]);
 
   const handleSelect = useCallback(
@@ -82,12 +84,12 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
         void loadWorkspaceSurface(tenantId, projectId, id);
       }
     },
-    [workspaceId, tenantId, projectId, onWorkspaceChange, loadWorkspaceSurface],
+    [workspaceId, tenantId, projectId, onWorkspaceChange, loadWorkspaceSurface]
   );
 
   const currentName = useMemo(
     () => workspaces.find((w) => w.id === workspaceId)?.name ?? 'Workspace Chat',
-    [workspaces, workspaceId],
+    [workspaces, workspaceId]
   );
 
   if (!workspaceId) {
@@ -114,13 +116,17 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
             <>
               <button
                 type="button"
-                onClick={() => { setPickerOpen((p) => !p); }}
+                onClick={() => {
+                  setPickerOpen((p) => !p);
+                }}
                 className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/50"
               >
                 <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {currentName}
                 </span>
-                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${pickerOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}
+                />
               </button>
               {pickerOpen && (
                 <div className="absolute left-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
@@ -134,16 +140,22 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
                         <button
                           key={w.id}
                           type="button"
-                          onClick={() => { handleSelect(w.id); }}
+                          onClick={() => {
+                            handleSelect(w.id);
+                          }}
                           className={`flex w-full items-center gap-2.5 border-0 px-3 py-2 text-left transition-colors ${
                             isActive
                               ? 'bg-indigo-50 dark:bg-indigo-900/30'
                               : 'bg-transparent hover:bg-slate-50 dark:hover:bg-slate-700/40'
                           }`}
                         >
-                          <Hash className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-indigo-500' : 'text-slate-400'}`} />
+                          <Hash
+                            className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-indigo-500' : 'text-slate-400'}`}
+                          />
                           <div className="min-w-0 flex-1">
-                            <span className={`block truncate text-sm ${isActive ? 'font-semibold text-indigo-700 dark:text-indigo-300' : 'font-medium text-slate-700 dark:text-slate-300'}`}>
+                            <span
+                              className={`block truncate text-sm ${isActive ? 'font-semibold text-indigo-700 dark:text-indigo-300' : 'font-medium text-slate-700 dark:text-slate-300'}`}
+                            >
                               {w.name}
                             </span>
                             {w.description && (
@@ -152,9 +164,7 @@ export const WorkspaceGroupChatPanel: React.FC<WorkspaceGroupChatPanelProps> = (
                               </span>
                             )}
                           </div>
-                          {isActive && (
-                            <Check className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
-                          )}
+                          {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-indigo-500" />}
                         </button>
                       );
                     })}

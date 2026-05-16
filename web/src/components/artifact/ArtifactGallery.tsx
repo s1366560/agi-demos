@@ -7,15 +7,7 @@
 import React, { useState } from 'react';
 
 import { Modal, Empty, Typography, Space, Tag, Segmented } from 'antd';
-import {
-  LayoutGrid,
-  List,
-  Image as ImageIcon,
-  Video,
-  Volume2,
-  FileText,
-  File,
-} from 'lucide-react';
+import { LayoutGrid, List, Image as ImageIcon, Video, Volume2, FileText, File } from 'lucide-react';
 
 import { ArtifactRenderer } from './ArtifactRenderer';
 
@@ -129,7 +121,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
         <div
           className="grid gap-4"
           style={{
-            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))`,
           }}
         >
           {displayedArtifacts.map((artifact) => (
@@ -178,7 +170,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
         footer={null}
         width="80%"
         style={{ top: 20 }}
-        destroyOnClose
+        destroyOnHidden
       >
         {expandedArtifact && (
           <ArtifactRenderer artifact={expandedArtifact} maxHeight="70vh" showMeta />

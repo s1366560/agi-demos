@@ -11,6 +11,8 @@
 
 import { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   Clock,
   Timer,
@@ -31,17 +33,12 @@ import {
 import { formatTimeWithSeconds } from '@/utils/date';
 
 import {
-  isImageUrl as _isImageUrl,
   parseBase64Image,
   extractImageUrl,
   foldTextWithMetadata,
 } from '../../../utils/toolResultUtils';
 
-
 import type { ToolExecution } from '../../../types/agent';
-
-// Keep reference to suppress unused warning - may be used in future
-void _isImageUrl;
 
 export interface ToolExecutionDetailProps {
   /** Tool execution data */
@@ -75,7 +72,7 @@ function getToolIcon(name: string) {
  */
 function formatDuration(ms: number | undefined): string {
   if (!ms) return '-';
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return `${String(ms)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
@@ -95,6 +92,7 @@ function formatTime(isoString: string | undefined): string {
  * ToolExecutionDetail component
  */
 export function ToolExecutionDetail({ execution, compact = false }: ToolExecutionDetailProps) {
+  const { t } = useTranslation();
   const [showFullInput, setShowFullInput] = useState(false);
   const [showFullResult, setShowFullResult] = useState(false);
 
@@ -113,28 +111,27 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
       bg: 'bg-amber-100 dark:bg-amber-900/30',
       text: 'text-amber-600 dark:text-amber-400',
       icon: Clock,
-      label: 'Running',
+      label: t('components.toolExecutionDetail.status.running', { defaultValue: 'Running' }),
     },
     success: {
       bg: 'bg-emerald-100 dark:bg-emerald-900/30',
       text: 'text-emerald-600 dark:text-emerald-400',
       icon: CheckCircle,
-      label: 'Success',
+      label: t('components.toolExecutionDetail.status.success', { defaultValue: 'Success' }),
     },
     failed: {
       bg: 'bg-red-100 dark:bg-red-900/30',
       text: 'text-red-600 dark:text-red-400',
       icon: XCircle,
-      label: 'Failed',
+      label: t('components.toolExecutionDetail.status.failed', { defaultValue: 'Failed' }),
     },
   }[execution.status];
 
-   
   const ToolIcon = getToolIcon(execution.toolName);
 
   if (compact) {
     return (
-      <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+      <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md">
         <div className="flex items-center gap-2">
           {/* eslint-disable-next-line react-hooks/static-components */}
           <ToolIcon size={16} className="text-slate-500" />
@@ -155,7 +152,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
   const StatusIcon = statusConfig.icon;
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
@@ -168,18 +165,6 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
           </h4>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span
-            className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${statusConfig.bg} ${statusConfig.text}`}
-          >
-            {execution.status === 'running' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
-            )}
-            {execution.status !== 'running' && <StatusIcon size={12} />}
-            {statusConfig.label}
-          </span>
-        </div>
-
         {/* Status Badge */}
         <div className="flex items-center gap-2">
           <span
@@ -188,7 +173,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
             {execution.status === 'running' && (
               <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none" />
             )}
-            {execution.status !== 'running' && <statusConfig.icon size={12} />}
+            {execution.status !== 'running' && <StatusIcon size={12} />}
             {statusConfig.label}
           </span>
           {execution.duration && (
@@ -209,7 +194,9 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
             className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-300"
           >
             {showFullInput ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            Input Parameters
+            {t('components.toolExecutionDetail.inputParameters', {
+              defaultValue: 'Input Parameters',
+            })}
           </button>
           {showFullInput && (
             <div className="mt-2 bg-slate-900 dark:bg-slate-950 rounded-md p-2 overflow-x-auto">
@@ -224,12 +211,18 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
         <div className="flex items-center gap-4 text-xs text-slate-500">
           <span className="flex items-center gap-1">
             <Clock size={12} />
-            Start: {formatTime(execution.startTime)}
+            {t('components.toolExecutionDetail.start', {
+              defaultValue: 'Start: {{time}}',
+              time: formatTime(execution.startTime),
+            })}
           </span>
           {execution.endTime && (
             <span className="flex items-center gap-1">
               <Timer size={12} />
-              Duration: {formatDuration(execution.duration)}
+              {t('components.toolExecutionDetail.duration', {
+                defaultValue: 'Duration: {{duration}}',
+                duration: formatDuration(execution.duration),
+              })}
             </span>
           )}
         </div>
@@ -239,7 +232,13 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
           <div>
             <div className="flex items-center justify-between">
               <h6 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                {execution.error ? 'Error' : hasImageResult ? 'Image Result' : 'Result'}
+                {execution.error
+                  ? t('components.toolExecutionDetail.error', { defaultValue: 'Error' })
+                  : hasImageResult
+                    ? t('components.toolExecutionDetail.imageResult', {
+                        defaultValue: 'Image Result',
+                      })
+                    : t('components.toolExecutionDetail.result', { defaultValue: 'Result' })}
               </h6>
               {!hasImageResult && isResultFolded && (
                 <button
@@ -249,7 +248,9 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
                   }}
                   className="text-xs text-primary hover:underline"
                 >
-                  {showFullResult ? 'Show Less' : 'Show Full'}
+                  {showFullResult
+                    ? t('components.toolExecutionDetail.showLess', { defaultValue: 'Show Less' })
+                    : t('components.toolExecutionDetail.showFull', { defaultValue: 'Show Full' })}
                 </button>
               )}
             </div>
@@ -260,7 +261,9 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
                   <div>
                     <img
                       src={imageUrl}
-                      alt="Tool result"
+                      alt={t('components.toolExecutionDetail.toolResultAlt', {
+                        defaultValue: 'Tool result',
+                      })}
                       className="max-w-full max-h-96 rounded-md mx-auto border border-slate-200 dark:border-slate-600"
                       loading="lazy"
                       onError={(e) => {
@@ -271,14 +274,16 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
                       }}
                     />
                     <div className="hidden mt-2 text-sm text-slate-500">
-                      Failed to load image.{' '}
+                      {t('components.toolExecutionDetail.loadImageFailed', {
+                        defaultValue: 'Failed to load image.',
+                      })}{' '}
                       <a
                         href={imageUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-primary hover:underline"
                       >
-                        Open URL
+                        {t('components.toolExecutionDetail.openUrl', { defaultValue: 'Open URL' })}
                       </a>
                     </div>
                     <a
@@ -288,17 +293,25 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
                       className="inline-flex items-center gap-1 mt-2 text-xs text-primary hover:underline"
                     >
                       <ExternalLink size={12} />
-                      Open in new tab
+                      {t('components.toolExecutionDetail.openInNewTab', {
+                        defaultValue: 'Open in new tab',
+                      })}
                     </a>
                   </div>
                 ) : base64Image ? (
                   <div>
                     <img
                       src={`data:image/${base64Image.format};base64,${base64Image.data}`}
-                      alt="Screenshot"
+                      alt={t('components.toolExecutionDetail.screenshotAlt', {
+                        defaultValue: 'Screenshot',
+                      })}
                       className="max-w-full max-h-96 rounded-md mx-auto border border-slate-200 dark:border-slate-600"
                     />
-                    <p className="mt-2 text-xs text-slate-500">Screenshot captured</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {t('components.toolExecutionDetail.screenshotCaptured', {
+                        defaultValue: 'Screenshot captured',
+                      })}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -321,7 +334,7 @@ export function ToolExecutionDetail({ execution, compact = false }: ToolExecutio
           <div className="flex items-center justify-center py-4">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin motion-reduce:animate-none" />
-              Executing...
+              {t('components.toolExecutionDetail.executing', { defaultValue: 'Executing...' })}
             </div>
           </div>
         )}

@@ -1,20 +1,33 @@
 import { memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Brain } from 'lucide-react';
+
+import type { TFunction } from 'i18next';
+
 /**
  * StreamingThoughtBubble - Streaming thought display component
  *
  * Uses same styling as ReasoningLogCard for consistency with final render.
  */
 
-
 interface StreamingThoughtBubbleProps {
   content: string;
   isStreaming: boolean;
 }
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
   ({ content, isStreaming }) => {
+    const { t } = useTranslation();
+    const reasoningLabel = tFallback(t, 'agent.streamingThought.reasoning', 'Reasoning');
+    const thinkingLabel = tFallback(t, 'agent.streamingThought.thinking', 'Thinking...');
+
     return (
       <div className="flex items-start gap-3 pb-4 animate-fade-in-up">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30 flex items-center justify-center flex-shrink-0">
@@ -24,9 +37,11 @@ export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
           <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/50 dark:from-amber-900/20 dark:to-orange-900/10 border border-amber-200/50 dark:border-amber-800/30 rounded-xl overflow-hidden">
             <div className="px-4 py-2.5 flex items-center gap-2">
               <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
-                Reasoning
+                {reasoningLabel}
               </span>
-              <span className="text-xs text-amber-600/70 dark:text-amber-500/70">Thinking...</span>
+              <span className="text-xs text-amber-600/70 dark:text-amber-500/70">
+                {thinkingLabel}
+              </span>
               {isStreaming && (
                 <span className="flex gap-0.5 ml-1">
                   <span

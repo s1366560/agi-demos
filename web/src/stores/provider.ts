@@ -115,7 +115,7 @@ export const useProviderStore = create<ProviderState>()(
         set({ catalogLoading: true, error: null });
         try {
           const response = await providerAPI.getModelCatalog(provider);
-          const catalog = response.models ?? [];
+          const catalog = response.models;
           set({
             modelCatalog: catalog,
             modelSearchResults: catalog,

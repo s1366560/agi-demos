@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 import { Building2, Calendar, Camera, CheckCircle, MapPin, X } from 'lucide-react';
 
-
 import { formatDateOnly } from '@/utils/date';
 
 import { authAPI } from '../services/api';
@@ -61,7 +60,7 @@ export const UserProfile: React.FC = () => {
       setFormData((prev) => ({
         ...prev,
         profile: {
-          ...prev.profile!,
+          ...(prev.profile ?? {}),
           [name]: value,
         },
       }));
@@ -93,7 +92,7 @@ export const UserProfile: React.FC = () => {
   if (!user) return <div className="p-8 text-center">{t('common.loading')}</div>;
 
   return (
-    <div className="mx-auto w-full max-w-7xl p-6 lg:p-8">
+    <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
       {/* Page Heading */}
       <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -111,7 +110,7 @@ export const UserProfile: React.FC = () => {
       </div>
 
       {/* Content Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 xl:gap-8">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3 xl:gap-8">
         {/* Left Column: Summary Card */}
         <div className="lg:col-span-1">
           <div className="sticky top-24 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-surface-dark">
@@ -128,7 +127,12 @@ export const UserProfile: React.FC = () => {
                     }
                   />
                 </div>
-                <button type="button" className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark">
+                <button
+                  type="button"
+                  aria-label={t('user_profile.avatar.change', 'Change avatar')}
+                  title={t('user_profile.avatar.change', 'Change avatar')}
+                  className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark"
+                >
                   <Camera size={14} />
                 </button>
               </div>
@@ -170,11 +174,14 @@ export const UserProfile: React.FC = () => {
         </div>
 
         {/* Right Column: Settings Form */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-surface-dark">
             {/* Tabs */}
-            <div className="border-b border-slate-200 px-6 dark:border-slate-700">
-              <nav aria-label="Tabs" className="-mb-px flex space-x-8">
+            <div className="overflow-x-auto border-b border-slate-200 px-4 dark:border-slate-700 sm:px-6">
+              <nav
+                aria-label={t('user_profile.tabs.label', 'Tabs')}
+                className="-mb-px flex min-w-max space-x-8"
+              >
                 <button
                   type="button"
                   aria-current="page"
@@ -182,19 +189,32 @@ export const UserProfile: React.FC = () => {
                 >
                   {t('user_profile.tabs.basic')}
                 </button>
-                <button type="button" className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
+                <button
+                  type="button"
+                  className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white"
+                >
                   {t('user_profile.tabs.contact')}
                 </button>
-                <button type="button" className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
+                <button
+                  type="button"
+                  className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white"
+                >
                   {t('user_profile.tabs.preferences')}
                 </button>
-                <button type="button" className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white">
+                <button
+                  type="button"
+                  className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white"
+                >
                   {t('user_profile.tabs.security')}
                 </button>
               </nav>
             </div>
             <div className="p-6">
-              <form onSubmit={handleSubmit}>
+              <form
+                onSubmit={(event) => {
+                  void handleSubmit(event);
+                }}
+              >
                 {/* Basic Information Section */}
                 <div className="mb-8">
                   <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
@@ -270,10 +290,18 @@ export const UserProfile: React.FC = () => {
                           value={formData.profile?.department}
                           onChange={handleChange}
                         >
-                          <option>Engineering</option>
-                          <option>Product</option>
-                          <option>Design</option>
-                          <option>Marketing</option>
+                          <option value="Engineering">
+                            {t('user_profile.basic.departments.engineering', 'Engineering')}
+                          </option>
+                          <option value="Product">
+                            {t('user_profile.basic.departments.product', 'Product')}
+                          </option>
+                          <option value="Design">
+                            {t('user_profile.basic.departments.design', 'Design')}
+                          </option>
+                          <option value="Marketing">
+                            {t('user_profile.basic.departments.marketing', 'Marketing')}
+                          </option>
                         </select>
                       </div>
                     </div>
@@ -373,9 +401,18 @@ export const UserProfile: React.FC = () => {
                           value={formData.profile?.language}
                           onChange={handleChange}
                         >
-                          <option>English (US)</option>
-                          <option>Chinese (Simplified)</option>
-                          <option>Japanese</option>
+                          <option value="English (US)">
+                            {t('user_profile.preferences.languages.enUS', 'English (US)')}
+                          </option>
+                          <option value="Chinese (Simplified)">
+                            {t(
+                              'user_profile.preferences.languages.zhSimplified',
+                              'Chinese (Simplified)'
+                            )}
+                          </option>
+                          <option value="Japanese">
+                            {t('user_profile.preferences.languages.japanese', 'Japanese')}
+                          </option>
                         </select>
                       </div>
                     </div>
@@ -394,9 +431,21 @@ export const UserProfile: React.FC = () => {
                           value={formData.profile?.timezone}
                           onChange={handleChange}
                         >
-                          <option>Pacific Time (US & Canada)</option>
-                          <option>Eastern Time (US & Canada)</option>
-                          <option>London (UTC)</option>
+                          <option value="Pacific Time (US & Canada)">
+                            {t(
+                              'user_profile.preferences.timezones.pacific',
+                              'Pacific Time (US & Canada)'
+                            )}
+                          </option>
+                          <option value="Eastern Time (US & Canada)">
+                            {t(
+                              'user_profile.preferences.timezones.eastern',
+                              'Eastern Time (US & Canada)'
+                            )}
+                          </option>
+                          <option value="London (UTC)">
+                            {t('user_profile.preferences.timezones.london', 'London (UTC)')}
+                          </option>
                         </select>
                       </div>
                     </div>
@@ -451,7 +500,7 @@ export const UserProfile: React.FC = () => {
                         setShowSuccess(false);
                       }}
                     >
-                      <span className="sr-only">Close</span>
+                      <span className="sr-only">{t('common.close', 'Close')}</span>
                       <X size={14} />
                     </button>
                   </div>

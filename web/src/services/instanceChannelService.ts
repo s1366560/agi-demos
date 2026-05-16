@@ -30,11 +30,7 @@ export const instanceChannelService = {
     instanceId: string,
     channelId: string,
     data: { name?: string; config?: Record<string, unknown> }
-  ) =>
-    httpClient.put<ChannelConfig>(
-      `${BASE_URL}/${instanceId}/channels/${channelId}`,
-      data
-    ),
+  ) => httpClient.put<ChannelConfig>(`${BASE_URL}/${instanceId}/channels/${channelId}`, data),
 
   deleteChannel: (instanceId: string, channelId: string) =>
     httpClient.delete(`${BASE_URL}/${instanceId}/channels/${channelId}`),

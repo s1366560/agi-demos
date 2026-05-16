@@ -20,9 +20,16 @@ import {
 import { useCurrentTenant } from '@/stores/tenant';
 
 import { eventService } from '@/services/eventService';
-import { webhookService, Webhook } from '@/services/webhookService';
+import { webhookService, type Webhook } from '@/services/webhookService';
 
 const { Title } = Typography;
+
+interface WebhookFormValues {
+  name: string;
+  url: string;
+  events: string[];
+  is_active: boolean;
+}
 
 export const Webhooks: React.FC = () => {
   const { t } = useTranslation();
@@ -32,7 +39,7 @@ export const Webhooks: React.FC = () => {
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<WebhookFormValues>();
 
   const fetchWebhooks = React.useCallback(async () => {
     if (!currentTenant) return;
@@ -49,18 +56,23 @@ export const Webhooks: React.FC = () => {
   }, [currentTenant, t]);
 
   useEffect(() => {
-    fetchWebhooks();
+    void fetchWebhooks();
   }, [fetchWebhooks]);
 
   useEffect(() => {
-    eventService.getEventTypes().then(setEventTypes).catch(console.error);
+    void eventService
+      .getEventTypes()
+      .then(setEventTypes)
+      .catch((err: unknown) => {
+        console.error(err);
+      });
   }, []);
 
   const handleDelete = async (id: string) => {
     try {
       await webhookService.deleteWebhook(id);
       message.success(t('webhooks.deleteSuccess', 'Webhook deleted'));
-      fetchWebhooks();
+      void fetchWebhooks();
     } catch (err) {
       console.error(err);
       message.error(t('webhooks.deleteError', 'Failed to delete webhook'));
@@ -95,7 +107,7 @@ export const Webhooks: React.FC = () => {
         message.success(t('webhooks.createSuccess', 'Webhook created'));
       }
       setIsModalVisible(false);
-      fetchWebhooks();
+      void fetchWebhooks();
     } catch (err) {
       console.error(err);
     }
@@ -133,7 +145,7 @@ export const Webhooks: React.FC = () => {
       ),
     },
     {
-      title: t('common.actions', 'Actions'),
+      title: t('common.actions.label', 'Actions'),
       key: 'actions',
       render: (_: unknown, record: Webhook) => (
         <Space size="middle">
@@ -147,7 +159,9 @@ export const Webhooks: React.FC = () => {
           </Button>
           <Popconfirm
             title={t('webhooks.deleteConfirm', 'Are you sure you want to delete this webhook?')}
-            onConfirm={() => handleDelete(record.id)}
+            onConfirm={() => {
+              void handleDelete(record.id);
+            }}
           >
             <Button type="link" danger>
               {t('common.delete', 'Delete')}
@@ -187,11 +201,13 @@ export const Webhooks: React.FC = () => {
             : t('webhooks.create', 'Create Webhook')
         }
         open={isModalVisible}
-        onOk={handleSave}
+        onOk={() => {
+          void handleSave();
+        }}
         onCancel={() => {
           setIsModalVisible(false);
         }}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Form.Item

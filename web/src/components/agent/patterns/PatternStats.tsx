@@ -53,7 +53,7 @@ export function PatternStats({
 }: PatternStatsProps) {
   const formatTrend = (value: number) => {
     const sign = value >= 0 ? '+' : '';
-    return `${sign}${value}%`;
+    return `${sign}${String(value)}%`;
   };
 
   const getTrendIcon = (value: number) => {
@@ -80,7 +80,7 @@ export function PatternStats({
     {
       id: 'success',
       label: 'Avg. Success Rate',
-      value: `${successRate}%`,
+      value: `${String(successRate)}%`,
       icon: BarChart3,
       color: 'bg-emerald-500',
       trend: successTrend,
@@ -99,7 +99,7 @@ export function PatternStats({
     <div className={`grid ${compact ? 'grid-cols-3 gap-3' : 'grid-cols-1 md:grid-cols-3 gap-4'}`}>
       {stats.map((stat) => {
         const TrendIcon = stat.trend !== undefined ? getTrendIcon(stat.trend) : null;
-        
+
         return (
           <div
             key={stat.id}

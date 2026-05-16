@@ -11,10 +11,14 @@
 import { useState, useMemo } from 'react';
 import type React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Tooltip } from 'antd';
 import { Info, ChevronDown, ChevronRight, DollarSign } from 'lucide-react';
 
 import { resolveThemeColor } from '@/hooks/useThemeColor';
+
+import type { TFunction } from 'i18next';
 
 /**
  * Token usage data structure
@@ -99,6 +103,15 @@ const formatCost = (cost: number): string => {
   return `$${cost.toFixed(2)}`;
 };
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+function interpolateLabelCount(template: string, label: string, count: string): string {
+  return template.replace('{{label}}', label).replace('{{count}}', count);
+}
+
 /**
  * Stacked bar component for token visualization
  */
@@ -119,6 +132,11 @@ const StackedBar: React.FC<StackedBarProps> = ({
   maxTokens,
   showLabels = false,
 }) => {
+  const { t } = useTranslation();
+  const tooltipTemplate = tFallback(t, 'agent.tokenUsage.tooltip', '{{label}}: {{count}} tokens');
+  const inputLabel = tFallback(t, 'agent.tokenUsage.input', 'Input');
+  const outputLabel = tFallback(t, 'agent.tokenUsage.output', 'Output');
+  const reasoningLabel = tFallback(t, 'agent.tokenUsage.reasoning', 'Reasoning');
   const effectiveMax = maxTokens || total;
   const inputPercent = (input / effectiveMax) * 100;
   const outputPercent = (output / effectiveMax) * 100;
@@ -131,25 +149,33 @@ const StackedBar: React.FC<StackedBarProps> = ({
       <div className="relative h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
         <div className="absolute inset-0 flex">
           {/* Input segment */}
-          <Tooltip title={`Input: ${formatNumber(input)} tokens`}>
+          <Tooltip title={interpolateLabelCount(tooltipTemplate, inputLabel, formatNumber(input))}>
             <div
               className={`${COLORS.input.bg} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
-              style={{ width: `${inputPercent}%` }}
+              style={{ width: `${String(inputPercent)}%` }}
             />
           </Tooltip>
           {/* Output segment */}
-          <Tooltip title={`Output: ${formatNumber(output)} tokens`}>
+          <Tooltip
+            title={interpolateLabelCount(tooltipTemplate, outputLabel, formatNumber(output))}
+          >
             <div
               className={`${COLORS.output.bg} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
-              style={{ width: `${outputPercent}%` }}
+              style={{ width: `${String(outputPercent)}%` }}
             />
           </Tooltip>
           {/* Reasoning segment */}
           {reasoning > 0 && (
-            <Tooltip title={`Reasoning: ${formatNumber(reasoning)} tokens`}>
+            <Tooltip
+              title={interpolateLabelCount(
+                tooltipTemplate,
+                reasoningLabel,
+                formatNumber(reasoning)
+              )}
+            >
               <div
                 className={`${COLORS.reasoning.bg} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-500`}
-                style={{ width: `${reasoningPercent}%` }}
+                style={{ width: `${String(reasoningPercent)}%` }}
               />
             </Tooltip>
           )}
@@ -160,7 +186,14 @@ const StackedBar: React.FC<StackedBarProps> = ({
       {showLabels && (
         <div className="flex justify-between mt-1 text-2xs text-slate-500 dark:text-slate-400">
           <span>0</span>
-          {maxTokens && <span className="font-medium">{Math.round(totalPercent)}% used</span>}
+          {maxTokens && (
+            <span className="font-medium">
+              {t('agent.tokenUsage.usedPercent', {
+                defaultValue: '{{percent}}% used',
+                percent: Math.round(totalPercent),
+              })}
+            </span>
+          )}
           <span>{formatNumber(effectiveMax)}</span>
         </div>
       )}
@@ -203,7 +236,9 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
   maxTokens,
   warningThreshold = 90,
 }) => {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
+  const tokenCountTemplate = tFallback(t, 'agent.tokenUsage.tokenCount', '{{count}} tokens');
 
   // Calculate percentages
   const percentages = useMemo(() => {
@@ -241,7 +276,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
             <ChevronRight size={14} className="text-2xs" />
           )}
           <span className={isOverThreshold ? 'text-amber-600 dark:text-amber-400' : ''}>
-            {formatNumber(tokenData.total)} tokens
+            {tokenCountTemplate.replace('{{count}}', formatNumber(tokenData.total))}
           </span>
           {costData && (
             <>
@@ -270,7 +305,9 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
             <Info size={16} className="text-blue-500" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Token Usage</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              {tFallback(t, 'agent.tokenUsage.title', 'Token Usage')}
+            </h3>
             {costData && (
               <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <DollarSign size={14} />
@@ -301,20 +338,20 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
       <div className="space-y-2">
         <LegendItem
           color={COLORS.input.bg}
-          label="Input"
+          label={tFallback(t, 'agent.tokenUsage.input', 'Input')}
           value={tokenData.input}
           percentage={percentages.input}
         />
         <LegendItem
           color={COLORS.output.bg}
-          label="Output"
+          label={tFallback(t, 'agent.tokenUsage.output', 'Output')}
           value={tokenData.output}
           percentage={percentages.output}
         />
         {tokenData.reasoning !== undefined && tokenData.reasoning > 0 && (
           <LegendItem
             color={COLORS.reasoning.bg}
-            label="Reasoning"
+            label={tFallback(t, 'agent.tokenUsage.reasoning', 'Reasoning')}
             value={tokenData.reasoning}
             percentage={percentages.reasoning}
           />
@@ -325,24 +362,30 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
       {costData?.breakdown && (
         <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
           <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-            Cost Breakdown
+            {tFallback(t, 'agent.tokenUsage.costBreakdown', 'Cost Breakdown')}
           </h4>
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300">Input cost:</span>
+              <span className="text-slate-600 dark:text-slate-300">
+                {tFallback(t, 'agent.tokenUsage.inputCost', 'Input cost')}:
+              </span>
               <span className="font-mono text-slate-700 dark:text-slate-200">
                 {formatCost(costData.breakdown.input_cost)}
               </span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300">Output cost:</span>
+              <span className="text-slate-600 dark:text-slate-300">
+                {tFallback(t, 'agent.tokenUsage.outputCost', 'Output cost')}:
+              </span>
               <span className="font-mono text-slate-700 dark:text-slate-200">
                 {formatCost(costData.breakdown.output_cost)}
               </span>
             </div>
             {costData.breakdown.reasoning_cost !== undefined && (
               <div className="flex justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">Reasoning cost:</span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  {tFallback(t, 'agent.tokenUsage.reasoningCost', 'Reasoning cost')}:
+                </span>
                 <span className="font-mono text-slate-700 dark:text-slate-200">
                   {formatCost(costData.breakdown.reasoning_cost)}
                 </span>
@@ -356,7 +399,10 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
       {isOverThreshold && (
         <div className="mt-4 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            Token usage is above {warningThreshold}% of the limit.
+            {t('agent.tokenUsage.warning', {
+              defaultValue: 'Token usage is above {{threshold}}% of the limit.',
+              threshold: warningThreshold,
+            })}
           </p>
         </div>
       )}

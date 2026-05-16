@@ -44,9 +44,9 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
         onSuccess();
       }
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create tenant:', err);
-      setError(err.message || t('tenant.create_modal.error'));
+      setError(err instanceof Error ? err.message : t('tenant.create_modal.error'));
     } finally {
       setIsLoading(false);
     }
@@ -69,9 +69,12 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('tenant.create_modal.title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('tenant.create_modal.title')}
+            </h2>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             disabled={isLoading}
             className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors disabled:opacity-50"
@@ -80,7 +83,12 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+          className="p-6"
+        >
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md">
               <p className="text-sm text-red-800 dark:text-red-300">{error}</p>

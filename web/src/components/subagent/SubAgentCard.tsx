@@ -52,9 +52,9 @@ const formatTimeAgo = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '-';
   const diff = Date.now() - new Date(dateStr).getTime();
   if (diff < 60000) return '<1m';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-  return `${Math.floor(diff / 86400000)}d`;
+  if (diff < 3600000) return `${Math.floor(diff / 60000).toString()}m`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000).toString()}h`;
+  return `${Math.floor(diff / 86400000).toString()}d`;
 };
 
 interface SubAgentCardProps {
@@ -95,7 +95,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
       ? t('tenant.subagents.card.allTools', 'All')
       : String(subagent.allowed_tools.length);
     const skillCount = subagent.allowed_skills.length;
-    const mcpCount = subagent.allowed_mcp_servers?.length ?? 0;
+    const mcpCount = subagent.allowed_mcp_servers.length;
 
     return (
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors overflow-hidden group">
@@ -141,12 +141,28 @@ export const SubAgentCard = memo<SubAgentCardProps>(
 
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {!isReadonly && (
-                <Switch checked={subagent.enabled} onChange={handleToggle} size="small" />
+                <Switch
+                  checked={subagent.enabled}
+                  onChange={handleToggle}
+                  size="small"
+                  aria-label={t('tenant.subagents.card.toggle', {
+                    name: subagent.display_name,
+                    defaultValue: 'Toggle {{name}}',
+                  })}
+                />
               )}
               {/* More menu */}
               <div className="relative">
                 <button
                   type="button"
+                  aria-label={t('tenant.subagents.card.openActions', {
+                    name: subagent.display_name,
+                    defaultValue: 'Open actions for {{name}}',
+                  })}
+                  title={t('tenant.subagents.card.openActions', {
+                    name: subagent.display_name,
+                    defaultValue: 'Open actions for {{name}}',
+                  })}
                   onClick={() => {
                     setMenuOpen(!menuOpen);
                   }}
@@ -305,7 +321,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
               <span className="flex items-center gap-1">
                 <Clock size={11} />
                 {subagent.avg_execution_time_ms < 1000
-                  ? `${Math.round(subagent.avg_execution_time_ms)}ms`
+                  ? `${Math.round(subagent.avg_execution_time_ms).toString()}ms`
                   : `${(subagent.avg_execution_time_ms / 1000).toFixed(1)}s`}
               </span>
             )}

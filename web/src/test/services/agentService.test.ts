@@ -25,9 +25,11 @@ class MockWebSocket {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
+  protocols: string | string[] | undefined;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = protocols;
     // Simulate async connection
     setTimeout(() => {
       this.readyState = MockWebSocket.OPEN;
@@ -122,7 +124,7 @@ describe('agentService - WebSocket Token Handling', () => {
       expect(agentService.getStatus()).toBe('error');
     });
 
-    it('should include token in WebSocket URL', async () => {
+    it('should include token in WebSocket auth protocols', async () => {
       const expectedToken = 'url-token-test';
       const authStorage = JSON.stringify({
         state: { token: expectedToken },
@@ -131,27 +133,30 @@ describe('agentService - WebSocket Token Handling', () => {
 
       // Create a spy to capture WebSocket URL
       let capturedWsUrl: string | undefined;
+      let capturedProtocols: string | string[] | undefined;
       vi.stubGlobal(
         'WebSocket',
         class extends MockWebSocket {
-          constructor(url: string) {
-            super(url);
+          constructor(url: string, protocols?: string | string[]) {
+            super(url, protocols);
             capturedWsUrl = url;
+            capturedProtocols = protocols;
           }
         }
       );
 
       await agentService.connect();
 
-      // Verify token is in URL
+      // Verify token is in auth protocols, not the URL query string
       expect(capturedWsUrl).toBeDefined();
-      expect(capturedWsUrl).toContain(`token=${encodeURIComponent(expectedToken)}`);
+      expect(capturedWsUrl).not.toContain(`token=${encodeURIComponent(expectedToken)}`);
+      expect(capturedProtocols).toEqual(['memstack.auth', expectedToken]);
 
       // Cleanup
       agentService.disconnect();
     });
 
-    it('should prioritize memstack-auth-storage over legacy token', async () => {
+    it('should prioritize memstack-auth-storage over legacy token in auth protocols', async () => {
       const storageToken = 'storage-priority-token';
       const legacyToken = 'legacy-priority-token';
 
@@ -166,12 +171,14 @@ describe('agentService - WebSocket Token Handling', () => {
 
       // Capture WebSocket URL to verify correct token used
       let capturedWsUrl: string | undefined;
+      let capturedProtocols: string | string[] | undefined;
       vi.stubGlobal(
         'WebSocket',
         class extends MockWebSocket {
-          constructor(url: string) {
-            super(url);
+          constructor(url: string, protocols?: string | string[]) {
+            super(url, protocols);
             capturedWsUrl = url;
+            capturedProtocols = protocols;
           }
         }
       );
@@ -179,7 +186,8 @@ describe('agentService - WebSocket Token Handling', () => {
       await agentService.connect();
 
       // Verify storage token is used, not legacy token
-      expect(capturedWsUrl).toContain(`token=${encodeURIComponent(storageToken)}`);
+      expect(capturedProtocols).toEqual(['memstack.auth', storageToken]);
+      expect(capturedWsUrl).not.toContain(`token=${encodeURIComponent(storageToken)}`);
       expect(capturedWsUrl).not.toContain(`token=${encodeURIComponent(legacyToken)}`);
 
       // Cleanup

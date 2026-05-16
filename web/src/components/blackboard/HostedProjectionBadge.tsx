@@ -1,19 +1,13 @@
 import { useTranslation } from 'react-i18next';
 
-import {
-  HOSTED,
-  NON_AUTHORITATIVE,
-} from './blackboardSurfaceContract';
+import { HOSTED, NON_AUTHORITATIVE } from './blackboardSurfaceContract';
 
 interface HostedProjectionBadgeProps {
   labelKey: string;
   fallbackLabel: string;
 }
 
-export function HostedProjectionBadge({
-  labelKey,
-  fallbackLabel,
-}: HostedProjectionBadgeProps) {
+export function HostedProjectionBadge({ labelKey, fallbackLabel }: HostedProjectionBadgeProps) {
   const { t } = useTranslation();
 
   return (

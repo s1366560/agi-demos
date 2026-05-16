@@ -4,6 +4,9 @@
  * Displays scraped web page content.
  */
 
+import { useTranslation } from 'react-i18next';
+
+import { message } from 'antd';
 import { FileText, Copy, Link, Info } from 'lucide-react';
 
 export interface WebScrapeResultCardProps {
@@ -19,27 +22,45 @@ export function WebScrapeResultCard({
   description,
   content,
 }: WebScrapeResultCardProps) {
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+  const { t } = useTranslation();
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      message.success(
+        t('components.webScrapeResult.copySuccess', { defaultValue: 'Copied to clipboard' })
+      );
+    } catch {
+      void message.error(
+        t('components.webScrapeResult.copyFailed', { defaultValue: 'Copy failed' })
+      );
+    }
   };
 
   const isTruncated = content.includes('(content truncated)');
 
   return (
-    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl overflow-hidden mb-4">
+    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md overflow-hidden mb-4">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
           <FileText size={18} className="text-purple-500" />
-          <span className="font-semibold text-slate-900 dark:text-white">Scraped Content</span>
+          <span className="font-semibold text-slate-900 dark:text-white">
+            {t('components.webScrapeResult.title', { defaultValue: 'Scraped Content' })}
+          </span>
         </div>
         <button
           type="button"
-          onClick={handleCopy}
+          onClick={() => {
+            void handleCopy();
+          }}
+          aria-label={t('components.webScrapeResult.copyContent', {
+            defaultValue: 'Copy scraped content',
+          })}
           className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
         >
           <Copy size={14} />
-          Copy
+          {t('common.copy', { defaultValue: 'Copy' })}
         </button>
       </div>
 
@@ -65,7 +86,7 @@ export function WebScrapeResultCard({
         {description && <p className="text-sm text-slate-600 dark:text-slate-400">{description}</p>}
 
         {/* Content */}
-        <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-3 max-h-80 overflow-y-auto">
+        <div className="bg-slate-100 dark:bg-slate-900 rounded-md p-3 max-h-80 overflow-y-auto">
           <pre className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words font-sans">
             {content}
           </pre>
@@ -75,7 +96,11 @@ export function WebScrapeResultCard({
         {isTruncated && (
           <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
             <Info size={12} />
-            <span>Content was truncated due to length limits</span>
+            <span>
+              {t('components.webScrapeResult.truncated', {
+                defaultValue: 'Content was truncated due to length limits',
+              })}
+            </span>
           </div>
         )}
       </div>

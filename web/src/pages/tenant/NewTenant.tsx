@@ -26,7 +26,7 @@ export const NewTenant: React.FC = () => {
         description: formData.description,
         plan: formData.plan,
       });
-      navigate('/tenant');
+      void navigate('/tenant');
     } catch (error) {
       console.error('Failed to create tenant:', error);
     }
@@ -82,7 +82,12 @@ export const NewTenant: React.FC = () => {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="p-8 pt-2 flex flex-col gap-6">
+            <form
+              onSubmit={(event) => {
+                void handleSubmit(event);
+              }}
+              className="p-8 pt-2 flex flex-col gap-6"
+            >
               <div className="space-y-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   {t('tenant.create_page.org_details')}
@@ -103,7 +108,9 @@ export const NewTenant: React.FC = () => {
                         setFormData({ ...formData, name: e.target.value });
                       }}
                       className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
-                      placeholder="e.g. Acme Corp"
+                      placeholder={t('tenant.create_page.name_placeholder', {
+                        defaultValue: 'e.g. Acme Corp',
+                      })}
                       type="text"
                     />
                   </div>
@@ -111,7 +118,7 @@ export const NewTenant: React.FC = () => {
 
                 <label className="flex flex-col w-full">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
-                    Description
+                    {t('tenant.create_page.description', { defaultValue: 'Description' })}
                   </span>
                   <textarea
                     rows={3}
@@ -120,13 +127,15 @@ export const NewTenant: React.FC = () => {
                       setFormData({ ...formData, description: e.target.value });
                     }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary p-3 text-sm placeholder:text-slate-400 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
-                    placeholder="Briefly describe your organization..."
+                    placeholder={t('tenant.create_page.description_placeholder', {
+                      defaultValue: 'Briefly describe your organization...',
+                    })}
                   />
                 </label>
 
                 <label className="flex flex-col w-full">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">
-                    Plan
+                    {t('tenant.create_page.plan', { defaultValue: 'Plan' })}
                   </span>
                   <select
                     value={formData.plan}
@@ -135,10 +144,22 @@ export const NewTenant: React.FC = () => {
                     }}
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary h-12 px-3 text-sm outline-none"
                   >
-                    <option value="free">Free Starter</option>
-                    <option value="basic">Basic Team</option>
-                    <option value="premium">Premium Business</option>
-                    <option value="enterprise">Enterprise</option>
+                    <option value="free">
+                      {t('tenant.create_page.plan_options.free', { defaultValue: 'Free Starter' })}
+                    </option>
+                    <option value="basic">
+                      {t('tenant.create_page.plan_options.basic', { defaultValue: 'Basic Team' })}
+                    </option>
+                    <option value="premium">
+                      {t('tenant.create_page.plan_options.premium', {
+                        defaultValue: 'Premium Business',
+                      })}
+                    </option>
+                    <option value="enterprise">
+                      {t('tenant.create_page.plan_options.enterprise', {
+                        defaultValue: 'Enterprise',
+                      })}
+                    </option>
                   </select>
                 </label>
               </div>

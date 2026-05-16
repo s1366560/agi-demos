@@ -3,15 +3,111 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { BadgeCheck, Database, Diamond, FolderOpen, Globe, MoreVertical, Plug, Users } from 'lucide-react';
+import {
+  BadgeCheck,
+  Database,
+  Diamond,
+  FolderOpen,
+  Globe,
+  MoreVertical,
+  Plug,
+  Users,
+} from 'lucide-react';
 
 import { tenantAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
 
+interface TenantOverviewProject {
+  id: string;
+  name: string;
+  owner: string;
+  memory_consumed: string;
+  status?: string | null;
+}
+
+interface TenantMemoryHistoryPoint {
+  date: string;
+  used: number;
+  daily_added: number;
+  memory_count: number;
+  percentage: number;
+}
+
+interface TenantOverviewStats {
+  storage: {
+    used: number;
+    total: number;
+    percentage: number;
+  };
+  projects: {
+    active: number;
+    new_this_week: number;
+    list: TenantOverviewProject[];
+  };
+  members: {
+    total: number;
+    new_added: number;
+  };
+  memory_history?: TenantMemoryHistoryPoint[];
+  tenant_info: {
+    organization_id: string;
+    plan: string;
+    region?: string | null;
+    next_billing_date?: string | null;
+  };
+}
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
+
+const formatStorage = (bytes: number) => {
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  const tb = bytes / (1024 * 1024 * 1024 * 1024);
+  if (tb >= 1) return `${tb.toFixed(1)} TB`;
+  const gb = bytes / (1024 * 1024 * 1024);
+  return `${gb.toFixed(1)} GB`;
+};
+
+const isActiveProject = (status?: string | null): boolean => status?.toLowerCase() === 'active';
+
+const hasValue = (value?: string | null): value is string => Boolean(value?.trim());
+
+const buildMemoryChartPoints = (history: TenantMemoryHistoryPoint[]) => {
+  if (history.length === 0) return [];
+
+  const lastIndex = Math.max(history.length - 1, 1);
+  return history.map((point, index) => ({
+    x: (index / lastIndex) * 100,
+    y: 50 - (clampPercent(point.percentage) / 100) * 44,
+  }));
+};
+
+const buildLinePath = (points: Array<{ x: number; y: number }>) =>
+  points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)},${point.y.toFixed(2)}`)
+    .join(' ');
+
+const buildAreaPath = (points: Array<{ x: number; y: number }>) => {
+  if (points.length === 0) return '';
+  return `${buildLinePath(points)} L100,50 L0,50 Z`;
+};
+
+const getStorageTrendLabel = (history: TenantMemoryHistoryPoint[]): string => {
+  if (history.length < 2) return '0.0%';
+
+  const current = history[history.length - 1]?.percentage ?? 0;
+  const previous = history[Math.max(0, history.length - 8)]?.percentage ?? 0;
+  const delta = current - previous;
+  const prefix = delta > 0 ? '+' : '';
+  return `${prefix}${delta.toFixed(1)}%`;
+};
+
 export const TenantOverview: React.FC = () => {
   const { t } = useTranslation();
   const { currentTenant, tenants, listTenants, setCurrentTenant } = useTenantStore();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<TenantOverviewStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   useEffect(() => {
@@ -20,7 +116,7 @@ export const TenantOverview: React.FC = () => {
         await listTenants();
       }
     };
-    init();
+    void init();
   }, [listTenants, tenants.length]);
 
   useEffect(() => {
@@ -30,20 +126,31 @@ export const TenantOverview: React.FC = () => {
   }, [currentTenant, tenants, setCurrentTenant]);
 
   useEffect(() => {
+    let isCurrent = true;
+
     const fetchStats = async () => {
       if (currentTenant) {
         setIsLoadingStats(true);
         try {
           const data = await tenantAPI.getStats(currentTenant.id);
-          setStats(data);
+          if (isCurrent) {
+            setStats(data as TenantOverviewStats);
+          }
         } catch (error) {
           console.error('Failed to fetch tenant stats:', error);
         } finally {
-          setIsLoadingStats(false);
+          if (isCurrent) {
+            setIsLoadingStats(false);
+          }
         }
       }
     };
-    fetchStats();
+
+    void fetchStats();
+
+    return () => {
+      isCurrent = false;
+    };
   }, [currentTenant]);
 
   if (!currentTenant) {
@@ -54,12 +161,29 @@ export const TenantOverview: React.FC = () => {
     return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
   }
 
-  const formatStorage = (bytes: number) => {
-    const tb = bytes / (1024 * 1024 * 1024 * 1024);
-    if (tb >= 1) return `${tb.toFixed(1)} TB`;
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(1)} GB`;
-  };
+  const storagePercentage = clampPercent(stats.storage.percentage);
+  const memoryHistory =
+    stats.memory_history && stats.memory_history.length > 0
+      ? stats.memory_history
+      : [
+          {
+            date: new Date().toISOString().slice(0, 10),
+            used: stats.storage.used,
+            daily_added: 0,
+            memory_count: 0,
+            percentage: stats.storage.percentage,
+          },
+        ];
+  const latestMemoryUsage = memoryHistory[memoryHistory.length - 1]?.used ?? stats.storage.used;
+  const chartPoints = buildMemoryChartPoints(memoryHistory);
+  const chartLinePath = buildLinePath(chartPoints);
+  const chartAreaPath = buildAreaPath(chartPoints);
+  const regionLabel = hasValue(stats.tenant_info.region)
+    ? stats.tenant_info.region
+    : t('common.status.unavailable');
+  const nextBillingLabel = hasValue(stats.tenant_info.next_billing_date)
+    ? stats.tenant_info.next_billing_date
+    : t('common.status.unavailable');
 
   return (
     <div className="max-w-full mx-auto flex flex-col gap-8">
@@ -82,7 +206,7 @@ export const TenantOverview: React.FC = () => {
                 <Database size={16} className="text-white" />
               </div>
               <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
-                +12%
+                {getStorageTrendLabel(memoryHistory)}
               </span>
             </div>
             <div>
@@ -101,7 +225,7 @@ export const TenantOverview: React.FC = () => {
             <div className="w-full bg-black/20 rounded-full h-1.5 mt-1">
               <div
                 className="bg-white h-1.5 rounded-full"
-                style={{ width: `${stats.storage.percentage}%` }}
+                style={{ width: `${storagePercentage.toString()}%` }}
               ></div>
             </div>
           </div>
@@ -160,22 +284,23 @@ export const TenantOverview: React.FC = () => {
 
       {/* Middle Row: Chart & Tenant Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Chart Area - Placeholder for now */}
         <div className="lg:col-span-2 bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                 {t('tenant.overview.memoryUsageHistory')}
               </h3>
               <p className="text-sm text-slate-500">{t('tenant.overview.last30Days')}</p>
             </div>
-            <select className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg py-1.5 px-3 focus:ring-primary focus:border-primary outline-none">
-              <option>{t('tenant.overview.last30Days')}</option>
-              <option>Last 7 Days</option>
-              <option>Last 24 Hours</option>
-            </select>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-xs font-medium uppercase text-slate-500">
+                {t('tenant.overview.latestUsage')}
+              </p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                {formatStorage(latestMemoryUsage)}
+              </p>
+            </div>
           </div>
-          {/* Simulated Chart using SVG */}
           <div className="flex-1 w-full min-h-60 relative">
             <div className="absolute inset-0 flex flex-col justify-between text-xs text-slate-400">
               <div className="flex w-full items-center">
@@ -199,29 +324,49 @@ export const TenantOverview: React.FC = () => {
                 <div className="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div>
               </div>
             </div>
-            <svg
-              className="absolute inset-0 h-full w-full pl-8 pb-4 pt-2"
-              preserveAspectRatio="none"
-              viewBox="0 0 100 50"
-            >
-              <defs>
-                <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#1e3fae" stopOpacity="0.2"></stop>
-                  <stop offset="100%" stopColor="#1e3fae" stopOpacity="0"></stop>
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,45 C10,40 15,35 20,38 C25,41 30,20 40,22 C50,24 55,30 60,25 C65,20 75,15 80,18 C85,21 90,10 100,5 V50 H0 Z"
-                fill="url(#chartGradient)"
-              ></path>
-              <path
-                d="M0,45 C10,40 15,35 20,38 C25,41 30,20 40,22 C50,24 55,30 60,25 C65,20 75,15 80,18 C85,21 90,10 100,5"
-                fill="none"
-                stroke="#1e3fae"
-                strokeWidth="0.5"
-                vectorEffect="non-scaling-stroke"
-              ></path>
-            </svg>
+            {chartPoints.length > 0 ? (
+              <svg
+                aria-label={t('tenant.overview.memoryChartAria')}
+                className="absolute inset-0 h-full w-full pl-8 pb-4 pt-2"
+                preserveAspectRatio="none"
+                role="img"
+                viewBox="0 0 100 50"
+              >
+                <defs>
+                  <linearGradient id="tenantMemoryChartGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#1e3fae" stopOpacity="0.22"></stop>
+                    <stop offset="100%" stopColor="#1e3fae" stopOpacity="0"></stop>
+                  </linearGradient>
+                </defs>
+                <path d={chartAreaPath} fill="url(#tenantMemoryChartGradient)"></path>
+                <path
+                  d={chartLinePath}
+                  fill="none"
+                  stroke="#1e3fae"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="0.8"
+                  vectorEffect="non-scaling-stroke"
+                ></path>
+                {chartPoints.map((point, index) => {
+                  if (index !== 0 && index !== chartPoints.length - 1) return null;
+                  return (
+                    <circle
+                      key={`${point.x.toFixed(2)}-${point.y.toFixed(2)}`}
+                      cx={point.x}
+                      cy={point.y}
+                      fill="#1e3fae"
+                      r="1.2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  );
+                })}
+              </svg>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center pl-8 pb-4 pt-2 text-sm text-slate-500">
+                {t('tenant.overview.noMemoryHistory')}
+              </div>
+            )}
           </div>
         </div>
 
@@ -265,9 +410,7 @@ export const TenantOverview: React.FC = () => {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   {t('tenant.overview.region')}
                 </p>
-                <p className="text-slate-900 dark:text-white font-medium">
-                  {stats.tenant_info.region}
-                </p>
+                <p className="text-slate-900 dark:text-white font-medium">{regionLabel}</p>
               </div>
             </div>
             <div className="h-px w-full bg-slate-100 dark:bg-slate-800 my-2"></div>
@@ -277,12 +420,15 @@ export const TenantOverview: React.FC = () => {
                   {t('tenant.overview.nextBillingDate')}
                 </span>
                 <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {stats.tenant_info.next_billing_date}
+                  {nextBillingLabel}
                 </span>
               </div>
-              <button className="w-full py-2 px-4 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">
+              <Link
+                to="/tenant/billing"
+                className="block w-full rounded-md border border-slate-200 bg-white px-4 py-2 text-center text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+              >
                 {t('tenant.overview.viewInvoice')}
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -294,7 +440,10 @@ export const TenantOverview: React.FC = () => {
           <h3 className="text-lg font-bold text-slate-900 dark:text-white">
             {t('tenant.overview.mostActiveProjects')}
           </h3>
-          <Link to="/tenant/projects" className="text-primary text-sm font-medium hover:underline">
+          <Link
+            to={`/tenant/${currentTenant.id}/projects`}
+            className="text-primary text-sm font-medium hover:underline"
+          >
             {t('common.actions.viewAll')}
           </Link>
         </div>
@@ -303,24 +452,24 @@ export const TenantOverview: React.FC = () => {
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Project Name
+                  {t('tenant.overview.projectName')}
                 </th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   {t('common.stats.owner')}
                 </th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Memory Consumed
+                  {t('tenant.overview.memoryConsumed')}
                 </th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">
-                  Status
+                  {t('common.forms.status')}
                 </th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">
-                  Actions
+                  {t('tenant.overview.actions')}
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {stats.projects.list.map((project: any) => (
+              {stats.projects.list.map((project) => (
                 <tr
                   key={project.id}
                   className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
@@ -345,36 +494,43 @@ export const TenantOverview: React.FC = () => {
                     </div>
                   </td>
                   <td className="py-4 px-6">
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="bg-primary h-1.5 rounded-full"
-                          style={{ width: '75%' }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        {project.memory_consumed}
-                      </span>
-                    </div>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {project.memory_consumed}
+                    </span>
                   </td>
                   <td className="py-4 px-6 text-right">
                     <span
                       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        project.status === 'Active'
+                        isActiveProject(project.status)
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                          : hasValue(project.status)
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                       }`}
                     >
                       <span
                         className={`size-1.5 rounded-full ${
-                          project.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'
+                          isActiveProject(project.status)
+                            ? 'bg-emerald-500'
+                            : hasValue(project.status)
+                              ? 'bg-amber-500'
+                              : 'bg-slate-400'
                         }`}
                       ></span>
-                      {project.status}
+                      {hasValue(project.status) ? project.status : t('common.status.unavailable')}
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <button className="text-slate-400 hover:text-primary transition-colors">
+                    <button
+                      type="button"
+                      aria-label={t('tenant.overview.openProjectActions', {
+                        name: project.name,
+                      })}
+                      title={t('tenant.overview.openProjectActions', {
+                        name: project.name,
+                      })}
+                      className="text-slate-400 hover:text-primary transition-colors"
+                    >
                       <MoreVertical size={20} />
                     </button>
                   </td>

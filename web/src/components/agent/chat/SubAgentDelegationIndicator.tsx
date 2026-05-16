@@ -6,8 +6,12 @@
 
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Tooltip } from 'antd';
 import { Bot, Loader2, CheckCircle, XCircle, AtSign, Search, Zap } from 'lucide-react';
+
+import type { TFunction } from 'i18next';
 
 export interface SubAgentDelegationIndicatorProps {
   subagentName: string;
@@ -15,6 +19,11 @@ export interface SubAgentDelegationIndicatorProps {
   triggerType: 'keyword' | 'semantic' | 'explicit';
   taskDescription?: string | undefined;
   status: 'started' | 'completed' | 'failed';
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 const getTriggerIcon = (triggerType: string) => {
@@ -30,16 +39,16 @@ const getTriggerIcon = (triggerType: string) => {
   }
 };
 
-const getTriggerLabel = (triggerType: string) => {
+const getTriggerLabel = (triggerType: string, t: TFunction) => {
   switch (triggerType) {
     case 'keyword':
-      return 'Keyword Match';
+      return tFallback(t, 'agent.subAgentDelegation.keywordMatch', 'Keyword Match');
     case 'semantic':
-      return 'Semantic Match';
+      return tFallback(t, 'agent.subAgentDelegation.semanticMatch', 'Semantic Match');
     case 'explicit':
       return '@Mention';
     default:
-      return 'Delegated';
+      return tFallback(t, 'agent.subAgentDelegation.delegated', 'Delegated');
   }
 };
 
@@ -63,6 +72,7 @@ export const SubAgentDelegationIndicator: FC<SubAgentDelegationIndicatorProps> =
   taskDescription,
   status,
 }) => {
+  const { t } = useTranslation();
   const backgroundColor = `${subagentColor}20`;
   const borderColor = `${subagentColor}40`;
 
@@ -85,15 +95,17 @@ export const SubAgentDelegationIndicator: FC<SubAgentDelegationIndicatorProps> =
         title={
           <div className="space-y-1">
             <div>
-              <strong>Trigger:</strong> {getTriggerLabel(triggerType)}
+              <strong>{tFallback(t, 'agent.subAgentDelegation.trigger', 'Trigger')}:</strong>{' '}
+              {getTriggerLabel(triggerType, t)}
             </div>
             {taskDescription && (
               <div>
-                <strong>Task:</strong> {taskDescription}
+                <strong>{tFallback(t, 'agent.subAgentDelegation.task', 'Task')}:</strong>{' '}
+                {taskDescription}
               </div>
             )}
             <div>
-              <strong>Status:</strong> {status}
+              <strong>{tFallback(t, 'agent.subAgentDelegation.status', 'Status')}:</strong> {status}
             </div>
           </div>
         }

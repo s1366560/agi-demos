@@ -32,11 +32,12 @@ class BrowserEventEmitter {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    const eventListeners = this.listeners.get(event)!;
+    const eventListeners = this.listeners.get(event) ?? new Set<(...args: unknown[]) => void>();
+    this.listeners.set(event, eventListeners);
 
     if (eventListeners.size >= this.maxListeners) {
       console.warn(
-        `MaxListenersExceededWarning: Possible memory leak. ${eventListeners.size + 1} listeners added for event "${event}". Use setMaxListeners() to increase limit.`
+        `MaxListenersExceededWarning: Possible memory leak. ${String(eventListeners.size + 1)} listeners added for event "${event}". Use setMaxListeners() to increase limit.`
       );
     }
 
@@ -85,8 +86,10 @@ class BrowserEventEmitter {
  * Plan mode events (plan_mode_enter, plan_created, etc.) are now delivered
  * directly through the WebSocket connection.
  */
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- legacy compatibility emitter.
 class SSEEmitter extends BrowserEventEmitter {
   constructor() {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- base class is intentionally legacy.
     super();
     // Increase max listeners to support multiple components
     this.setMaxListeners(100);
@@ -129,6 +132,7 @@ class SSEEmitter extends BrowserEventEmitter {
  * Global SSE emitter instance
  * @deprecated Use agentService WebSocket handlers instead
  */
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- exported for legacy consumers.
 export const sseEmitter = new SSEEmitter();
 
 /**

@@ -19,6 +19,10 @@ import { mentionService, type MentionItem } from '@/services/mentionService';
 
 import { useConversationParticipants } from '@/hooks/useConversationParticipants';
 
+type SubAgentStoreSnapshot = Partial<ReturnType<typeof useSubAgentStore.getState>>;
+
+const EMPTY_SUBAGENTS: NonNullable<ReturnType<typeof useSubAgentStore.getState>['subagents']> = [];
+
 export interface MentionPopoverHandle {
   getSelectedItem: () => MentionItem | null;
 }
@@ -37,35 +41,29 @@ interface MentionPopoverProps {
 export const MentionPopover = memo(
   forwardRef<MentionPopoverHandle, MentionPopoverProps>(
     (
-      {
-        query,
-        projectId,
-        visible,
-        onSelect,
-        selectedIndex,
-        onSelectedIndexChange,
-        conversationId,
-      },
+      { query, projectId, visible, onSelect, selectedIndex, onSelectedIndexChange, conversationId },
       ref
     ) => {
       const { t } = useTranslation();
       const [items, setItems] = useState<MentionItem[]>([]);
       const [loading, setLoading] = useState(false);
       const listRef = useRef<HTMLDivElement>(null);
-      const { subagents, listSubAgents } = useSubAgentStore();
+      const subagentStore = useSubAgentStore() as SubAgentStoreSnapshot;
+      const subagents = subagentStore.subagents ?? EMPTY_SUBAGENTS;
+      const listSubAgents = subagentStore.listSubAgents;
       const { roster } = useConversationParticipants(conversationId ?? null);
 
       // Ensure subagents are loaded
       useEffect(() => {
-        if (subagents.length === 0) {
+        if (subagents.length === 0 && typeof listSubAgents === 'function') {
           listSubAgents({ enabled_only: true }).catch((err: unknown) => {
             void message.error(
-              err instanceof Error ? err.message : 'Failed to load sub-agents'
+              err instanceof Error ? err.message : t('agent.mentions.loadSubAgentsFailed')
             );
             console.error('MentionPopover: listSubAgents failed', err);
           });
         }
-      }, [subagents.length, listSubAgents]);
+      }, [subagents.length, listSubAgents, t]);
 
       useImperativeHandle(ref, () => ({
         getSelectedItem: () => items[selectedIndex] ?? null,
@@ -79,59 +77,61 @@ export const MentionPopover = memo(
           return;
         }
 
-        const timer = setTimeout(async () => {
-          setLoading(true);
-          try {
-            // Parallel fetch: mention search + subagent filtering
-            const [mentionResults, _] = await Promise.all([
-              mentionService.search(query, projectId).catch((err: unknown) => {
-                console.error('MentionPopover: search failed', err);
-                return [];
-              }),
-              Promise.resolve(), // Subagents are already in store
-            ]);
+        const timer = setTimeout(() => {
+          void (async () => {
+            setLoading(true);
+            try {
+              // Parallel fetch: mention search + subagent filtering
+              const [mentionResults, _] = await Promise.all([
+                mentionService.search(query, projectId).catch((err: unknown) => {
+                  console.error('MentionPopover: search failed', err);
+                  return [];
+                }),
+                Promise.resolve(), // Subagents are already in store
+              ]);
 
-            // Filter subagents locally
-            const subagentResults: MentionItem[] = subagents
-              .filter(
-                (sa) =>
-                  sa.name.toLowerCase().includes(query.toLowerCase()) ||
-                  sa.display_name.toLowerCase().includes(query.toLowerCase())
-              )
-              .map((sa) => ({
-                id: sa.id,
-                name: sa.name, // Use system name for mention ID
-                type: 'subagent',
-                summary: sa.trigger.description,
-                entityType: 'SubAgent',
-              }));
+              // Filter subagents locally
+              const subagentResults: MentionItem[] = subagents
+                .filter(
+                  (sa) =>
+                    sa.name.toLowerCase().includes(query.toLowerCase()) ||
+                    sa.display_name.toLowerCase().includes(query.toLowerCase())
+                )
+                .map((sa) => ({
+                  id: sa.id,
+                  name: sa.name, // Use system name for mention ID
+                  type: 'subagent',
+                  summary: sa.trigger.description,
+                  entityType: 'SubAgent',
+                }));
 
-            // Filter conversation participants locally (Track B)
-            const participantResults: MentionItem[] = (roster?.participant_agents ?? [])
-              .filter((agentId) => agentId.toLowerCase().includes(query.toLowerCase()))
-              .map((agentId) => ({
-                id: agentId,
-                name: agentId,
-                type: 'participant',
-                entityType: 'Participant',
-                ...(agentId === roster?.coordinator_agent_id
-                  ? { summary: t('agent.mentions.coordinator', 'Coordinator') }
-                  : {}),
-              }));
+              // Filter conversation participants locally (Track B)
+              const participantResults: MentionItem[] = (roster?.participant_agents ?? [])
+                .filter((agentId) => agentId.toLowerCase().includes(query.toLowerCase()))
+                .map((agentId) => ({
+                  id: agentId,
+                  name: agentId,
+                  type: 'participant',
+                  entityType: 'Participant',
+                  ...(agentId === roster?.coordinator_agent_id
+                    ? { summary: t('agent.mentions.coordinator', 'Coordinator') }
+                    : {}),
+                }));
 
-            // Combine results: participants > SubAgents > entities/memories.
-            setItems([...participantResults, ...subagentResults, ...mentionResults]);
-            onSelectedIndexChange(0);
-          } catch (err: unknown) {
-            void message.error(
-              err instanceof Error ? err.message : 'Failed to search mentions'
-            );
-            console.error('MentionPopover: search failed', err);
-            setItems([]);
-            onSelectedIndexChange(0);
-          } finally {
-            setLoading(false);
-          }
+              // Combine results: participants > SubAgents > entities/memories.
+              setItems([...participantResults, ...subagentResults, ...mentionResults]);
+              onSelectedIndexChange(0);
+            } catch (err: unknown) {
+              void message.error(
+                err instanceof Error ? err.message : t('agent.mentions.searchFailed')
+              );
+              console.error('MentionPopover: search failed', err);
+              setItems([]);
+              onSelectedIndexChange(0);
+            } finally {
+              setLoading(false);
+            }
+          })();
         }, 200);
 
         return () => {
@@ -198,11 +198,11 @@ export const MentionPopover = memo(
                     {item.summary && (
                       <div className="text-xs text-slate-400 truncate mt-0.5">{item.summary}</div>
                     )}
-                     {item.entityType && (
-                       <span className="text-2xs bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300 px-1.5 rounded-full mt-0.5 inline-block">
-                         {item.entityType}
-                       </span>
-                     )}
+                    {item.entityType && (
+                      <span className="text-2xs bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300 px-1.5 rounded-full mt-0.5 inline-block">
+                        {item.entityType}
+                      </span>
+                    )}
                   </div>
                 </button>
               ))

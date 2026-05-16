@@ -9,6 +9,8 @@
 
 import { useCallback, memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Filter, ListTodo, Route, X } from 'lucide-react';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
@@ -17,8 +19,8 @@ import { useUrlState } from '../../hooks/useUrlState';
 
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { ResizeHandle } from './RightPanelComponents';
-import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { TaskList } from './TaskList';
+import { TaskLanePanel } from './tasks/TaskLanePanel';
 
 import type {
   AgentTask,
@@ -29,6 +31,7 @@ import type {
   ToolsetChangedEventData,
 } from '../../types/agent';
 import type { AgentNode } from '../../types/multiAgent';
+import type { TFunction } from 'i18next';
 
 export interface RightPanelProps {
   tasks?: AgentTask[] | undefined;
@@ -50,6 +53,11 @@ export interface RightPanelProps {
 
 type PanelTab = 'tasks' | 'insights' | 'agents';
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 interface ExecutionInsightsProps {
   executionPathDecision?: ExecutionPathDecidedEventData | null | undefined;
   selectionTrace?: SelectionTraceEventData | null | undefined;
@@ -66,6 +74,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
     executionNarrative,
     latestToolsetChange,
   }) => {
+    const { t } = useTranslation();
     const metadataLane =
       executionPathDecision?.metadata &&
       typeof executionPathDecision.metadata['domain_lane'] === 'string'
@@ -91,8 +100,11 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
           data-testid="execution-insights"
           className="rounded-lg border border-slate-200/60 dark:border-slate-700/50 p-4 text-sm text-slate-500 dark:text-slate-400"
         >
-          Execution diagnostics will appear after the agent makes routing and tool-selection
-          decisions.
+          {tFallback(
+            t,
+            'agent.rightPanel.insights.empty',
+            'Execution diagnostics will appear after the agent makes routing and tool-selection decisions.'
+          )}
         </div>
       );
     }
@@ -103,17 +115,19 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
         className="space-y-3 rounded-lg border border-slate-200/60 dark:border-slate-700/50 p-3"
       >
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Execution Insights
+          {tFallback(t, 'agent.rightPanel.insights.title', 'Execution Insights')}
         </h3>
 
         {executionPathDecision ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <Route size={13} />
-              <span>Routing</span>
+              <span>{tFallback(t, 'agent.rightPanel.insights.routing', 'Routing')}</span>
             </div>
             <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
-              Path: <span className="font-medium">{executionPathDecision.path}</span> · Confidence:{' '}
+              {tFallback(t, 'agent.rightPanel.insights.path', 'Path')}:{' '}
+              <span className="font-medium">{executionPathDecision.path}</span> ·{' '}
+              {tFallback(t, 'agent.rightPanel.insights.confidence', 'Confidence')}:{' '}
               <span className="font-medium">{executionPathDecision.confidence.toFixed(2)}</span>
             </div>
             <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
@@ -140,14 +154,21 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
         {selectionTrace ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
             <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Selection
+              {tFallback(t, 'agent.rightPanel.insights.selection', 'Selection')}
             </div>
             <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
-              {selectionTrace.final_count}/{selectionTrace.initial_count} tools kept · removed{' '}
-              {selectionTrace.removed_total}
+              {t('agent.rightPanel.insights.selectionSummary', {
+                defaultValue: '{{final}}/{{initial}} tools kept · removed {{removed}}',
+                final: selectionTrace.final_count,
+                initial: selectionTrace.initial_count,
+                removed: selectionTrace.removed_total,
+              })}
             </div>
             <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-              {selectionTrace.stages.length} stage(s) executed
+              {t('agent.rightPanel.insights.stageSummary', {
+                defaultValue: '{{count}} stage(s) executed',
+                count: selectionTrace.stages.length,
+              })}
             </div>
             {typeof selectionTrace.tool_budget === 'number' ? (
               <div className="mt-1 text-xs-plus text-slate-500 dark:text-slate-400">
@@ -161,11 +182,14 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <Filter size={13} />
-              <span>Policy</span>
+              <span>{tFallback(t, 'agent.rightPanel.insights.policy', 'Policy')}</span>
             </div>
             <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
-              Filtered {policyFiltered.removed_total} tool(s) across {policyFiltered.stage_count}{' '}
-              stage(s)
+              {t('agent.rightPanel.insights.policySummary', {
+                defaultValue: 'Filtered {{removed}} tool(s) across {{stages}} stage(s)',
+                removed: policyFiltered.removed_total,
+                stages: policyFiltered.stage_count,
+              })}
             </div>
             {policyFiltered.budget_exceeded_stages?.length ? (
               <div className="mt-1 text-xs-plus text-amber-600 dark:text-amber-400">
@@ -178,7 +202,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
         {latestToolsetChange ? (
           <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
             <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Toolset
+              {tFallback(t, 'agent.rightPanel.insights.toolset', 'Toolset')}
             </div>
             <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
               {latestToolsetChange.action || 'update'}
@@ -187,7 +211,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
             <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
               refresh: {latestToolsetChange.refresh_status || 'not_applicable'}
               {typeof latestToolsetChange.refreshed_tool_count === 'number'
-                ? ` (${latestToolsetChange.refreshed_tool_count} tools)`
+                ? ` (${String(latestToolsetChange.refreshed_tool_count)} tools)`
                 : ''}
             </div>
             {latestToolsetChange.trace_id ? (
@@ -204,7 +228,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
             data-testid="execution-narrative"
           >
             <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Execution Narrative
+              {tFallback(t, 'agent.rightPanel.insights.narrative', 'Execution Narrative')}
             </div>
             <div className="mt-2 space-y-2">
               {narrativeEntries.map((entry) => (
@@ -244,6 +268,7 @@ export const RightPanel = memo<RightPanelProps>(
     minWidth = 280,
     maxWidth = 600,
   }) => {
+    const { t } = useTranslation();
     const hasInsights = Boolean(
       executionPathDecision ||
       selectionTrace ||
@@ -297,10 +322,13 @@ export const RightPanel = memo<RightPanelProps>(
               </div>
               <div className="flex flex-col min-w-0">
                 <h2 className="font-semibold text-slate-900 dark:text-slate-100 leading-tight">
-                  Tasks
+                  {tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
                 </h2>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {tasks.length} item{tasks.length === 1 ? '' : 's'}
+                  {t('agent.rightPanel.taskCount', {
+                    defaultValue: '{{count}} item',
+                    count: tasks.length,
+                  })}
                 </span>
               </div>
             </div>
@@ -318,7 +346,7 @@ export const RightPanel = memo<RightPanelProps>(
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  Tasks
+                  {tFallback(t, 'agent.rightPanel.tabs.tasks', 'Tasks')}
                 </button>
                 {activeTab === 'tasks' ? (
                   <button
@@ -326,16 +354,26 @@ export const RightPanel = memo<RightPanelProps>(
                     onClick={() => {
                       setTaskView(taskView === 'lanes' ? 'flat' : 'lanes');
                     }}
-                    title={taskView === 'lanes' ? 'Switch to list view' : 'Switch to lane view'}
+                    title={
+                      taskView === 'lanes'
+                        ? tFallback(t, 'agent.rightPanel.switchToList', 'Switch to list view')
+                        : tFallback(t, 'agent.rightPanel.switchToLane', 'Switch to lane view')
+                    }
                     className="ml-1 px-2 py-1 text-xs rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                     data-testid="task-view-toggle"
                   >
-                    {taskView === 'lanes' ? 'List' : 'Lanes'}
+                    {taskView === 'lanes'
+                      ? tFallback(t, 'agent.rightPanel.list', 'List')
+                      : tFallback(t, 'agent.rightPanel.lanes', 'Lanes')}
                   </button>
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => hasInsights && setPreferredTab('insights')}
+                  onClick={() => {
+                    if (hasInsights) {
+                      setPreferredTab('insights');
+                    }
+                  }}
                   disabled={!hasInsights}
                   className={`px-2 py-1 text-xs rounded-md transition-colors ${
                     activeTab === 'insights'
@@ -343,11 +381,15 @@ export const RightPanel = memo<RightPanelProps>(
                       : 'text-slate-500 dark:text-slate-400'
                   } ${!hasInsights ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Insights
+                  {tFallback(t, 'agent.rightPanel.tabs.insights', 'Insights')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => hasAgents && setPreferredTab('agents')}
+                  onClick={() => {
+                    if (hasAgents) {
+                      setPreferredTab('agents');
+                    }
+                  }}
                   disabled={!hasAgents}
                   className={`px-2 py-1 text-xs rounded-md transition-colors ${
                     activeTab === 'agents'
@@ -355,7 +397,7 @@ export const RightPanel = memo<RightPanelProps>(
                       : 'text-slate-500 dark:text-slate-400'
                   } ${!hasAgents ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Agents
+                  {tFallback(t, 'agent.rightPanel.tabs.agents', 'Agents')}
                 </button>
               </div>
 
@@ -390,11 +432,7 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              {taskView === 'lanes' ? (
-                <TaskLanePanel tasks={tasks} />
-              ) : (
-                <TaskList tasks={tasks} />
-              )}
+              {taskView === 'lanes' ? <TaskLanePanel tasks={tasks} /> : <TaskList tasks={tasks} />}
             </div>
           )}
         </div>

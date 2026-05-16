@@ -37,16 +37,16 @@ export interface UseMessageAreaScrollReturn {
   scrollToBottom: () => void;
   handleScroll: () => void;
   // Refs exposed for the conversation-switch effect in MessageArea
-  isInitialLoadRef: React.MutableRefObject<boolean>;
-  hasScrolledInitiallyRef: React.MutableRefObject<boolean>;
-  prevTimelineLengthRef: React.MutableRefObject<number>;
-  previousScrollHeightRef: React.MutableRefObject<number>;
-  previousScrollTopRef: React.MutableRefObject<number>;
-  isLoadingEarlierRef: React.MutableRefObject<boolean>;
-  userScrolledUpRef: React.MutableRefObject<boolean>;
-  isSwitchingConversationRef: React.MutableRefObject<boolean>;
-  isPositioningRef: React.MutableRefObject<boolean>;
-  lastConversationIdRef: React.MutableRefObject<string | null | undefined>;
+  isInitialLoadRef: React.RefObject<boolean>;
+  hasScrolledInitiallyRef: React.RefObject<boolean>;
+  prevTimelineLengthRef: React.RefObject<number>;
+  previousScrollHeightRef: React.RefObject<number>;
+  previousScrollTopRef: React.RefObject<number>;
+  isLoadingEarlierRef: React.RefObject<boolean>;
+  userScrolledUpRef: React.RefObject<boolean>;
+  isSwitchingConversationRef: React.RefObject<boolean>;
+  isPositioningRef: React.RefObject<boolean>;
+  lastConversationIdRef: React.RefObject<string | null | undefined>;
 }
 
 // ========================================
@@ -311,16 +311,27 @@ export function useMessageAreaScroll(
 
   // Clear loading indicator when hasEarlierMessages becomes false
   useEffect(() => {
-    if (!hasEarlierMessages) {
-      queueMicrotask(() => {
-        setShowLoadingIndicator(false);
-      });
-      if (loadingIndicatorTimeoutRef.current) {
-        clearTimeout(loadingIndicatorTimeoutRef.current);
-        loadingIndicatorTimeoutRef.current = null;
-      }
+    if (hasEarlierMessages) {
+      return undefined;
     }
-  }, [hasEarlierMessages]);
+
+    if (loadingIndicatorTimeoutRef.current) {
+      clearTimeout(loadingIndicatorTimeoutRef.current);
+      loadingIndicatorTimeoutRef.current = null;
+    }
+
+    if (!showLoadingIndicator) {
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setShowLoadingIndicator(false);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [hasEarlierMessages, showLoadingIndicator]);
 
   // Reset userScrolledUpRef when streaming ends
   useEffect(() => {

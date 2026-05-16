@@ -20,12 +20,12 @@ import { workspaceAutonomyService, workspaceTaskService } from '@/services/works
 import { getPendingLeaderAdjudicationSummary } from '@/utils/workspaceTaskProjection';
 
 import { useLazyMessage } from '@/components/ui/lazyAntd';
-import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
 import {
   formatMetadataLabel,
   getRootGoalDisplayState,
   getTaskObservabilityState,
 } from '@/components/workspace/taskBoardSignals';
+import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
 
 import type {
   TaskExecutionSession,
@@ -425,7 +425,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId, showAutonomyA
           )}
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-secondary dark:text-text-muted">
             {t('workspaceDetail.taskBoard.showArchived', 'Show archived')}
-            <Switch size="small" checked={showArchived} onChange={setShowArchived} />
+            <Switch
+              size="small"
+              checked={showArchived}
+              aria-label={t('workspaceDetail.taskBoard.showArchived', 'Show archived')}
+              onChange={setShowArchived}
+            />
           </label>
           <Button
             type="text"
@@ -796,7 +801,9 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId, showAutonomyA
             loading={isExperienceLoading}
             recoveryActionLoading={isRecoveryActionRunning}
             error={experienceError}
-            onRecoveryAction={handleRecoveryAction}
+            onRecoveryAction={(action) => {
+              void handleRecoveryAction(action);
+            }}
             onClose={() => {
               setSelectedTaskId(null);
               setSelectedExperience(null);

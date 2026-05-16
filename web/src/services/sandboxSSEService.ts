@@ -149,7 +149,7 @@ class SandboxSSEService {
         this.status = 'connected';
         logger.debug(`[SandboxWS] Connected to project ${projectId} via agentService`);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         logger.error('[SandboxWS] Failed to connect:', err);
         this.status = 'error';
         this.notifyHandlers('onError', err instanceof Error ? err : new Error(String(err)));
@@ -239,8 +239,6 @@ class SandboxSSEService {
       case 'terminal_status':
         this.notifyHandlers('onStatusUpdate', event);
         break;
-      default:
-        logger.debug(`[SandboxWS] Unknown event type: ${type}`);
     }
   }
 

@@ -2,7 +2,7 @@
  * Tests for ProjectSettingsModal component
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import '@testing-library/jest-dom';
@@ -40,6 +40,16 @@ describe('ProjectSettingsModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  function createDeferred<T = void>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve;
+      reject = promiseReject;
+    });
+    return { promise, resolve, reject };
+  }
 
   describe('Rendering', () => {
     it('should render modal when isOpen is true', () => {
@@ -88,13 +98,27 @@ describe('ProjectSettingsModal', () => {
 
   describe('Save Functionality', () => {
     it('should call onSave when save button is clicked', async () => {
+      const saveDeferred = createDeferred();
+      mockOnSave.mockReturnValueOnce(saveDeferred.promise);
       render(<ProjectSettingsModal {...defaultProps} />);
 
       const saveButton = screen.getByText('Save Changes');
       await fireEvent.click(saveButton);
 
       await waitFor(() => {
+        expect(saveButton).toBeDisabled();
+      });
+      await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalled();
+      });
+      await act(async () => {
+        saveDeferred.resolve();
+      });
+      await waitFor(() => {
+        expect(mockOnClose).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
       });
     });
 
@@ -119,6 +143,8 @@ describe('ProjectSettingsModal', () => {
     });
 
     it('should call onDelete when confirmed', async () => {
+      const deleteDeferred = createDeferred();
+      mockOnDelete.mockReturnValueOnce(deleteDeferred.promise);
       render(<ProjectSettingsModal {...defaultProps} />);
 
       const deleteButton = screen.getByText('Delete Project');
@@ -127,7 +153,16 @@ describe('ProjectSettingsModal', () => {
       const confirmButton = screen.getByText('Confirm Delete');
       await fireEvent.click(confirmButton);
       await waitFor(() => {
+        expect(confirmButton).toBeDisabled();
+      });
+      await waitFor(() => {
         expect(mockOnDelete).toHaveBeenCalled();
+      });
+      await act(async () => {
+        deleteDeferred.resolve();
+      });
+      await waitFor(() => {
+        expect(screen.queryByText('Confirm Delete')).not.toBeInTheDocument();
       });
     });
 
@@ -146,10 +181,11 @@ describe('ProjectSettingsModal', () => {
 
   describe('Error Handling', () => {
     it('should display error when update fails', async () => {
-      const { projectService } = await import('../../services/projectService');
-      (projectService.updateProject as any).mockRejectedValue(new Error('Update failed'));
+      const saveDeferred = createDeferred();
+      const failingOnSave = vi.fn().mockReturnValueOnce(saveDeferred.promise);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-      render(<ProjectSettingsModal {...defaultProps} />);
+      render(<ProjectSettingsModal {...defaultProps} onSave={failingOnSave} />);
 
       const saveButton = screen.getByText('Save Changes');
       await fireEvent.click(saveButton);
@@ -157,14 +193,25 @@ describe('ProjectSettingsModal', () => {
       await waitFor(() => {
         expect(saveButton).toBeDisabled();
       });
+      await waitFor(() => {
+        expect(failingOnSave).toHaveBeenCalled();
+      });
+      await act(async () => {
+        saveDeferred.reject(new Error('Update failed'));
+      });
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
+      });
+      expect(consoleError).toHaveBeenCalledWith('Failed to update project:', expect.any(Error));
+      consoleError.mockRestore();
     });
 
     it('should display error when delete fails', async () => {
-      const { projectService } = await import('../../services/projectService');
-      (projectService.deleteProject as any).mockRejectedValue(new Error('Delete failed'));
-      global.confirm = vi.fn(() => true);
+      const deleteDeferred = createDeferred();
+      const failingOnDelete = vi.fn().mockReturnValueOnce(deleteDeferred.promise);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-      render(<ProjectSettingsModal {...defaultProps} />);
+      render(<ProjectSettingsModal {...defaultProps} onDelete={failingOnDelete} />);
 
       const deleteButton = screen.getByText('Delete Project');
       await fireEvent.click(deleteButton);
@@ -173,8 +220,19 @@ describe('ProjectSettingsModal', () => {
       expect(confirmButton).toBeInTheDocument();
       await fireEvent.click(confirmButton);
       await waitFor(() => {
+        expect(confirmButton).toBeDisabled();
+      });
+      await waitFor(() => {
+        expect(failingOnDelete).toHaveBeenCalled();
+      });
+      await act(async () => {
+        deleteDeferred.reject(new Error('Delete failed'));
+      });
+      await waitFor(() => {
         expect(screen.queryByText('Confirm Delete')).not.toBeInTheDocument();
       });
+      expect(consoleError).toHaveBeenCalledWith('Failed to delete project:', expect.any(Error));
+      consoleError.mockRestore();
     });
   });
 

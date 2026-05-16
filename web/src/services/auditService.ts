@@ -105,9 +105,15 @@ export const auditService = {
     if (params?.to_date) queryParams.end_time = params.to_date;
 
     const hasFilters = Boolean(
-      params?.action || params?.resource_type || params?.actor || params?.from_date || params?.to_date
+      params?.action ||
+      params?.resource_type ||
+      params?.actor ||
+      params?.from_date ||
+      params?.to_date
     );
-    const path = hasFilters ? `/tenants/${tenantId}/audit-logs/filter` : `/tenants/${tenantId}/audit-logs`;
+    const path = hasFilters
+      ? `/tenants/${tenantId}/audit-logs/filter`
+      : `/tenants/${tenantId}/audit-logs`;
     const response = await httpClient.get<BackendAuditListResponse>(path, { params: queryParams });
 
     return normalizeAuditListResponse(response);
@@ -135,9 +141,12 @@ export const auditService = {
   },
 
   getRuntimeHookSummary: (tenantId: string, params?: RuntimeHookAuditSummaryParams) =>
-    httpClient.get<RuntimeHookAuditSummary>(`/tenants/${tenantId}/audit-logs/runtime-hooks/summary`, {
-      params,
-    }),
+    httpClient.get<RuntimeHookAuditSummary>(
+      `/tenants/${tenantId}/audit-logs/runtime-hooks/summary`,
+      {
+        params,
+      }
+    ),
 
   exportLogs: (tenantId: string, format: 'csv' | 'json', params?: AuditListParams) => {
     const queryParams = new URLSearchParams();

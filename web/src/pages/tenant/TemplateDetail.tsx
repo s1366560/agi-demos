@@ -1,24 +1,24 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import {
+  Alert,
   Button,
   Card,
-  Typography,
-  Spin,
-  Alert,
-  Tag,
   Descriptions,
-  List,
   Empty,
+  List,
   message,
+  Spin,
+  Tag,
+  Typography,
 } from 'antd';
-import { ArrowLeft, Rocket, Copy } from 'lucide-react';
+import { ArrowLeft, Copy, Rocket } from 'lucide-react';
 
 import { instanceTemplateService } from '../../services/instanceTemplateService';
-import { useGenes, useGeneMarketActions } from '../../stores/geneMarket';
+import { useGeneMarketActions, useGenes } from '../../stores/geneMarket';
 
 import type {
   InstanceTemplateResponse,
@@ -60,8 +60,8 @@ export const TemplateDetail: React.FC = () => {
   }, [templateId]);
 
   useEffect(() => {
-    fetchData().catch(() => {});
-    listGenes().catch(() => {});
+    void fetchData();
+    void listGenes();
   }, [fetchData, listGenes]);
 
   const handleClone = async () => {
@@ -69,7 +69,7 @@ export const TemplateDetail: React.FC = () => {
     try {
       const cloned = await instanceTemplateService.clone(templateId);
       message.success(t('tenant.templateDetail.cloneSuccess', 'Template cloned successfully'));
-      navigate(`../instance-templates/${cloned.id}`);
+      void navigate(`../instance-templates/${cloned.id}`);
     } catch {
       message.error(t('tenant.templateDetail.cloneError', 'Failed to clone template'));
     }
@@ -92,7 +92,7 @@ export const TemplateDetail: React.FC = () => {
     return (
       <Alert
         type="warning"
-        message={t('tenant.templateDetail.notFound', 'Template not found')}
+        title={t('tenant.templateDetail.notFound', 'Template not found')}
         showIcon
       />
     );
@@ -103,7 +103,12 @@ export const TemplateDetail: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
       <div className="flex items-center gap-4">
-        <Button icon={<ArrowLeft size={16} />} onClick={() => navigate(-1)}>
+        <Button
+          icon={<ArrowLeft size={16} />}
+          onClick={() => {
+            void navigate(-1);
+          }}
+        >
           {t('common.back', 'Back')}
         </Button>
         <Title level={3} className="!mb-0">
@@ -117,10 +122,11 @@ export const TemplateDetail: React.FC = () => {
       {error && (
         <Alert
           type="error"
-          message={error}
-          closable
-          onClose={() => {
-            setError(null);
+          title={error}
+          closable={{
+            onClose: () => {
+              setError(null);
+            },
           }}
         />
       )}
@@ -188,7 +194,7 @@ export const TemplateDetail: React.FC = () => {
         )}
       </Card>
 
-      {template.base_config && Object.keys(template.base_config).length > 0 && (
+      {Object.keys(template.base_config).length > 0 && (
         <Card
           title={t('tenant.templateDetail.baseConfigTitle', 'Base Configuration')}
           className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
@@ -203,7 +209,12 @@ export const TemplateDetail: React.FC = () => {
         <Button type="primary" icon={<Rocket size={16} />} disabled>
           {t('tenant.templateDetail.deployFromTemplate', 'Deploy from Template')}
         </Button>
-        <Button icon={<Copy size={16} />} onClick={handleClone}>
+        <Button
+          icon={<Copy size={16} />}
+          onClick={() => {
+            void handleClone();
+          }}
+        >
           {t('tenant.templateDetail.clone', 'Clone Template')}
         </Button>
       </div>

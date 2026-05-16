@@ -24,7 +24,7 @@ interface ShortcutSection {
 export const ShortcutOverlay = memo(() => {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac');
+  const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
   const mod = isMac ? 'Cmd' : 'Ctrl';
 
   const sections: ShortcutSection[] = [

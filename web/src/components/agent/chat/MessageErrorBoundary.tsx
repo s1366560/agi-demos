@@ -17,6 +17,8 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { CircleAlert, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui';
@@ -43,6 +45,12 @@ export interface MessageErrorBoundaryState {
   retryCount: number;
 }
 
+interface WindowWithSentry extends Window {
+  Sentry?: {
+    captureException(error: Error, options: { contexts: { react: ErrorInfo } }): void;
+  };
+}
+
 /**
  * Default error fallback component.
  */
@@ -51,42 +59,47 @@ const DefaultErrorFallback: React.FC<{
   onRetry: () => void;
   showRetry: boolean;
   retryCount: number;
-}> = ({ error, onRetry, showRetry, retryCount }) => (
-  <div
-    className="p-4 my-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
-    role="alert"
-  >
-    <div className="flex items-start gap-3">
-      {/* Error icon */}
-      <CircleAlert size={20} className="text-red-500 dark:text-red-400" />
+  errorMessage?: string | undefined;
+}> = ({ error, onRetry, showRetry, retryCount, errorMessage }) => {
+  const { t } = useTranslation();
 
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">
-          Failed to render message
-        </h3>
+  return (
+    <div
+      className="p-4 my-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
+      role="alert"
+    >
+      <div className="flex items-start gap-3">
+        {/* Error icon */}
+        <CircleAlert size={20} className="text-red-500 dark:text-red-400" />
 
-        {error && (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400 font-mono break-words">
-            {error.message}
-          </p>
-        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">
+            {errorMessage ?? t('components.messageErrorBoundary.title')}
+          </h3>
 
-        {retryCount > 0 && (
-          <p className="mt-1 text-xs text-red-500 dark:text-red-400">
-            Retry attempts: {retryCount}
-          </p>
-        )}
+          {error && (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400 font-mono break-words">
+              {error.message}
+            </p>
+          )}
 
-        {showRetry && (
-          <Button onClick={onRetry} size="small" className="mt-2 text-xs">
-            <RefreshCw size={14} className="mr-1" />
-            Try Again
-          </Button>
-        )}
+          {retryCount > 0 && (
+            <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+              {t('components.messageErrorBoundary.retryAttempts', { count: retryCount })}
+            </p>
+          )}
+
+          {showRetry && (
+            <Button onClick={onRetry} size="small" className="mt-2 text-xs">
+              <RefreshCw size={14} className="mr-1" />
+              {t('components.messageErrorBoundary.tryAgain')}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 /**
  * Error boundary for chat message components.
@@ -121,9 +134,8 @@ export class MessageErrorBoundary extends Component<
     this.props.onError?.(error, errorInfo);
 
     // Report to error tracking service (e.g., Sentry)
-    if (typeof window !== 'undefined' && (window as any).Sentry) {
-      (window as any).Sentry.captureException(error, { contexts: { react: errorInfo } });
-    }
+    const sentry = typeof window !== 'undefined' ? (window as WindowWithSentry).Sentry : undefined;
+    sentry?.captureException(error, { contexts: { react: errorInfo } });
   }
 
   handleRetry = (): void => {
@@ -137,7 +149,7 @@ export class MessageErrorBoundary extends Component<
 
   override render(): ReactNode {
     const { hasError, error, retryCount } = this.state;
-    const { fallback, showRetry = true } = this.props;
+    const { fallback, showRetry = true, errorMessage } = this.props;
 
     if (hasError) {
       // Use custom fallback if provided
@@ -152,6 +164,7 @@ export class MessageErrorBoundary extends Component<
           onRetry={this.handleRetry}
           showRetry={showRetry}
           retryCount={retryCount}
+          errorMessage={errorMessage}
         />
       );
     }

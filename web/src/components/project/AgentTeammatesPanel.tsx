@@ -10,9 +10,9 @@
  *     AgentWorkspace. "Manage" jumps to /tenant/agent-definitions.
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
 import { Badge, Button, Card, Empty, List, Skeleton, Space, Tag, Typography, message } from 'antd';
@@ -61,15 +61,13 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
     try {
       const conversation = await agentService.createConversation({
         project_id: projectId,
-        title: `Chat with ${displayName}`,
+        title: t('project.agentTeammates.chatTitle', { name: displayName }),
         agent_config: { agent_definition_id: agent.id },
       });
-      navigate(
-        `/tenant/agent-workspace?conversation=${encodeURIComponent(conversation.id)}`,
-      );
+      void navigate(`/tenant/agent-workspace?conversation=${encodeURIComponent(conversation.id)}`);
     } catch (error) {
       console.error('Failed to start chat with agent', error);
-      message.error('Failed to start chat. Please try again.');
+      message.error(t('project.agentTeammates.startError'));
     } finally {
       setStartingId(null);
     }
@@ -80,13 +78,13 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
       title={
         <Space>
           <Bot size={16} />
-          <span>Agent teammates</span>
+          <span>{t('project.agentTeammates.title')}</span>
           {agents.length > 0 && <Tag>{agents.length}</Tag>}
         </Space>
       }
       extra={
         <Link to="/tenant/agent-definitions" style={{ fontSize: 13 }}>
-          Manage
+          {t('project.agentTeammates.manage')}
         </Link>
       }
       style={{ marginTop: 24 }}
@@ -98,8 +96,11 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <Text type="secondary">
-              No agent definitions for this project yet. Create one from{' '}
-              <Link to="/tenant/agent-definitions">Agent Definitions</Link>.
+              {t('project.agentTeammates.emptyPrefix')}{' '}
+              <Link to="/tenant/agent-definitions">
+                {t('project.agentTeammates.agentDefinitions')}
+              </Link>
+              {t('project.agentTeammates.emptySuffix')}
             </Text>
           }
         />
@@ -112,71 +113,65 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
             const successPct =
               agent.success_rate == null ? null : Math.round(agent.success_rate * 100);
             return (
-              <List.Item
-                actions={[
-                  <Button
-                    key="start-chat"
-                    type="primary"
-                    size="small"
-                    icon={<MessageSquarePlus size={14} />}
-                    loading={startingId === agent.id}
-                    disabled={!agent.enabled || startingId !== null}
-                    onClick={() => {
-                      void handleStartChat(agent);
-                    }}
+              <List.Item className="!flex !flex-col !items-stretch !gap-3 sm:!flex-row sm:!items-center">
+                <div className="flex min-w-0 flex-1 gap-3">
+                  <div
+                    aria-hidden
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-black/10 bg-neutral-100 text-[13px] font-medium text-neutral-900"
                   >
-                    {t('project.agentTeammates.startConversation')}
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={
-                    <div
-                      aria-hidden
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 6,
-                        background: agent.enabled ? '#f5f5f5' : '#fafafa',
-                        color: agent.enabled ? '#171717' : '#999',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 13,
-                        fontWeight: 500,
-                        border: '1px solid rgba(0,0,0,0.08)',
-                      }}
-                    >
-                      {initials(displayName)}
-                    </div>
-                  }
-                  title={
-                    <Space size="small">
+                    {initials(displayName)}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <Text strong>{displayName}</Text>
                       <Badge
                         status={agent.enabled ? 'success' : 'default'}
-                        text={<Text type="secondary" style={{ fontSize: 12 }}>{agent.enabled ? 'enabled' : 'disabled'}</Text>}
+                        text={
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {agent.enabled
+                              ? t('project.agentTeammates.status.enabled')
+                              : t('project.agentTeammates.status.disabled')}
+                          </Text>
+                        }
                       />
-                    </Space>
-                  }
-                  description={
-                    <Space size="large" wrap>
+                    </div>
+
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {agent.model ?? 'default model'}
+                        {agent.model ?? t('project.agentTeammates.defaultModel')}
                       </Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {agent.total_invocations} invocations
+                        {t('project.agentTeammates.invocations', {
+                          count: agent.total_invocations,
+                        })}
                       </Text>
                       {successPct != null && (
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                          {successPct}% success
+                          {t('project.agentTeammates.successRate', { percent: successPct })}
                         </Text>
                       )}
-                      {agent.can_spawn && <Tag color="blue">can spawn</Tag>}
-                      {agent.discoverable && <Tag>discoverable</Tag>}
-                    </Space>
-                  }
-                />
+                      {agent.can_spawn && (
+                        <Tag color="blue">{t('project.agentTeammates.canSpawn')}</Tag>
+                      )}
+                      {agent.discoverable && <Tag>{t('project.agentTeammates.discoverable')}</Tag>}
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  type="primary"
+                  size="small"
+                  className="w-full sm:w-auto"
+                  icon={<MessageSquarePlus size={14} />}
+                  loading={startingId === agent.id}
+                  disabled={!agent.enabled || startingId !== null}
+                  onClick={() => {
+                    void handleStartChat(agent);
+                  }}
+                >
+                  {t('project.agentTeammates.startConversation')}
+                </Button>
               </List.Item>
             );
           }}
@@ -187,10 +182,12 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
 }
 
 export function AgentTeammatesSkeleton() {
+  const { t } = useTranslation();
+
   return (
     <Card style={{ marginTop: 24 }}>
       <Title level={5} style={{ marginBottom: 12 }}>
-        Agent teammates
+        {t('project.agentTeammates.title')}
       </Title>
       <Skeleton active paragraph={{ rows: 2 }} />
     </Card>

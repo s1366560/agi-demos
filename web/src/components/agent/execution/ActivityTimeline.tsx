@@ -10,15 +10,10 @@
 
 import React, { useMemo, useRef, useEffect, memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Collapse, Tooltip } from 'antd';
-import {
-  Lightbulb,
-  Wrench,
-  CheckCircle,
-  RefreshCcw,
-  XCircle,
-  Clock,
-} from 'lucide-react';
+import { Lightbulb, Wrench, CheckCircle, RefreshCcw, XCircle, Clock } from 'lucide-react';
 
 import { formatTimeOnly, formatDuration } from '@/utils/date';
 
@@ -97,6 +92,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
   duration,
   compact = false,
 }) => {
+  const { t } = useTranslation();
   const isThought = type === 'thought';
   const isRunning = status === 'running';
 
@@ -183,11 +179,18 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
               compact ? 'text-2xs' : 'text-xs'
             } font-semibold text-slate-600 dark:text-slate-400`}
           >
-            {sequence}. {isThought ? 'Thought' : 'Tool'}
+            {sequence}.{' '}
+            {isThought
+              ? t('agent.activityTimeline.thought', { defaultValue: 'Thought' })
+              : t('agent.activityTimeline.tool', { defaultValue: 'Tool' })}
           </span>
           <div className="ml-auto flex items-center gap-2">
             {duration !== undefined && (
-              <Tooltip title="Execution time">
+              <Tooltip
+                title={t('agent.activityTimeline.executionTime', {
+                  defaultValue: 'Execution time',
+                })}
+              >
                 <span className="flex items-center gap-1 text-2xs text-slate-400 dark:text-slate-500">
                   <Clock size={10} className="text-2xs" />
                   {formatDuration(duration)}
@@ -195,9 +198,7 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
               </Tooltip>
             )}
             <span
-              className={`${
-                compact ? 'text-2xs' : 'text-xs'
-              } text-slate-400 dark:text-slate-500`}
+              className={`${compact ? 'text-2xs' : 'text-xs'} text-slate-400 dark:text-slate-500`}
             >
               {formatRelativeTime(timestamp)}
             </span>
@@ -239,6 +240,8 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
   status,
   compact = false,
 }) => {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
@@ -258,7 +261,7 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
                 : 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400'
           }`}
         >
-          {status.toUpperCase()}
+          {t(`agent.activityTimeline.status.${status}`, { defaultValue: status.toUpperCase() })}
         </span>
       </div>
 
@@ -271,13 +274,15 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
             {
               key: 'details',
               label: (
-                <span className="text-2xs text-slate-500 dark:text-slate-400">View details</span>
+                <span className="text-2xs text-slate-500 dark:text-slate-400">
+                  {t('agent.activityTimeline.viewDetails', { defaultValue: 'View details' })}
+                </span>
               ),
               children: (
                 <div className="space-y-2">
                   <div>
                     <span className="text-2xs uppercase font-bold text-slate-400 dark:text-slate-500">
-                      Input
+                      {t('agent.activityTimeline.input', { defaultValue: 'Input' })}
                     </span>
                     <pre
                       className={`${
@@ -290,7 +295,7 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
                   {result && (
                     <div>
                       <span className="text-2xs uppercase font-bold text-slate-400 dark:text-slate-500">
-                        Result
+                        {t('agent.activityTimeline.result', { defaultValue: 'Result' })}
                       </span>
                       <pre
                         className={`${
@@ -303,7 +308,9 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
                   )}
                   {error && (
                     <div>
-                      <span className="text-2xs uppercase font-bold text-red-400">Error</span>
+                      <span className="text-2xs uppercase font-bold text-red-400">
+                        {t('agent.activityTimeline.error', { defaultValue: 'Error' })}
+                      </span>
                       <pre className="p-1.5 text-2xs rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 overflow-x-auto max-w-full whitespace-pre-wrap break-all">
                         {error}
                       </pre>
@@ -332,6 +339,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
   maxItems = 10,
   autoScroll = true,
 }) => {
+  const { t } = useTranslation();
   const [showAll, setShowAll] = React.useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -385,11 +393,16 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
         className={isActive ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''}
       />
       <span className={`${compact ? 'text-2xs' : 'text-xs'} font-medium`}>
-        {isActive ? 'Processing...' : 'Activity Timeline'}
+        {isActive
+          ? t('agent.activityTimeline.processing', { defaultValue: 'Processing...' })
+          : t('agent.activityTimeline.title', { defaultValue: 'Activity Timeline' })}
       </span>
       {timeline.length > 0 && (
         <span className={`ml-auto ${compact ? 'text-2xs' : 'text-xs'} text-slate-400`}>
-          {timeline.length} activities
+          {t('agent.activityTimeline.activityCount', {
+            count: timeline.length,
+            defaultValue: '{{count}} activities',
+          })}
         </span>
       )}
     </div>
@@ -423,7 +436,10 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                     }}
                     className="text-xs text-primary hover:underline"
                   >
-                    Show {enrichedTimeline.length - maxItems} earlier activities
+                    {t('agent.activityTimeline.showEarlier', {
+                      count: enrichedTimeline.length - maxItems,
+                      defaultValue: 'Show {{count}} earlier activities',
+                    })}
                   </button>
                 </div>
               )}
@@ -461,7 +477,10 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                       compact={compact}
                     >
                       <ToolCardInline
-                        toolName={item.toolName ?? 'unknown'}
+                        toolName={
+                          item.toolName ??
+                          t('agent.activityTimeline.unknownTool', { defaultValue: 'unknown' })
+                        }
                         input={item.toolInput}
                         result={item.result}
                         error={item.error}
@@ -488,7 +507,9 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                       compact ? 'text-2xs' : 'text-xs'
                     } text-slate-400 dark:text-slate-500 italic`}
                   >
-                    Waiting for next activity...
+                    {t('agent.activityTimeline.waiting', {
+                      defaultValue: 'Waiting for next activity...',
+                    })}
                   </div>
                 </div>
               )}

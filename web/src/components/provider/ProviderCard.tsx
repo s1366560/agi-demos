@@ -1,6 +1,13 @@
 import React from 'react';
 
-import { BarChart, Pencil, Star, Trash2, UserCheck ,
+import { useTranslation } from 'react-i18next';
+
+import {
+  BarChart,
+  Pencil,
+  Star,
+  Trash2,
+  UserCheck,
   CheckCircle,
   Square,
   StopCircle,
@@ -20,39 +27,61 @@ import { BarChart, Pencil, Star, Trash2, UserCheck ,
   Loader2,
   AlertCircle,
   Globe,
-  User
+  User,
 } from 'lucide-react';
 
 import { ProviderConfig, CircuitBreakerState } from '../../types/memory';
 
 import { ProviderIcon } from './ProviderIcon';
 
-
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
 
@@ -153,6 +182,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   isCheckingHealth = false,
   isResettingCircuitBreaker = false,
 }) => {
+  const { t } = useTranslation();
   const statusConfig = getStatusConfig(provider.health_status);
   const cbConfig = getCircuitBreakerConfig(provider.resilience?.circuit_breaker_state);
 
@@ -171,7 +201,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 {provider.is_default && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-2xs font-medium bg-primary/10 text-primary border border-primary/20">
                     <Star size={10} className="fill-current" />
-                    <span className="ml-0.5">Default</span>
+                    <span className="ml-0.5">
+                      {t('tenant.providers.defaultBadge', { defaultValue: 'Default' })}
+                    </span>
                   </span>
                 )}
               </div>
@@ -194,7 +226,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 provider.is_active ? 'bg-emerald-500' : 'bg-slate-400'
               }`}
             />
-            {provider.is_active ? 'Active' : 'Inactive'}
+            {provider.is_active ? t('common.status.active') : t('common.status.inactive')}
           </div>
         </div>
       </div>
@@ -204,7 +236,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         {/* Models */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 dark:text-slate-400 w-14 shrink-0">LLM</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 w-14 shrink-0">
+              {t('components.provider.card.labels.llm', { defaultValue: 'LLM' })}
+            </span>
             <code className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 font-mono truncate">
               {provider.llm_model}
             </code>
@@ -212,7 +246,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           {provider.llm_small_model && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 dark:text-slate-400 w-14 shrink-0">
-                Small
+                {t('components.provider.card.labels.small', { defaultValue: 'Small' })}
               </span>
               <code className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 font-mono truncate">
                 {provider.llm_small_model}
@@ -222,7 +256,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           {provider.embedding_model && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 dark:text-slate-400 w-14 shrink-0">
-                Embed
+                {t('components.provider.card.labels.embed', { defaultValue: 'Embed' })}
               </span>
               <code className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 font-mono truncate">
                 {provider.embedding_model}
@@ -237,7 +271,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           {provider.reranker_model && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 dark:text-slate-400 w-14 shrink-0">
-                Rerank
+                {t('components.provider.card.labels.rerank', { defaultValue: 'Rerank' })}
               </span>
               <code className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 font-mono truncate">
                 {provider.reranker_model}
@@ -273,7 +307,10 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               <span className={`text-xs font-medium ${cbConfig.color}`}>{cbConfig.label}</span>
               {provider.resilience?.failure_count ? (
                 <span className="text-2xs text-red-500">
-                  {provider.resilience.failure_count} fails
+                  {t('components.provider.card.failureCount', {
+                    count: provider.resilience.failure_count,
+                    defaultValue: '{{count}} fails',
+                  })}
                 </span>
               ) : null}
             </div>
@@ -289,10 +326,16 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           }}
           disabled={isCheckingHealth}
           className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
-          title="Check Health"
+          title={t('components.provider.card.actions.checkHealth', {
+            defaultValue: 'Check Health',
+          })}
         >
-          {renderDynamicIcon(isCheckingHealth ? 'progress_activity' : 'monitor_heart', 16, isCheckingHealth ? 'animate-spin motion-reduce:animate-none' : '')}
-          Health
+          {renderDynamicIcon(
+            isCheckingHealth ? 'progress_activity' : 'monitor_heart',
+            16,
+            isCheckingHealth ? 'animate-spin motion-reduce:animate-none' : ''
+          )}
+          {t('components.provider.card.actions.health', { defaultValue: 'Health' })}
         </button>
 
         {provider.resilience?.circuit_breaker_state &&
@@ -303,10 +346,16 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               }}
               disabled={isResettingCircuitBreaker}
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-amber-200 dark:hover:border-amber-800"
-              title="Reset Circuit Breaker"
+              title={t('components.provider.card.actions.resetCircuitBreaker', {
+                defaultValue: 'Reset Circuit Breaker',
+              })}
             >
-              {renderDynamicIcon(isResettingCircuitBreaker ? 'progress_activity' : 'refresh', 16, isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : '')}
-              Reset
+              {renderDynamicIcon(
+                isResettingCircuitBreaker ? 'progress_activity' : 'refresh',
+                16,
+                isResettingCircuitBreaker ? 'animate-spin motion-reduce:animate-none' : ''
+              )}
+              {t('components.provider.card.actions.reset', { defaultValue: 'Reset' })}
             </button>
           )}
 
@@ -316,7 +365,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               onViewStats(provider);
             }}
             className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
-            title="View Statistics"
+            title={t('components.provider.card.actions.viewStatistics', {
+              defaultValue: 'View Statistics',
+            })}
           >
             <BarChart size={18} />
           </button>
@@ -327,7 +378,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             onAssign(provider);
           }}
           className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
-          title="Assign to Tenant"
+          title={t('components.provider.card.actions.assignToTenant', {
+            defaultValue: 'Assign to Tenant',
+          })}
         >
           <UserCheck size={18} />
         </button>
@@ -337,7 +390,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             onEdit(provider);
           }}
           className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
-          title="Edit"
+          title={t('common.edit')}
         >
           <Pencil size={18} />
         </button>
@@ -347,7 +400,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             onDelete(provider.id);
           }}
           className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
-          title="Delete"
+          title={t('common.delete')}
         >
           <Trash2 size={18} />
         </button>

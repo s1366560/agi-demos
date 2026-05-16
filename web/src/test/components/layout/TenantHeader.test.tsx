@@ -59,9 +59,8 @@ vi.mock('@/stores/backgroundStore', () => ({
 }));
 
 vi.mock('@/stores/theme', () => ({
-  useThemeStore: (
-    selector: (state: { theme: 'light'; setTheme: typeof setTheme }) => unknown
-  ) => selector({ theme: 'light', setTheme }),
+  useThemeStore: (selector: (state: { theme: 'light'; setTheme: typeof setTheme }) => unknown) =>
+    selector({ theme: 'light', setTheme }),
 }));
 
 vi.mock('@/stores/project', () => ({
@@ -116,6 +115,20 @@ describe('TenantHeader', () => {
       'href',
       '/tenant/tenant-1/workspaces'
     );
+  });
+
+  it('keeps desktop navigation visually bounded from header actions', () => {
+    const { container } = render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector('nav')).toHaveClass('overflow-hidden', 'mr-2');
+    expect(screen.getByRole('button', { name: 'Search' }).parentElement).toHaveClass('flex-none');
   });
 
   it('renders project-level contextual navigation instead of tenant destinations', () => {

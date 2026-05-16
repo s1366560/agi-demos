@@ -9,7 +9,6 @@ import React from 'react';
 
 import { CheckCircle2, Clock, Loader2, XCircle, Zap } from 'lucide-react';
 
-
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import { LazyProgress, LazySpace, Typography } from '@/components/ui/lazyAntd';
@@ -63,7 +62,12 @@ const statusConfig: Record<
     label: 'Preparing Tool',
     class: 'status-running',
   },
-  acting: { color: 'orange', icon: <Loader2 size={16} />, label: 'Acting', class: 'status-running' },
+  acting: {
+    color: 'orange',
+    icon: <Loader2 size={16} />,
+    label: 'Acting',
+    class: 'status-running',
+  },
   observing: {
     color: 'cyan',
     icon: <Loader2 size={16} />,

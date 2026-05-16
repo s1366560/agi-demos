@@ -7,8 +7,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Spin, Input, Select } from 'antd';
-import { Search, Wrench, Server } from 'lucide-react';
+import { Input, Select, Spin } from 'antd';
+import { Search, Server, Wrench } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useProjectStore } from '@/stores/project';
@@ -34,14 +34,14 @@ export const McpToolsTabV2: React.FC = () => {
   // Ensure servers are loaded
   useEffect(() => {
     if (servers.length === 0 && currentProject?.id) {
-      listServers({ project_id: currentProject.id });
+      void listServers({ project_id: currentProject.id });
     }
   }, [servers.length, currentProject?.id, listServers]);
 
   const allTools = useMemo<ToolWithServer[]>(
     () =>
       servers.flatMap((server) =>
-        (server.discovered_tools ?? []).map((tool) => ({
+        server.discovered_tools.map((tool) => ({
           ...tool,
           serverName: server.name,
           serverId: server.id,
@@ -75,7 +75,7 @@ export const McpToolsTabV2: React.FC = () => {
     [servers, t]
   );
 
-  const serversWithTools = servers.filter((s) => s.discovered_tools?.length).length;
+  const serversWithTools = servers.filter((s) => s.discovered_tools.length > 0).length;
 
   if (isLoading) {
     return (
@@ -100,7 +100,9 @@ export const McpToolsTabV2: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {allTools.length}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mcp.tools.totalTools')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('mcp.tools.totalTools')}
+                </p>
               </div>
             </div>
             <div className="w-px h-10 bg-slate-200 dark:bg-slate-700" />
@@ -112,7 +114,9 @@ export const McpToolsTabV2: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {serversWithTools}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mcp.tools.serversWithTools')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('mcp.tools.serversWithTools')}
+                </p>
               </div>
             </div>
           </div>
@@ -145,7 +149,7 @@ export const McpToolsTabV2: React.FC = () => {
             className="w-full sm:w-52"
             placeholder={t('mcp.tools.filterByServer')}
             options={serverOptions}
-            suffixIcon={<Server size={14} className="text-slate-400" />}
+            suffix={<Server size={14} className="text-slate-400" />}
           />
         </div>
       </div>
@@ -168,7 +172,7 @@ export const McpToolsTabV2: React.FC = () => {
       ) : (
         <div className="space-y-3">
           {filteredTools.map((tool, idx) => {
-            const key = `${tool.serverId}-${tool.name}-${idx}`;
+            const key = `${tool.serverId}-${tool.name}-${idx.toString()}`;
             const isExpanded = expandedKey === key;
 
             return (

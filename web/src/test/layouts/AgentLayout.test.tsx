@@ -59,7 +59,10 @@ vi.mock('@/hooks/useProjectBasePath', () => ({
   useProjectBasePath: () => ({ projectBasePath: '/tenant/tenant-123/project/proj-123' }),
 }));
 
-function renderWithRouter(ui: React.ReactElement, initialEntries = ['/tenant/tenant-123/project/proj-123/agent']) {
+function renderWithRouter(
+  ui: React.ReactElement,
+  initialEntries = ['/tenant/tenant-123/project/proj-123/agent']
+) {
   return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
 }
 

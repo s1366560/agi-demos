@@ -3,14 +3,28 @@
  *
  * Extracted from agentV3.ts to reduce file size and improve maintainability.
  * Subscribes to BroadcastChannel messages to keep state consistent across tabs.
- *
- * NOTE: Uses lazy import of useAgentV3Store to break the circular dependency.
  */
 
 import { logger } from '../../utils/logger';
 import { tabSync, type TabSyncMessage } from '../../utils/tabSync';
 
 import { useConversationsStore } from './conversationsStore';
+
+import type { AgentV3State } from './types';
+import type { StoreApi, UseBoundStore } from 'zustand';
+
+type AgentV3Store = UseBoundStore<StoreApi<AgentV3State>>;
+let agentV3Store: AgentV3Store | null = null;
+
+export function registerAgentV3Store(store: AgentV3Store): () => void {
+  agentV3Store = store;
+
+  return () => {
+    if (agentV3Store === store) {
+      agentV3Store = null;
+    }
+  };
+}
 
 /**
  * Initialize cross-tab synchronization.
@@ -24,20 +38,14 @@ export function initTabSync(): void {
 
   logger.info('[AgentV3] Initializing cross-tab sync');
 
-  // Use dynamic import to get the store lazily and avoid circular deps
-  let storeModule: typeof import('../agentV3') | null = null;
-
-  const getStore = async () => {
-    if (!storeModule) {
-      storeModule = await import('../agentV3');
-    }
-    return storeModule.useAgentV3Store;
-  };
-
   tabSync.subscribe((message: TabSyncMessage) => {
-    // Fire and forget the async handler
-    void (async () => {
-      const store = await getStore();
+    const store = agentV3Store;
+    if (!store) {
+      logger.warn('[AgentV3] Ignoring tab sync message before store registration');
+      return;
+    }
+
+    (() => {
       const state = store.getState();
 
       switch (message.type) {
@@ -67,11 +75,11 @@ export function initTabSync(): void {
             logger.info(
               `[TabSync] Conversation ${msg.conversationId} completed in another tab, reloading...`
             );
-            const conv = useConversationsStore.getState().conversations.find(
-              (c) => c.id === msg.conversationId
-            );
+            const conv = useConversationsStore
+              .getState()
+              .conversations.find((c) => c.id === msg.conversationId);
             if (conv) {
-              state.loadMessages(msg.conversationId, conv.project_id);
+              void state.loadMessages(msg.conversationId, conv.project_id);
             }
           }
           break;

@@ -11,7 +11,6 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { ChatMessage } from './ChatMessage';
 import { MentionInput } from './MentionInput';
 
-
 export interface ChatPanelProps {
   tenantId: string;
   projectId: string;
@@ -66,11 +65,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ tenantId, projectId, works
         ) : (
           <div className="flex flex-col pb-2">
             {messages.map((msg) => (
-              <ChatMessage
-                key={msg.id}
-                message={msg}
-                isOwn={msg.sender_id === currentUser?.id}
-              />
+              <ChatMessage key={msg.id} message={msg} isOwn={msg.sender_id === currentUser?.id} />
             ))}
             <div ref={messagesEndRef} />
           </div>

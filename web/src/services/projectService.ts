@@ -106,7 +106,7 @@ export const projectService = {
    */
   listMembers: async (projectId: string): Promise<{ users: User[] }> => {
     const response = await apiFetch.get(`/projects/${projectId}/members`);
-    return response.json();
+    return (await response.json()) as { users: User[] };
   },
 
   /**
@@ -188,7 +188,7 @@ export const projectService = {
    */
   getProject: async (projectId: string): Promise<Project> => {
     const response = await apiFetch.get(`/projects/${projectId}`);
-    return response.json();
+    return (await response.json()) as Project;
   },
 
   /**
@@ -211,7 +211,7 @@ export const projectService = {
    */
   updateProject: async (projectId: string, updates: Partial<Project>): Promise<Project> => {
     const response = await apiFetch.patch(`/projects/${projectId}`, updates);
-    return response.json();
+    return (await response.json()) as Project;
   },
 
   /**
@@ -251,7 +251,7 @@ export const projectService = {
    */
   listProjects: async (tenantId: string): Promise<Project[]> => {
     const response = await apiFetch.get(`/tenants/${tenantId}/projects`);
-    const data = await response.json();
-    return data.projects || [];
+    const data = (await response.json()) as { projects?: Project[] | undefined };
+    return data.projects ?? [];
   },
 };

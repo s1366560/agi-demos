@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { Button, Card, Typography, Spin, Alert, Tag, Descriptions, Rate, List, Empty } from 'antd';
+import { Alert, Button, Card, Descriptions, Empty, List, Rate, Spin, Tag, Typography } from 'antd';
 import { ArrowLeft } from 'lucide-react';
 
 import {
@@ -38,7 +38,7 @@ export const GenomeDetail: React.FC = () => {
     };
   }, [genomeId, getGenome, listGenes, setCurrentGenome, clearError]);
 
-  const genomeGenes = genes.filter((g) => genome?.gene_ids?.includes(g.id));
+  const genomeGenes = genes.filter((g) => genome?.gene_ids.includes(g.id));
 
   if (loading && !genome) {
     return (
@@ -52,7 +52,7 @@ export const GenomeDetail: React.FC = () => {
     return (
       <Alert
         type="warning"
-        message={t('tenant.genomeDetail.notFound', 'Genome not found')}
+        title={t('tenant.genomeDetail.notFound', 'Genome not found')}
         showIcon
       />
     );
@@ -63,7 +63,12 @@ export const GenomeDetail: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
       <div className="flex items-center gap-4">
-        <Button icon={<ArrowLeft size={16} />} onClick={() => navigate(-1)}>
+        <Button
+          icon={<ArrowLeft size={16} />}
+          onClick={() => {
+            void navigate(-1);
+          }}
+        >
           {t('common.back', 'Back')}
         </Button>
         <Title level={3} className="!mb-0">
@@ -72,7 +77,7 @@ export const GenomeDetail: React.FC = () => {
         <Tag color={genome.visibility === 'public' ? 'green' : 'default'}>{genome.visibility}</Tag>
       </div>
 
-      {error && <Alert type="error" message={error} closable onClose={clearError} />}
+      {error && <Alert type="error" title={error} closable={{ onClose: clearError }} />}
 
       <Card className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
         <Descriptions column={2} bordered>
@@ -129,7 +134,7 @@ export const GenomeDetail: React.FC = () => {
         )}
       </Card>
 
-      {genome.config && Object.keys(genome.config).length > 0 && (
+      {Object.keys(genome.config).length > 0 && (
         <Card
           title={t('tenant.genomeDetail.configTitle', 'Configuration')}
           className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"

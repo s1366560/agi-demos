@@ -8,6 +8,8 @@
 import { useMemo } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Database, Minimize2 } from 'lucide-react';
 
 import { LazyTooltip } from '@/components/ui/lazyAntd';
@@ -55,6 +57,7 @@ function formatTokens(tokens: number): string {
 }
 
 export const ContextStatusIndicator: FC = () => {
+  const { t } = useTranslation();
   const status = useContextStatus();
   const { setDetailExpanded } = useContextActions();
 
@@ -62,7 +65,7 @@ export const ContextStatusIndicator: FC = () => {
   const currentTokens = status?.currentTokens ?? 0;
   const tokenBudget = status?.tokenBudget ?? 128000;
   const compressionLevel = status?.compressionLevel ?? 'none';
-  const totalSaved = status?.compressionHistory?.total_tokens_saved ?? 0;
+  const totalSaved = status ? status.compressionHistory.total_tokens_saved : 0;
   const fromCache = status?.fromCache ?? false;
   const messagesInSummary = status?.messagesInSummary ?? 0;
 
@@ -79,20 +82,48 @@ export const ContextStatusIndicator: FC = () => {
       <LazyTooltip
         title={
           <div className="space-y-1">
-            <div className="font-medium">Context Window</div>
-            <div>
-              Tokens: {formatTokens(currentTokens)} / {formatTokens(tokenBudget)}
+            <div className="font-medium">
+              {t('components.contextStatus.title', { defaultValue: 'Context Window' })}
             </div>
-            <div>Occupancy: {occupancy.toFixed(1)}%</div>
+            <div>
+              {t('components.contextStatus.tokens', {
+                current: formatTokens(currentTokens),
+                budget: formatTokens(tokenBudget),
+                defaultValue: 'Tokens: {{current}} / {{budget}}',
+              })}
+            </div>
+            <div>
+              {t('components.contextStatus.occupancy', {
+                percent: occupancy.toFixed(1),
+                defaultValue: 'Occupancy: {{percent}}%',
+              })}
+            </div>
             {compressionLevel !== 'none' && (
-              <div>Compression: {compressionLevel.replace(/_/g, ' ').toUpperCase()}</div>
+              <div>
+                {t('components.contextStatus.compression', {
+                  level: compressionLevel.replace(/_/g, ' ').toUpperCase(),
+                  defaultValue: 'Compression: {{level}}',
+                })}
+              </div>
             )}
-            {totalSaved > 0 && <div>Saved: {formatTokens(totalSaved)} tokens</div>}
+            {totalSaved > 0 && (
+              <div>
+                {t('components.contextStatus.saved', {
+                  tokens: formatTokens(totalSaved),
+                  defaultValue: 'Saved: {{tokens}} tokens',
+                })}
+              </div>
+            )}
             {fromCache && messagesInSummary > 0 && (
-              <div>Summary: {messagesInSummary} messages cached</div>
+              <div>
+                {t('components.contextStatus.summaryCached', {
+                  count: messagesInSummary,
+                  defaultValue: 'Summary: {{count}} messages cached',
+                })}
+              </div>
             )}
             <div className="text-xs opacity-70 pt-1 border-t border-gray-600 mt-1">
-              Click for details
+              {t('components.contextStatus.clickDetails', { defaultValue: 'Click for details' })}
             </div>
           </div>
         }
@@ -110,7 +141,7 @@ export const ContextStatusIndicator: FC = () => {
           <div className="w-12 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
             <div
               className={`h-full rounded-full transition-[width] duration-500 ${barColorClass}`}
-              style={{ width: `${Math.min(occupancy, 100)}%` }}
+              style={{ width: `${String(Math.min(occupancy, 100))}%` }}
             />
           </div>
 

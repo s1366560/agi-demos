@@ -57,9 +57,7 @@ describe('HITLCenterPanel — inline resolve (Track F)', () => {
       ],
     });
 
-    render(
-      <HITLCenterPanel conversationId="conv-1" autoRefreshMs={0} />
-    );
+    render(<HITLCenterPanel conversationId="conv-1" autoRefreshMs={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('Ship it?')).toBeInTheDocument();
@@ -86,9 +84,7 @@ describe('HITLCenterPanel — inline resolve (Track F)', () => {
       ],
     });
 
-    render(
-      <HITLCenterPanel conversationId="conv-2" autoRefreshMs={0} />
-    );
+    render(<HITLCenterPanel conversationId="conv-2" autoRefreshMs={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('Grant network access?')).toBeInTheDocument();
@@ -114,9 +110,7 @@ describe('HITLCenterPanel — inline resolve (Track F)', () => {
       ],
     });
 
-    render(
-      <HITLCenterPanel conversationId="conv-3" autoRefreshMs={0} />
-    );
+    render(<HITLCenterPanel conversationId="conv-3" autoRefreshMs={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('Which repo?')).toBeInTheDocument();

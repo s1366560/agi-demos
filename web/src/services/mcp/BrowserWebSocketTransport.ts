@@ -17,8 +17,6 @@ export interface BrowserWebSocketTransportOptions {
   url: string;
   /** Connection timeout in milliseconds (default: 10000) */
   connectTimeout?: number | undefined;
-  /** Auth token to append as query parameter */
-  token?: string | undefined;
 }
 
 /**
@@ -40,11 +38,7 @@ export class BrowserWebSocketTransport implements Transport {
   sessionId?: string;
 
   constructor(options: BrowserWebSocketTransportOptions) {
-    const url = new URL(options.url);
-    if (options.token) {
-      url.searchParams.set('token', options.token);
-    }
-    this.url = url.toString();
+    this.url = options.url;
     this.connectTimeout = options.connectTimeout ?? 10_000;
   }
 
@@ -61,7 +55,7 @@ export class BrowserWebSocketTransport implements Transport {
         ws.onmessage = null;
         ws.onclose = null;
         ws.close();
-        reject(new Error(`WebSocket connection timeout after ${this.connectTimeout}ms`));
+        reject(new Error(`WebSocket connection timeout after ${String(this.connectTimeout)}ms`));
       }, this.connectTimeout);
 
       ws.onopen = () => {
@@ -87,8 +81,9 @@ export class BrowserWebSocketTransport implements Transport {
         try {
           const message = JSON.parse(event.data as string) as JSONRPCMessage;
           this.onmessage?.(message);
-        } catch (err) {
-          this.onerror?.(new Error(`Failed to parse message: ${err}`));
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.onerror?.(new Error(`Failed to parse message: ${message}`));
         }
       };
 
@@ -99,14 +94,15 @@ export class BrowserWebSocketTransport implements Transport {
     });
   }
 
-  async send(message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
+  send(message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket not connected');
     }
     this.ws.send(JSON.stringify(message));
+    return Promise.resolve();
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     const ws = this.ws;
     if (ws) {
       this.ws = null;
@@ -116,5 +112,6 @@ export class BrowserWebSocketTransport implements Transport {
       ws.onclose = null;
       ws.close(1000, 'Client closed');
     }
+    return Promise.resolve();
   }
 }

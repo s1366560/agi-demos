@@ -22,12 +22,9 @@ function renderContentWithMentions(content: string, isOwn: boolean): React.React
     }
     const mentionName = match[1] || match[2];
     parts.push(
-      <span
-        key={matchIndex}
-        className={`font-medium ${isOwn ? 'text-blue-200' : 'text-blue-600'}`}
-      >
+      <span key={matchIndex} className={`font-medium ${isOwn ? 'text-blue-200' : 'text-blue-600'}`}>
         @{mentionName}
-      </span>,
+      </span>
     );
     lastIndex = matchIndex + match[0].length;
   }
@@ -63,7 +60,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
             size="small"
           />
         </div>
-        
+
         <div className={`flex flex-col mx-2 ${isOwn ? 'items-end' : 'items-start'}`}>
           <div className="flex items-baseline space-x-2 mb-1">
             {!isOwn && (
@@ -75,7 +72,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
               {timeString}
             </Text>
           </div>
-          
+
           <div
             className={`px-4 py-2 rounded-2xl shadow-sm text-sm whitespace-pre-wrap break-words ${
               isOwn

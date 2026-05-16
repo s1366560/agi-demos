@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { FC } from 'react';
 
-import { Modal, Checkbox, Tag, Typography } from 'antd';
+import { useTranslation } from 'react-i18next';
+
+import { Checkbox, Modal, Tag, Typography } from 'antd';
 
 import { getCategoryColor } from './utils';
 
 import type { CyberGene } from '@/types/workspace';
-
-import type { CheckboxOptionType } from 'antd';
-
 
 export interface GeneAssignModalProps {
   open: boolean;
@@ -18,7 +18,7 @@ export interface GeneAssignModalProps {
   onCancel: () => void;
 }
 
-export const GeneAssignModal: React.FC<GeneAssignModalProps> = ({
+export const GeneAssignModal: FC<GeneAssignModalProps> = ({
   open,
   agentName,
   availableGenes,
@@ -26,6 +26,7 @@ export const GeneAssignModal: React.FC<GeneAssignModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export const GeneAssignModal: React.FC<GeneAssignModalProps> = ({
     setSelectedIds(checkedValues);
   };
 
-  const options: CheckboxOptionType[] = availableGenes.map((gene) => ({
+  const options = availableGenes.map((gene) => ({
     label: (
       <div className="flex items-center gap-2 py-1">
         <Typography.Text>{gene.name}</Typography.Text>
@@ -60,24 +61,33 @@ export const GeneAssignModal: React.FC<GeneAssignModalProps> = ({
 
   return (
     <Modal
-      title={`Assign Genes to ${agentName}`}
+      title={t('workspaceDetail.genes.assignTitle', {
+        agentName,
+        defaultValue: 'Assign Genes to {{agentName}}',
+      })}
       open={open}
       onOk={handleOk}
       onCancel={onCancel}
-      destroyOnClose
-      okText="Save Assignments"
+      destroyOnHidden
+      okText={t('workspaceDetail.genes.saveAssignments', 'Save Assignments')}
+      cancelText={t('common.cancel', 'Cancel')}
     >
       <div className="py-4">
         {availableGenes.length === 0 ? (
           <Typography.Text type="secondary">
-            No active genes available in this workspace.
+            {t(
+              'workspaceDetail.genes.noActiveGenes',
+              'No active genes available in this workspace.'
+            )}
           </Typography.Text>
         ) : (
           <Checkbox.Group
             className="flex flex-col gap-2"
             options={options}
             value={selectedIds}
-            onChange={(values) => { onChange(values as string[]); }}
+            onChange={(values) => {
+              onChange(values);
+            }}
           />
         )}
       </div>

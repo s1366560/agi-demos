@@ -195,7 +195,7 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     recalledMemories: stored.recalledMemories,
     agentNodes: new Map(),
     subagentPreviews: new Map(),
-    isTerminated: stored.isTerminated ?? false,
+    isTerminated: stored.isTerminated,
     terminationReason: stored.terminationReason ?? null,
     terminationRationale: stored.terminationRationale ?? null,
     goalCompletionSummary: stored.goalCompletionSummary ?? null,

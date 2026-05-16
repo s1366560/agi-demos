@@ -7,6 +7,8 @@
 
 import { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 export type SidebarConversationStatus = 'done' | 'running' | 'failed';
 
 export interface Conversation {
@@ -53,6 +55,7 @@ export function ChatHistorySidebar({
   searchQuery = '',
   onSearchChange,
 }: ChatHistorySidebarProps) {
+  const { t } = useTranslation();
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,11 +89,11 @@ export function ChatHistorySidebar({
   const getStatusLabel = (status: SidebarConversationStatus): string => {
     switch (status) {
       case 'done':
-        return 'Done';
+        return t('agent.chatHistory.status.done', { defaultValue: 'Done' });
       case 'running':
-        return 'Running';
+        return t('agent.chatHistory.status.running', { defaultValue: 'Running' });
       case 'failed':
-        return 'Failed';
+        return t('agent.chatHistory.status.failed', { defaultValue: 'Failed' });
       default:
         return '';
     }
@@ -102,11 +105,13 @@ export function ChatHistorySidebar({
         {/* New Chat Button */}
         <button
           onClick={onNewChat}
-          aria-label="New conversation"
-          className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 px-4 rounded-xl transition-colors shadow-sm text-sm font-semibold"
+          aria-label={t('agent.chatHistory.newConversationAria', {
+            defaultValue: 'New conversation',
+          })}
+          className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 px-4 rounded-lg transition-colors shadow-sm text-sm font-semibold"
         >
           <span className="material-symbols-outlined text-xl">add_comment</span>
-          <span>New Chat</span>
+          <span>{t('agent.chatHistory.newChat', { defaultValue: 'New Chat' })}</span>
         </button>
 
         {/* Search Input */}
@@ -121,9 +126,13 @@ export function ChatHistorySidebar({
             type="text"
             value={localSearch}
             onChange={handleSearchChange}
-            placeholder="Search history..."
-            aria-label="Search conversation history"
-            className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-[color,background-color,border-color,box-shadow,opacity,transform] placeholder:text-text-muted text-slate-900 dark:text-white shadow-md"
+            placeholder={t('agent.chatHistory.searchPlaceholder', {
+              defaultValue: 'Search history...',
+            })}
+            aria-label={t('agent.chatHistory.searchAria', {
+              defaultValue: 'Search conversation history',
+            })}
+            className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-[color,background-color,border-color,box-shadow,opacity,transform] placeholder:text-text-muted text-slate-900 dark:text-white shadow-md"
           />
         </div>
 
@@ -133,7 +142,7 @@ export function ChatHistorySidebar({
           {recentConversations.length > 0 && (
             <>
               <h3 className="text-2xs font-bold text-text-muted uppercase tracking-wider px-2 mb-2 mt-4">
-                Recent Sessions
+                {t('agent.chatHistory.recentSessions', { defaultValue: 'Recent Sessions' })}
               </h3>
               {recentConversations.map((conversation) => (
                 <button
@@ -142,7 +151,7 @@ export function ChatHistorySidebar({
                   aria-label={conversation.title}
                   aria-pressed={selectedConversationId === conversation.id}
                   aria-current={selectedConversationId === conversation.id ? 'true' : undefined}
-                  className={`w-full text-left p-3 rounded-xl cursor-pointer transition-colors group ${
+                  className={`w-full text-left p-3 rounded-lg cursor-pointer transition-colors group ${
                     selectedConversationId === conversation.id
                       ? 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark ring-1 ring-primary/30'
                       : 'hover:bg-slate-100 dark:hover:bg-white/5'
@@ -183,7 +192,7 @@ export function ChatHistorySidebar({
           {olderConversations.length > 0 && (
             <>
               <h3 className="text-2xs font-bold text-text-muted uppercase tracking-wider px-2 mb-2 mt-6">
-                Older
+                {t('agent.chatHistory.older', { defaultValue: 'Older' })}
               </h3>
               {olderConversations.map((conversation) => (
                 <button
@@ -191,7 +200,7 @@ export function ChatHistorySidebar({
                   onClick={() => onSelectConversation?.(conversation.id)}
                   aria-label={conversation.title}
                   aria-pressed={selectedConversationId === conversation.id}
-                  className="w-full text-left p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl cursor-pointer transition-colors group"
+                  className="w-full text-left p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg cursor-pointer transition-colors group"
                 >
                   <div className="flex justify-between items-start mb-1">
                     <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white truncate pr-2 leading-tight">
@@ -221,7 +230,9 @@ export function ChatHistorySidebar({
           {/* Empty State */}
           {filteredConversations.length === 0 && localSearch && (
             <div className="text-center py-8">
-              <p className="text-sm text-slate-400">No conversations found</p>
+              <p className="text-sm text-slate-400">
+                {t('agent.chatHistory.emptySearch', { defaultValue: 'No conversations found' })}
+              </p>
             </div>
           )}
         </div>

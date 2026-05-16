@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message } from 'antd';
 import { X, Folder, AlertCircle, Settings, Brain, Users, Cloud, Monitor } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
@@ -11,6 +12,37 @@ interface ProjectCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (() => void) | undefined;
+}
+
+type ProjectStatus = 'active' | 'paused' | 'archived';
+type ActiveTab = 'basic' | 'memory' | 'graph' | 'sandbox';
+type SandboxType = 'cloud' | 'local';
+
+interface ProjectFormData {
+  name: string;
+  description: string;
+  status: ProjectStatus;
+  memory_rules: {
+    max_episodes: number;
+    retention_days: number;
+    auto_refresh: boolean;
+    refresh_interval: number;
+  };
+  graph_config: {
+    max_nodes: number;
+    max_edges: number;
+    similarity_threshold: number;
+    community_detection: boolean;
+  };
+  sandbox_config: {
+    sandbox_type: SandboxType;
+    local_config: {
+      workspace_path: string;
+      tunnel_url: string;
+      host: string;
+      port: number;
+    };
+  };
 }
 
 export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
@@ -22,10 +54,10 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   const { createProject, isLoading, error } = useProjectStore();
   const { currentTenant } = useTenantStore();
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ProjectFormData>({
     name: '',
     description: '',
-    status: 'active' as const,
+    status: 'active',
     memory_rules: {
       max_episodes: 1000,
       retention_days: 30,
@@ -39,7 +71,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       community_detection: true,
     },
     sandbox_config: {
-      sandbox_type: 'cloud' as 'cloud' | 'local',
+      sandbox_type: 'cloud',
       local_config: {
         workspace_path: '/workspace',
         tunnel_url: '',
@@ -49,7 +81,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
     },
   });
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'memory' | 'graph' | 'sandbox'>('basic');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('basic');
 
   const resetFormData = () => {
     setFormData({
@@ -80,7 +112,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!currentTenant) return;
 
@@ -101,9 +133,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       onClose();
       resetFormData();
     } catch (_error) {
-      void message.error(
-        _error instanceof Error ? _error.message : 'Failed to create project'
-      );
+      void message.error(_error instanceof Error ? _error.message : 'Failed to create project');
       console.error('ProjectCreateModal: create failed', _error);
     }
   };
@@ -121,7 +151,9 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Folder className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('project.create.title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('project.create.title')}
+            </h2>
           </div>
           <button
             onClick={handleClose}
@@ -197,7 +229,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
           </nav>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto" id="project-form">
+        <form
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+          className="flex-1 overflow-y-auto"
+          id="project-form"
+        >
           <div className="p-6 space-y-4">
             {error && (
               <div
@@ -275,7 +313,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     id="project-create-status"
                     value={formData.status}
                     onChange={(e) => {
-                      setFormData({ ...formData, status: e.target.value as any });
+                      setFormData({ ...formData, status: e.target.value as ProjectStatus });
                     }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                     disabled={isLoading}
@@ -561,7 +599,8 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <strong>{t('project.create.sandboxIntroPrefix')}</strong>{t('project.create.sandboxIntroBody')}
+                    <strong>{t('project.create.sandboxIntroPrefix')}</strong>
+                    {t('project.create.sandboxIntroBody')}
                   </p>
                 </div>
 
@@ -653,24 +692,20 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         htmlFor="project-create-tunnel-url"
                         className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                       >
-                        {t('project.create.tunnelUrlLabel')} <span className="text-gray-400">{t('project.create.optional')}</span>
+                        {t('project.create.tunnelUrlLabel')}{' '}
+                        <span className="text-gray-400">{t('project.create.optional')}</span>
                       </label>
                       <input
                         type="url"
                         id="project-create-tunnel-url"
-                        value={formData.sandbox_config.local_config?.tunnel_url || ''}
+                        value={formData.sandbox_config.local_config.tunnel_url}
                         onChange={(e) => {
                           setFormData({
                             ...formData,
                             sandbox_config: {
                               ...formData.sandbox_config,
                               local_config: {
-                                ...(formData.sandbox_config.local_config || {
-                                  workspace_path: '/workspace',
-                                  tunnel_url: '',
-                                  host: 'localhost',
-                                  port: 8765,
-                                }),
+                                ...formData.sandbox_config.local_config,
                                 tunnel_url: e.target.value,
                               },
                             },
@@ -690,24 +725,20 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         htmlFor="project-create-workspace-path"
                         className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
                       >
-                        {t('project.create.workspacePathLabel')} <span className="text-gray-400">{t('project.create.optional')}</span>
+                        {t('project.create.workspacePathLabel')}{' '}
+                        <span className="text-gray-400">{t('project.create.optional')}</span>
                       </label>
                       <input
                         type="text"
                         id="project-create-workspace-path"
-                        value={formData.sandbox_config.local_config?.workspace_path || ''}
+                        value={formData.sandbox_config.local_config.workspace_path}
                         onChange={(e) => {
                           setFormData({
                             ...formData,
                             sandbox_config: {
                               ...formData.sandbox_config,
                               local_config: {
-                                ...(formData.sandbox_config.local_config || {
-                                  workspace_path: '/workspace',
-                                  tunnel_url: '',
-                                  host: 'localhost',
-                                  port: 8765,
-                                }),
+                                ...formData.sandbox_config.local_config,
                                 workspace_path: e.target.value,
                               },
                             },
@@ -724,7 +755,8 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
 
                     <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
                       <p className="text-sm text-purple-800 dark:text-purple-300">
-                        <strong>{t('project.create.tipPrefix')}</strong>{t('project.create.tipIntro')}
+                        <strong>{t('project.create.tipPrefix')}</strong>
+                        {t('project.create.tipIntro')}
                       </p>
                       <ol className="mt-2 text-sm text-purple-700 dark:text-purple-400 list-decimal list-inside space-y-1">
                         <li>{t('project.create.tipStep1')}</li>
@@ -753,7 +785,6 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             form="project-form"
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading || !formData.name.trim()}
-            onClick={handleSubmit}
           >
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">

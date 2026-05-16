@@ -35,12 +35,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
 
   // Load data if missing
   useEffect(() => {
-    if (tenants.length === 0) listTenants();
+    if (tenants.length === 0) void listTenants();
   }, [tenants.length, listTenants]);
 
   useEffect(() => {
     if (mode === 'project' && currentTenant && projects.length === 0) {
-      listProjects(currentTenant.id);
+      void listProjects(currentTenant.id);
     }
   }, [mode, currentTenant, projects.length, listProjects]);
 
@@ -155,7 +155,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
   const handleTenantSwitch = (tenant: Tenant) => {
     setCurrentTenant(tenant);
     setIsOpen(false);
-    navigate(`/tenant/${tenant.id}`);
+    void navigate(`/tenant/${tenant.id}`);
   };
 
   const handleProjectSwitch = (project: Project) => {
@@ -169,19 +169,19 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
       const subPath = currentPath.substring(
         currentPath.indexOf(`/project/${projectId}`) + `/project/${projectId}`.length
       );
-      navigate(`${tenantBasePath}/project/${project.id}${subPath}`);
+      void navigate(`${tenantBasePath}/project/${project.id}${subPath}`);
     } else {
       // Default to overview
-      navigate(`${tenantBasePath}/project/${project.id}`);
+      void navigate(`${tenantBasePath}/project/${project.id}`);
     }
   };
 
   const handleBackToTenant = () => {
     setIsOpen(false);
     if (currentTenant) {
-      navigate(`/tenant/${currentTenant.id}`);
+      void navigate(`/tenant/${currentTenant.id}`);
     } else {
-      navigate('/tenant');
+      void navigate('/tenant');
     }
   };
 
@@ -291,7 +291,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                   ref={(el) => {
                     menuItemRefs.current[tenants.length] = el;
                   }}
-                  onClick={() => navigate('/tenants/new')}
+                  onClick={() => {
+                    void navigate('/tenants/new');
+                  }}
                   onKeyDown={(e) => {
                     handleMenuKeyDown(e, tenants.length);
                   }}

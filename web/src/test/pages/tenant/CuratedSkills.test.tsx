@@ -78,9 +78,7 @@ describe('CuratedSkills (tenant)', () => {
   });
 
   it('does not render a version selector when a source has only one version', async () => {
-    vi.mocked(curatedSkillAPI.list).mockResolvedValue([
-      makeCurated({ id: 'c1', semver: '0.1.0' }),
-    ]);
+    vi.mocked(curatedSkillAPI.list).mockResolvedValue([makeCurated({ id: 'c1', semver: '0.1.0' })]);
     render(withQuery(<CuratedSkills />));
     await waitFor(() => {
       expect(screen.getByText('echo')).toBeInTheDocument();

@@ -8,21 +8,48 @@
 import { ReactNode, memo, useState, useMemo, useRef, useEffect } from 'react';
 import type { ComponentType } from 'react';
 
-import { Brain, Wrench, Sparkles, Bot, ChevronRight, AlertCircle, ChevronUp, ChevronDown, TerminalSquare, Loader2, Check, X, FileEdit, FileInput, Image as ImageIcon, Film, AudioLines, FileText, Table as TableIcon, Presentation, FileArchive, Code as CodeIcon, File as FileIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+import {
+  Brain,
+  Wrench,
+  Sparkles,
+  Bot,
+  ChevronRight,
+  AlertCircle,
+  ChevronUp,
+  ChevronDown,
+  TerminalSquare,
+  Loader2,
+  Check,
+  X,
+  FileEdit,
+  FileInput,
+  Image as ImageIcon,
+  Film,
+  AudioLines,
+  FileText,
+  Table as TableIcon,
+  Presentation,
+  FileArchive,
+  Code as CodeIcon,
+  File as FileIcon,
+} from 'lucide-react';
 
 import { foldTextWithMetadata } from '../../../utils/toolResultUtils';
 
 import { MarkdownContent } from './MarkdownContent';
 
+type AgentIconName = 'psychology' | 'construction' | 'auto_awesome' | 'smart_toy';
 
-const getAgentIcon = (icon: string): ComponentType<{ size?: number; className?: string }> => {
-  switch (icon) {
-    case 'psychology': return Brain;
-    case 'construction': return Wrench;
-    case 'auto_awesome': return Sparkles;
-    case 'smart_toy': return Bot;
-    default: return Brain;
-  }
+const AGENT_ICON_COMPONENTS: Record<
+  AgentIconName,
+  ComponentType<{ size?: number; className?: string }>
+> = {
+  psychology: Brain,
+  construction: Wrench,
+  auto_awesome: Sparkles,
+  smart_toy: Bot,
 };
 
 export interface MessageStreamProps {
@@ -75,11 +102,10 @@ export interface UserMessageProps {
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${bytes.toString()} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
 
 const getFileIconComponent = (mimeType: string) => {
   if (mimeType.startsWith('image/')) return ImageIcon;
@@ -100,7 +126,6 @@ const getFileIconComponent = (mimeType: string) => {
     return CodeIcon;
   return FileIcon;
 };
-
 
 export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMessageProps) {
   return (
@@ -147,10 +172,13 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
           <div className={`flex flex-col gap-1 ${forcedSkillName ? 'mt-2' : 'mt-0.5'}`}>
             {fileMetadata.map((file, idx) => (
               <div
-                key={idx}
+                key={idx.toString()}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg"
               >
-                {(() => { const Icon = getFileIconComponent(file.mime_type); return <Icon size={16} className="text-slate-500 dark:text-slate-400" />; })()}
+                {(() => {
+                  const Icon = getFileIconComponent(file.mime_type);
+                  return <Icon size={16} className="text-slate-500 dark:text-slate-400" />;
+                })()}
                 <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-50">
                   {file.filename}
                 </span>
@@ -171,7 +199,7 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
  */
 export interface AgentSectionProps {
   /** Icon type */
-  icon?: 'psychology' | 'construction' | 'auto_awesome' | 'smart_toy' | undefined;
+  icon?: AgentIconName | undefined;
   /** Icon background color */
   iconBg?: string | undefined;
   /** Icon color */
@@ -188,11 +216,12 @@ export function AgentSection({
   opacity = false,
   children,
 }: AgentSectionProps) {
+  const AgentIcon = AGENT_ICON_COMPONENTS[icon];
+
   return (
     <div className={`flex items-start gap-4 ${opacity ? 'opacity-70' : ''}`}>
       <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center shrink-0`}>
-        {/* eslint-disable-next-line react-hooks/static-components */}
-        {(() => { const Icon = getAgentIcon(icon); return <Icon size={18} className={iconColor} />; })()}
+        <AgentIcon size={18} className={iconColor} />
       </div>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
@@ -219,16 +248,27 @@ export function ReasoningLogCard({
   completed = false,
   expanded = true,
 }: ReasoningLogCardProps) {
+  const { t } = useTranslation();
+
   return (
-    <div className="bg-slate-50 dark:bg-surface-dark/50 border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none p-4">
+    <div className="bg-slate-50 dark:bg-surface-dark/50 border border-slate-200 dark:border-border-dark rounded-md rounded-tl-none p-4">
       <details className="group/reasoning" open={expanded}>
         <summary className="text-sm text-slate-600 dark:text-slate-300 cursor-pointer list-none flex items-center justify-between select-none">
           <div className="flex items-center gap-2">
-            <ChevronRight size={14} className="group-open/reasoning:rotate-90 transition-transform" />
-            <span className="font-semibold uppercase text-2xs text-primary">Reasoning Log</span>
+            <ChevronRight
+              size={14}
+              className="group-open/reasoning:rotate-90 transition-transform"
+            />
+            <span className="font-semibold uppercase text-2xs text-primary">
+              {t('components.messageStream.reasoningLog', { defaultValue: 'Reasoning Log' })}
+            </span>
             <span className="text-xs">{summary}</span>
           </div>
-            {completed && <span className="text-2xs font-bold text-emerald-500">COMPLETE</span>}
+          {completed && (
+            <span className="text-2xs font-bold text-emerald-500">
+              {t('components.messageStream.complete', { defaultValue: 'COMPLETE' })}
+            </span>
+          )}
         </summary>
         <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed space-y-2">
           {steps.map((step, index) => (
@@ -273,6 +313,7 @@ interface ToolResultDisplayProps {
 }
 
 function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Memoize the folded result calculation
@@ -288,24 +329,29 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-         <label className="text-2xs uppercase font-bold text-red-600 flex items-center gap-1">
-             <AlertCircle size={12} />
-             Error
-           </label>
-           {isFolded && (
-             <button
-               type="button"
-               onClick={() => {
-                 setIsExpanded(!isExpanded);
-               }}
-               className="text-2xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
-             >
+          <label className="text-2xs uppercase font-bold text-red-600 flex items-center gap-1">
+            <AlertCircle size={12} />
+            {t('components.messageStream.error', { defaultValue: 'Error' })}
+          </label>
+          {isFolded && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsExpanded(!isExpanded);
+              }}
+              className="text-2xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+            >
               {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {isExpanded ? 'Show Less' : `Show Full (${totalLines} lines)`}
+              {isExpanded
+                ? t('components.messageStream.showLess', { defaultValue: 'Show Less' })
+                : t('components.messageStream.showFullLines', {
+                    defaultValue: 'Show Full ({{count}} lines)',
+                    count: totalLines,
+                  })}
             </button>
           )}
         </div>
-        <div className="px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto max-h-48 overflow-y-auto">
+        <div className="px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-md text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto max-h-48 overflow-y-auto">
           <pre className="whitespace-pre-wrap break-words">{displayText}</pre>
         </div>
       </div>
@@ -315,25 +361,30 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-       <label className="text-2xs uppercase font-bold text-emerald-600 flex items-center gap-1">
-           <TerminalSquare size={12} />
-           Output
-         </label>
-         {isFolded && (
-           <button
-             type="button"
-             onClick={() => {
-               setIsExpanded(!isExpanded);
-             }}
-             className="text-2xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
-           >
+        <label className="text-2xs uppercase font-bold text-emerald-600 flex items-center gap-1">
+          <TerminalSquare size={12} />
+          {t('components.messageStream.output', { defaultValue: 'Output' })}
+        </label>
+        {isFolded && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsExpanded(!isExpanded);
+            }}
+            className="text-2xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+          >
             {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            {isExpanded ? 'Show Less' : `Show Full (${totalLines} lines)`}
+            {isExpanded
+              ? t('components.messageStream.showLess', { defaultValue: 'Show Less' })
+              : t('components.messageStream.showFullLines', {
+                  defaultValue: 'Show Full ({{count}} lines)',
+                  count: totalLines,
+                })}
           </button>
         )}
       </div>
       <div
-        className={`px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-x-auto ${isExpanded ? 'max-h-96' : 'max-h-48'} overflow-y-auto`}
+        className={`px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-md text-xs text-slate-700 dark:text-slate-300 overflow-x-auto ${isExpanded ? 'max-h-96' : 'max-h-48'} overflow-y-auto`}
       >
         <MarkdownContent
           content={displayText}
@@ -362,7 +413,7 @@ export interface ToolExecutionCardDisplayProps {
   /** Execution duration in milliseconds */
   duration?: number | undefined;
   /** Execution result - can be string or object */
-  result?: string | unknown | undefined;
+  result?: unknown;
   /** Error message */
   error?: string | undefined;
   /** Whether to show details expanded by default */
@@ -380,6 +431,7 @@ export function ToolExecutionCardDisplay({
   error,
   defaultExpanded = false,
 }: ToolExecutionCardDisplayProps) {
+  const { t } = useTranslation();
   const streamingArgsRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll streaming arguments to bottom
@@ -390,7 +442,7 @@ export function ToolExecutionCardDisplay({
   }, [partialArguments, status]);
 
   const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
+    if (ms < 1000) return `${ms.toString()}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${(ms / 60000).toFixed(1)}m`;
   };
@@ -402,33 +454,33 @@ export function ToolExecutionCardDisplay({
     switch (status) {
       case 'preparing':
         return (
-           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
-             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-             Preparing
-           </div>
-         );
-       case 'running':
-         return (
-           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
-             <Loader2 size={12} className="animate-spin" />
-             Running
-           </div>
-         );
-       case 'success':
-         return (
-           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-2xs font-bold uppercase tracking-wider">
-             <Check size={12} />
-             Success
-             {duration !== undefined && (
-               <span className="ml-1 text-emerald-500/70">({formatDuration(duration)})</span>
-             )}
-           </div>
-         );
-       case 'error':
-         return (
-           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 text-2xs font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
+            {t('components.messageStream.status.preparing', { defaultValue: 'Preparing' })}
+          </div>
+        );
+      case 'running':
+        return (
+          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-2xs font-bold uppercase tracking-wider">
+            <Loader2 size={12} className="animate-spin" />
+            {t('components.messageStream.status.running', { defaultValue: 'Running' })}
+          </div>
+        );
+      case 'success':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-2xs font-bold uppercase tracking-wider">
+            <Check size={12} />
+            {t('components.messageStream.status.success', { defaultValue: 'Success' })}
+            {duration !== undefined && (
+              <span className="ml-1 text-emerald-500/70">({formatDuration(duration)})</span>
+            )}
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 text-2xs font-bold uppercase tracking-wider">
             <X size={12} />
-            Failed
+            {t('components.messageStream.status.failed', { defaultValue: 'Failed' })}
             {duration !== undefined && (
               <span className="ml-1 text-red-500/70">({formatDuration(duration)})</span>
             )}
@@ -440,7 +492,7 @@ export function ToolExecutionCardDisplay({
   const hasDetails = parameters || partialArguments || executionMode || formattedResult || error;
 
   return (
-    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md rounded-tl-none shadow-sm overflow-hidden">
       <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-border-dark flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Wrench size={20} className="text-primary" />
@@ -456,19 +508,21 @@ export function ToolExecutionCardDisplay({
         >
           <summary className="px-4 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-1 select-none">
             <ChevronRight size={14} className="group-open:rotate-90 transition-transform" />
-            <span>Details</span>
+            <span>{t('components.messageStream.details', { defaultValue: 'Details' })}</span>
           </summary>
           <div className="p-4 pt-0 space-y-4">
             {/* Preparing State - streaming arguments */}
             {status === 'preparing' && partialArguments && (
               <div className="space-y-1">
-                 <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
-                   <FileEdit size={12} />
-                   Building Arguments
-                 </label>
+                <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                  <FileEdit size={12} />
+                  {t('components.messageStream.buildingArguments', {
+                    defaultValue: 'Building Arguments',
+                  })}
+                </label>
                 <div
                   ref={streamingArgsRef}
-                  className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto"
+                  className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-md text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto"
                 >
                   <pre className="whitespace-pre-wrap break-words">
                     {partialArguments}
@@ -481,10 +535,12 @@ export function ToolExecutionCardDisplay({
             {/* Preparing State - no arguments yet */}
             {status === 'preparing' && !partialArguments && (
               <div className="space-y-2">
-                <div className="border border-dashed border-blue-200 dark:border-blue-500/20 rounded-lg p-4 flex items-center justify-center gap-2 text-center bg-blue-50/50 dark:bg-blue-500/5">
+                <div className="border border-dashed border-blue-200 dark:border-blue-500/20 rounded-md p-4 flex items-center justify-center gap-2 text-center bg-blue-50/50 dark:bg-blue-500/5">
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
                   <p className="text-xs text-blue-600 dark:text-blue-400 italic">
-                    Preparing tool call...
+                    {t('components.messageStream.preparingToolCall', {
+                      defaultValue: 'Preparing tool call...',
+                    })}
                   </p>
                 </div>
               </div>
@@ -492,12 +548,12 @@ export function ToolExecutionCardDisplay({
 
             {/* Input Parameters */}
             {parameters && status !== 'preparing' && (
-             <div className="space-y-1">
-                 <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
-                   <FileInput size={12} />
-                   Input
-                 </label>
-                <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto">
+              <div className="space-y-1">
+                <label className="text-2xs uppercase font-bold text-text-muted flex items-center gap-1">
+                  <FileInput size={12} />
+                  {t('components.messageStream.input', { defaultValue: 'Input' })}
+                </label>
+                <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-md text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto">
                   <pre className="whitespace-pre-wrap break-words">
                     {JSON.stringify(parameters, null, 2)}
                   </pre>
@@ -505,27 +561,34 @@ export function ToolExecutionCardDisplay({
               </div>
             )}
 
-             {/* Execution Mode */}
-             {executionMode && (
-               <div className="space-y-1">
-                 <label className="text-2xs uppercase font-bold text-text-muted">
-                   Execution Mode
-                 </label>
-                <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted">
+            {/* Execution Mode */}
+            {executionMode && (
+              <div className="space-y-1">
+                <label className="text-2xs uppercase font-bold text-text-muted">
+                  {t('components.messageStream.executionMode', {
+                    defaultValue: 'Execution Mode',
+                  })}
+                </label>
+                <div className="px-3 py-2 bg-slate-100 dark:bg-background-dark/50 rounded-md text-xs font-mono text-slate-600 dark:text-text-muted">
                   {executionMode}
                 </div>
               </div>
             )}
 
-             {/* Running State */}
-             {status === 'running' && (
-               <div className="space-y-2">
-                 <label className="text-2xs uppercase font-bold text-text-muted">
-                   Live Results
-                 </label>
-                <div className="border border-dashed border-slate-200 dark:border-border-dark rounded-lg p-6 flex flex-col items-center justify-center gap-2 text-center bg-slate-50/50 dark:bg-background-dark/20">
-                  <Loader2 size={30} className="text-slate-300 dark:text-border-dark animate-spin" />
-                  <p className="text-xs text-text-muted italic">Executing...</p>
+            {/* Running State */}
+            {status === 'running' && (
+              <div className="space-y-2">
+                <label className="text-2xs uppercase font-bold text-text-muted">
+                  {t('components.messageStream.liveResults', { defaultValue: 'Live Results' })}
+                </label>
+                <div className="border border-dashed border-slate-200 dark:border-border-dark rounded-md p-6 flex flex-col items-center justify-center gap-2 text-center bg-slate-50/50 dark:bg-background-dark/20">
+                  <Loader2
+                    size={30}
+                    className="text-slate-300 dark:text-border-dark animate-spin"
+                  />
+                  <p className="text-xs text-text-muted italic">
+                    {t('components.messageStream.executing', { defaultValue: 'Executing...' })}
+                  </p>
                 </div>
               </div>
             )}

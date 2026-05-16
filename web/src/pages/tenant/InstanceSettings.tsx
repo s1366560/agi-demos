@@ -16,7 +16,13 @@ import { providerAPI } from '@/services/api';
 import { instanceService } from '@/services/instanceService';
 import type { InstanceLlmConfigUpdate } from '@/services/instanceService';
 
-import { useLazyMessage, LazyPopconfirm, LazySpin, LazyButton, LazySelect } from '@/components/ui/lazyAntd';
+import {
+  useLazyMessage,
+  LazyPopconfirm,
+  LazySpin,
+  LazyButton,
+  LazySelect,
+} from '@/components/ui/lazyAntd';
 
 import {
   useCurrentInstance,
@@ -64,15 +70,14 @@ export const InstanceSettings: React.FC = () => {
         .then((inst) => {
           setCurrentInstance(inst);
           if (lastSyncedId.current !== inst.id) {
+            const descriptionValue = (inst as unknown as Record<string, unknown>).description;
             lastSyncedId.current = inst.id;
             setName(inst.name);
-            setDescription(
-              ((inst as unknown as Record<string, unknown>).description as string) ?? ''
-            );
+            setDescription(typeof descriptionValue === 'string' ? descriptionValue : '');
             setIsDirty(false);
           }
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.error('Failed to get instance details:', err);
         });
     }
@@ -95,7 +100,7 @@ export const InstanceSettings: React.FC = () => {
     providerAPI
       .list({ include_inactive: false })
       .then(setProviders)
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error('Failed to list providers:', err);
       });
   }, []);
@@ -111,7 +116,7 @@ export const InstanceSettings: React.FC = () => {
         setHasApiKeyOverride(cfg.has_api_key_override);
         setLlmApiKeyOverride('');
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error('Failed to get LLM config:', err);
         message?.error(t('tenant.instances.settings.llmConfigLoadError'));
       })
@@ -132,7 +137,7 @@ export const InstanceSettings: React.FC = () => {
       .then((res) => {
         setAvailableModels(res.models.chat);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error('Failed to list models:', err);
         setAvailableModels([]);
       });
@@ -164,7 +169,7 @@ export const InstanceSettings: React.FC = () => {
     try {
       await deleteInstance(instanceId);
       message?.success(t('tenant.instances.settings.deleteSuccess'));
-      navigate('../..');
+      void navigate('../..');
     } catch (err) {
       console.error('Failed to delete instance:', err);
     }
@@ -390,12 +395,7 @@ export const InstanceSettings: React.FC = () => {
             cancelText={t('common.cancel')}
             okButtonProps={{ danger: true }}
           >
-            <LazyButton
-              type="primary"
-              danger
-              disabled={isSubmitting}
-              icon={<Trash2 size={16} />}
-            >
+            <LazyButton type="primary" danger disabled={isSubmitting} icon={<Trash2 size={16} />}>
               {t('common.delete')}
             </LazyButton>
           </LazyPopconfirm>

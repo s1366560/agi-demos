@@ -8,6 +8,9 @@ vi.mock('../../services/api', () => ({
     login: vi.fn(),
     verifyToken: vi.fn(),
   },
+  tenantAPI: {
+    list: vi.fn().mockResolvedValue({ tenants: [], total: 0, page: 1, page_size: 20 }),
+  },
 }));
 
 // Helper to get token from Zustand persist storage

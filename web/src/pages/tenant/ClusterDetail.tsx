@@ -8,7 +8,6 @@ import {
   Row,
   Col,
   Statistic,
-  Table,
   Tag,
   Button,
   Space,
@@ -18,7 +17,6 @@ import {
   Typography,
   Descriptions,
   Progress,
-  Timeline,
   Empty,
   Spin,
   Modal,
@@ -26,15 +24,7 @@ import {
   Input,
   Select,
 } from 'antd';
-import {
-  Server,
-  Network,
-  HardDrive,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  Clock,
-} from 'lucide-react';
+import { Server, Network, HardDrive } from 'lucide-react';
 
 import {
   useCurrentCluster,
@@ -44,42 +34,57 @@ import {
   useClusterActions,
 } from '../../stores/cluster';
 
-import type { ColumnsType } from 'antd/es/table';
+import type { ClusterUpdate } from '../../services/clusterService';
 
 const { TextArea } = Input;
 const { Option } = Select;
 const { Title, Text } = Typography;
 
-interface NodeInfo {
-  id: string;
+const CLUSTER_PROVIDER_OPTIONS = [
+  { value: 'docker', label: 'Docker' },
+  { value: 'vke', label: 'Volcengine VKE' },
+  { value: 'ack', label: 'Alibaba ACK' },
+  { value: 'tke', label: 'Tencent TKE' },
+  { value: 'custom', label: 'Custom Kubernetes' },
+] as const;
+
+interface ClusterEditFormValues {
   name: string;
-  status: string;
-  cpu_usage: number;
-  memory_usage: number;
-  roles: string[];
-  kubelet_version: string;
+  compute_provider?: string | undefined;
+  proxy_endpoint?: string | undefined;
+  provider_config?: string | undefined;
 }
 
-interface ClusterEvent {
-  id: string;
-  type: string;
-  message: string;
-  reason: string;
-  count: number;
-  timestamp: string;
-  source: string;
-}
+const parseProviderConfig = (value: string | undefined): Record<string, unknown> | undefined => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
 
-// Mock data for nodes and events (would come from API in real implementation)
-const mockNodes: NodeInfo[] = [];
-const mockEvents: ClusterEvent[] = [];
+  const parsed: unknown = JSON.parse(trimmed);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Provider config must be a JSON object');
+  }
+
+  return parsed as Record<string, unknown>;
+};
+
+const usageColor = (usage: number) => {
+  if (usage > 80) {
+    return '#ff4d4f';
+  }
+  if (usage > 60) {
+    return '#faad14';
+  }
+  return '#3f8600';
+};
 
 export const ClusterDetail: React.FC = () => {
   const { clusterId } = useParams<{ clusterId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<ClusterEditFormValues>();
 
   const cluster = useCurrentCluster();
   const clusterHealth = useClusterHealth();
@@ -90,8 +95,8 @@ export const ClusterDetail: React.FC = () => {
 
   useEffect(() => {
     if (clusterId) {
-      getCluster(clusterId);
-      getClusterHealth(clusterId);
+      void getCluster(clusterId);
+      void getClusterHealth(clusterId);
     }
     return () => {
       clearError();
@@ -100,7 +105,7 @@ export const ClusterDetail: React.FC = () => {
   }, [clusterId, getCluster, getClusterHealth, clearError, reset]);
 
   const handleBack = () => {
-    navigate('/clusters');
+    void navigate('/clusters');
   };
 
   const handleEdit = () => {
@@ -108,10 +113,11 @@ export const ClusterDetail: React.FC = () => {
       form.setFieldsValue({
         name: cluster.name,
         compute_provider: cluster.compute_provider,
-        proxy_endpoint: cluster.proxy_endpoint,
-        provider_config: cluster.provider_config
-          ? JSON.stringify(cluster.provider_config, null, 2)
-          : '',
+        proxy_endpoint: cluster.proxy_endpoint ?? undefined,
+        provider_config:
+          Object.keys(cluster.provider_config).length > 0
+            ? JSON.stringify(cluster.provider_config, null, 2)
+            : '',
       });
       setEditModalVisible(true);
     }
@@ -120,13 +126,16 @@ export const ClusterDetail: React.FC = () => {
   const handleEditSubmit = async () => {
     try {
       const values = await form.validateFields();
-      const updateData: Record<string, unknown> = {
-        name: values.name,
-        compute_provider: values.compute_provider,
-        proxy_endpoint: values.proxy_endpoint,
-      };
-      if (values.provider_config) {
-        updateData.provider_config = JSON.parse(values.provider_config);
+      const updateData: ClusterUpdate = { name: values.name };
+      if (values.compute_provider !== undefined) {
+        updateData.compute_provider = values.compute_provider;
+      }
+      if (values.proxy_endpoint !== undefined) {
+        updateData.proxy_endpoint = values.proxy_endpoint;
+      }
+      const providerConfig = parseProviderConfig(values.provider_config);
+      if (providerConfig) {
+        updateData.provider_config = providerConfig;
       }
       if (clusterId) {
         await updateCluster(clusterId, updateData);
@@ -142,7 +151,7 @@ export const ClusterDetail: React.FC = () => {
     if (clusterId) {
       await deleteCluster(clusterId);
       message.success(t('tenant.clusters.deletedSuccess'));
-      navigate('/clusters');
+      void navigate('/clusters');
     }
   };
 
@@ -174,101 +183,19 @@ export const ClusterDetail: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active':
-      case 'connected':
-      case 'healthy':
-        return <CheckCircle2 className="text-[#52c41a]" size={16} />;
-      case 'pending':
-      case 'provisioning':
-        return <Clock className="text-[#1890ff]" size={16} />;
-      case 'warning':
-      case 'maintenance':
-        return <AlertCircle className="text-[#faad14]" size={16} />;
-      case 'error':
-      case 'disconnected':
-      case 'unhealthy':
-        return <XCircle className="text-[#ff4d4f]" size={16} />;
-      default:
-        return <Clock size={16} />;
-    }
-  };
-
-  const nodeColumns: ColumnsType<NodeInfo> = [
-    {
-      title: t('tenant.clusters.detail.nodes.name'),
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string, record) => (
-        <Space>
-          {getStatusIcon(record.status)}
-          {name}
-        </Space>
-      ),
-    },
-    {
-      title: t('tenant.clusters.detail.nodes.status'),
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: string) => <Tag color={getStatusColor(status)}>{status}</Tag>,
-    },
-    {
-      title: t('tenant.clusters.detail.nodes.cpu'),
-      dataIndex: 'cpu_usage',
-      key: 'cpu_usage',
-      render: (usage: number) => (
-        <Progress percent={usage} size="small" status={usage > 80 ? 'exception' : 'active'} />
-      ),
-    },
-    {
-      title: t('tenant.clusters.detail.nodes.memory'),
-      dataIndex: 'memory_usage',
-      key: 'memory_usage',
-      render: (usage: number) => (
-        <Progress percent={usage} size="small" status={usage > 80 ? 'exception' : 'active'} />
-      ),
-    },
-    {
-      title: t('tenant.clusters.detail.nodes.roles'),
-      dataIndex: 'roles',
-      key: 'roles',
-      render: (roles: string[]) => roles.map((role) => <Tag key={role}>{role}</Tag>),
-    },
-    {
-      title: t('tenant.clusters.detail.nodes.version'),
-      dataIndex: 'kubelet_version',
-      key: 'kubelet_version',
-    },
-  ];
-
-  const renderEventTimeline = () => {
-    if (mockEvents.length === 0) {
+  const renderUsage = (usage: number | null | undefined) => {
+    if (usage == null) {
       return (
-        <Empty
-          description={t('tenant.clusters.detail.noEvents')}
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
+        <Text type="secondary">
+          {t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+        </Text>
       );
     }
-
     return (
-      <Timeline
-        items={mockEvents.map((event) => ({
-          color: event.type === 'Warning' ? 'red' : 'blue',
-          children: (
-            <div>
-              <Text strong>{event.reason}</Text>
-              <br />
-              <Text type="secondary">{event.message}</Text>
-              <br />
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {new Date(event.timestamp).toLocaleString()} - {event.source}
-                {event.count > 1 && ` (x${event.count})`}
-              </Text>
-            </div>
-          ),
-        }))}
+      <Progress
+        percent={Number(usage.toFixed(2))}
+        size="small"
+        status={usage > 80 ? 'exception' : 'active'}
       />
     );
   };
@@ -327,13 +254,20 @@ export const ClusterDetail: React.FC = () => {
           </div>
         </div>
         <Space>
-          <Button onClick={handleRefreshHealth} loading={isLoading}>
+          <Button
+            onClick={() => {
+              void handleRefreshHealth();
+            }}
+            loading={isLoading}
+          >
             {t('common.actions.checkHealth')}
           </Button>
           <Button onClick={handleEdit}>{t('common.edit')}</Button>
           <Popconfirm
             title={t('tenant.clusters.deleteConfirm')}
-            onConfirm={handleDelete}
+            onConfirm={() => {
+              void handleDelete();
+            }}
             okText={t('common.yes')}
             cancelText={t('common.no')}
             okButtonProps={{ danger: true }}
@@ -370,13 +304,10 @@ export const ClusterDetail: React.FC = () => {
               value={clusterHealth?.cpu_usage ?? 0}
               suffix="%"
               prefix={<HardDrive size={20} />}
-              valueStyle={{
-                color:
-                  (clusterHealth?.cpu_usage ?? 0) > 80
-                    ? '#ff4d4f'
-                    : (clusterHealth?.cpu_usage ?? 0) > 60
-                      ? '#faad14'
-                      : '#3f8600',
+              styles={{
+                content: {
+                  color: usageColor(clusterHealth?.cpu_usage ?? 0),
+                },
               }}
             />
           </Card>
@@ -388,13 +319,10 @@ export const ClusterDetail: React.FC = () => {
               value={clusterHealth?.memory_usage ?? 0}
               suffix="%"
               prefix={<HardDrive size={20} />}
-              valueStyle={{
-                color:
-                  (clusterHealth?.memory_usage ?? 0) > 80
-                    ? '#ff4d4f'
-                    : (clusterHealth?.memory_usage ?? 0) > 60
-                      ? '#faad14'
-                      : '#3f8600',
+              styles={{
+                content: {
+                  color: usageColor(clusterHealth?.memory_usage ?? 0),
+                },
               }}
             />
           </Card>
@@ -414,7 +342,9 @@ export const ClusterDetail: React.FC = () => {
             {cluster.health_status ? (
               <Tag color={getStatusColor(cluster.health_status)}>{cluster.health_status}</Tag>
             ) : (
-              <Text type="secondary">N/A</Text>
+              <Text type="secondary">
+                {t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+              </Text>
             )}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.provider')}>
@@ -439,13 +369,17 @@ export const ClusterDetail: React.FC = () => {
               : t('common.time.never')}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.clusters.detail.createdBy')}>
-            {cluster.created_by || <Text type="secondary">N/A</Text>}
+            {cluster.created_by || (
+              <Text type="secondary">
+                {t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+              </Text>
+            )}
           </Descriptions.Item>
         </Descriptions>
       </Card>
 
       {/* Provider Config */}
-      {Object.keys(cluster.provider_config || {}).length > 0 && (
+      {Object.keys(cluster.provider_config).length > 0 && (
         <Card title={t('tenant.clusters.detail.providerConfig')}>
           <pre className="bg-slate-100 dark:bg-slate-900 p-4 rounded-lg overflow-x-auto text-sm">
             {JSON.stringify(cluster.provider_config, null, 2)}
@@ -455,35 +389,51 @@ export const ClusterDetail: React.FC = () => {
 
       {/* Node List */}
       <Card title={t('tenant.clusters.detail.nodes.title')}>
-        {mockNodes.length === 0 ? (
+        <Descriptions column={{ xs: 1, md: 2 }} bordered size="small">
+          <Descriptions.Item label={t('tenant.clusters.healthDrawer.nodeCount')}>
+            {clusterHealth?.node_count ?? 0}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('tenant.clusters.healthDrawer.checkedAt')}>
+            {clusterHealth?.checked_at
+              ? new Date(clusterHealth.checked_at).toLocaleString()
+              : t('common.time.never')}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('tenant.clusters.healthDrawer.cpuUsage')}>
+            {renderUsage(clusterHealth?.cpu_usage)}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('tenant.clusters.healthDrawer.memoryUsage')}>
+            {renderUsage(clusterHealth?.memory_usage)}
+          </Descriptions.Item>
+        </Descriptions>
+        {!clusterHealth || clusterHealth.node_count === 0 ? (
           <Empty
             description={t('tenant.clusters.detail.nodes.empty')}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
+            className="mt-4"
           />
-        ) : (
-          <Table
-            columns={nodeColumns}
-            dataSource={mockNodes}
-            rowKey="id"
-            pagination={false}
-            size="small"
-          />
-        )}
+        ) : null}
       </Card>
 
       {/* Recent Events */}
-      <Card title={t('tenant.clusters.detail.events.title')}>{renderEventTimeline()}</Card>
+      <Card title={t('tenant.clusters.detail.events.title')}>
+        <Empty
+          description={t('tenant.clusters.detail.noEvents')}
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
+      </Card>
 
       {/* Edit Modal */}
       <Modal
         title={t('tenant.clusters.editTitle')}
         open={editModalVisible}
-        onOk={handleEditSubmit}
+        onOk={() => {
+          void handleEditSubmit();
+        }}
         onCancel={() => {
           setEditModalVisible(false);
         }}
         confirmLoading={isSubmitting}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -495,12 +445,11 @@ export const ClusterDetail: React.FC = () => {
           </Form.Item>
           <Form.Item name="compute_provider" label={t('tenant.clusters.form.provider')}>
             <Select>
-              <Option value="docker">Docker</Option>
-              <Option value="kubernetes">Kubernetes</Option>
-              <Option value="aws">AWS</Option>
-              <Option value="gcp">GCP</Option>
-              <Option value="azure">Azure</Option>
-              <Option value="on-prem">On-Premise</Option>
+              {CLUSTER_PROVIDER_OPTIONS.map((option) => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="proxy_endpoint" label={t('tenant.clusters.form.apiEndpoint')}>

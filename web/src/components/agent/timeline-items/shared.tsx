@@ -9,11 +9,8 @@ import { lazy, Suspense } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { formatDateTime, formatDistanceToNowCN, formatTimeOnly } from '../../../utils/date';
-import {
-  getOptionDescriptionText,
-  getOptionLabelText,
-} from '../../../utils/hitlOptionDisplay';
+import { formatDateTime, formatDistanceToNow, formatTimeOnly } from '../../../utils/date';
+import { getOptionDescriptionText, getOptionLabelText } from '../../../utils/hitlOptionDisplay';
 import { safeMarkdownComponents } from '../chat/markdownPlugins';
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
@@ -48,8 +45,16 @@ export const MarkdownRenderer = lazy(async () => {
  * Suspense wrapper for MarkdownRenderer
  */
 export function MarkdownWithSuspense({ children }: { children: string }) {
+  const { t } = useTranslation();
+
   return (
-    <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="text-slate-400">
+          {t('components.timelineItems.loadingMarkdown', { defaultValue: 'Loading...' })}
+        </div>
+      }
+    >
       <MarkdownRenderer>{children}</MarkdownRenderer>
     </Suspense>
   );
@@ -60,7 +65,7 @@ export function MarkdownWithSuspense({ children }: { children: string }) {
  * WCAG 1.3.1: Uses semantic <time> element with datetime attribute
  */
 export function TimeBadge({ timestamp }: { timestamp: number }) {
-  const naturalTime = formatDistanceToNowCN(timestamp);
+  const naturalTime = formatDistanceToNow(timestamp);
   const readableTime = formatTimeOnly(timestamp);
   const isoDateTime = new Date(timestamp).toISOString();
 
@@ -102,7 +107,7 @@ export function OptionButton({
       onClick={onClick}
       disabled={disabled}
       className={`
-        w-full text-left p-3 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform]
+        w-full text-left p-3 rounded-md border transition-[color,background-color,border-color,box-shadow,opacity,transform]
         focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
         ${
           isSelected

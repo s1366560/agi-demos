@@ -35,13 +35,17 @@ import { Check, ChevronDown, ChevronRight, ListTodo, X } from 'lucide-react';
 import { SimpleExecutionView } from './SimpleExecutionView';
 import { TimelineNode } from './TimelineNode';
 
-import type { TimelineStep, WorkPlan, ToolExecution } from '../../../types/agent';
+import type { TimelineStep, ToolExecution } from '../../../types/agent';
 
 export type DisplayMode = 'timeline' | 'simple-timeline' | 'direct';
 
+interface ExecutionWorkPlan {
+  steps: Array<{ description: string }>;
+}
+
 export interface ExecutionTimelineProps {
   /** Work plan (if present, enables full timeline mode) */
-  workPlan?: WorkPlan | null | undefined;
+  workPlan?: ExecutionWorkPlan | null | undefined;
   /** Timeline steps with execution details */
   steps: TimelineStep[];
   /** Tool execution history (for simple-timeline mode) */
@@ -115,7 +119,7 @@ function expansionReducer(state: ExpansionState, action: ExpansionAction): Expan
 // ============================================
 
 interface ExecutionTimelineContextValue {
-  workPlan: WorkPlan | null | undefined;
+  workPlan: ExecutionWorkPlan | null | undefined;
   steps: TimelineStep[];
   toolExecutionHistory: ToolExecution[];
   isStreaming: boolean;
@@ -150,7 +154,7 @@ const useExecutionTimelineContext = () => {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function getDisplayMode(
-  workPlan: WorkPlan | null | undefined,
+  workPlan: ExecutionWorkPlan | null | undefined,
   steps: TimelineStep[],
   toolExecutionHistory: ToolExecution[]
 ): DisplayMode {
@@ -193,9 +197,14 @@ const HeaderContent: React.FC = () => {
             <ListTodo size={20} className="text-primary" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white">{t('agent.executionTimeline.title')}</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              {t('agent.executionTimeline.title')}
+            </h3>
             <p className="text-sm text-slate-500">
-              {t('agent.executionTimeline.stepsCompleted', { completed: completedSteps, total: totalSteps })}
+              {t('agent.executionTimeline.stepsCompleted', {
+                completed: completedSteps,
+                total: totalSteps,
+              })}
             </p>
           </div>
         </div>
@@ -203,7 +212,9 @@ const HeaderContent: React.FC = () => {
         <div className="flex items-center gap-2">
           {matchedPattern && (
             <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-              {t('agent.executionTimeline.matchedPattern', { percent: Math.round(matchedPattern.similarity * 100) })}
+              {t('agent.executionTimeline.matchedPattern', {
+                percent: Math.round(matchedPattern.similarity * 100),
+              })}
             </span>
           )}
 
@@ -234,7 +245,7 @@ const HeaderContent: React.FC = () => {
       >
         <div
           className="h-full bg-primary transition-[width] duration-500 ease-out"
-          style={{ width: `${progressPercent}%` }}
+          style={{ width: `${String(progressPercent)}%` }}
         />
       </div>
     </>
@@ -276,7 +287,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
             const isCompleted = step.status === 'completed';
             const isActive = step.status === 'running' || currentStepNumber === step.stepNumber;
             const isFailed = step.status === 'failed';
-              return (
+            return (
               <button
                 key={step.stepNumber}
                 type="button"
@@ -328,10 +339,16 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                 >
                   {step.description}
                 </span>
-                {step.toolExecutions && step.toolExecutions.length > 0 && (
-                  <span className="text-xs text-slate-400">{t('agent.executionTimeline.toolsLabel', { count: step.toolExecutions.length })}</span>
+                {step.toolExecutions.length > 0 && (
+                  <span className="text-xs text-slate-400">
+                    {t('agent.executionTimeline.toolsLabel', { count: step.toolExecutions.length })}
+                  </span>
                 )}
-                {isActive && isStreaming && <span className="text-xs text-primary">{t('agent.executionTimeline.runningEllipsis')}</span>}
+                {isActive && isStreaming && (
+                  <span className="text-xs text-primary">
+                    {t('agent.executionTimeline.runningEllipsis')}
+                  </span>
+                )}
                 {isStepExpanded(step.stepNumber) ? (
                   <ChevronDown size={18} className="text-slate-400" />
                 ) : (
@@ -360,11 +377,19 @@ export const Controls: React.FC<ControlsProps> = ({ children }) => {
     <>
       {children || (
         <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-          <button type="button" onClick={expandAll} className="text-xs text-primary hover:underline">
+          <button
+            type="button"
+            onClick={expandAll}
+            className="text-xs text-primary hover:underline"
+          >
             {t('agent.executionTimeline.expandAll')}
           </button>
           <span className="text-slate-300">|</span>
-          <button type="button" onClick={collapseAll} className="text-xs text-primary hover:underline">
+          <button
+            type="button"
+            onClick={collapseAll}
+            className="text-xs text-primary hover:underline"
+          >
             {t('agent.executionTimeline.collapseAll')}
           </button>
         </div>
@@ -439,7 +464,7 @@ export const SimpleView: React.FC<SimpleViewProps> = ({ children }) => {
 // ============================================
 
 interface SimpleTimelineModeProps {
-  workPlan: WorkPlan | null | undefined;
+  workPlan: ExecutionWorkPlan | null | undefined;
   currentStepNumber: number | null | undefined;
   isStreaming: boolean;
   children: React.ReactNode;
@@ -455,13 +480,15 @@ function SimpleTimelineMode({
   return (
     <div className="w-full mb-4">
       {/* Work Plan Checklist - Only show if workPlan exists */}
-      {workPlan && workPlan.steps && workPlan.steps.length > 0 && (
+      {workPlan && workPlan.steps.length > 0 && (
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 mb-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <ListTodo size={18} className="text-primary" />
             </div>
-            <h3 className="font-semibold text-slate-900 dark:text-white">{t('agent.executionTimeline.title')}</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              {t('agent.executionTimeline.title')}
+            </h3>
           </div>
           <div className="space-y-2">
             {workPlan.steps.map((step, idx) => {
@@ -507,7 +534,9 @@ function SimpleTimelineMode({
                     {step.description}
                   </span>
                   {isActive && isStreaming && (
-                    <span className="ml-auto text-xs text-primary">{t('agent.executionTimeline.runningEllipsis')}</span>
+                    <span className="ml-auto text-xs text-primary">
+                      {t('agent.executionTimeline.runningEllipsis')}
+                    </span>
                   )}
                 </div>
               );
@@ -560,7 +589,7 @@ function ExecutionTimelineImpl({
   useEffect(() => {
     if (currentStepNumber !== null && currentStepNumber !== undefined && timelineRef.current) {
       const stepElement = timelineRef.current.querySelector(
-        `[data-step-number="${currentStepNumber}"]`
+        `[data-step-number="${String(currentStepNumber)}"]`
       );
       if (stepElement) {
         stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });

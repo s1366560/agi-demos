@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -10,6 +10,13 @@ import { useAuthStore } from '../stores/auth';
 
 export const Login: React.FC = () => {
   const { t } = useTranslation();
+  const translate = useCallback(
+    (key: string, fallback: string) => {
+      const value = t(key, fallback);
+      return value === key ? fallback : value;
+    },
+    [t]
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -38,6 +45,16 @@ export const Login: React.FC = () => {
     } else {
       setEmail('user@memstack.ai');
       setPassword('userpassword');
+    }
+  };
+
+  const handleDemoKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    type: 'admin' | 'user'
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleDemoLogin(type);
     }
   };
 
@@ -99,14 +116,6 @@ export const Login: React.FC = () => {
 
           <div className="text-sm text-slate-400 flex justify-between items-center">
             <span>{t('login.footer.rights', { year: new Date().getFullYear() })}</span>
-            <div className="flex space-x-4">
-              <a href="#" className="hover:text-white transition-colors">
-                {t('login.footer.privacy')}
-              </a>
-              <a href="#" className="hover:text-white transition-colors">
-                {t('login.footer.terms')}
-              </a>
-            </div>
           </div>
         </div>
       </div>
@@ -139,7 +148,13 @@ export const Login: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6" data-testid="login-form">
+          <form
+            onSubmit={(event) => {
+              void handleSubmit(event);
+            }}
+            className="space-y-6"
+            data-testid="login-form"
+          >
             <div>
               <label
                 htmlFor="email"
@@ -165,19 +180,19 @@ export const Login: React.FC = () => {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="mb-1.5 space-y-1">
                 <label
                   htmlFor="password"
                   className="block text-sm font-medium text-gray-700 dark:text-slate-300"
                 >
                   {t('login.password')}
                 </label>
-                <a
-                  href="#"
-                  className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors"
+                <p
+                  id="password-help"
+                  className="text-xs leading-snug text-gray-500 dark:text-slate-400"
                 >
-                  {t('login.form.forgot_password')}
-                </a>
+                  {t('login.form.forgot_unavailable')}
+                </p>
               </div>
               <div className="relative">
                 <input
@@ -191,6 +206,7 @@ export const Login: React.FC = () => {
                   placeholder={t('login.form.password_placeholder')}
                   required
                   disabled={isLoading || authLoading}
+                  aria-describedby="password-help"
                   data-testid="password-input"
                 />
                 <button
@@ -242,13 +258,7 @@ export const Login: React.FC = () => {
 
             <div className="mt-8 text-center">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                {t('login.form.no_account')}{' '}
-                <a
-                  href="#"
-                  className="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors"
-                >
-                  {t('login.form.register')}
-                </a>
+                {t('login.form.register_unavailable')}
               </p>
             </div>
           </div>
@@ -266,23 +276,35 @@ export const Login: React.FC = () => {
                 onClick={() => {
                   handleDemoLogin('admin');
                 }}
-                className="flex justify-between items-center text-blue-800 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-2 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                onKeyDown={(event) => {
+                  handleDemoKeyDown(event, 'admin');
+                }}
+                className="flex flex-col gap-1 rounded bg-blue-100/50 p-2 text-blue-800 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 role="button"
                 tabIndex={0}
+                aria-label={translate('login.demo.adminAria', 'Use admin demo credentials')}
               >
-                <span className="font-medium">{t('login.demo.admin')}</span>
-                <span className="font-mono text-xs">admin@memstack.ai / adminpassword</span>
+                <span className="font-medium leading-tight">{t('login.demo.admin')}</span>
+                <span className="break-all font-mono text-xs leading-snug">
+                  admin@memstack.ai / adminpassword
+                </span>
               </div>
               <div
                 onClick={() => {
                   handleDemoLogin('user');
                 }}
-                className="flex justify-between items-center text-blue-800 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-2 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                onKeyDown={(event) => {
+                  handleDemoKeyDown(event, 'user');
+                }}
+                className="flex flex-col gap-1 rounded bg-blue-100/50 p-2 text-blue-800 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 role="button"
                 tabIndex={0}
+                aria-label={translate('login.demo.userAria', 'Use user demo credentials')}
               >
-                <span className="font-medium">{t('login.demo.user')}</span>
-                <span className="font-mono text-xs">user@memstack.ai / userpassword</span>
+                <span className="font-medium leading-tight">{t('login.demo.user')}</span>
+                <span className="break-all font-mono text-xs leading-snug">
+                  user@memstack.ai / userpassword
+                </span>
               </div>
             </div>
           </div>

@@ -48,20 +48,22 @@ export const ProjectLayout: React.FC = memo(() => {
       } else {
         const { tenants, listTenants } = useTenantStore.getState();
         if (tenants.length === 0) {
-          listTenants().then(() => {
-            const tenants = useTenantStore.getState().tenants;
-            if (tenants.length > 0) {
-              const firstTenant = tenants[0];
-              if (firstTenant) {
-                setCurrentTenant(firstTenant);
-                getProject(firstTenant.id, projectId)
-                  .then((p) => {
-                    setCurrentProject(p);
-                  })
-                  .catch(console.error);
+          void listTenants()
+            .then(() => {
+              const tenants = useTenantStore.getState().tenants;
+              if (tenants.length > 0) {
+                const firstTenant = tenants[0];
+                if (firstTenant) {
+                  setCurrentTenant(firstTenant);
+                  getProject(firstTenant.id, projectId)
+                    .then((p) => {
+                      setCurrentProject(p);
+                    })
+                    .catch(console.error);
+                }
               }
-            }
-          });
+            })
+            .catch(console.error);
         } else {
           const firstTenant = tenants[0];
           if (firstTenant) {
@@ -106,7 +108,7 @@ export const ProjectLayout: React.FC = memo(() => {
         {/* Scrollable Page Content */}
         <div className="flex-1 overflow-y-auto p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
-            <RouteErrorBoundary context="Project" fallbackPath={`/project/${projectId}`}>
+            <RouteErrorBoundary context="Project" fallbackPath={`/project/${projectId ?? ''}`}>
               <Outlet />
             </RouteErrorBoundary>
           </div>

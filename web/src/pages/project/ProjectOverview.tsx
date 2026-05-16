@@ -1,10 +1,23 @@
 import React, { useEffect, useState } from 'react';
 
-
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
-import { Bot, Brain, CheckCircle, ChevronDown, Cloud, FileText, Film, Image as ImageIcon, MoreVertical, Network, RefreshCw, Trash2, Users } from 'lucide-react';
+import {
+  Bot,
+  Brain,
+  CheckCircle,
+  ChevronDown,
+  Cloud,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  MoreVertical,
+  Network,
+  RefreshCw,
+  Trash2,
+  Users,
+} from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
@@ -13,14 +26,52 @@ import { formatDateOnly } from '@/utils/date';
 import { LazyDropdown, Modal, message } from '@/components/ui/lazyAntd';
 
 import { projectAPI, memoryAPI } from '../../services/api';
-import { Project, Memory } from '../../types/memory';
+
+import type { Project, Memory } from '../../types/memory';
+
+interface ProjectOverviewStats {
+  memory_count: number;
+  storage_used: number;
+  storage_limit: number;
+  active_nodes: number;
+  collaborators: number;
+}
+
+interface DropdownClickInfo {
+  key: string;
+  domEvent: {
+    stopPropagation: () => void;
+  };
+}
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
+
+const formatStorage = (bytes: number) => {
+  const gb = bytes / (1024 * 1024 * 1024);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  const kb = bytes / 1024;
+  return `${kb.toFixed(1)} KB`;
+};
+
+const readMetadataString = (memory: Memory, key: string): string => {
+  const metadataValue: unknown = memory.metadata;
+  if (!metadataValue || typeof metadataValue !== 'object') {
+    return '';
+  }
+
+  const metadata = metadataValue as Record<string, unknown>;
+  const value = metadata[key];
+  return typeof value === 'string' ? value : '';
+};
 
 export const ProjectOverview: React.FC = () => {
   const { t } = useTranslation();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { projectBasePath } = useProjectBasePath();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<ProjectOverviewStats | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +93,7 @@ export const ProjectOverview: React.FC = () => {
             projectAPI.get(projectId, projectId),
             memoryAPI.list(projectId, { page: 1, page_size: 5 }),
           ]);
-          setStats(statsData);
+          setStats(statsData as ProjectOverviewStats);
           setProject(projectData);
           setMemories(memoriesData.memories);
         } catch (error) {
@@ -52,7 +103,7 @@ export const ProjectOverview: React.FC = () => {
         }
       }
     };
-    fetchData();
+    void fetchData();
   }, [projectId]);
 
   const handleReprocess = async (memoryId: string) => {
@@ -84,7 +135,7 @@ export const ProjectOverview: React.FC = () => {
 
       // Refresh stats
       const statsData = await projectAPI.getStats(projectId);
-      setStats(statsData);
+      setStats(statsData as ProjectOverviewStats);
 
       setDeleteModalOpen(false);
       setMemoryToDelete(null);
@@ -104,15 +155,6 @@ export const ProjectOverview: React.FC = () => {
     return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
   }
 
-  const formatStorage = (bytes: number) => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    if (gb >= 1) return `${gb.toFixed(1)} GB`;
-    const mb = bytes / (1024 * 1024);
-    if (mb >= 1) return `${mb.toFixed(1)} MB`;
-    const kb = bytes / 1024;
-    return `${kb.toFixed(1)} KB`;
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -120,9 +162,9 @@ export const ProjectOverview: React.FC = () => {
 
     if (diffInSeconds < 60) return t('common.time.justNow');
     if (diffInSeconds < 3600)
-      return `${Math.floor(diffInSeconds / 60)}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`;
+      return `${Math.floor(diffInSeconds / 60).toString()}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`;
     if (diffInSeconds < 86400)
-      return `${Math.floor(diffInSeconds / 3600)}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`;
+      return `${Math.floor(diffInSeconds / 3600).toString()}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`;
     return formatDateOnly(date);
   };
 
@@ -150,7 +192,7 @@ export const ProjectOverview: React.FC = () => {
       memory.title === 'text'
     ) {
       // Use first 50 chars of content as title
-      const contentPreview = memory.content || memory.metadata?.source_content || '';
+      const contentPreview = memory.content || readMetadataString(memory, 'source_content');
       if (contentPreview) {
         return contentPreview.substring(0, 50) + (contentPreview.length > 50 ? '...' : '');
       }
@@ -158,6 +200,9 @@ export const ProjectOverview: React.FC = () => {
     }
     return memory.title;
   };
+
+  const storageQuotaPercent =
+    stats.storage_limit > 0 ? clampPercent((stats.storage_used / stats.storage_limit) * 100) : 0;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -211,12 +256,12 @@ export const ProjectOverview: React.FC = () => {
           <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
             <div
               className="bg-purple-500 h-full rounded-full"
-              style={{ width: `${(stats.storage_used / stats.storage_limit) * 100}%` }}
+              style={{ width: `${storageQuotaPercent.toString()}%` }}
             ></div>
           </div>
           <span className="text-xs text-slate-500 mt-1">
             {t('project.overview.quotaUsage', {
-              percent: Math.round((stats.storage_used / stats.storage_limit) * 100),
+              percent: Math.round(storageQuotaPercent),
             })}
           </span>
         </div>
@@ -308,10 +353,13 @@ export const ProjectOverview: React.FC = () => {
                   ) : (
                     memories.map((memory: Memory) => {
                       const status = getMemoryStatus(memory);
+                      const memoryTitle = getMemoryTitle(memory);
                       return (
                         <tr
                           key={memory.id}
-                          onClick={() => navigate(`${projectBasePath}/memory/${memory.id}`)}
+                          onClick={() => {
+                            void navigate(`${projectBasePath}/memory/${memory.id}`);
+                          }}
                           className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
                         >
                           <td className="px-6 py-3">
@@ -327,7 +375,7 @@ export const ProjectOverview: React.FC = () => {
                               </div>
                               <div>
                                 <div className="font-medium text-slate-900 dark:text-white">
-                                  {getMemoryTitle(memory)}
+                                  {memoryTitle}
                                 </div>
                                 <div className="text-xs text-slate-500">
                                   {t('common.time.updated', {
@@ -349,7 +397,7 @@ export const ProjectOverview: React.FC = () => {
                             </span>
                           </td>
                           <td className="px-6 py-3 text-slate-600 dark:text-slate-300 text-right font-mono">
-                            {formatStorage(memory.content?.length || 0)}
+                            {formatStorage(memory.content.length)}
                           </td>
                           <td className="px-6 py-3 text-right">
                             <LazyDropdown
@@ -358,22 +406,20 @@ export const ProjectOverview: React.FC = () => {
                                   {
                                     key: 'reprocess',
                                     label: t('common.actions.reprocess') || 'Reprocess',
-                                    icon: (
-                                      <RefreshCw size={14} />
-                                    ),
+                                    icon: <RefreshCw size={14} />,
                                   },
                                   {
                                     key: 'delete',
                                     label: t('common.actions.delete') || 'Delete',
                                     danger: true,
-                                    icon: (
-                                      <Trash2 size={14} />
-                                    ),
+                                    icon: <Trash2 size={14} />,
                                   },
                                 ],
-                                onClick: ({ key, domEvent }: { key: string; domEvent: any }) => {
+                                onClick: ({ key, domEvent }: DropdownClickInfo) => {
                                   domEvent.stopPropagation();
-                                  if (key === 'reprocess') handleReprocess(memory.id);
+                                  if (key === 'reprocess') {
+                                    void handleReprocess(memory.id);
+                                  }
                                   if (key === 'delete') {
                                     setMemoryToDelete(memory);
                                     setDeleteModalOpen(true);
@@ -382,7 +428,14 @@ export const ProjectOverview: React.FC = () => {
                               }}
                               trigger={['click']}
                             >
-                              <button type="button"
+                              <button
+                                type="button"
+                                aria-label={t('project.memories.openActions', {
+                                  name: memoryTitle,
+                                })}
+                                title={t('project.memories.openActions', {
+                                  name: memoryTitle,
+                                })}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                 }}
@@ -400,10 +453,13 @@ export const ProjectOverview: React.FC = () => {
               </table>
             </div>
             <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-surface-dark flex justify-center">
-              <button type="button" className="text-xs font-medium text-slate-500 hover:text-primary flex items-center gap-1">
+              <Link
+                to={`${projectBasePath}/memories`}
+                className="text-xs font-medium text-slate-500 hover:text-primary flex items-center gap-1"
+              >
                 {t('common.actions.showMore')}{' '}
                 <ChevronDown size={16} style={{ fontSize: '16px' }} />
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -416,9 +472,13 @@ export const ProjectOverview: React.FC = () => {
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wide">
                 {t('project.overview.projectTeam')}
               </h3>
-              <button type="button" className="p-1 text-slate-400 hover:text-primary rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+              <Link
+                to={`${projectBasePath}/settings`}
+                aria-label={t('project.overview.projectTeam')}
+                className="p-1 text-slate-400 hover:text-primary rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
                 <Users size={16} style={{ fontSize: '20px' }} />
-              </button>
+              </Link>
             </div>
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
@@ -427,7 +487,7 @@ export const ProjectOverview: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    {stats?.collaborators || 0} {t('common.stats.members')}
+                    {stats.collaborators} {t('common.stats.members')}
                   </p>
                   <p className="text-xs text-slate-500">{t('project.overview.collaborating')}</p>
                 </div>
@@ -467,7 +527,9 @@ export const ProjectOverview: React.FC = () => {
       <Modal
         title={t('project.memories.deleteTitle') || 'Delete Memory'}
         open={deleteModalOpen}
-        onOk={handleDelete}
+        onOk={() => {
+          void handleDelete();
+        }}
         onCancel={() => {
           setDeleteModalOpen(false);
           setMemoryToDelete(null);

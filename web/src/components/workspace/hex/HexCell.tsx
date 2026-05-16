@@ -31,7 +31,9 @@ export const HexCell: FC<HexCellProps> = ({
   for (let i = 0; i < 6; i++) {
     const angleDeg = 60 * i;
     const angleRad = (Math.PI / 180) * angleDeg;
-    corners.push(`${cx + size * Math.cos(angleRad)},${cy + size * Math.sin(angleRad)}`);
+    const x = String(cx + size * Math.cos(angleRad));
+    const y = String(cy + size * Math.sin(angleRad));
+    corners.push(`${x},${y}`);
   }
   const points = corners.join(' ');
 
@@ -65,11 +67,11 @@ export const HexCell: FC<HexCellProps> = ({
       onClick={onClick}
       onKeyDown={handleKeyDown}
       onContextMenu={onContextMenu}
-      role="button"
+      role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       style={{ cursor: onClick ? 'pointer' : 'default' }}
-      className="hover:opacity-80 transition-opacity duration-200"
-      aria-label={`Hex cell at q:${q}, r:${r}`}
+      className={onClick ? 'hover:opacity-80 transition-opacity duration-200' : undefined}
+      aria-label={`Hex cell at q:${String(q)}, r:${String(r)}`}
     >
       <polygon
         points={points}

@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import type { FC, MouseEvent as ReactMouseEvent } from 'react';
+import type { FC, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { useHexLayout } from './useHexLayout';
 
@@ -17,11 +19,8 @@ export interface HexMiniMapProps {
   onNavigate: (x: number, y: number) => void;
 }
 
-export const HexMiniMap: FC<HexMiniMapProps> = ({
-  cells,
-  viewBox,
-  onNavigate,
-}) => {
+export const HexMiniMap: FC<HexMiniMapProps> = ({ cells, viewBox, onNavigate }) => {
+  const { t } = useTranslation();
   const hexSize = 40.0;
   const { hexToPixel, getHexCorners } = useHexLayout({ size: hexSize });
 
@@ -55,19 +54,26 @@ export const HexMiniMap: FC<HexMiniMapProps> = ({
     };
   }, [cells, hexToPixel]);
 
-  const handleMapClick = (e: ReactMouseEvent<SVGSVGElement>) => {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-
+  const navigateFromClientPoint = (clientX: number, clientY: number, rect: DOMRect) => {
+    const clickX = clientX - rect.left;
+    const clickY = clientY - rect.top;
     const scaleX = mapWidth / rect.width;
     const scaleY = mapHeight / rect.height;
+    onNavigate(minX + clickX * scaleX, minY + clickY * scaleY);
+  };
 
-    const targetX = minX + clickX * scaleX;
-    const targetY = minY + clickY * scaleY;
+  const handleMapClick = (event: ReactMouseEvent<SVGSVGElement>) => {
+    navigateFromClientPoint(
+      event.clientX,
+      event.clientY,
+      event.currentTarget.getBoundingClientRect()
+    );
+  };
 
-    onNavigate(targetX, targetY);
+  const handleMapKeyDown = (event: ReactKeyboardEvent<SVGSVGElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onNavigate(minX + mapWidth / 2, minY + mapHeight / 2);
   };
 
   return (
@@ -75,21 +81,22 @@ export const HexMiniMap: FC<HexMiniMapProps> = ({
       <svg
         width="100%"
         height="100%"
-        viewBox={`${minX} ${minY} ${mapWidth} ${mapHeight}`}
+        viewBox={`${String(minX)} ${String(minY)} ${String(mapWidth)} ${String(mapHeight)}`}
         preserveAspectRatio="xMidYMid meet"
         onClick={handleMapClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleMapClick(e as any);
-        }}
+        onKeyDown={handleMapKeyDown}
         className="cursor-pointer"
-        role="img"
-        aria-label="Hex Mini Map"
+        role="button"
+        tabIndex={0}
+        aria-label={t('workspaceDetail.hex.miniMapAria', 'Hex Mini Map')}
       >
-        <title>Hex Mini Map</title>
+        <title>{t('workspaceDetail.hex.miniMapAria', 'Hex Mini Map')}</title>
         {cells.map((cell) => {
           const { x, y } = hexToPixel(cell.q, cell.r);
-          const corners = getHexCorners(x, y).map((p) => `${p.x},${p.y}`).join(' ');
-          
+          const corners = getHexCorners(x, y)
+            .map((p) => `${String(p.x)},${String(p.y)}`)
+            .join(' ');
+
           let fill = 'transparent';
           if (cell.color) {
             fill = cell.color;
@@ -107,7 +114,7 @@ export const HexMiniMap: FC<HexMiniMapProps> = ({
 
           return (
             <polygon
-              key={`${cell.q}-${cell.r}`}
+              key={`${String(cell.q)}-${String(cell.r)}`}
               points={corners}
               fill={fill}
               stroke="rgba(255,255,255,0.1)"

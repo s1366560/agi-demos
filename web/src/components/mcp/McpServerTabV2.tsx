@@ -5,9 +5,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message, Select, Spin, Input, Tooltip } from 'antd';
 import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
@@ -62,12 +63,12 @@ export const McpServerTabV2: React.FC = () => {
 
   useEffect(() => {
     if (currentProject?.id) {
-      listServers({ project_id: currentProject.id });
-      fetchApps(currentProject.id);
+      void listServers({ project_id: currentProject.id });
+      void fetchApps(currentProject.id);
     } else if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
-      listServers();
-      fetchApps();
+      void listServers();
+      void fetchApps();
     }
   }, [listServers, fetchApps, currentProject?.id]);
 
@@ -136,8 +137,8 @@ export const McpServerTabV2: React.FC = () => {
     setDrawerOpen(false);
     setEditingServer(null);
     const projectId = currentProject?.id;
-    listServers(projectId ? { project_id: projectId } : {});
-  }, [listServers, currentProject]);
+    void listServers(projectId ? { project_id: projectId } : {});
+  }, [listServers, currentProject?.id]);
 
   const handleToggle = useCallback(
     async (server: MCPServerResponse, enabled: boolean) => {
@@ -148,7 +149,7 @@ export const McpServerTabV2: React.FC = () => {
         /* store handles error */
       }
     },
-    [toggleEnabled]
+    [toggleEnabled, t]
   );
 
   const handleSync = useCallback(
@@ -160,7 +161,7 @@ export const McpServerTabV2: React.FC = () => {
         /* store handles error */
       }
     },
-    [syncServer]
+    [syncServer, t]
   );
 
   const handleTest = useCallback(
@@ -172,7 +173,10 @@ export const McpServerTabV2: React.FC = () => {
           const toolsCount = result.tools_discovered ?? 0;
           message.success(
             latencyMs != null
-              ? t('mcp.servers.connectSuccessDetail', { latency: Math.round(latencyMs), count: toolsCount })
+              ? t('mcp.servers.connectSuccessDetail', {
+                  latency: Math.round(latencyMs),
+                  count: toolsCount,
+                })
               : t('mcp.servers.connectSuccess')
           );
         } else {
@@ -182,7 +186,7 @@ export const McpServerTabV2: React.FC = () => {
         /* store handles error */
       }
     },
-    [testServer]
+    [testServer, t]
   );
 
   const handleDelete = useCallback(
@@ -194,14 +198,14 @@ export const McpServerTabV2: React.FC = () => {
         /* store handles error */
       }
     },
-    [deleteServer]
+    [deleteServer, t]
   );
 
   const handleRefresh = useCallback(() => {
     const projectId = currentProject?.id;
-    listServers(projectId ? { project_id: projectId } : {});
-    fetchApps(projectId);
-  }, [listServers, fetchApps, currentProject]);
+    void listServers(projectId ? { project_id: projectId } : {});
+    void fetchApps(projectId);
+  }, [listServers, fetchApps, currentProject?.id]);
 
   const handleReconcile = useCallback(async () => {
     if (!currentProject?.id) {
@@ -228,7 +232,7 @@ export const McpServerTabV2: React.FC = () => {
     } finally {
       setIsReconciling(false);
     }
-  }, [currentProject?.id, listServers, fetchApps]);
+  }, [currentProject?.id, listServers, fetchApps, t]);
 
   // Error count
   const errorCount = useMemo(
@@ -266,6 +270,12 @@ export const McpServerTabV2: React.FC = () => {
               }}
               allowClear
               prefix={<Search size={16} className="text-slate-400" />}
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <Search size={16} aria-hidden="true" />
+                </>
+              }
               className="w-full"
             />
           </div>
@@ -329,7 +339,7 @@ export const McpServerTabV2: React.FC = () => {
                 onClick={handleRefresh}
                 disabled={isLoading}
                 className={`inline-flex items-center justify-center px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200`}
-                aria-label="refresh"
+                aria-label={t('mcp.servers.refreshTooltip')}
               >
                 <RefreshCw
                   size={18}
@@ -339,7 +349,9 @@ export const McpServerTabV2: React.FC = () => {
             </Tooltip>
             <Tooltip title={t('mcp.servers.reconcileTooltip')}>
               <button
-                onClick={handleReconcile}
+                onClick={() => {
+                  void handleReconcile();
+                }}
                 disabled={isReconciling || !currentProject?.id}
                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200`}
               >
@@ -361,7 +373,10 @@ export const McpServerTabV2: React.FC = () => {
         {hasActiveFilters && (
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {t('mcp.servers.filterSummary', { shown: filteredServers.length, total: servers.length })}
+              {t('mcp.servers.filterSummary', {
+                shown: filteredServers.length,
+                total: servers.length,
+              })}
             </span>
             <button
               onClick={clearFilters}
@@ -428,11 +443,19 @@ export const McpServerTabV2: React.FC = () => {
               server={server}
               isSyncing={syncingServers.has(server.id)}
               isTesting={testingServers.has(server.id)}
-              onToggle={handleToggle}
-              onSync={handleSync}
-              onTest={handleTest}
+              onToggle={(targetServer, enabled) => {
+                void handleToggle(targetServer, enabled);
+              }}
+              onSync={(targetServer) => {
+                void handleSync(targetServer);
+              }}
+              onTest={(targetServer) => {
+                void handleTest(targetServer);
+              }}
               onEdit={handleEdit}
-              onDelete={handleDelete}
+              onDelete={(id) => {
+                void handleDelete(id);
+              }}
               onShowTools={setToolsServer}
               appCount={
                 appStatsByServer.byId[server.id]?.total ??

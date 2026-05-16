@@ -9,7 +9,8 @@
  * @see https://react.dev/reference/react/lazy
  */
 
-import { lazy, ComponentType, Suspense, ReactNode, useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
+import type { ComponentType, LazyExoticComponent, ReactNode } from 'react';
 
 import { Spin, Empty as EmptyComponent } from 'antd';
 
@@ -35,13 +36,36 @@ export const SpinnerFallback: React.FC = () => (
 // Lazy Component Factory
 // ============================================================================
 
-function createLazyComponent<T extends ComponentType<any>>(
-  importFn: () => Promise<{ default: T }>,
+type LazyComponentProps = Record<string, unknown>;
+type LazyComponent = ComponentType<LazyComponentProps>;
+type NamedComponent = {
+  displayName?: string | undefined;
+  name?: string | undefined;
+};
+
+function getComponentName(component: NamedComponent): string {
+  if (component.displayName !== undefined && component.displayName.length > 0) {
+    return component.displayName;
+  }
+
+  if (component.name !== undefined && component.name.length > 0) {
+    return component.name;
+  }
+
+  return 'Component';
+}
+
+function createLazyComponent(
+  importFn: () => Promise<{ default: unknown }>,
   displayName: string
-): ComponentType<any> {
-  const LazyComponent = lazy(importFn);
-  (LazyComponent as any).displayName = displayName;
-  return LazyComponent as ComponentType<any>;
+): LazyComponent {
+  const LazyComponent = lazy(async () => {
+    const module = await importFn();
+    return { default: module.default as LazyComponent };
+  }) as LazyExoticComponent<LazyComponent> & NamedComponent;
+
+  LazyComponent.displayName = displayName;
+  return LazyComponent as unknown as LazyComponent;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -55,9 +79,7 @@ export function withSuspense<P extends object>(
     </Suspense>
   );
 
-  WrappedComponent.displayName = `WithSuspense(${
-    (LazyComponent as any).displayName || 'Component'
-  })`;
+  WrappedComponent.displayName = `WithSuspense(${getComponentName(LazyComponent)})`;
 
   return WrappedComponent as ComponentType<P>;
 }
@@ -364,9 +386,13 @@ export function useLazyMessage() {
   const [messageApi, setMessageApi] = useState<typeof import('antd').message | null>(null);
 
   useEffect(() => {
-    import('antd').then((m) => {
-      setMessageApi(() => m.message);
-    });
+    void import('antd')
+      .then((m) => {
+        setMessageApi(() => m.message);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load Ant Design message API:', error);
+      });
   }, []);
 
   return messageApi;
@@ -379,9 +405,13 @@ export function useLazyNotification() {
   );
 
   useEffect(() => {
-    import('antd').then((m) => {
-      setNotificationApi(() => m.notification);
-    });
+    void import('antd')
+      .then((m) => {
+        setNotificationApi(() => m.notification);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load Ant Design notification API:', error);
+      });
   }, []);
 
   return notificationApi;

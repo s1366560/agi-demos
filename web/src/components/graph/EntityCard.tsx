@@ -105,8 +105,12 @@ const EntityCardInternal: React.FC<EntityCardProps> = ({ entity, onClick, isSele
       }`}
     >
       <div className="flex items-start justify-between mb-2">
-        <h3 className="font-semibold text-slate-900 dark:text-white truncate flex-1">{entity.name}</h3>
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ml-2 flex-shrink-0 ${entityTypeColor}`}>
+        <h3 className="font-semibold text-slate-900 dark:text-white truncate flex-1">
+          {entity.name}
+        </h3>
+        <span
+          className={`px-2 py-1 rounded-full text-xs font-medium ml-2 flex-shrink-0 ${entityTypeColor}`}
+        >
           {entity.entity_type || t('common.status.unknown', 'Unknown')}
         </span>
       </div>

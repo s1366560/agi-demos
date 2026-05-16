@@ -33,6 +33,7 @@ import {
 } from '@/services/workspaceService';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+import { confirmAction } from '@/utils/confirmAction';
 import { getAuthToken } from '@/utils/tokenResolver';
 
 import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
@@ -486,6 +487,8 @@ function DeliveryPanel({
   onRegenerateContract: () => void;
   onOpenPreview: (previewUrl: string, serviceId: string) => void;
 }) {
+  const { t } = useTranslation();
+
   if (!delivery) {
     return null;
   }
@@ -573,7 +576,7 @@ function DeliveryPanel({
 
       {(delivery.warnings?.length ?? 0) > 0 && (
         <div className="mt-3 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-xs leading-5 text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
-          <div className="font-semibold uppercase">Warnings</div>
+          <div className="font-semibold uppercase">{t('blackboard.planRunWarnings', 'Warnings')}</div>
           <ul className="mt-1 space-y-1">
             {delivery.warnings?.map((warning) => (
               <li key={warning} className="break-words">
@@ -633,7 +636,9 @@ function DeliveryPanel({
                     ) : (
                       <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     )}
-                    <span className="truncate">Open preview</span>
+                    <span className="truncate">
+                      {t('blackboard.planRunOpenPreview', 'Open preview')}
+                    </span>
                   </button>
                 )}
               </div>
@@ -1151,10 +1156,10 @@ export function PlanRunSnapshotSection({
     if (result.reason === 'no_root_needs_progress') {
       return t('blackboard.planRunAutonomyStable', 'All root goals are currently stable.');
     }
-    return t(
-      'blackboard.planRunAutonomyNoop',
-      `Autonomy did not run: ${result.reason || 'unknown'}`
-    );
+    return t('blackboard.planRunAutonomyNoop', {
+      reason: result.reason || 'unknown',
+      defaultValue: `Autonomy did not run: ${result.reason || 'unknown'}`,
+    });
   };
 
   const runAutonomyTick = async (force: boolean) => {
@@ -1189,12 +1194,12 @@ export function PlanRunSnapshotSection({
     }
     if (
       action?.requires_confirmation &&
-      !window.confirm(
-        t(
-          'blackboard.planRunConfirmNodeAction',
-          `Run "${actionLabel(action, actionId)}" for this durable plan node?`
-        )
-      )
+      !(await confirmAction({
+        title: t('blackboard.planRunConfirmNodeAction', {
+          action: actionLabel(action, actionId),
+          defaultValue: `Run "${actionLabel(action, actionId)}" for this durable plan node?`,
+        }),
+      }))
     ) {
       return;
     }
@@ -1367,7 +1372,7 @@ export function PlanRunSnapshotSection({
   };
 
   const openPreview = async (previewUrl: string, serviceId?: string) => {
-    const previewWindow = window.open('about:blank', '_blank');
+    const previewWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
     if (previewWindow) {
       previewWindow.opener = null;
     }
@@ -1699,7 +1704,7 @@ export function PlanRunSnapshotSection({
                   </label>
                   <div
                     className="flex min-w-0 flex-1 flex-wrap gap-2"
-                    aria-label="Filter plan nodes"
+                    aria-label={t('blackboard.planRunFilterNodes', 'Filter plan nodes')}
                   >
                     {FILTERS.map((item) => (
                       <button
@@ -1934,7 +1939,7 @@ export function PlanRunSnapshotSection({
                   <div className="min-w-0 flex-1">
                     <div
                       className="flex min-w-0 flex-wrap gap-2 border-b border-border-separator px-4 py-3 dark:border-border-dark"
-                      aria-label="Plan node details"
+                      aria-label={t('blackboard.planRunNodeDetails', 'Plan node details')}
                     >
                       {DETAIL_TABS.map((tab) => (
                         <button

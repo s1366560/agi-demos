@@ -1,8 +1,4 @@
-import type {
-  ExecutionSummary,
-  ExecutionTaskSummary,
-  ExecutionTokenSummary,
-} from '@/types/agent';
+import type { ExecutionSummary, ExecutionTaskSummary, ExecutionTokenSummary } from '@/types/agent';
 
 type UnknownRecord = Record<string, unknown>;
 

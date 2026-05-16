@@ -90,6 +90,6 @@ export function getStatusBg(status: RuntimeStatus): string {
 export interface ServerFilters {
   search: string;
   enabled: 'all' | 'enabled' | 'disabled';
-  type: 'all' | 'stdio' | 'sse' | 'remote' | 'http';
+  type: 'all' | 'stdio' | 'sse' | 'remote' | 'http' | 'websocket';
   runtime: 'all' | 'running' | 'starting' | 'stopping' | 'stopped' | 'error';
 }

@@ -83,16 +83,12 @@ function delayWithJitter(ms: number): Promise<void> {
  */
 async function fetchWithRetry<T>(fn: () => Promise<T>, config: FetchRetryConfig = {}): Promise<T> {
   const {
-    maxRetries: _maxRetries = DEFAULT_FETCH_RETRY.maxRetries,
-    initialDelay: _initialDelay = DEFAULT_FETCH_RETRY.initialDelay,
-    maxDelay: _maxDelay = DEFAULT_FETCH_RETRY.maxDelay,
-    backoffMultiplier: _backoffMultiplier = DEFAULT_FETCH_RETRY.backoffMultiplier,
+    maxRetries = DEFAULT_FETCH_RETRY.maxRetries,
+    initialDelay = DEFAULT_FETCH_RETRY.initialDelay,
+    maxDelay = DEFAULT_FETCH_RETRY.maxDelay,
+    backoffMultiplier = DEFAULT_FETCH_RETRY.backoffMultiplier,
     isRetryable = isFetchErrorRetryable,
   } = config;
-  const maxRetries = _maxRetries ?? DEFAULT_FETCH_RETRY.maxRetries;
-  const initialDelay = _initialDelay ?? DEFAULT_FETCH_RETRY.initialDelay;
-  const maxDelay = _maxDelay ?? DEFAULT_FETCH_RETRY.maxDelay;
-  const backoffMultiplier = _backoffMultiplier ?? DEFAULT_FETCH_RETRY.backoffMultiplier;
 
   let lastError: unknown;
 
@@ -170,6 +166,29 @@ function getDefaultHeaders(): Record<string, string> {
   return headers;
 }
 
+function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  if (headers === undefined) {
+    return {};
+  }
+
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+
+  return headers;
+}
+
+function mergeHeaders(headers: HeadersInit | undefined): Record<string, string> {
+  return {
+    ...getDefaultHeaders(),
+    ...normalizeHeaders(headers),
+  };
+}
+
 /**
  * Handle 401 unauthorized response
  *
@@ -193,15 +212,17 @@ export function handleUnauthorized(): void {
  *
  * @example
  * createWebSocketUrl('/agent/ws') // 'ws://localhost:3000/api/v1/agent/ws'
- * createWebSocketUrl('/agent/ws', { token: 'abc' }) // 'ws://localhost:3000/api/v1/agent/ws?token=abc'
+ * createWebSocketUrl('/terminal/ws', { session_id: 'abc' }) // 'ws://localhost:3000/api/v1/terminal/ws?session_id=abc'
  */
 export function createWebSocketUrl(path: string, params?: Record<string, string>): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const configuredApiUrl =
+    typeof import.meta.env.VITE_API_URL === 'string' ? import.meta.env.VITE_API_URL : undefined;
 
   let host: string;
-  if (import.meta.env.VITE_API_URL) {
+  if (configuredApiUrl) {
     // Extract host from VITE_API_URL
-    host = new URL(import.meta.env.VITE_API_URL).host;
+    host = new URL(configuredApiUrl).host;
   } else if (window.location.host.includes(':3000')) {
     // Development: Vite dev server on port 3000, backend on port 8000
     host = 'localhost:8000';
@@ -220,6 +241,12 @@ export function createWebSocketUrl(path: string, params?: Record<string, string>
   }
 
   return wsUrl;
+}
+
+const WEBSOCKET_AUTH_SUBPROTOCOL = 'memstack.auth';
+
+export function createWebSocketAuthProtocols(token: string): string[] {
+  return [WEBSOCKET_AUTH_SUBPROTOCOL, token];
 }
 
 /**
@@ -273,63 +300,48 @@ async function fetchWithRetryWrapper(
 
 export const apiFetch = {
   get: async (url: string, options: FetchOptions = {}): Promise<Response> => {
-    const headers = getDefaultHeaders();
-    const mergedHeaders = { ...headers, ...options.headers };
-
     const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
-      headers: mergedHeaders,
+      headers: mergeHeaders(options.headers),
     });
     return handleResponse(response);
   },
 
   post: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
-    const headers = getDefaultHeaders();
-    const mergedHeaders = { ...headers, ...options.headers };
-
     const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'POST',
-      headers: mergedHeaders,
+      headers: mergeHeaders(options.headers),
       body: data !== undefined ? JSON.stringify(data) : null,
     });
     return handleResponse(response);
   },
 
   put: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
-    const headers = getDefaultHeaders();
-    const mergedHeaders = { ...headers, ...options.headers };
-
     const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'PUT',
-      headers: mergedHeaders,
+      headers: mergeHeaders(options.headers),
       body: data !== undefined ? JSON.stringify(data) : null,
     });
     return handleResponse(response);
   },
 
   patch: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
-    const headers = getDefaultHeaders();
-    const mergedHeaders = { ...headers, ...options.headers };
-
     const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'PATCH',
-      headers: mergedHeaders,
+      headers: mergeHeaders(options.headers),
       body: data !== undefined ? JSON.stringify(data) : null,
     });
     return handleResponse(response);
   },
 
   delete: async (url: string, options: FetchOptions = {}): Promise<Response> => {
-    const headers = getDefaultHeaders();
-    const mergedHeaders = { ...headers, ...options.headers };
-
     const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'DELETE',
-      headers: mergedHeaders,
+      headers: mergeHeaders(options.headers),
     });
     return handleResponse(response);
   },

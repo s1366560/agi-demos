@@ -9,7 +9,17 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { AlertCircle, CheckCircle, Cloud, CloudOff, Eye, Loader2, Server, Settings, Wrench } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  Cloud,
+  CloudOff,
+  Eye,
+  Loader2,
+  Server,
+  Settings,
+  Wrench,
+} from 'lucide-react';
 
 import { useClusters, useClusterLoading, useClusterActions } from '@/stores/cluster';
 import { useTenantStore } from '@/stores/tenant';
@@ -52,7 +62,7 @@ const getStatusConfig = (status: string): { color: string; bgColor: string; labe
 };
 
 const getProviderIcon = (provider: string) => {
-  switch (provider?.toLowerCase()) {
+  switch (provider.toLowerCase()) {
     case 'aws':
     case 'gcp':
     case 'azure':
@@ -78,8 +88,10 @@ const ClusterCard: React.FC<ClusterCardProps> = ({ cluster, onViewDetails }) => 
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${statusConfig.bgColor}`}>
-            {/* eslint-disable-next-line react-hooks/static-components */}
-            {(() => { const Icon = getProviderIcon(cluster.compute_provider); return <Icon size={24} className={statusConfig.color} />; })()}
+            {React.createElement(getProviderIcon(cluster.compute_provider), {
+              size: 24,
+              className: statusConfig.color,
+            })}
           </div>
           <div>
             <h3 className="font-semibold text-slate-900 dark:text-white">{cluster.name}</h3>
@@ -149,7 +161,7 @@ export const OrgClusters: React.FC = () => {
   const { listClusters } = useClusterActions();
 
   useEffect(() => {
-    listClusters();
+    void listClusters();
   }, [listClusters]);
 
   // Stats
@@ -165,7 +177,8 @@ export const OrgClusters: React.FC = () => {
 
   const handleViewDetails = useCallback(
     (clusterId: string) => {
-      navigate(`/tenant/${currentTenant?.id}/clusters?highlight=${clusterId}`);
+      if (!currentTenant) return;
+      void navigate(`/tenant/${currentTenant.id}/clusters?highlight=${clusterId}`);
     },
     [navigate, currentTenant]
   );
@@ -191,7 +204,9 @@ export const OrgClusters: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => navigate(`/tenant/${currentTenant.id}/clusters`)}
+          onClick={() => {
+            void navigate(`/tenant/${currentTenant.id}/clusters`);
+          }}
           type="button"
           className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium"
         >
@@ -272,7 +287,9 @@ export const OrgClusters: React.FC = () => {
             {t('tenant.orgSettings.clusters.noClusters')}
           </p>
           <button
-            onClick={() => navigate(`/tenant/${currentTenant.id}/clusters`)}
+            onClick={() => {
+              void navigate(`/tenant/${currentTenant.id}/clusters`);
+            }}
             type="button"
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-sm font-medium"
           >

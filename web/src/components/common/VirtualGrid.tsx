@@ -40,7 +40,6 @@ import React, { useRef, memo, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Tags } from 'lucide-react';
 
-
 export interface VirtualGridProps<T> {
   /** Array of items to render */
   items: T[];
@@ -62,6 +61,29 @@ export interface VirtualGridProps<T> {
   className?: string | undefined;
 }
 
+type VitestWindow = Window & {
+  __vitest__?: {
+    isFake?: boolean;
+  };
+};
+
+function isVitestWindowFake(): boolean {
+  return typeof window !== 'undefined' && (window as VitestWindow).__vitest__?.isFake === true;
+}
+
+function getItemKey(item: unknown, index: number): string {
+  if (item && typeof item === 'object') {
+    const record = item as Record<string, unknown>;
+    if (typeof record.uuid === 'string' || typeof record.uuid === 'number') {
+      return String(record.uuid);
+    }
+    if (typeof record.id === 'string' || typeof record.id === 'number') {
+      return String(record.id);
+    }
+  }
+  return String(index);
+}
+
 /**
  * Internal VirtualGrid component implementation
  */
@@ -79,9 +101,7 @@ function VirtualGridInternal<T>({
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Detect test environment - render all items without virtualization
-  const isTestEnvironment =
-    process.env.NODE_ENV === 'test' ||
-    (typeof window !== 'undefined' && (window as any).__vitest__?.isFake === true);
+  const isTestEnvironment = process.env.NODE_ENV === 'test' || isVitestWindowFake();
 
   // For small item counts or test environment, render all items
   const shouldRenderAll = items.length <= 10 || isTestEnvironment;
@@ -140,17 +160,7 @@ function VirtualGridInternal<T>({
     return (
       <div data-testid="virtual-grid" className={gridClasses} style={{ padding: '1rem' }}>
         {items.map((item, index) => (
-          <React.Fragment
-            key={
-              typeof item === 'object' && item !== null && 'uuid' in item
-                ? String((item as any).uuid)
-                : typeof item === 'object' && item !== null && 'id' in item
-                  ? String((item as any).id)
-                  : index
-            }
-          >
-            {renderItem(item, index)}
-          </React.Fragment>
+          <React.Fragment key={getItemKey(item, index)}>{renderItem(item, index)}</React.Fragment>
         ))}
       </div>
     );
@@ -161,14 +171,14 @@ function VirtualGridInternal<T>({
       ref={parentRef}
       data-testid="virtual-scroll-container"
       className="overflow-auto"
-      style={{ height: `${containerHeight}px` }}
+      style={{ height: containerHeight }}
     >
       <div
         data-testid="virtual-grid"
         className={gridClasses}
         style={{
           position: 'relative',
-          height: `${totalSize}px`,
+          height: totalSize,
           width: '100%',
           padding: '1rem',
         }}
@@ -180,13 +190,13 @@ function VirtualGridInternal<T>({
           return (
             <div
               key={virtualRow.key}
-              data-testid={`virtual-row-${virtualRow.index}`}
+              data-testid={`virtual-row-${String(virtualRow.index)}`}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
-                transform: `translateY(${virtualRow.start}px)`,
+                transform: `translateY(${String(virtualRow.start)}px)`,
               }}
             >
               {renderItem(item, virtualRow.index)}

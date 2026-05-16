@@ -54,7 +54,9 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Building2 className="h-5 w-5 text-gray-600 dark:text-slate-400" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('tenant.selector.workspacesTitle')}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('tenant.selector.workspacesTitle')}
+            </h3>
           </div>
           <button
             onClick={onCreateTenant}
@@ -70,7 +72,9 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
         {tenants.length === 0 ? (
           <div className="text-center py-8">
             <Building2 className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
-            <p className="text-gray-600 dark:text-slate-400 mb-4">{t('tenant.selector.emptyMessage')}</p>
+            <p className="text-gray-600 dark:text-slate-400 mb-4">
+              {t('tenant.selector.emptyMessage')}
+            </p>
             <button
               onClick={onCreateTenant}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"

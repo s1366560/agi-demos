@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Fingerprint, Building2 } from 'lucide-react';
 
 import { useGraphContext } from './CytoscapeGraph';
+import { getNodeConnectionCount } from './nodeDetails';
 
 import type { NodeData } from './types';
 
@@ -31,6 +32,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
 
   // Use prop node if provided (explicitly passed), otherwise use context
   const node = propNode !== undefined ? propNode : context.selectedNode;
+  const connectionCount = node ? getNodeConnectionCount(node) : null;
 
   const handleClose = () => {
     context.setSelectedNode(null);
@@ -52,9 +54,7 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
                     ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30'
                     : node.type === 'Episodic'
                       ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30'
-                      : node.type === 'Community'
-                        ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30'
-                        : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-500/30'
+                      : 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/30'
                 }`}
               >
                 {node.type}
@@ -79,23 +79,18 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            {/* Impact Score / Stats Placeholder */}
-            <div>
-              <div className="flex justify-between items-end mb-1">
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
-                  {t('project.graph.node_detail.relevance', 'Relevance')}
-                </label>
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">
-                  {t('project.graph.node_detail.high', 'High')}
-                </span>
+            {connectionCount !== null && (
+              <div>
+                <div className="flex justify-between items-end mb-1">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
+                    {t('project.graph.node_detail.connections', 'Connections')}
+                  </label>
+                  <span className="text-slate-900 dark:text-white font-bold text-sm">
+                    {connectionCount}
+                  </span>
+                </div>
               </div>
-              <div className="w-full bg-slate-100 dark:bg-background-dark rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-emerald-500 to-blue-600 h-full rounded-full"
-                  style={{ width: '85%' }}
-                ></div>
-              </div>
-            </div>
+            )}
 
             {/* Entity Type */}
             {node.entity_type && (
@@ -126,7 +121,9 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
                   {t('project.graph.node_detail.members', 'Members')}
                 </label>
                 <p className="text-sm text-slate-700 dark:text-slate-300">
-                  {node.member_count} entities
+                  {t('project.graph.node_detail.entities_count', {
+                    count: node.member_count,
+                  })}
                 </p>
               </div>
             )}
@@ -144,15 +141,6 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
                 </div>
               </div>
             )}
-          </div>
-
-          <div className="p-4 border-t border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-background-dark flex gap-2">
-            <button type="button" className="flex-1 py-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-50 dark:hover:bg-surface-elevated hover:text-slate-900 dark:hover:text-white transition-colors">
-              {t('project.graph.node_detail.expand', 'Expand')}
-            </button>
-            <button type="button" className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 shadow-lg shadow-blue-600/20 transition-colors">
-              {t('project.graph.node_detail.edit', 'Edit')}
-            </button>
           </div>
         </>
       ) : (

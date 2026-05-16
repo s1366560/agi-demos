@@ -257,6 +257,12 @@ export const SkillList: FC = () => {
             <Search
               placeholder={t('tenant.skills.searchPlaceholder')}
               value={search}
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
               onChange={(e) => {
                 setSearch(e.target.value);
               }}
@@ -371,6 +377,8 @@ export const SkillList: FC = () => {
                     <button
                       type="button"
                       className={`${iconButton} hover:text-[oklch(0.55_0.18_25)]`}
+                      title={t('tenant.skills.actions.delete')}
+                      aria-label={t('tenant.skills.actions.deleteAria')}
                     >
                       <Trash2 size={16} />
                     </button>

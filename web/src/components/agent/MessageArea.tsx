@@ -76,11 +76,11 @@ import {
   StreamingContentMarker,
 } from './message/markers';
 import { StreamingToolPreparation } from './message/StreamingToolPreparation';
-import { TurnPlaceholderRow } from './message/TurnPlaceholderRow';
 import { applyTurnCollapse, computeTurns, isTurnPlaceholder } from './message/turnFolding';
-import { useTurnCollapse } from './message/useTurnCollapse';
+import { TurnPlaceholderRow } from './message/TurnPlaceholderRow';
 import { useMessageAreaKeyboard } from './message/useMessageAreaKeyboard';
 import { useMessageAreaScroll } from './message/useMessageAreaScroll';
+import { useTurnCollapse } from './message/useTurnCollapse';
 import { MessageBubble } from './MessageBubble';
 import {
   ASSISTANT_AVATAR_CLASSES,
@@ -111,7 +111,8 @@ export type {
   MessageAreaCompound,
 } from './message/types';
 
-// Re-export useMessageArea for external consumers
+// Re-export useMessageArea for external consumers.
+// eslint-disable-next-line react-refresh/only-export-components
 export { useMessageArea };
 
 // Define local type aliases to avoid TS6192 (unused imports)
@@ -206,12 +207,19 @@ type _SymbolTagged = Record<symbol, boolean> & { displayName?: string };
 const InternalLoading: React.FC<
   _MessageAreaLoadingProps & { context: _MessageAreaContextValue }
 > = ({ message, context }) => {
+  const { t } = useTranslation();
+
   if (!context.isLoading) return null;
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center">
         <Loader2 className="animate-spin text-4xl text-primary mb-4" size={16} />
-        <p className="text-slate-500">{message || 'Loading conversation...'}</p>
+        <p className="text-slate-500">
+          {message ||
+            t('components.messageArea.loadingConversation', {
+              defaultValue: 'Loading conversation...',
+            })}
+        </p>
       </div>
     </div>
   );
@@ -223,13 +231,22 @@ const InternalEmpty: React.FC<_MessageAreaEmptyProps & { context: _MessageAreaCo
   subtitle,
   context,
 }) => {
+  const { t } = useTranslation();
+
   if (context.isLoading) return null;
   if (context.timeline.length > 0) return null;
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center text-slate-400">
-        <p>{title || 'No messages yet'}</p>
-        <p className="text-sm">{subtitle || 'Start a conversation to see messages here'}</p>
+        <p>
+          {title || t('components.messageArea.emptyTitle', { defaultValue: 'No messages yet' })}
+        </p>
+        <p className="text-sm">
+          {subtitle ||
+            t('components.messageArea.emptySubtitle', {
+              defaultValue: 'Start a conversation to see messages here',
+            })}
+        </p>
       </div>
     </div>
   );
@@ -242,10 +259,7 @@ const InternalEmpty: React.FC<_MessageAreaEmptyProps & { context: _MessageAreaCo
 const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
   ({
     timeline,
-    streamingContent: propStreamingContent,
-    streamingThought: propStreamingThought,
     isStreaming,
-    isThinkingStreaming: propIsThinkingStreaming,
     isLoading,
     hasEarlierMessages = false,
     onLoadEarlier,
@@ -258,15 +272,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
   }) => {
     // Subscribe to fast-changing streaming values directly from the store
     // to avoid re-rendering the parent AgentChatContent on every token.
-const storeStreamingContent = useStreamingAssistantContent();
-  const storeStreamingThought = useStreamingThought();
-  const storeIsThinkingStreaming = useIsThinkingStreaming();
+    const storeStreamingContent = useStreamingAssistantContent();
+    const storeStreamingThought = useStreamingThought();
+    const storeIsThinkingStreaming = useIsThinkingStreaming();
 
-    const streamingContent = isStreaming
-      ? (storeStreamingContent ?? propStreamingContent ?? '')
-      : '';
-    const streamingThought = storeStreamingThought ?? propStreamingThought ?? '';
-    const isThinkingStreaming = storeIsThinkingStreaming ?? Boolean(propIsThinkingStreaming);
+    const streamingContent = isStreaming ? storeStreamingContent : '';
+    const streamingThought = storeStreamingThought;
+    const isThinkingStreaming = storeIsThinkingStreaming;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
@@ -467,6 +479,7 @@ const storeStreamingContent = useStreamingAssistantContent();
       [displayItems]
     );
 
+    // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
       count: displayItems.length,
       getScrollElement: () => containerRef.current,
@@ -475,7 +488,6 @@ const storeStreamingContent = useStreamingAssistantContent();
       paddingEnd: isStreaming ? 16 : 0,
     });
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: refs from useMessageAreaScroll are stable MutableRefObject references that never change identity
     useEffect(() => {
       if (lastConversationIdRef.current === conversationId) return;
       lastConversationIdRef.current = conversationId;
@@ -521,7 +533,22 @@ const storeStreamingContent = useStreamingAssistantContent();
         cancelAnimationFrame(rafId);
         if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current);
       };
-    }, [conversationId, virtualizer, displayItems.length, timeline.length]);
+    }, [
+      conversationId,
+      virtualizer,
+      displayItems.length,
+      timeline.length,
+      lastConversationIdRef,
+      isSwitchingConversationRef,
+      isPositioningRef,
+      isInitialLoadRef,
+      hasScrolledInitiallyRef,
+      prevTimelineLengthRef,
+      previousScrollHeightRef,
+      previousScrollTopRef,
+      isLoadingEarlierRef,
+      userScrolledUpRef,
+    ]);
 
     // Keyboard navigation (extracted to useMessageAreaKeyboard)
     const { focusedMsgIndex } = useMessageAreaKeyboard({
@@ -551,7 +578,8 @@ const storeStreamingContent = useStreamingAssistantContent();
               <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
                 <Loader2 className="animate-spin text-primary mr-2" size={16} />
                 <span className="text-xs text-slate-500">
-                  {scrollIndicatorChild?.props.label || 'Loading...'}
+                  {scrollIndicatorChild?.props.label ||
+                    t('components.messageArea.loading', { defaultValue: 'Loading...' })}
                 </span>
               </div>
             </div>
@@ -917,8 +945,15 @@ const storeStreamingContent = useStreamingAssistantContent();
             <button
               onClick={contextValue.scroll.scrollToBottom}
               className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 animate-fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-              title={scrollButtonChild?.props.title || 'Scroll to bottom'}
-              aria-label="Scroll to bottom"
+              title={
+                scrollButtonChild?.props.title ||
+                t('components.messageArea.scrollToBottom', {
+                  defaultValue: 'Scroll to bottom',
+                })
+              }
+              aria-label={t('components.messageArea.scrollToBottom', {
+                defaultValue: 'Scroll to bottom',
+              })}
               data-testid="scroll-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

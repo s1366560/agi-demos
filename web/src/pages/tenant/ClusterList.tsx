@@ -37,6 +37,14 @@ import type { ClusterResponse } from '../../services/clusterService';
 const { TextArea } = Input;
 const { Option } = Select;
 
+const CLUSTER_PROVIDER_OPTIONS = [
+  { value: 'docker', label: 'Docker' },
+  { value: 'vke', label: 'Volcengine VKE' },
+  { value: 'ack', label: 'Alibaba ACK' },
+  { value: 'tke', label: 'Tencent TKE' },
+  { value: 'custom', label: 'Custom Kubernetes' },
+] as const;
+
 interface FormValues {
   name: string;
   compute_provider?: string;
@@ -203,7 +211,12 @@ export const ClusterList: FC = () => {
       key: 'actions',
       render: (_: unknown, record: ClusterResponse) => (
         <Space size="middle">
-          <Button type="link" onClick={() => { handleViewCluster(record.id); }}>
+          <Button
+            type="link"
+            onClick={() => {
+              handleViewCluster(record.id);
+            }}
+          >
             {t('common.actions.viewAll')}
           </Button>
           <Button type="link" onClick={() => void handleHealthCheck(record.id)}>
@@ -231,8 +244,8 @@ export const ClusterList: FC = () => {
   ];
 
   return (
-    <div className="max-w-full mx-auto w-full flex flex-col gap-8">
-      <div className="flex justify-between items-center">
+    <div className="max-w-full mx-auto w-full flex flex-col gap-8 overflow-x-hidden">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">{t('tenant.clusters.title')}</h1>
           <p className="text-slate-500">{t('tenant.clusters.subtitle')}</p>
@@ -242,20 +255,20 @@ export const ClusterList: FC = () => {
         </Button>
       </div>
 
-      <Row gutter={16}>
-        <Col span={8}>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={8}>
           <Card>
             <div className="text-slate-500">{t('tenant.clusters.stats.total')}</div>
             <div className="text-2xl font-bold">{total}</div>
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={8}>
           <Card>
             <div className="text-slate-500">{t('tenant.clusters.stats.healthy')}</div>
             <div className="text-2xl font-bold text-green-600">{healthyCount}</div>
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={8}>
           <Card>
             <div className="text-slate-500">{t('tenant.clusters.stats.unhealthy')}</div>
             <div className="text-2xl font-bold text-red-600">{unhealthyCount}</div>
@@ -268,6 +281,7 @@ export const ClusterList: FC = () => {
         dataSource={clusters}
         rowKey="id"
         loading={loading}
+        scroll={{ x: 'max-content' }}
         pagination={{ total: clusters.length, pageSize: 10 }}
       />
 
@@ -289,12 +303,11 @@ export const ClusterList: FC = () => {
           </Form.Item>
           <Form.Item name="compute_provider" label={t('tenant.clusters.form.provider')}>
             <Select>
-              <Option value="docker">Docker</Option>
-              <Option value="kubernetes">Kubernetes</Option>
-              <Option value="aws">AWS</Option>
-              <Option value="gcp">GCP</Option>
-              <Option value="azure">Azure</Option>
-              <Option value="on-prem">On-Premise</Option>
+              {CLUSTER_PROVIDER_OPTIONS.map((option) => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="proxy_endpoint" label={t('tenant.clusters.form.apiEndpoint')}>
@@ -324,17 +337,19 @@ export const ClusterList: FC = () => {
               {clusterHealth.node_count}
             </Descriptions.Item>
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.cpuUsage')}>
-              {clusterHealth.cpu_usage !== null ? `${clusterHealth.cpu_usage.toFixed(2)}%` : 'N/A'}
+              {clusterHealth.cpu_usage !== null
+                ? `${clusterHealth.cpu_usage.toFixed(2)}%`
+                : t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
             </Descriptions.Item>
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.memoryUsage')}>
               {clusterHealth.memory_usage !== null
                 ? `${clusterHealth.memory_usage.toFixed(2)}%`
-                : 'N/A'}
+                : t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
             </Descriptions.Item>
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.checkedAt')}>
               {clusterHealth.checked_at
                 ? new Date(clusterHealth.checked_at).toLocaleString()
-                : 'N/A'}
+                : t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
             </Descriptions.Item>
           </Descriptions>
         ) : (

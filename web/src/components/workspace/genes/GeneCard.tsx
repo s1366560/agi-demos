@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Card, Tag, Dropdown, Typography } from 'antd';
 import { MoreHorizontal, Pencil, Trash2, CheckCircle, Ban } from 'lucide-react';
 
@@ -9,7 +11,6 @@ import type { CyberGene } from '@/types/workspace';
 
 import type { MenuProps } from 'antd';
 
-
 export interface GeneCardProps {
   gene: CyberGene;
   onEdit?: ((gene: CyberGene) => void) | undefined;
@@ -18,6 +19,8 @@ export interface GeneCardProps {
 }
 
 export const GeneCard: React.FC<GeneCardProps> = ({ gene, onEdit, onDelete, onToggleActive }) => {
+  const { t } = useTranslation();
+
   const getCategoryText = (category: string) => {
     return category.charAt(0).toUpperCase() + category.slice(1);
   };
@@ -26,19 +29,21 @@ export const GeneCard: React.FC<GeneCardProps> = ({ gene, onEdit, onDelete, onTo
     {
       key: 'edit',
       icon: <Pencil size={14} />,
-      label: 'Edit',
+      label: t('common.edit', 'Edit'),
       onClick: () => onEdit?.(gene),
     },
     {
       key: 'toggle_active',
       icon: gene.is_active ? <Ban size={14} /> : <CheckCircle size={14} />,
-      label: gene.is_active ? 'Deactivate' : 'Activate',
+      label: gene.is_active
+        ? t('components.workspace.genes.deactivate', 'Deactivate')
+        : t('components.workspace.genes.activate', 'Activate'),
       onClick: () => onToggleActive?.(gene.id, !gene.is_active),
     },
     {
       key: 'delete',
       icon: <Trash2 size={14} className="text-red-500" />,
-      label: <span className="text-red-500">Delete</span>,
+      label: <span className="text-red-500">{t('common.delete', 'Delete')}</span>,
       onClick: () => onDelete?.(gene.id),
     },
   ];
@@ -62,7 +67,9 @@ export const GeneCard: React.FC<GeneCardProps> = ({ gene, onEdit, onDelete, onTo
               v{gene.version}
             </Tag>
             <Tag color={gene.is_active ? 'success' : 'error'} className="m-0 border-transparent">
-              {gene.is_active ? 'Active' : 'Inactive'}
+              {gene.is_active
+                ? t('common.status.active', 'Active')
+                : t('common.status.inactive', 'Inactive')}
             </Tag>
           </div>
           <Typography.Title level={5} className="m-0 truncate" title={gene.name}>
@@ -81,7 +88,7 @@ export const GeneCard: React.FC<GeneCardProps> = ({ gene, onEdit, onDelete, onTo
         <div className="flex items-center gap-4 flex-shrink-0">
           <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
             {/* biome-ignore lint/a11y/useSemanticElements: requested by audit */}
-            <div 
+            <div
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {

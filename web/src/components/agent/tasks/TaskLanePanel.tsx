@@ -9,7 +9,15 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Ban, CheckCircle2, ChevronDown, ChevronRight, Circle, Loader2, XCircle } from 'lucide-react';
+import {
+  Ban,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Loader2,
+  XCircle,
+} from 'lucide-react';
 
 import {
   DEFAULT_LANE_CONTRACT,
@@ -92,14 +100,17 @@ const PRIORITY_DOT: Record<string, string> = {
  * canonical column ids in `DEFAULT_LANE_CONTRACT` so we can reuse a single
  * source of truth for "what does this lane owe downstream".
  */
-const LANE_TO_CONTRACT_COLUMN: Record<'in_progress' | 'pending' | 'completed' | 'failed', string> = {
-  pending: 'todo',
-  in_progress: 'dev',
-  completed: 'done',
-  failed: 'dev',
-};
+const LANE_TO_CONTRACT_COLUMN: Record<'in_progress' | 'pending' | 'completed' | 'failed', string> =
+  {
+    pending: 'todo',
+    in_progress: 'dev',
+    completed: 'done',
+    failed: 'dev',
+  };
 
-function getLaneContractEvidence(laneKey: 'in_progress' | 'pending' | 'completed' | 'failed'): ArtifactType[] {
+function getLaneContractEvidence(
+  laneKey: 'in_progress' | 'pending' | 'completed' | 'failed'
+): ArtifactType[] {
   const columnId = LANE_TO_CONTRACT_COLUMN[laneKey];
   const sorted = [...DEFAULT_LANE_CONTRACT.columns].sort((a, b) => a.position - b.position);
   const idx = sorted.findIndex((c) => c.id === columnId);
@@ -127,7 +138,7 @@ function loadCollapsed(conversationId: string | undefined): Record<LaneKey, bool
 }
 
 const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
-  const cfg = STATUS_ICON[task.status] ?? STATUS_ICON.pending;
+  const cfg = STATUS_ICON[task.status];
   const Icon = cfg.icon;
   const isActive = task.status === 'in_progress';
   const isDone = task.status === 'completed';
@@ -239,7 +250,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
         <div className="h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
           <div
             className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 dark:bg-emerald-400"
-            style={{ width: `${pct}%` }}
+            style={{ width: `${String(pct)}%` }}
           />
         </div>
       </div>

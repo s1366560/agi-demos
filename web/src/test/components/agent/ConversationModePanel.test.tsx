@@ -12,20 +12,45 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+vi.mock('antd', async (importOriginal) => {
+  const React = await import('react');
+  const actual = await importOriginal<typeof import('antd')>();
+
+  return {
+    ...actual,
+    Segmented: ({ disabled, onChange, options = [], value, ...props }: any) =>
+      React.createElement(
+        'div',
+        { 'data-testid': props['data-testid'], role: 'group' },
+        options.map((option: { label: string; value: string }) =>
+          React.createElement(
+            'button',
+            {
+              'aria-pressed': option.value === value,
+              disabled,
+              key: option.value,
+              onClick: () => onChange?.(option.value),
+              type: 'button',
+            },
+            option.label
+          )
+        )
+      ),
+  };
+});
+
 const refresh = vi.fn().mockResolvedValue(undefined);
-let mockRoster:
-  | {
-      effective_mode: string;
-      participant_agents?: string[];
-      participant_bindings?: Array<{
-        agent_id: string;
-        display_name: string | null;
-        label: string | null;
-      }>;
-      coordinator_agent_id?: string | null;
-      focused_agent_id?: string | null;
-    }
-  | null = {
+let mockRoster: {
+  effective_mode: string;
+  participant_agents?: string[];
+  participant_bindings?: Array<{
+    agent_id: string;
+    display_name: string | null;
+    label: string | null;
+  }>;
+  coordinator_agent_id?: string | null;
+  focused_agent_id?: string | null;
+} | null = {
   effective_mode: 'single_agent',
   participant_agents: [],
   participant_bindings: [],
@@ -73,6 +98,13 @@ vi.mock('@/services/workspaceService', () => ({
 import { ConversationModePanel } from '@/components/agent/ConversationModePanel';
 
 describe('ConversationModePanel', () => {
+  const renderPanel = async () => {
+    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await waitFor(() => {
+      expect(getConversation).toHaveBeenCalledWith('c1', 'p1');
+    });
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockRoster = {
@@ -90,8 +122,8 @@ describe('ConversationModePanel', () => {
     listTasks.mockResolvedValue([]);
   });
 
-  it('renders the mode segmented control reflecting effective_mode from roster', () => {
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+  it('renders the mode segmented control reflecting effective_mode from roster', async () => {
+    await renderPanel();
     expect(screen.getByTestId('conversation-mode-panel')).toBeInTheDocument();
     expect(screen.getByText('Single')).toBeInTheDocument();
     expect(screen.getByText('Autonomous')).toBeInTheDocument();
@@ -103,7 +135,7 @@ describe('ConversationModePanel', () => {
   });
 
   it('PATCHes the new mode when operator picks a non-autonomous option', async () => {
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
     fireEvent.click(screen.getByText('Shared'));
     await waitFor(() => {
       expect(updateConversationMode).toHaveBeenCalledWith('c1', 'p1', {
@@ -114,7 +146,7 @@ describe('ConversationModePanel', () => {
   });
 
   it('PATCHes autonomous mode directly (no goal-contract drawer after G1)', async () => {
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
     fireEvent.click(screen.getByText('Autonomous'));
     await waitFor(() => {
       expect(updateConversationMode).toHaveBeenCalledWith('c1', 'p1', {
@@ -124,9 +156,8 @@ describe('ConversationModePanel', () => {
   });
 
   it('ignores clicks on the already-active mode', async () => {
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
     fireEvent.click(screen.getByText('Single'));
-    await new Promise((r) => setTimeout(r, 20));
     expect(updateConversationMode).not.toHaveBeenCalled();
   });
 
@@ -134,9 +165,7 @@ describe('ConversationModePanel', () => {
     mockRoster = {
       effective_mode: 'autonomous',
       participant_agents: ['leader-1'],
-      participant_bindings: [
-        { agent_id: 'leader-1', display_name: 'Leader One', label: null },
-      ],
+      participant_bindings: [{ agent_id: 'leader-1', display_name: 'Leader One', label: null }],
       coordinator_agent_id: 'leader-1',
       focused_agent_id: null,
     };
@@ -150,7 +179,7 @@ describe('ConversationModePanel', () => {
       { id: 't2', title: 'Audit logs', status: 'open' },
     ]);
 
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
 
     await waitFor(() => {
       expect(listTasks).toHaveBeenCalledWith('ws1');
@@ -177,9 +206,8 @@ describe('ConversationModePanel', () => {
       linked_workspace_task_id: null,
     });
 
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
 
-    await waitFor(() => expect(getConversation).toHaveBeenCalled());
     expect(screen.queryByTestId('conversation-task-picker')).not.toBeInTheDocument();
     expect(listTasks).not.toHaveBeenCalled();
   });
@@ -196,7 +224,7 @@ describe('ConversationModePanel', () => {
       focused_agent_id: 'agent-b',
     };
 
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
 
     expect(screen.getByText('Coordinator: Coordinator A')).toBeInTheDocument();
     expect(screen.getByText('Focused agent: Focused B')).toBeInTheDocument();
@@ -227,7 +255,7 @@ describe('ConversationModePanel', () => {
       focused_agent_id: 'agent-b',
     });
 
-    render(<ConversationModePanel conversationId="c1" projectId="p1" />);
+    await renderPanel();
 
     await waitFor(() => {
       expect(screen.getByText('Participants: 2')).toBeInTheDocument();

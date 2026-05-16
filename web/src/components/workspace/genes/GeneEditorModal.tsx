@@ -5,6 +5,10 @@ import { useTranslation } from 'react-i18next';
 
 import { Form, Input, Modal, Segmented, Switch, Tabs, Tag } from 'antd';
 
+import { GeneConfigForm } from './GeneConfigForm';
+import { GeneConfigJsonEditor } from './GeneConfigJsonEditor';
+import { getCategoryColor } from './utils';
+
 import {
   parseGeneConfig,
   parseRawConfigJson,
@@ -13,12 +17,6 @@ import {
   type GeneConfigDraft,
   type GeneConfigValidationError,
 } from '@/types/geneConfig';
-
-import { getCategoryColor } from './utils';
-
-import { GeneConfigForm } from './GeneConfigForm';
-import { GeneConfigJsonEditor } from './GeneConfigJsonEditor';
-
 import type { CyberGene, CyberGeneCategory } from '@/types/workspace';
 
 export interface GenePayload {
@@ -218,7 +216,7 @@ export const GeneEditorModal: React.FC<GeneEditorModalProps> = ({
           ? t('workspaceDetail.genes.create', 'Create')
           : t('workspaceDetail.genes.save', 'Save')
       }
-      destroyOnClose
+      destroyOnHidden
     >
       <Form layout="vertical" className="space-y-3">
         <Form.Item
@@ -243,7 +241,7 @@ export const GeneEditorModal: React.FC<GeneEditorModalProps> = ({
             }))}
             value={payload.category}
             onChange={(v) => {
-              handleCategoryChange(v as CyberGeneCategory);
+              handleCategoryChange(v);
             }}
           />
         </Form.Item>

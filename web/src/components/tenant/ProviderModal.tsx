@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 
-import { AlertCircle, Bot, Loader2, Save, X ,
+import { useTranslation } from 'react-i18next';
+
+import {
+  AlertCircle,
+  Bot,
+  Loader2,
+  Save,
+  X,
   CheckCircle,
   Square,
   StopCircle,
@@ -18,7 +25,7 @@ import { AlertCircle, Bot, Loader2, Save, X ,
   Brain,
   Info,
   Globe,
-  User
+  User,
 } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
@@ -26,32 +33,54 @@ import { formatDateTime } from '@/utils/date';
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../../types/memory';
 
-
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
 
@@ -98,6 +127,16 @@ const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
 
 const providerTypeRequiresApiKey = (type: ProviderType) =>
   !OPTIONAL_API_KEY_PROVIDERS.includes(type);
+
+const getProviderErrorMessage = (err: unknown): string => {
+  if (typeof err === 'object' && err !== null && 'response' in err) {
+    const response = (err as { response?: { data?: { detail?: unknown } } }).response;
+    const detail = response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+  }
+  if (err instanceof Error) return err.message;
+  return 'Failed to save provider';
+};
 
 const DEFAULT_MODELS: Partial<
   Record<
@@ -242,6 +281,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
   onSuccess,
   provider,
 }) => {
+  const { t } = useTranslation();
   const isEditing = !!provider;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -322,7 +362,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
     setError(null);
 
     try {
-      if (isEditing && provider) {
+      if (provider) {
         const updateData: ProviderUpdate = {
           name: formData.name,
           provider_type: formData.provider_type,
@@ -355,9 +395,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
         await providerAPI.create(createData);
       }
       onSuccess();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to save provider:', err);
-      setError(err.response?.data?.detail || 'Failed to save provider');
+      setError(getProviderErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -410,7 +450,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
-                {renderDynamicIcon(tab.icon, 18, "")}
+                {renderDynamicIcon(tab.icon, 18, '')}
                 {tab.label}
               </button>
             ))}
@@ -418,7 +458,12 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+          className="flex-1 overflow-y-auto"
+        >
           <div className="p-6 space-y-6">
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
@@ -515,7 +560,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                       }}
                       className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Active</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      {t('common.status.active')}
+                    </span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -527,7 +574,9 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                       className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                     />
                     <span className="text-sm text-slate-700 dark:text-slate-300">
-                      Set as default provider
+                      {t('components.provider.modal.setDefaultProvider', {
+                        defaultValue: 'Set as default provider',
+                      })}
                     </span>
                   </label>
                 </div>
@@ -659,17 +708,23 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                   </h4>
                   <div className="space-y-2 text-sm text-slate-500">
                     <p>
-                      <span className="font-medium">Type:</span>{' '}
+                      <span className="font-medium">
+                        {t('components.provider.modal.type', { defaultValue: 'Type:' })}
+                      </span>{' '}
                       {PROVIDER_TYPES.find((t) => t.value === formData.provider_type)?.label}
                     </p>
-                    {isEditing && provider && (
+                    {provider && (
                       <>
                         <p>
-                          <span className="font-medium">Created:</span>{' '}
+                          <span className="font-medium">
+                            {t('components.provider.modal.created', { defaultValue: 'Created:' })}
+                          </span>{' '}
                           {formatDateTime(provider.created_at)}
                         </p>
                         <p>
-                          <span className="font-medium">Updated:</span>{' '}
+                          <span className="font-medium">
+                            {t('components.provider.modal.updated', { defaultValue: 'Updated:' })}
+                          </span>{' '}
                           {formatDateTime(provider.updated_at)}
                         </p>
                       </>

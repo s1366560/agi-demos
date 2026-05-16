@@ -59,13 +59,8 @@ const buildQuery = (limit?: number): string => {
 };
 
 export const playbookService = {
-  listPlaybooks: async (
-    projectId: string,
-    limit?: number
-  ): Promise<Playbook[]> => {
-    const response = await apiFetch.get(
-      `/projects/${projectId}/playbooks${buildQuery(limit)}`
-    );
+  listPlaybooks: async (projectId: string, limit?: number): Promise<Playbook[]> => {
+    const response = await apiFetch.get(`/projects/${projectId}/playbooks${buildQuery(limit)}`);
     const body = (await response.json()) as PlaybooksResponse;
     return body.items;
   },

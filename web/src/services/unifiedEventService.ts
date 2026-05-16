@@ -20,7 +20,10 @@
 import { logger } from '../utils/logger';
 import { getAuthToken } from '../utils/tokenResolver';
 
-import { createWebSocketUrl } from './client/urlUtils';
+import { createWebSocketAuthProtocols, createWebSocketUrl } from './client/urlUtils';
+import { attachWatchdog } from './client/wsWatchdog';
+
+import type { Watchdog } from './client/wsWatchdog';
 
 // =============================================================================
 // Types
@@ -66,7 +69,7 @@ interface ServerMessage {
   conversation_id?: string | undefined;
   project_id?: string | undefined;
   sequence_id?: string | undefined;
-  data?: unknown | undefined;
+  data?: unknown;
   event_id?: string | undefined;
   event_time_us?: number | undefined;
   event_counter?: number | undefined;
@@ -82,10 +85,11 @@ interface ServerMessage {
  * Generate a unique session ID for this browser tab
  */
 function generateSessionId(): string {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- retain fallback for older runtimes.
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  return `${String(Date.now())}-${Math.random().toString(36).substring(2, 15)}`;
 }
 
 /**
@@ -109,6 +113,7 @@ class UnifiedEventServiceImpl {
   // Heartbeat to keep connection alive
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private readonly HEARTBEAT_INTERVAL_MS = 30000;
+  private watchdog: Watchdog | null = null;
 
   // Topic subscriptions: topic -> Set of handlers
   private subscriptions: Map<string, Set<EventHandler>> = new Map();
@@ -174,12 +179,16 @@ class UnifiedEventServiceImpl {
       }
 
       const wsUrl = createWebSocketUrl('/agent/ws', {
-        token,
         session_id: this.sessionId,
       });
 
       try {
-        this.ws = new WebSocket(wsUrl);
+        this.ws = new WebSocket(wsUrl, createWebSocketAuthProtocols(token));
+        this.watchdog?.stop();
+        this.watchdog = attachWatchdog(this.ws, {
+          staleAfterMs: this.HEARTBEAT_INTERVAL_MS * 3,
+          label: 'UnifiedWS',
+        });
 
         this.ws.onopen = () => {
           logger.debug(`[UnifiedWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`);
@@ -201,8 +210,12 @@ class UnifiedEventServiceImpl {
         };
 
         this.ws.onmessage = (event) => {
+          this.watchdog?.notifyMessage();
           try {
-            const message: ServerMessage = JSON.parse(event.data);
+            if (typeof event.data !== 'string') {
+              throw new Error('Expected text WebSocket message');
+            }
+            const message = JSON.parse(event.data) as ServerMessage;
             this.handleMessage(message);
           } catch (err) {
             logger.error('[UnifiedWS] Failed to parse message:', err);
@@ -213,6 +226,7 @@ class UnifiedEventServiceImpl {
           logger.debug('[UnifiedWS] Disconnected', event.code, event.reason);
           this.setStatus('disconnected');
           this.stopHeartbeat();
+          this.stopWatchdog();
 
           if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnect();
@@ -223,15 +237,16 @@ class UnifiedEventServiceImpl {
           logger.error('[UnifiedWS] Error:', error);
           this.setStatus('error');
           this.stopHeartbeat();
+          this.stopWatchdog();
           this.connectingPromise = null;
-          reject(error);
+          reject(error instanceof Error ? error : new Error('WebSocket error'));
         };
       } catch (err) {
         logger.error('[UnifiedWS] Connection error:', err);
         this.setStatus('error');
         this.connectingPromise = null;
         this.scheduleReconnect();
-        reject(err);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
   }
@@ -242,6 +257,7 @@ class UnifiedEventServiceImpl {
   disconnect(): void {
     this.isManualClose = true;
     this.stopHeartbeat();
+    this.stopWatchdog();
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -390,11 +406,7 @@ class UnifiedEventServiceImpl {
   /**
    * Subscribe to project-scoped domain events.
    */
-  subscribeProject(
-    projectId: string,
-    handler: EventHandler,
-    fromSequence?: string
-  ): () => void {
+  subscribeProject(projectId: string, handler: EventHandler, fromSequence?: string): () => void {
     const topic = `project:${projectId}`;
 
     this.ensureConnected();
@@ -688,12 +700,12 @@ class UnifiedEventServiceImpl {
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     logger.debug(
-      `[UnifiedWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      `[UnifiedWS] Reconnecting in ${String(delay)}ms (attempt ${String(this.reconnectAttempts)}/${String(this.maxReconnectAttempts)})`
     );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
-      this.connect().catch((err) => {
+      this.connect().catch((err: unknown) => {
         logger.error('[UnifiedWS] Reconnect failed:', err);
       });
     }, delay);
@@ -713,6 +725,11 @@ class UnifiedEventServiceImpl {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+  }
+
+  private stopWatchdog(): void {
+    this.watchdog?.stop();
+    this.watchdog = null;
   }
 
   // ===========================================================================

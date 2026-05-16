@@ -170,7 +170,7 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
                     borderRadius: '50%',
                     background: '#d9d9d9',
                     animation: 'pulse 1.4s ease-in-out infinite',
-                    animationDelay: `${i * 0.2}s`,
+                    animationDelay: `${String(i * 0.2)}s`,
                   }}
                 />
               ))}

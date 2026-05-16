@@ -164,9 +164,7 @@ describe('WorkstationArrangementBoard', () => {
 
     // Agent's initial character is rendered inside an SVG text element
     const svgTexts = document.querySelectorAll('svg text');
-    const agentInitials = Array.from(svgTexts).filter(
-      (el) => el.textContent === 'A'
-    );
+    const agentInitials = Array.from(svgTexts).filter((el) => el.textContent === 'A');
     expect(agentInitials.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -352,9 +350,7 @@ describe('WorkstationArrangementBoard', () => {
     // Press 3 to switch to 3D
     fireEvent.keyDown(board, { key: '3' });
 
-    expect(
-      screen.getByText('blackboard.arrangement.threeDPreviewNote')
-    ).toBeInTheDocument();
+    expect(screen.getByText('blackboard.arrangement.threeDPreviewNote')).toBeInTheDocument();
 
     // Switch back via toggle button (keyboard '2' only works on the 2D board div)
     const twoDButton = screen.getByText('blackboard.arrangement.modes.twoD');
@@ -394,7 +390,9 @@ describe('WorkstationArrangementBoard', () => {
     // verify the same zoom-clamp logic (ZOOM_MIN=0.3, ZOOM_MAX=4.0) via keyboard
     renderBoard();
     const board = getBoard();
-    act(() => { board.focus(); });
+    act(() => {
+      board.focus();
+    });
 
     const readScale = (): number => {
       const g = document.querySelector('svg g[transform]');
@@ -455,12 +453,8 @@ describe('WorkstationArrangementBoard', () => {
 
     // When an agent is selected, the action drawer shows agent-specific info.
     // The agent selection shows 'Open workspace' link and 'Move' and 'Remove' buttons.
-    expect(
-      screen.getByText('blackboard.arrangement.openWorkspace')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('blackboard.arrangement.actions.move')
-    ).toBeInTheDocument();
+    expect(screen.getByText('blackboard.arrangement.openWorkspace')).toBeInTheDocument();
+    expect(screen.getByText('blackboard.arrangement.actions.move')).toBeInTheDocument();
   });
 
   // ---- Selection state machine -------------------------------------------
@@ -515,9 +509,7 @@ describe('WorkstationArrangementBoard', () => {
     fireEvent.click(threeDButton);
 
     // 3D preview note should appear
-    expect(
-      screen.getByText('blackboard.arrangement.threeDPreviewNote')
-    ).toBeInTheDocument();
+    expect(screen.getByText('blackboard.arrangement.threeDPreviewNote')).toBeInTheDocument();
 
     // Click 2D button to go back
     fireEvent.click(twoDButton);

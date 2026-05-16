@@ -8,6 +8,18 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const antdMessage = vi.hoisted(() => ({
+  error: vi.fn(),
+}));
+const antdModal = vi.hoisted(() => ({
+  confirm: vi.fn((options?: { onOk?: () => void | Promise<void> }) => options?.onOk?.()),
+}));
+
+vi.mock('antd', () => ({
+  Modal: antdModal,
+  message: antdMessage,
+}));
+
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ projectId: 'test-project-1' }),
@@ -16,7 +28,24 @@ vi.mock('react-router-dom', () => ({
 // Mock i18n
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: string | Record<string, unknown>) => {
+      const defaultValue =
+        typeof options === 'string'
+          ? options
+          : typeof options === 'object' &&
+              options !== null &&
+              typeof options.defaultValue === 'string'
+            ? options.defaultValue
+            : key;
+
+      if (typeof options !== 'object' || options === null) {
+        return defaultValue;
+      }
+
+      return defaultValue.replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
+        String(options[token] ?? '')
+      );
+    },
     i18n: {
       changeLanguage: () => Promise.resolve(),
       language: 'en-US',
@@ -159,6 +188,15 @@ describe('EdgeTypeList Compound Component', () => {
         // KNOWS appears in both master and detail panes, use getAllByText
         expect(screen.getAllByText('KNOWS').length).toBeGreaterThan(0);
         expect(screen.getAllByText('WORKS_FOR').length).toBeGreaterThan(0);
+      });
+    });
+
+    it('should render schema attributes returned by the API', async () => {
+      const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
+      render(<EdgeTypeList />);
+      await waitFor(() => {
+        expect(screen.getByText('since')).toBeInTheDocument();
+        expect(screen.getByText('strength')).toBeInTheDocument();
       });
     });
   });
@@ -411,6 +449,30 @@ describe('EdgeTypeList Compound Component', () => {
       await waitFor(() => {
         expect(screen.getByText('New Edge Type')).toBeInTheDocument();
       });
+    });
+
+    it('shows in-app error feedback when saving fails', async () => {
+      const { schemaAPI } = await import('../../../../services/api');
+      vi.mocked(schemaAPI.createEdgeType).mockRejectedValueOnce(new Error('save failed'));
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+
+      const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
+      render(<EdgeTypeList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Create Edge Type')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Create Edge Type'));
+      await waitFor(() => {
+        expect(screen.getByText('New Edge Type')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Save'));
+
+      await waitFor(() => {
+        expect(antdMessage.error).toHaveBeenCalledWith('Failed to save edge type');
+      });
+      expect(alertSpy).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
     });
 
     it('should select edge and show detail pane', async () => {

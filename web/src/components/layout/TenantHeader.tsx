@@ -7,6 +7,8 @@
  *   Right:  Search + Notifications + User menu
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -38,6 +40,7 @@ import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 import { useThemeStore } from '@/stores/theme';
 import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
+
 import { authAPI } from '@/services/api';
 
 import { deriveTopNavigationItems } from '@/config/navigation';
@@ -191,7 +194,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         basePath,
         projectBasePath,
         preferredWorkspaceId,
-        t: (key, fallback) => String(fallback ? t(key, fallback) : t(key)),
+        t: (key, fallback) => (fallback ? t(key, fallback) : t(key)),
         tenantId: normalizedTenantId || undefined,
         projectId: effectiveProjectId,
       }),
@@ -210,7 +213,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
               type="button"
               onClick={onMobileMenuOpen}
               className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 md:hidden"
-              aria-label="Menu"
+              aria-label={t('components.layout.header.mobileMenu', 'Menu')}
             >
               <Menu size={18} className="text-slate-500" />
             </button>
@@ -218,7 +221,11 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
               type="button"
               onClick={onSidebarToggle}
               className="hidden md:flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-500"
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={
+                sidebarCollapsed
+                  ? t('components.layout.header.expandSidebar', 'Expand sidebar')
+                  : t('components.layout.header.collapseSidebar', 'Collapse sidebar')
+              }
             >
               {sidebarCollapsed ? <PanelRight size={18} /> : <PanelLeft size={18} />}
             </button>
@@ -231,13 +238,13 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
           </div>
 
           {/* Center: Nav tabs */}
-          <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0 ml-4">
+          <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0 ml-4 mr-2 overflow-hidden">
             {visibleNav.map((item) => (
               <NavLink
                 key={item.id}
                 to={item.path}
                 className={() =>
-                  `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap ${
+                  `flex shrink-0 items-center gap-1.5 px-2 2xl:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap ${
                     isContextualTopNavItemActive(location.pathname, item)
                       ? 'bg-primary/10 text-primary'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
@@ -251,14 +258,11 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
           </nav>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-none">
             <SearchButton />
             <BackgroundTasksButton />
             <NotificationButton />
-            <HeaderUserMenu
-              tenantId={tenantId}
-              currentTenant={currentTenant}
-            />
+            <HeaderUserMenu tenantId={tenantId} currentTenant={currentTenant} />
           </div>
         </div>
       </header>
@@ -289,13 +293,13 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
   const isAnyActive = items.some((item) => isContextualTopNavItemActive(location.pathname, item));
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative shrink-0" ref={ref}>
       <button
         type="button"
         onClick={() => {
           setOpen(!open);
         }}
-        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
+        className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           isAnyActive
             ? 'bg-primary/10 text-primary'
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -336,6 +340,7 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
  * Background SubAgent tasks indicator
  */
 function BackgroundTasksButton() {
+  const { t } = useTranslation();
   const runningCount = useRunningCount();
   const togglePanel = useBackgroundStore((s) => s.togglePanel);
 
@@ -344,7 +349,7 @@ function BackgroundTasksButton() {
       type="button"
       onClick={togglePanel}
       className="relative p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      aria-label="Background tasks"
+      aria-label={t('components.layout.header.backgroundTasks', 'Background tasks')}
     >
       <Activity size={18} />
       {runningCount > 0 && (
@@ -360,11 +365,13 @@ function BackgroundTasksButton() {
  * Compact search button (icon only, expandable later)
  */
 function SearchButton() {
+  const { t } = useTranslation();
+
   return (
     <button
       type="button"
       className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      aria-label="Search"
+      aria-label={t('common.search', 'Search')}
     >
       <Search size={18} />
     </button>
@@ -375,11 +382,13 @@ function SearchButton() {
  * Notification bell
  */
 function NotificationButton() {
+  const { t } = useTranslation();
+
   return (
     <button
       type="button"
       className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      aria-label="Notifications"
+      aria-label={t('notifications.title', 'Notifications')}
     >
       <Bell size={18} />
     </button>
@@ -484,7 +493,7 @@ function HeaderUserMenu({
           setOpen(!open);
         }}
         className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        aria-label="User menu"
+        aria-label={t('components.layout.header.userMenu', 'User menu')}
       >
         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs font-medium overflow-hidden">
           {avatarUrl ? (
@@ -519,6 +528,9 @@ function HeaderUserMenu({
             <button
               type="button"
               onClick={cycleTheme}
+              aria-label={t('user.themeCycleAria', 'Switch theme. Current theme: {{theme}}', {
+                theme: themeLabel,
+              })}
               className="w-full flex items-center justify-between px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             >
               <span className="flex items-center gap-2.5">
@@ -586,7 +598,7 @@ function HeaderUserMenu({
               icon={<User size={16} />}
               label={t('user.profile', 'Profile')}
               onClick={() => {
-                void navigate('/profile');
+                void navigate(`${basePath}/profile`);
                 setOpen(false);
               }}
             />

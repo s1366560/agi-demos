@@ -7,6 +7,28 @@
 
 const ZUSTAND_AUTH_STORAGE_KEY = 'memstack-auth-storage';
 
+type AuthStateClearer = () => void;
+
+let authStateClearer: AuthStateClearer | null = null;
+
+type TokenLookupResult = {
+  found: boolean;
+  token: string | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readTokenFromRecord(record: Record<string, unknown>): TokenLookupResult {
+  if (!Object.prototype.hasOwnProperty.call(record, 'token')) {
+    return { found: false, token: null };
+  }
+
+  const token = record.token;
+  return { found: true, token: typeof token === 'string' ? token : null };
+}
+
 /**
  * Get the authentication token from Zustand persist storage.
  *
@@ -19,16 +41,24 @@ export function getAuthToken(): string | null {
 
   if (authStorage) {
     try {
-      const parsed = JSON.parse(authStorage);
+      const parsed: unknown = JSON.parse(authStorage);
+
+      if (!isRecord(parsed)) {
+        return null;
+      }
 
       // Zustand persist structure: { state: { token: "..." }, version: 0 }
-      if (parsed.state && 'token' in parsed.state) {
-        return parsed.state.token;
+      if (isRecord(parsed.state)) {
+        const stateToken = readTokenFromRecord(parsed.state);
+        if (stateToken.found) {
+          return stateToken.token;
+        }
       }
 
       // Backward compatibility: direct property
-      if ('token' in parsed) {
-        return parsed.token;
+      const directToken = readTokenFromRecord(parsed);
+      if (directToken.found) {
+        return directToken.token;
       }
     } catch {
       // Invalid JSON
@@ -38,26 +68,24 @@ export function getAuthToken(): string | null {
   return null;
 }
 
+export function registerAuthStateClearer(clearer: AuthStateClearer): () => void {
+  authStateClearer = clearer;
+
+  return () => {
+    if (authStateClearer === clearer) {
+      authStateClearer = null;
+    }
+  };
+}
+
 /**
  * Clear all authentication state.
  *
  * Clears both the Zustand in-memory store AND persisted localStorage.
- * Uses dynamic import to avoid circular dependencies (stores -> services -> tokenResolver).
  * This is the ONLY function that should clear auth state across the app.
  */
 export function clearAuthState(): void {
-  // Clear Zustand in-memory state (triggers React re-render -> redirect to /login)
-  import('@/stores/auth')
-    .then(({ useAuthStore }) => {
-      useAuthStore.setState({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
-    })
-    .catch(() => {
-      // If dynamic import fails, clear localStorage directly as fallback
-      localStorage.removeItem(ZUSTAND_AUTH_STORAGE_KEY);
-    });
+  localStorage.removeItem(ZUSTAND_AUTH_STORAGE_KEY);
+
+  authStateClearer?.();
 }

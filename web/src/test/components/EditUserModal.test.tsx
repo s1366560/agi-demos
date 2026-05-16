@@ -102,7 +102,7 @@ describe('EditUserModal - Component Tests', () => {
       );
 
       expect(screen.getByText('Admin')).toBeInTheDocument();
-      expect(screen.getByText('Editor')).toBeInTheDocument();
+      expect(screen.getByText('Member')).toBeInTheDocument();
       expect(screen.getByText('Viewer')).toBeInTheDocument();
     });
 
@@ -121,6 +121,8 @@ describe('EditUserModal - Component Tests', () => {
       expect(screen.getByText('Owner')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
       expect(screen.getByText('Member')).toBeInTheDocument();
+      expect(screen.getByText('Editor')).toBeInTheDocument();
+      expect(screen.getByText('Viewer')).toBeInTheDocument();
     });
 
     it('disables role selection for owner role', () => {
@@ -172,7 +174,7 @@ describe('EditUserModal - Component Tests', () => {
         />
       );
 
-      const closeButton = screen.getByRole('button', { name: '' }); // X icon button
+      const closeButton = screen.getByRole('button', { name: 'Close' });
       fireEvent.click(closeButton);
 
       expect(mockOnClose).toHaveBeenCalledTimes(1);

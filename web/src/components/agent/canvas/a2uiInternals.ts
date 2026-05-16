@@ -19,6 +19,7 @@ import { initializeDefaultCatalog as rawInitializeDefaultCatalog } from '../../.
 // @ts-expect-error CopilotKit does not publish declarations for this internal styles module.
 import { injectStyles as rawInjectStyles } from '../../../../node_modules/@copilotkit/a2ui-renderer/dist/react-renderer/styles/index.mjs';
 // @ts-expect-error CopilotKit does not publish declarations for this internal theme utils module.
+// prettier-ignore
 import { classMapToString as rawClassMapToString, stylesToObject as rawStylesToObject } from '../../../../node_modules/@copilotkit/a2ui-renderer/dist/react-renderer/theme/utils.mjs';
 import { theme as rawA2UITheme } from '../../../../node_modules/@copilotkit/a2ui-renderer/dist/theme/viewer-theme.mjs';
 
@@ -39,7 +40,7 @@ export interface A2UIActions {
 }
 
 export interface A2UIComponentHelpers {
-  theme: any;
+  theme: unknown;
   resolveString(value: unknown): string | null;
   resolveNumber(value: unknown): number | null;
   resolveBoolean(value: unknown): boolean | null;
@@ -49,15 +50,17 @@ export interface A2UIComponentHelpers {
   getUniqueId(prefix: string): string;
 }
 
+type A2UIRegisteredComponent = ComponentType<never> | NamedExoticComponent<never>;
+
 export interface A2UIComponentRegistration {
-  component: ComponentType<any> | NamedExoticComponent<any>;
+  component: A2UIRegisteredComponent;
   lazy?: boolean | undefined;
 }
 
 export interface A2UIComponentRegistry {
   has(type: string): boolean;
   register(type: string, registration: A2UIComponentRegistration): void;
-  get(type: string): ComponentType<any> | NamedExoticComponent<any> | null;
+  get(type: string): A2UIRegisteredComponent | null;
   getRegisteredTypes(): string[];
   clear(): void;
 }

@@ -52,9 +52,7 @@ export interface UseTurnCollapseResult {
   expandAll: () => void;
 }
 
-export function useTurnCollapse(
-  conversationId: string | null | undefined
-): UseTurnCollapseResult {
+export function useTurnCollapse(conversationId: string | null | undefined): UseTurnCollapseResult {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => readSet(conversationId));
 
   // Reset when the active conversation changes.

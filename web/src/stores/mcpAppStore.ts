@@ -70,14 +70,12 @@ export const useMCPAppStore = create<MCPAppState>()(
           }
           // Prune stale resources/cache entries for apps no longer in backend
           const prev = get();
-          const resources = { ...prev.resources };
-          const resourceCachedAt = { ...prev.resourceCachedAt };
-          for (const id of Object.keys(resources)) {
-            if (!apps[id]) {
-              delete resources[id];
-              delete resourceCachedAt[id];
-            }
-          }
+          const resources = Object.fromEntries(
+            Object.entries(prev.resources).filter(([id]) => Boolean(apps[id]))
+          );
+          const resourceCachedAt = Object.fromEntries(
+            Object.entries(prev.resourceCachedAt).filter(([id]) => Boolean(apps[id]))
+          );
           set({ apps, resources, resourceCachedAt, loading: false });
         } catch (err) {
           set({ error: getErrorMessage(err), loading: false });
@@ -142,23 +140,26 @@ export const useMCPAppStore = create<MCPAppState>()(
         if (!uri || !html) return;
         const now = Date.now();
         set((state) => {
-          const nextHtmlByUri = { ...state.htmlByUri };
-          for (const [key, value] of Object.entries(nextHtmlByUri)) {
-            if (now - value.cachedAt >= HTML_CACHE_TTL_MS) {
-              delete nextHtmlByUri[key];
-            }
-          }
+          let nextHtmlByUri = Object.fromEntries(
+            Object.entries(state.htmlByUri).filter(
+              ([, value]) => now - value.cachedAt < HTML_CACHE_TTL_MS
+            )
+          );
 
           nextHtmlByUri[uri] = { html, cachedAt: now };
 
           const keys = Object.keys(nextHtmlByUri);
           if (keys.length > MAX_HTML_CACHE_ENTRIES) {
-            keys
-              .sort((a, b) => (nextHtmlByUri[a]?.cachedAt ?? 0) - (nextHtmlByUri[b]?.cachedAt ?? 0))
-              .slice(0, keys.length - MAX_HTML_CACHE_ENTRIES)
-              .forEach((key) => {
-                delete nextHtmlByUri[key];
-              });
+            const keysToDrop = new Set(
+              keys
+                .sort(
+                  (a, b) => (nextHtmlByUri[a]?.cachedAt ?? 0) - (nextHtmlByUri[b]?.cachedAt ?? 0)
+                )
+                .slice(0, keys.length - MAX_HTML_CACHE_ENTRIES)
+            );
+            nextHtmlByUri = Object.fromEntries(
+              Object.entries(nextHtmlByUri).filter(([key]) => !keysToDrop.has(key))
+            );
           }
 
           return { htmlByUri: nextHtmlByUri };

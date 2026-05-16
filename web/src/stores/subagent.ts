@@ -142,8 +142,8 @@ export const useSubAgentStore = create<SubAgentState>()(
           };
           const response = await subagentAPI.list(queryParams);
           set({
-            subagents: response.subagents || [],
-            total: response.total || 0,
+            subagents: response.subagents,
+            total: response.total,
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -256,7 +256,7 @@ export const useSubAgentStore = create<SubAgentState>()(
         try {
           const response = await subagentAPI.listTemplates();
           set({
-            templates: response.templates || [],
+            templates: response.templates,
             isTemplatesLoading: false,
           });
         } catch (error: unknown) {

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 
-import { createApiUrl } from '../services/client/urlUtils';
+import { subscribeToTaskEvents } from '../services/taskStream';
 
 export interface TaskStatus {
   task_id: string;
@@ -113,7 +113,7 @@ function safeParseJSON(data: unknown): Record<string, unknown> | null {
  * unsubscribe();
  */
 export function useTaskSSE(options: UseTaskSSEOptions = {}) {
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
   const isConnectedRef = useRef(false);
 
   // Store callbacks in a ref to avoid recreating subscribe on every options change
@@ -126,9 +126,9 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
   }, [options]);
 
   const unsubscribe = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
       isConnectedRef.current = false;
     }
   }, []);
@@ -138,78 +138,64 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
       // Close existing connection if any
       unsubscribe();
 
-      const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
+      unsubscribeRef.current = subscribeToTaskEvents(taskId, {
+        onOpen: () => {
+          isConnectedRef.current = true;
+        },
+        onProgress: (event) => {
+          const data = safeParseJSON(event.data);
+          if (!data) return;
 
-      const eventSource = new EventSource(streamUrl);
-      eventSourceRef.current = eventSource;
+          const task: TaskStatus = {
+            task_id: safeStringify(data.id),
+            status: normalizeStatus(safeStringify(data.status)),
+            progress: safeNumber(data.progress),
+            message: safeStringify(data.message) || 'Processing...',
+          };
 
-      eventSource.onopen = () => {
-        isConnectedRef.current = true;
-      };
+          optionsRef.current.onProgress?.(task);
+        },
+        onCompleted: (event) => {
+          const data = safeParseJSON(event.data);
+          if (!data) return;
 
-      // Listen for progress events
-      eventSource.addEventListener('progress', (e: MessageEvent) => {
-        const data = safeParseJSON(e.data);
-        if (!data) return;
+          const task: TaskStatus = {
+            task_id: safeStringify(data.id),
+            status: 'completed',
+            progress: 100,
+            message: safeStringify(data.message) || 'Completed',
+            result: data.result,
+          };
 
-        const task: TaskStatus = {
-          task_id: safeStringify(data.id),
-          status: normalizeStatus(safeStringify(data.status)),
-          progress: safeNumber(data.progress),
-          message: safeStringify(data.message) || 'Processing...',
-        };
+          optionsRef.current.onCompleted?.(task);
+          window.setTimeout(() => {
+            unsubscribe();
+          }, 500);
+        },
+        onFailed: (event) => {
+          const data = safeParseJSON(event.data);
+          if (!data) return;
 
-        optionsRef.current.onProgress?.(task);
-      });
+          console.error('Failed event:', data);
 
-      // Listen for completion
-      eventSource.addEventListener('completed', (e: MessageEvent) => {
-        const data = safeParseJSON(e.data);
-        if (!data) return;
+          const task: TaskStatus = {
+            task_id: safeStringify(data.id),
+            status: 'failed',
+            progress: safeNumber(data.progress),
+            message: safeStringify(data.message) || 'Failed',
+            error: safeStringify(data.error || data.message) || 'Unknown error',
+          };
 
-        const task: TaskStatus = {
-          task_id: safeStringify(data.id),
-          status: 'completed',
-          progress: 100,
-          message: safeStringify(data.message) || 'Completed',
-          result: data.result,
-        };
-
-        optionsRef.current.onCompleted?.(task);
-
-        // Auto-close connection on completion
-        setTimeout(() => {
-          unsubscribe();
-        }, 500);
-      });
-
-      // Listen for failed event
-      eventSource.addEventListener('failed', (e: MessageEvent) => {
-        const data = safeParseJSON(e.data);
-        if (!data) return;
-
-        console.error('❌ Failed event:', data);
-
-        const task: TaskStatus = {
-          task_id: safeStringify(data.id),
-          status: 'failed',
-          progress: safeNumber(data.progress),
-          message: safeStringify(data.message) || 'Failed',
-          error: safeStringify(data.error || data.message) || 'Unknown error',
-        };
-
-        optionsRef.current.onFailed?.(task);
-        unsubscribe();
-      });
-
-      // Error handling
-      eventSource.onerror = (e) => {
-        console.error('❌ SSE connection error:', e);
-        if (eventSource.readyState === EventSource.CLOSED) {
+          optionsRef.current.onFailed?.(task);
           isConnectedRef.current = false;
-          optionsRef.current.onError?.(new Error('SSE connection closed unexpectedly'));
-        }
-      };
+          unsubscribe();
+        },
+        onError: (error) => {
+          console.error('SSE connection error:', error);
+          isConnectedRef.current = false;
+          optionsRef.current.onError?.(error);
+        },
+      });
 
       return () => {
         unsubscribe();
@@ -241,57 +227,42 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
  * @returns Cleanup function to close the SSE connection
  */
 export function subscribeToTask(taskId: string, callbacks: UseTaskSSEOptions): () => void {
-  const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
+  return subscribeToTaskEvents(taskId, {
+    onProgress: (event) => {
+      const data = safeParseJSON(event.data);
+      if (!data) return;
 
-  const eventSource = new EventSource(streamUrl);
+      callbacks.onProgress?.({
+        task_id: safeStringify(data.id),
+        status: normalizeStatus(safeStringify(data.status)),
+        progress: safeNumber(data.progress),
+        message: safeStringify(data.message) || 'Processing...',
+      });
+    },
+    onCompleted: (event) => {
+      const data = safeParseJSON(event.data);
+      if (!data) return;
 
-  eventSource.addEventListener('progress', (e: MessageEvent) => {
-    const data = safeParseJSON(e.data);
-    if (!data) return;
+      callbacks.onCompleted?.({
+        task_id: safeStringify(data.id),
+        status: 'completed',
+        progress: 100,
+        message: safeStringify(data.message) || 'Completed',
+        result: data.result,
+      });
+    },
+    onFailed: (event) => {
+      const data = safeParseJSON(event.data);
+      if (!data) return;
 
-    callbacks.onProgress?.({
-      task_id: safeStringify(data.id),
-      status: normalizeStatus(safeStringify(data.status)),
-      progress: safeNumber(data.progress),
-      message: safeStringify(data.message) || 'Processing...',
-    });
+      callbacks.onFailed?.({
+        task_id: safeStringify(data.id),
+        status: 'failed',
+        progress: safeNumber(data.progress),
+        message: safeStringify(data.message) || 'Failed',
+        error: safeStringify(data.error || data.message) || 'Unknown error',
+      });
+    },
+    onError: callbacks.onError,
   });
-
-  eventSource.addEventListener('completed', (e: MessageEvent) => {
-    const data = safeParseJSON(e.data);
-    if (!data) return;
-
-    callbacks.onCompleted?.({
-      task_id: safeStringify(data.id),
-      status: 'completed',
-      progress: 100,
-      message: safeStringify(data.message) || 'Completed',
-      result: data.result,
-    });
-    eventSource.close();
-  });
-
-  eventSource.addEventListener('failed', (e: MessageEvent) => {
-    const data = safeParseJSON(e.data);
-    if (!data) return;
-
-    callbacks.onFailed?.({
-      task_id: safeStringify(data.id),
-      status: 'failed',
-      progress: safeNumber(data.progress),
-      message: safeStringify(data.message) || 'Failed',
-      error: safeStringify(data.error || data.message) || 'Unknown error',
-    });
-    eventSource.close();
-  });
-
-  eventSource.onerror = () => {
-    if (eventSource.readyState === EventSource.CLOSED) {
-      callbacks.onError?.(new Error('SSE connection closed unexpectedly'));
-    }
-  };
-
-  return () => {
-    eventSource.close();
-  };
 }

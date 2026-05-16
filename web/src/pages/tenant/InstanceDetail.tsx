@@ -16,7 +16,13 @@ import {
   EyeOff,
 } from 'lucide-react';
 
-import { LazyModal, LazySpin, LazyButton, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import {
+  LazyModal,
+  LazySpin,
+  LazyButton,
+  LazyPopconfirm,
+  useLazyMessage,
+} from '@/components/ui/lazyAntd';
 
 import {
   useCurrentInstance,
@@ -28,7 +34,6 @@ import {
 } from '../../stores/instance';
 
 import { getStatusColor } from './utils/instanceUtils';
-
 
 import type { InstanceMemberResponse } from '../../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
@@ -54,13 +59,13 @@ export const InstanceDetail: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      getInstance(id);
-      listMembers(id);
+      void getInstance(id);
+      void listMembers(id);
     }
   }, [id, getInstance, listMembers]);
 
   const handleBack = () => {
-    navigate('..');
+    void navigate('..');
   };
 
   const handleRestart = async () => {
@@ -82,7 +87,7 @@ export const InstanceDetail: React.FC = () => {
     try {
       await deleteInstance(id);
       messageApi?.success(t('tenant.instances.deleteSuccess'));
-      navigate('..');
+      void navigate('..');
     } catch {
       messageApi?.error(t('tenant.instances.deleteError'));
       setIsSubmitting(false);
@@ -103,11 +108,9 @@ export const InstanceDetail: React.FC = () => {
     }
   };
 
-
-
   const handleCopyToken = () => {
     if (instance?.proxy_token) {
-      navigator.clipboard.writeText(instance.proxy_token);
+      void navigator.clipboard.writeText(instance.proxy_token);
       messageApi?.success(t('tenant.instances.tokenCopied'));
     }
   };
@@ -181,7 +184,9 @@ export const InstanceDetail: React.FC = () => {
           </LazyButton>
           <LazyPopconfirm
             title={t('tenant.instances.actions.restartConfirm')}
-            onConfirm={handleRestart}
+            onConfirm={() => {
+              void handleRestart();
+            }}
             okText={t('common.yes')}
             cancelText={t('common.no')}
             okButtonProps={{ loading: isSubmitting }}
@@ -190,12 +195,16 @@ export const InstanceDetail: React.FC = () => {
           </LazyPopconfirm>
           <LazyPopconfirm
             title={t('tenant.instances.actions.deleteConfirm')}
-            onConfirm={handleDelete}
+            onConfirm={() => {
+              void handleDelete();
+            }}
             okText={t('common.yes')}
             cancelText={t('common.no')}
             okButtonProps={{ danger: true, loading: isSubmitting }}
           >
-            <LazyButton danger disabled={isSubmitting}>{t('tenant.instances.actions.delete')}</LazyButton>
+            <LazyButton danger disabled={isSubmitting}>
+              {t('tenant.instances.actions.delete')}
+            </LazyButton>
           </LazyPopconfirm>
         </Space>
       </div>
@@ -244,11 +253,15 @@ export const InstanceDetail: React.FC = () => {
             key={tab.key}
             onClick={() => {
               if (tab.path) {
-                navigate(`.${tab.path}`);
+                void navigate(`.${tab.path}`);
               }
             }}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px rounded-none h-auto ${
-              (tab.key === 'overview' ? location.pathname.split('/').pop() === id : location.pathname.split('/').pop() === tab.key)
+              (
+                tab.key === 'overview'
+                  ? location.pathname.split('/').pop() === id
+                  : location.pathname.split('/').pop() === tab.key
+              )
                 ? 'border-info text-info-dark dark:text-info-light'
                 : 'border-transparent text-text-muted hover:text-text-secondary dark:text-text-muted dark:hover:text-text-inverse hover:border-border-separator'
             }`}
@@ -391,7 +404,9 @@ export const InstanceDetail: React.FC = () => {
       <LazyModal
         title={t('tenant.instances.actions.scale')}
         open={scaleModalVisible}
-        onOk={handleScale}
+        onOk={() => {
+          void handleScale();
+        }}
         onCancel={() => {
           if (!isSubmitting) setScaleModalVisible(false);
         }}

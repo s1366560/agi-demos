@@ -4,23 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation, Outlet } from 'react-router-dom';
 
 import { Tag, Space, InputNumber } from 'antd';
-import {
-  ArrowLeft,
-  FileText,
-  Network,
-  Users,
-  Dna,
-  Settings,
-  LayoutDashboard,
-} from 'lucide-react';
-
-import { LazyModal, LazySpin, LazyButton, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import { ArrowLeft, FileText, Network, Users, Dna, Settings, LayoutDashboard } from 'lucide-react';
 
 import {
-  useCurrentInstance,
-  useInstanceLoading,
-  useInstanceActions,
-} from '../../stores/instance';
+  LazyModal,
+  LazySpin,
+  LazyButton,
+  LazyPopconfirm,
+  useLazyMessage,
+} from '@/components/ui/lazyAntd';
+
+import { useCurrentInstance, useInstanceLoading, useInstanceActions } from '../../stores/instance';
 
 import { getStatusColor } from './utils/instanceUtils';
 
@@ -42,12 +36,12 @@ export const InstanceLayout: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      getInstance(id);
+      void getInstance(id);
     }
   }, [id, getInstance]);
 
   const handleBack = () => {
-    navigate('..');
+    void navigate('..');
   };
 
   const handleRestart = async () => {
@@ -69,7 +63,7 @@ export const InstanceLayout: React.FC = () => {
     try {
       await deleteInstance(id);
       messageApi?.success(t('tenant.instances.deleteSuccess'));
-      navigate('..');
+      void navigate('..');
     } catch {
       messageApi?.error(t('tenant.instances.deleteError'));
       setIsSubmitting(false);
@@ -91,12 +85,42 @@ export const InstanceLayout: React.FC = () => {
   };
 
   const tabs = [
-    { key: 'overview', label: t('tenant.instances.tabs.overview'), icon: <LayoutDashboard size={14} />, path: '.' },
-    { key: 'files', label: t('tenant.instances.tabs.files'), icon: <FileText size={14} />, path: 'files' },
-    { key: 'channels', label: t('tenant.instances.tabs.channels'), icon: <Network size={14} />, path: 'channels' },
-    { key: 'members', label: t('tenant.instances.tabs.members'), icon: <Users size={14} />, path: 'members' },
-    { key: 'genes', label: t('tenant.instances.tabs.genes'), icon: <Dna size={14} />, path: 'genes' },
-    { key: 'settings', label: t('tenant.instances.tabs.settings'), icon: <Settings size={14} />, path: 'settings' },
+    {
+      key: 'overview',
+      label: t('tenant.instances.tabs.overview'),
+      icon: <LayoutDashboard size={14} />,
+      path: '.',
+    },
+    {
+      key: 'files',
+      label: t('tenant.instances.tabs.files'),
+      icon: <FileText size={14} />,
+      path: 'files',
+    },
+    {
+      key: 'channels',
+      label: t('tenant.instances.tabs.channels'),
+      icon: <Network size={14} />,
+      path: 'channels',
+    },
+    {
+      key: 'members',
+      label: t('tenant.instances.tabs.members'),
+      icon: <Users size={14} />,
+      path: 'members',
+    },
+    {
+      key: 'genes',
+      label: t('tenant.instances.tabs.genes'),
+      icon: <Dna size={14} />,
+      path: 'genes',
+    },
+    {
+      key: 'settings',
+      label: t('tenant.instances.tabs.settings'),
+      icon: <Settings size={14} />,
+      path: 'settings',
+    },
   ];
 
   const getActiveTab = () => {
@@ -114,7 +138,7 @@ export const InstanceLayout: React.FC = () => {
   const handleTabKeyDown = (e: React.KeyboardEvent, index: number) => {
     const tabCount = tabs.length;
     let newIndex: number | null = null;
-    
+
     switch (e.key) {
       case 'ArrowRight':
         newIndex = (index + 1) % tabCount;
@@ -131,7 +155,7 @@ export const InstanceLayout: React.FC = () => {
       default:
         return;
     }
-    
+
     e.preventDefault();
     const tabElements = tabListRef.current?.querySelectorAll('[role="tab"]');
     if (tabElements?.[newIndex]) {
@@ -148,11 +172,7 @@ export const InstanceLayout: React.FC = () => {
   }
 
   if (!instance && !isLoading) {
-    return (
-      <div className="p-8 text-center flex justify-center">
-        {t('common.notFound')}
-      </div>
-    );
+    return <div className="p-8 text-center flex justify-center">{t('common.notFound')}</div>;
   }
 
   if (!instance) {
@@ -161,25 +181,25 @@ export const InstanceLayout: React.FC = () => {
 
   return (
     <div className="max-w-full mx-auto w-full flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
           <LazyButton
             type="text"
             icon={<ArrowLeft size={16} />}
             onClick={handleBack}
             aria-label={t('common.back', 'Go back')}
           />
-          <div>
-            <h1 className="text-2xl font-bold text-text-primary dark:text-text-inverse flex items-center gap-3">
-              {instance.name}
+          <div className="min-w-0">
+            <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold text-text-primary dark:text-text-inverse">
+              <span className="min-w-0 break-words">{instance.name}</span>
               <Tag color={getStatusColor(instance.status)} className="m-0">
                 {t(`tenant.instances.status.${instance.status}`)}
               </Tag>
             </h1>
-            <p className="text-sm text-text-muted mt-1">ID: {instance.id}</p>
+            <p className="mt-1 break-all text-sm text-text-muted">ID: {instance.id}</p>
           </div>
         </div>
-        <Space>
+        <Space wrap>
           <LazyButton
             onClick={() => {
               setNewReplicas(instance.replicas);
@@ -191,7 +211,9 @@ export const InstanceLayout: React.FC = () => {
           </LazyButton>
           <LazyPopconfirm
             title={t('tenant.instances.actions.restartConfirm')}
-            onConfirm={handleRestart}
+            onConfirm={() => {
+              void handleRestart();
+            }}
             okText={t('common.yes')}
             cancelText={t('common.no')}
             okButtonProps={{ loading: isSubmitting }}
@@ -200,34 +222,44 @@ export const InstanceLayout: React.FC = () => {
           </LazyPopconfirm>
           <LazyPopconfirm
             title={t('tenant.instances.actions.deleteConfirm')}
-            onConfirm={handleDelete}
+            onConfirm={() => {
+              void handleDelete();
+            }}
             okText={t('common.yes')}
             cancelText={t('common.no')}
             okButtonProps={{ danger: true, loading: isSubmitting }}
           >
-            <LazyButton danger disabled={isSubmitting}>{t('tenant.instances.actions.delete')}</LazyButton>
+            <LazyButton danger disabled={isSubmitting}>
+              {t('tenant.instances.actions.delete')}
+            </LazyButton>
           </LazyPopconfirm>
         </Space>
       </div>
 
-      <div 
+      <div
         ref={tabListRef}
-        role="tablist" 
+        role="tablist"
         aria-label={t('tenant.instances.tabs.ariaLabel', 'Instance tabs')}
-        className="flex items-center gap-1 border-b border-border-light dark:border-border-dark -mb-2"
+        className="-mb-2 flex max-w-full items-center gap-1 overflow-x-auto border-b border-border-light dark:border-border-dark"
       >
         {tabs.map((tab, index) => {
           const isActive = activeTab === tab.key;
           return (
-            <button type="button"
+            <button
+              id={`instance-tab-${tab.key}`}
+              type="button"
               key={tab.key}
               role="tab"
               aria-selected={isActive}
               tabIndex={isActive ? 0 : -1}
               aria-controls="instance-tab-panel"
-              onKeyDown={(e) => { handleTabKeyDown(e, index); }}
-              onClick={() => navigate(tab.path)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px rounded-none h-auto bg-transparent cursor-pointer ${
+              onKeyDown={(e) => {
+                handleTabKeyDown(e, index);
+              }}
+              onClick={() => {
+                void navigate(tab.path);
+              }}
+              className={`-mb-px flex h-auto shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-b-2 bg-transparent px-4 py-2.5 text-sm font-medium transition-colors ${
                 isActive
                   ? 'border-info text-info-dark dark:text-info-light'
                   : 'border-transparent text-text-muted hover:text-text-secondary dark:text-text-muted dark:hover:text-text-inverse hover:border-border-separator'

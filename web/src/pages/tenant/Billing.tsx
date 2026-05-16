@@ -7,7 +7,7 @@ import { Check, CreditCard, Download, Loader2, Receipt } from 'lucide-react';
 import { billingService } from '../../services/billingService';
 import { useTenantStore } from '../../stores/tenant';
 
-import type { BillingInfo } from '../../services/billingService';
+import type { BillingInfo, UpgradePlanRequest } from '../../services/billingService';
 
 // Loading state component
 const LoadingState = memo<{ message: string }>(({ message }) => (
@@ -23,6 +23,11 @@ export const Billing: FC = memo(() => {
   const { currentTenant } = useTenantStore();
   const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<UpgradePlanRequest['plan'] | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
 
   const fetchBillingInfo = useCallback(async () => {
     if (currentTenant) {
@@ -38,8 +43,43 @@ export const Billing: FC = memo(() => {
   }, [currentTenant]);
 
   useEffect(() => {
-    fetchBillingInfo();
+    void fetchBillingInfo();
   }, [fetchBillingInfo]);
+
+  const currentPlan = billingInfo?.tenant.plan ?? currentTenant?.plan ?? 'free';
+  const getNextPlan = useCallback((plan: string): UpgradePlanRequest['plan'] | null => {
+    if (plan === 'enterprise') return null;
+    if (plan === 'pro' || plan === 'premium') return 'enterprise';
+    return 'pro';
+  }, []);
+  const nextPlan = getNextPlan(currentPlan);
+  const formatPlanName = useCallback((plan: string) => {
+    if (plan === 'pro') return 'Pro';
+    return plan.charAt(0).toUpperCase() + plan.slice(1);
+  }, []);
+
+  const handleUpgrade = useCallback(
+    async (plan: UpgradePlanRequest['plan']) => {
+      if (!currentTenant) return;
+
+      setActionLoading(plan);
+      setActionMessage(null);
+      try {
+        const response = await billingService.upgradePlan(currentTenant.id, plan);
+        setActionMessage({
+          type: 'success',
+          text: response.message || t('tenant.billing.upgrade_success'),
+        });
+        await fetchBillingInfo();
+      } catch (error) {
+        console.error('Failed to upgrade plan:', error);
+        setActionMessage({ type: 'error', text: t('tenant.billing.upgrade_error') });
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [currentTenant, fetchBillingInfo, t]
+  );
 
   // Format storage bytes to human-readable
   const formatStorage = useMemo(() => {
@@ -122,6 +162,21 @@ export const Billing: FC = memo(() => {
         <p className="text-slate-500 dark:text-slate-400 mt-1">{t('tenant.billing.subtitle')}</p>
       </div>
 
+      {actionMessage ? (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            actionMessage.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-300'
+              : actionMessage.type === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300'
+                : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300'
+          }`}
+          role="status"
+        >
+          {actionMessage.text}
+        </div>
+      ) : null}
+
       {/* Current Subscription Card */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
@@ -133,24 +188,34 @@ export const Billing: FC = memo(() => {
             <div>
               <div className="flex items-center gap-3">
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white capitalize">
-                  {billingInfo?.tenant.plan ?? currentTenant.plan}
+                  {currentPlan}
                 </h3>
                 <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide">
-                  Active
+                  {t('common.status.active')}
                 </span>
               </div>
               <p className="text-slate-500 mt-1">
                 {t('tenant.billing.plan_description', {
-                  plan: billingInfo?.tenant.plan ?? currentTenant.plan,
+                  plan: currentPlan,
                 })}
               </p>
             </div>
             <div className="flex gap-3">
-              <button className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm transition-colors">
-                {t('tenant.billing.contact_sales')}
-              </button>
-              <button className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-                {t('tenant.billing.upgrade_options')}
+              <button
+                className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!nextPlan || actionLoading !== null}
+                type="button"
+                onClick={() => {
+                  if (nextPlan) {
+                    void handleUpgrade(nextPlan);
+                  }
+                }}
+              >
+                {actionLoading === nextPlan
+                  ? t('tenant.billing.upgrading')
+                  : nextPlan
+                    ? t('tenant.billing.upgrade_to', { plan: formatPlanName(nextPlan) })
+                    : t('tenant.billing.current_plan_button')}
               </button>
             </div>
           </div>
@@ -169,7 +234,7 @@ export const Billing: FC = memo(() => {
               <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-purple-500 transition-[width]"
-                  style={{ width: `${usageStats.storagePercent}%` }}
+                  style={{ width: `${String(usageStats.storagePercent)}%` }}
                 ></div>
               </div>
             </div>
@@ -186,7 +251,7 @@ export const Billing: FC = memo(() => {
               <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-500 transition-[width]"
-                  style={{ width: `${usageStats.projectsPercent}%` }}
+                  style={{ width: `${String(usageStats.projectsPercent)}%` }}
                 ></div>
               </div>
             </div>
@@ -203,7 +268,7 @@ export const Billing: FC = memo(() => {
               <div className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-green-500 transition-[width]"
-                  style={{ width: `${usageStats.usersPercent}%` }}
+                  style={{ width: `${String(usageStats.usersPercent)}%` }}
                 ></div>
               </div>
             </div>
@@ -213,27 +278,35 @@ export const Billing: FC = memo(() => {
         {/* Upgrade Promo */}
         <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-6 md:p-8 text-white flex flex-col justify-between">
           <div>
-            <h3 className="text-xl font-bold mb-2">Enterprise Plan</h3>
+            <h3 className="text-xl font-bold mb-2">{t('tenant.billing.enterprise.title')}</h3>
             <p className="text-indigo-100 text-sm mb-6">
-              Get unlimited storage, advanced security features, and dedicated support.
+              {t('tenant.billing.enterprise.description')}
             </p>
             <ul className="space-y-3 mb-8">
               <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <Check size={16} /> Unlimited
-                Projects
+                <Check size={16} /> {t('tenant.billing.enterprise.features.projects')}
               </li>
               <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <Check size={16} /> SSO & Audit
-                Logs
+                <Check size={16} /> {t('tenant.billing.enterprise.features.security')}
               </li>
               <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <Check size={16} /> Priority
-                Support
+                <Check size={16} /> {t('tenant.billing.enterprise.features.support')}
               </li>
             </ul>
           </div>
-          <button className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-3 rounded-lg transition-colors shadow-sm">
-            {t('tenant.billing.contact_sales')}
+          <button
+            className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-3 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={currentPlan === 'enterprise' || actionLoading !== null}
+            type="button"
+            onClick={() => {
+              void handleUpgrade('enterprise');
+            }}
+          >
+            {actionLoading === 'enterprise'
+              ? t('tenant.billing.upgrading')
+              : currentPlan === 'enterprise'
+                ? t('tenant.billing.current_plan_button')
+                : t('tenant.billing.upgrade_to', { plan: formatPlanName('enterprise') })}
           </button>
         </div>
       </div>

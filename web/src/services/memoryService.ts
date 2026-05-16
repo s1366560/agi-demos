@@ -49,9 +49,9 @@ interface MemoryUpdate {
   title?: string | undefined;
   content?: string | undefined;
   tags?: string[] | undefined;
-  entities?: any[] | undefined;
-  relationships?: any[] | undefined;
-  metadata?: Record<string, any> | undefined;
+  entities?: unknown[] | undefined;
+  relationships?: unknown[] | undefined;
+  metadata?: Record<string, unknown> | undefined;
   version: number;
 }
 
@@ -171,7 +171,7 @@ export const memoryService = {
     shareData: MemoryShareCreate
   ): Promise<MemoryShareResponse> => {
     const response = await apiFetch.post(`/memories/${memoryId}/shares`, shareData);
-    return response.json();
+    return (await response.json()) as MemoryShareResponse;
   },
 
   /**

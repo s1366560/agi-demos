@@ -6,11 +6,15 @@
 
 import { useState, useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { CheckCircle } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
+
+import type { TFunction } from 'i18next';
 
 export interface FinalReportProps {
   /** Report content (markdown or plain text) */
@@ -27,6 +31,11 @@ export interface FinalReportProps {
   conversationId?: string | undefined;
   /** Element ID for PDF export */
   elementId?: string | undefined;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 /**
@@ -48,6 +57,8 @@ export function FinalReport({
   conversationId,
   elementId,
 }: FinalReportProps) {
+  const { t } = useTranslation();
+
   // Format timestamp for display
   const formatTimestamp = (isoString: string) => {
     return formatDateTime(isoString);
@@ -60,11 +71,14 @@ export function FinalReport({
     const lines = text.split('\n');
     let idCounter = 0;
     return lines.map((line) => {
-      const currentId = idCounter++;
+      const currentId = String(idCounter++);
       // Headers
       if (line.startsWith('# ')) {
         return (
-          <h2 key={`h2-${currentId}`} className="text-xl font-bold text-slate-900 dark:text-white mt-4 mb-2">
+          <h2
+            key={`h2-${currentId}`}
+            className="text-xl font-bold text-slate-900 dark:text-white mt-4 mb-2"
+          >
             {line.replace('# ', '')}
           </h2>
         );
@@ -104,11 +118,17 @@ export function FinalReport({
         const parts = line.split('**');
         let partIdCounter = 0;
         return (
-          <p key={`p-bold-${currentId}`} className="text-sm text-slate-700 dark:text-slate-300 mb-1">
+          <p
+            key={`p-bold-${currentId}`}
+            className="text-sm text-slate-700 dark:text-slate-300 mb-1"
+          >
             {parts.map((part, i) => {
-              const currentPartId = partIdCounter++;
+              const currentPartId = String(partIdCounter++);
               return i % 2 === 1 ? (
-                <strong key={`strong-${currentId}-${currentPartId}`} className="font-semibold text-slate-900 dark:text-white">
+                <strong
+                  key={`strong-${currentId}-${currentPartId}`}
+                  className="font-semibold text-slate-900 dark:text-white"
+                >
                   {part}
                 </strong>
               ) : (
@@ -139,9 +159,13 @@ export function FinalReport({
   >(null);
 
   useEffect(() => {
-    import('./ExportActions').then((mod) => {
-      setExportActions(() => mod.ExportActions);
-    });
+    void import('./ExportActions')
+      .then((mod) => {
+        setExportActions(() => mod.ExportActions);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load export actions:', error);
+      });
   }, []);
 
   return (
@@ -156,9 +180,16 @@ export function FinalReport({
             <CheckCircle size={18} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Final Response</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              {tFallback(t, 'agent.finalReport.title', 'Final Response')}
+            </h3>
             {timestamp && (
-              <p className="text-xs text-slate-500">Generated {formatTimestamp(timestamp)}</p>
+              <p className="text-xs text-slate-500">
+                {t('agent.finalReport.generated', {
+                  defaultValue: 'Generated {{time}}',
+                  time: formatTimestamp(timestamp),
+                })}
+              </p>
             )}
           </div>
         </div>

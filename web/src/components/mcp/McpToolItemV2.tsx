@@ -5,8 +5,13 @@
 
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Tag, Tooltip } from 'antd';
-import { ChevronDown, FileJson, Wrench ,
+import {
+  ChevronDown,
+  FileJson,
+  Wrench,
   CheckCircle,
   Square,
   StopCircle,
@@ -26,40 +31,61 @@ import { ChevronDown, FileJson, Wrench ,
   Loader2,
   AlertCircle,
   Globe,
-  User
+  User,
 } from 'lucide-react';
-
 
 import { SERVER_TYPE_STYLES, CARD_STYLES } from './styles';
 
 import type { MCPToolInfo } from '@/types/agent';
 
-
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
 
@@ -76,6 +102,7 @@ export interface McpToolItemV2Props {
 }
 
 export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, onToggle }) => {
+  const { t } = useTranslation();
   const typeStyle: (typeof SERVER_TYPE_STYLES)[keyof typeof SERVER_TYPE_STYLES] =
     (tool.serverType as keyof typeof SERVER_TYPE_STYLES) in SERVER_TYPE_STYLES
       ? SERVER_TYPE_STYLES[tool.serverType as keyof typeof SERVER_TYPE_STYLES]
@@ -113,7 +140,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
                   {tool.name}
                 </h4>
                 {tool.input_schema && (
-                  <Tooltip title="Has input schema">
+                  <Tooltip title={t('mcp.toolItem.hasInputSchema')}>
                     <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
                       <FileJson size={10} />
                     </span>
@@ -126,7 +153,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
                 </p>
               ) : (
                 <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-0.5">
-                  No description
+                  {t('mcp.toolItem.noDescription')}
                 </p>
               )}
             </div>
@@ -136,7 +163,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
             {/* Server Tag */}
             <Tag className="text-xs m-0 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border-0">
               <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                {renderDynamicIcon(typeStyle.icon, 12, "")}
+                {renderDynamicIcon(typeStyle.icon, 12, '')}
                 {tool.serverName}
               </span>
             </Tag>
@@ -184,7 +211,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
               <div className="flex items-center gap-1.5 mb-2">
                 <FileJson size={12} className="text-slate-400" />
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Description
+                  {t('mcp.toolItem.description')}
                 </span>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -199,7 +226,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, 
               <div className="flex items-center gap-1.5 mb-2">
                 <FileJson size={12} className="text-slate-400" />
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Input Schema
+                  {t('mcp.toolItem.inputSchema')}
                 </span>
               </div>
               <pre className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-auto max-h-80 border border-slate-200 dark:border-slate-700 font-mono">

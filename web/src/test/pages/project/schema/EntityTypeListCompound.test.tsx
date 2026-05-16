@@ -16,7 +16,24 @@ vi.mock('react-router-dom', () => ({
 // Mock i18n
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: string | Record<string, unknown>) => {
+      const defaultValue =
+        typeof options === 'string'
+          ? options
+          : typeof options === 'object' &&
+              options !== null &&
+              typeof options.defaultValue === 'string'
+            ? options.defaultValue
+            : key;
+
+      if (typeof options !== 'object' || options === null) {
+        return defaultValue;
+      }
+
+      return defaultValue.replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
+        String(options[token] ?? '')
+      );
+    },
     i18n: {
       changeLanguage: () => Promise.resolve(),
       language: 'en-US',
@@ -165,6 +182,16 @@ describe('EntityTypeList Compound Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Person')).toBeInTheDocument();
         expect(screen.getByText('Organization')).toBeInTheDocument();
+      });
+    });
+
+    it('should render schema attributes returned by the API', async () => {
+      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      render(<EntityTypeList />);
+      await waitFor(() => {
+        expect(screen.getAllByText('name').length).toBeGreaterThan(0);
+        expect(screen.getByText('age')).toBeInTheDocument();
+        expect(screen.getByText('email')).toBeInTheDocument();
       });
     });
   });
@@ -418,6 +445,31 @@ describe('EntityTypeList Compound Component', () => {
       const saveButton = screen.getByText('Save');
       fireEvent.click(saveButton);
       expect(onSave).toHaveBeenCalled();
+    });
+
+    it('should save edits made inside the modal form', async () => {
+      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const { schemaAPI } = await import('../../../../services/api');
+      render(<EntityTypeList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Person')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getAllByTitle('Edit')[0]);
+      fireEvent.click(screen.getByText('General Settings'));
+      fireEvent.change(screen.getByPlaceholderText('What does this entity type represent?'), {
+        target: { value: 'Updated person description' },
+      });
+      fireEvent.click(screen.getByText('Save'));
+
+      await waitFor(() => {
+        expect(schemaAPI.updateEntityType).toHaveBeenCalledWith(
+          'test-project-1',
+          'entity-type-1',
+          expect.objectContaining({ description: 'Updated person description' })
+        );
+      });
     });
 
     it('should render tab buttons', async () => {

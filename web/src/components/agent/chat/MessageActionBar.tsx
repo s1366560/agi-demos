@@ -91,6 +91,7 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
         textArea.style.opacity = '0';
         document.body.appendChild(textArea);
         textArea.select();
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- Legacy fallback when async Clipboard API write fails.
         document.execCommand('copy');
         document.body.removeChild(textArea);
         setCopied(true);
@@ -109,7 +110,9 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
       key: 'copy',
       icon: copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />,
       label: copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copy', 'Copy'),
-      onClick: handleCopy,
+      onClick: () => {
+        void handleCopy();
+      },
     });
 
     // Reply - available for all messages
@@ -266,7 +269,9 @@ export const CodeBlockCopyButton: React.FC<{ code: string }> = memo(({ code }) =
     >
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => {
+          void handleCopy();
+        }}
         className="p-1 rounded hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-400 hover:text-slate-200"
         aria-label={t('agent.actions.copyCode', 'Copy code')}
       >

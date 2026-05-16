@@ -53,12 +53,33 @@ import type {
   EnhancedSearchCompound,
 } from './search/types';
 
-// Type declarations for Web Speech API
-declare global {
-  interface Window {
-    SpeechRecognition: any;
-    webkitSpeechRecognition: any;
-  }
+// Local Web Speech API subset used by this page.
+interface SpeechRecognitionResultLike {
+  transcript: string;
+}
+
+interface SpeechRecognitionAlternativeListLike {
+  [index: number]: SpeechRecognitionResultLike | undefined;
+}
+
+interface SpeechRecognitionResultListLike {
+  [index: number]: SpeechRecognitionAlternativeListLike | undefined;
+}
+
+interface SpeechRecognitionEventLike {
+  results: SpeechRecognitionResultListLike;
+}
+
+interface SpeechRecognitionLike {
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+}
+
+interface SpeechRecognitionConstructorLike {
+  new (): SpeechRecognitionLike;
 }
 
 // Use refs for values that change frequently but don't need to trigger re-renders
@@ -116,21 +137,104 @@ function HistoryMarker(_props: EnhancedSearchHistoryProps) {
   return null;
 }
 
-// Attach symbols after function declarations
-(FormMarker as any)[FORM_SYMBOL] = true;
-(ConfigMarker as any)[CONFIG_SYMBOL] = true;
-(ResultsMarker as any)[RESULTS_SYMBOL] = true;
-(GraphMarker as any)[GRAPH_SYMBOL] = true;
-(ErrorMarker as any)[ERROR_SYMBOL] = true;
-(HistoryMarker as any)[HISTORY_SYMBOL] = true;
+function markComponent<P>(component: React.FC<P>, marker: symbol, displayName: string): void {
+  const marked = component as React.FC<P> &
+    Record<symbol, unknown> & {
+      displayName?: string | undefined;
+    };
+  marked[marker] = true;
+  marked.displayName = displayName;
+}
 
-// Set display names for testing
-(FormMarker as any).displayName = 'EnhancedSearchForm';
-(ConfigMarker as any).displayName = 'EnhancedSearchConfig';
-(ResultsMarker as any).displayName = 'EnhancedSearchResults';
-(GraphMarker as any).displayName = 'EnhancedSearchGraph';
-(ErrorMarker as any).displayName = 'EnhancedSearchError';
-(HistoryMarker as any).displayName = 'EnhancedSearchHistory';
+function hasMarker<P>(child: React.ReactNode, marker: symbol): child is React.ReactElement<P> {
+  if (!React.isValidElement(child)) {
+    return false;
+  }
+
+  const elementType = child.type as unknown;
+  if (
+    typeof elementType !== 'function' &&
+    (typeof elementType !== 'object' || elementType === null)
+  ) {
+    return false;
+  }
+
+  return (elementType as Record<symbol, unknown>)[marker] === true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getStringField(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function getNumberField(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function getStringArrayField(
+  record: Record<string, unknown>,
+  ...keys: string[]
+): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value) && value.every((item): item is string => typeof item === 'string')) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function toSearchResult(item: unknown, fallbackContent: string): SearchResult {
+  const record = isRecord(item) ? item : {};
+  const metadata = isRecord(record.metadata) ? record.metadata : {};
+
+  const content =
+    getStringField(record, 'content', 'summary', 'text') ??
+    getStringField(metadata, 'content', 'summary', 'text') ??
+    fallbackContent;
+  const uuid = getStringField(record, 'uuid') ?? getStringField(metadata, 'uuid');
+  const name = getStringField(record, 'name') ?? getStringField(metadata, 'name');
+  const createdAt = getStringField(record, 'created_at') ?? getStringField(metadata, 'created_at');
+  const tags = getStringArrayField(record, 'tags') ?? getStringArrayField(metadata, 'tags') ?? [];
+
+  return {
+    content,
+    score: getNumberField(record, 'score') ?? 0,
+    metadata: {
+      ...metadata,
+      type: getStringField(record, 'type', 'entity_type') ?? 'Result',
+      uuid,
+      name,
+      depth: getNumberField(record, 'depth'),
+      created_at: createdAt,
+      tags,
+    },
+    source: getStringField(record, 'source') ?? 'unknown',
+  };
+}
+
+// Attach symbols after function declarations
+markComponent(FormMarker, FORM_SYMBOL, 'EnhancedSearchForm');
+markComponent(ConfigMarker, CONFIG_SYMBOL, 'EnhancedSearchConfig');
+markComponent(ResultsMarker, RESULTS_SYMBOL, 'EnhancedSearchResults');
+markComponent(GraphMarker, GRAPH_SYMBOL, 'EnhancedSearchGraph');
+markComponent(ErrorMarker, ERROR_SYMBOL, 'EnhancedSearchError');
+markComponent(HistoryMarker, HISTORY_SYMBOL, 'EnhancedSearchHistory');
 
 // ========================================
 // Main Component
@@ -154,16 +258,35 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
 
     // Parse children to detect sub-components
     const childrenArray = Children.toArray(children);
-    const formChild = childrenArray.find((child: any) => child?.type?.[FORM_SYMBOL]) as any;
-    const configChild = childrenArray.find((child: any) => child?.type?.[CONFIG_SYMBOL]) as any;
-    const resultsChild = childrenArray.find((child: any) => child?.type?.[RESULTS_SYMBOL]) as any;
-    const graphChild = childrenArray.find((child: any) => child?.type?.[GRAPH_SYMBOL]) as any;
-    const errorChild = childrenArray.find((child: any) => child?.type?.[ERROR_SYMBOL]) as any;
-    const historyChild = childrenArray.find((child: any) => child?.type?.[HISTORY_SYMBOL]) as any;
+    const formChild = childrenArray.find(
+      (child): child is React.ReactElement<EnhancedSearchFormProps> =>
+        hasMarker<EnhancedSearchFormProps>(child, FORM_SYMBOL)
+    );
+    const configChild = childrenArray.find(
+      (child): child is React.ReactElement<EnhancedSearchConfigProps> =>
+        hasMarker<EnhancedSearchConfigProps>(child, CONFIG_SYMBOL)
+    );
+    const resultsChild = childrenArray.find(
+      (child): child is React.ReactElement<EnhancedSearchResultsProps> =>
+        hasMarker<EnhancedSearchResultsProps>(child, RESULTS_SYMBOL)
+    );
+    const graphChild = childrenArray.find(
+      (child): child is React.ReactElement<EnhancedSearchGraphProps> =>
+        hasMarker<EnhancedSearchGraphProps>(child, GRAPH_SYMBOL)
+    );
+    const errorChild = childrenArray.find(
+      (child): child is React.ReactElement<EnhancedSearchErrorProps> =>
+        hasMarker<EnhancedSearchErrorProps>(child, ERROR_SYMBOL)
+    );
+    const historyChild = childrenArray.find(
+      (child): child is React.ReactElement<EnhancedSearchHistoryProps> =>
+        hasMarker<EnhancedSearchHistoryProps>(child, HISTORY_SYMBOL)
+    );
 
     // Determine if using compound mode
-    const hasSubComponents =
-      formChild || configChild || resultsChild || graphChild || errorChild || historyChild;
+    const hasSubComponents = Boolean(
+      formChild || configChild || resultsChild || graphChild || errorChild || historyChild
+    );
 
     // In legacy mode, include all sections by default
     // In compound mode, only include explicitly specified sections
@@ -315,7 +438,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       setError(null);
 
       try {
-        let data: any;
+        let data: { results: unknown[] };
 
         switch (params.searchMode) {
           case 'semantic': {
@@ -380,21 +503,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         }
 
         // Map the raw results to our display format
-        const mappedResults = (data.results || []).map((item: any) => ({
-          content:
-            item.content || item.summary || item.text || t('project.search.results.no_content'),
-          score: item.score || 0,
-          metadata: {
-            ...item.metadata,
-            type: item.type || item.entity_type || 'Result',
-            uuid: item.uuid || item.metadata?.uuid,
-            name: item.name || item.metadata?.name,
-            depth: item.depth,
-            created_at: item.created_at || item.metadata?.created_at,
-            tags: item.tags || item.metadata?.tags || [],
-          },
-          source: item.source || 'unknown',
-        }));
+        const mappedResults = data.results.map((item) =>
+          toSearchResult(item, t('project.search.results.no_content'))
+        );
 
         setResults(mappedResults);
 
@@ -412,8 +523,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         if (mappedResults.length > 0) {
           setIsResultsCollapsed(false);
           setIsSubgraphMode(true);
-          if (mappedResults[0].metadata.uuid) {
-            setSelectedSubgraphIds([mappedResults[0].metadata.uuid]);
+          const firstUuid = mappedResults[0]?.metadata.uuid;
+          if (firstUuid) {
+            setSelectedSubgraphIds([firstUuid]);
           }
         }
       } catch (err) {
@@ -442,17 +554,28 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
         return;
       }
 
+      const speechWindow = window as unknown as {
+        SpeechRecognition?: SpeechRecognitionConstructorLike | undefined;
+        webkitSpeechRecognition?: SpeechRecognitionConstructorLike | undefined;
+      };
       const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setError(t('project.search.errors.voice_not_supported'));
+        return;
+      }
+
       const recognition = new SpeechRecognition();
 
       recognition.onstart = () => {
         setIsListening(true);
       };
 
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setQuery(transcript);
+      recognition.onresult = (event: SpeechRecognitionEventLike) => {
+        const transcript = event.results[0]?.[0]?.transcript;
+        if (transcript) {
+          setQuery(transcript);
+        }
         setIsListening(false);
       };
 
@@ -490,7 +613,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `search-results-${Date.now()}.json`;
+      a.download = `search-results-${String(Date.now())}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -499,7 +622,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
 
     const handleCopyId = useCallback((id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      navigator.clipboard.writeText(id);
+      void navigator.clipboard.writeText(id);
       setCopiedId(id);
       setTimeout(() => {
         setCopiedId(null);
@@ -521,8 +644,8 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     }, [highlightNodeIds]);
 
     return (
-      <div className="bg-slate-50 dark:bg-[#121520] text-slate-900 dark:text-white font-sans h-full flex overflow-hidden">
-        <main className="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-[#121520]">
+      <div className="flex h-full min-w-0 overflow-hidden bg-slate-50 font-sans text-slate-900 dark:bg-[#121520] dark:text-white">
+        <main className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-[#121520]">
           {/* Search Form */}
           {includeForm && (
             <SearchForm
@@ -541,7 +664,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               onStartEntityUuidChange={setStartEntityUuid}
               onCommunityUuidChange={setCommunityUuid}
               onSearchFocusChange={setIsSearchFocused}
-              onSearch={handleSearch}
+              onSearch={() => {
+                void handleSearch();
+              }}
               onVoiceSearch={handleVoiceSearch}
               onConfigToggle={() => {
                 setIsConfigOpen(!isConfigOpen);
@@ -555,10 +680,11 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                 setShowHistory(false);
               }}
               onExportResults={handleExportResults}
+              canExportResults={results.length > 0}
             />
           )}
 
-          <div className="flex-1 flex overflow-hidden p-6 gap-6 pt-2">
+          <div className="flex min-w-0 flex-1 gap-4 overflow-hidden p-4 pt-2 sm:gap-6 sm:p-6">
             {/* Config Sidebar */}
             {includeConfig && (
               <SearchConfig
@@ -599,7 +725,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               />
             )}
 
-            <div className="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
+            <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
               {/* Error Message */}
               {includeError && error && (
                 <div
@@ -615,7 +741,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               {includeGraph && (
                 <section
                   className={`
-                bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden group transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
+                min-w-0 bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden group transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
                 ${isResultsCollapsed ? 'flex-1' : 'h-[55%]'}
               `}
                 >
@@ -645,7 +771,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                   </div>
 
                   {/* Real Graph Visualization */}
-                  <div className="w-full h-full relative">
+                  <div className="relative h-full w-full min-w-0 overflow-hidden">
                     <CytoscapeGraph
                       projectId={projectId}
                       tenantId={tenantId}
@@ -678,9 +804,6 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                   onViewModeChange={setViewMode}
                   onResultClick={handleResultClick}
                   onCopyId={handleCopyId}
-                  onSubgraphModeToggle={() => {
-                    setIsSubgraphMode(!isSubgraphMode);
-                  }}
                 />
               )}
 
@@ -690,7 +813,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                   className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4"
                   data-testid="search-history"
                 >
-                  <h3 className="text-sm font-medium mb-2">Search History</h3>
+                  <h3 className="text-sm font-medium mb-2">
+                    {t('project.search.actions.searchHistory', 'Search History')}
+                  </h3>
                   {searchHistory.length > 0 ? (
                     <ul className="space-y-1">
                       {searchHistory.map((item, index) => (
@@ -708,7 +833,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-xs text-slate-500 dark:text-slate-500">No search history</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-500">
+                      {t('project.search.actions.noHistory', 'No search history')}
+                    </p>
                   )}
                 </div>
               )}

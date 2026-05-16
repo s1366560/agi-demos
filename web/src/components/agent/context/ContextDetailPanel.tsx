@@ -1,5 +1,7 @@
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Drawer, Progress, Space, Tag, Typography, Divider, Empty, Timeline } from 'antd';
 import { Minimize2, Clock, Zap, Database, CheckCircle } from 'lucide-react';
 
@@ -12,6 +14,7 @@ import {
 } from '../../../stores/contextStore';
 
 import type { CompressionRecord, TokenDistribution } from '../../../stores/contextStore';
+import type { TFunction } from 'i18next';
 
 const { Text, Title } = Typography;
 
@@ -28,14 +31,17 @@ function getOccupancyColor(pct: number): string {
   return resolveThemeColor('--color-error', '#f5222d');
 }
 
-const levelDescriptions: Record<string, string> = {
-  none: 'No compression active. Context usage is within normal range.',
-  l1_prune: 'Old tool outputs are being pruned to reclaim space.',
-  l2_summarize: 'Historical messages are being incrementally summarized.',
-  l3_deep_compress: 'Full context distillation active. Maximum compression.',
+const levelDescriptionKeys: Record<string, string> = {
+  none: 'agent.contextDetail.levels.none',
+  l1_prune: 'agent.contextDetail.levels.l1Prune',
+  l2_summarize: 'agent.contextDetail.levels.l2Summarize',
+  l3_deep_compress: 'agent.contextDetail.levels.l3DeepCompress',
 };
 
-const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distribution }) => {
+const TokenDistributionBar: FC<{ distribution: TokenDistribution; t: TFunction }> = ({
+  distribution,
+  t,
+}) => {
   const tc = useThemeColors({
     info: '--color-info',
     success: '--color-success',
@@ -53,14 +59,44 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distrib
     distribution.tool +
     distribution.summary;
   if (total === 0)
-    return <Empty description="No token data" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    return (
+      <Empty
+        description={t('agent.contextDetail.empty.noTokenData')}
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+      />
+    );
 
   const segments = [
-    { key: 'system', label: 'System', color: tc.info, value: distribution.system },
-    { key: 'user', label: 'User', color: tc.success, value: distribution.user },
-    { key: 'assistant', label: 'Assistant', color: tc.purple, value: distribution.assistant },
-    { key: 'tool', label: 'Tool', color: tc.warning, value: distribution.tool },
-    { key: 'summary', label: 'Summary', color: tc.cyan, value: distribution.summary },
+    {
+      key: 'system',
+      label: t('agent.contextDetail.segments.system'),
+      color: tc.info,
+      value: distribution.system,
+    },
+    {
+      key: 'user',
+      label: t('agent.contextDetail.segments.user'),
+      color: tc.success,
+      value: distribution.user,
+    },
+    {
+      key: 'assistant',
+      label: t('agent.contextDetail.segments.assistant'),
+      color: tc.purple,
+      value: distribution.assistant,
+    },
+    {
+      key: 'tool',
+      label: t('agent.contextDetail.segments.tool'),
+      color: tc.warning,
+      value: distribution.tool,
+    },
+    {
+      key: 'summary',
+      label: t('agent.contextDetail.segments.summary'),
+      color: tc.cyan,
+      value: distribution.summary,
+    },
   ].filter((s) => s.value > 0);
 
   return (
@@ -78,7 +114,7 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distrib
           <div
             key={seg.key}
             style={{
-              width: `${(seg.value / total) * 100}%`,
+              width: `${String((seg.value / total) * 100)}%`,
               backgroundColor: seg.color,
               minWidth: seg.value > 0 ? 2 : 0,
               transition: 'width 0.3s ease',
@@ -112,9 +148,17 @@ const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distrib
   );
 };
 
-const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) => {
+const CompressionTimeline: FC<{ records: CompressionRecord[]; t: TFunction }> = ({
+  records,
+  t,
+}) => {
   if (records.length === 0) {
-    return <Empty description="No compression events yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    return (
+      <Empty
+        description={t('agent.contextDetail.empty.noCompressionEvents')}
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+      />
+    );
   }
 
   const items = records.map((record) => {
@@ -133,14 +177,21 @@ const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) 
           </div>
           <Space size={12} wrap>
             <span>
-              <Zap size={16} className="mr-1 inline-block align-text-bottom" /> Saved {formatTokens(record.tokens_saved)} tokens (
-              {record.savings_pct.toFixed(0)}%)
+              <Zap size={16} className="mr-1 inline-block align-text-bottom" />{' '}
+              {t('agent.contextDetail.timeline.tokensSaved', {
+                tokens: formatTokens(record.tokens_saved),
+                percent: record.savings_pct.toFixed(0),
+              })}
             </span>
             <span>
-              <Clock size={16} className="mr-1 inline-block align-text-bottom" /> {record.duration_ms.toFixed(0)}ms
+              <Clock size={16} className="mr-1 inline-block align-text-bottom" />{' '}
+              {record.duration_ms.toFixed(0)}ms
             </span>
             <span>
-              Messages: {record.messages_before} → {record.messages_after}
+              {t('agent.contextDetail.timeline.messages', {
+                before: record.messages_before,
+                after: record.messages_after,
+              })}
             </span>
           </Space>
         </div>
@@ -152,6 +203,7 @@ const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) 
 };
 
 export const ContextDetailPanel: FC = () => {
+  const { t } = useTranslation();
   const status = useContextStatus();
   const expanded = useContextDetailExpanded();
   const { setDetailExpanded } = useContextActions();
@@ -168,6 +220,8 @@ export const ContextDetailPanel: FC = () => {
   const currentTokens = status?.currentTokens ?? 0;
   const tokenBudget = status?.tokenBudget ?? 128000;
   const compressionLevel = status?.compressionLevel ?? 'none';
+  const levelDescriptionKey = levelDescriptionKeys[compressionLevel];
+  const levelDescription = levelDescriptionKey ? t(levelDescriptionKey) : '';
   const history = status?.compressionHistory;
   const distribution = status?.tokenDistribution;
 
@@ -176,7 +230,7 @@ export const ContextDetailPanel: FC = () => {
       title={
         <Space>
           <Database size={16} />
-          <span>Context Monitor</span>
+          <span>{t('agent.contextDetail.title')}</span>
         </Space>
       }
       placement="right"
@@ -190,7 +244,7 @@ export const ContextDetailPanel: FC = () => {
       {/* Overall Usage */}
       <div style={{ marginBottom: 24 }}>
         <Title level={5} style={{ marginBottom: 12 }}>
-          Context Usage
+          {t('agent.contextDetail.contextUsage')}
         </Title>
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
           <Progress
@@ -223,13 +277,13 @@ export const ContextDetailPanel: FC = () => {
             }
             icon={compressionLevel === 'none' ? <CheckCircle size={16} /> : <Minimize2 size={16} />}
           >
-            {levelDescriptions[compressionLevel]
+            {levelDescription
               ? compressionLevel.replace('l', 'L').replace('_', ' ')
               : compressionLevel}
           </Tag>
         </div>
         <div style={{ fontSize: 12, color: tc.muted, textAlign: 'center', marginTop: 6 }}>
-          {levelDescriptions[compressionLevel] ?? ''}
+          {levelDescription}
         </div>
       </div>
 
@@ -238,12 +292,15 @@ export const ContextDetailPanel: FC = () => {
       {/* Token Distribution */}
       <div style={{ marginBottom: 24 }}>
         <Title level={5} style={{ marginBottom: 12 }}>
-          Token Distribution
+          {t('agent.contextDetail.tokenDistribution')}
         </Title>
         {distribution ? (
-          <TokenDistributionBar distribution={distribution} />
+          <TokenDistributionBar distribution={distribution} t={t} />
         ) : (
-          <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty
+            description={t('agent.contextDetail.empty.noData')}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         )}
       </div>
 
@@ -253,7 +310,7 @@ export const ContextDetailPanel: FC = () => {
       {history && history.total_compressions > 0 && (
         <div style={{ marginBottom: 24 }}>
           <Title level={5} style={{ marginBottom: 12 }}>
-            Compression Summary
+            {t('agent.contextDetail.compressionSummary')}
           </Title>
           <div
             style={{
@@ -274,7 +331,9 @@ export const ContextDetailPanel: FC = () => {
               <div style={{ fontSize: 18, fontWeight: 600, color: tc.success }}>
                 {formatTokens(history.total_tokens_saved)}
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>Tokens Saved</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>
+                {t('agent.contextDetail.summary.tokensSaved')}
+              </div>
             </div>
             <div
               style={{
@@ -287,7 +346,9 @@ export const ContextDetailPanel: FC = () => {
               <div style={{ fontSize: 18, fontWeight: 600, color: tc.info }}>
                 {history.total_compressions}
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>Compressions</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>
+                {t('agent.contextDetail.summary.compressions')}
+              </div>
             </div>
             <div
               style={{
@@ -300,7 +361,9 @@ export const ContextDetailPanel: FC = () => {
               <div style={{ fontSize: 18, fontWeight: 600, color: tc.warningDark }}>
                 {(history.average_compression_ratio * 100).toFixed(0)}%
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>Avg Ratio</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>
+                {t('agent.contextDetail.summary.avgRatio')}
+              </div>
             </div>
             <div
               style={{
@@ -313,7 +376,9 @@ export const ContextDetailPanel: FC = () => {
               <div style={{ fontSize: 18, fontWeight: 600, color: tc.purple }}>
                 {history.average_savings_pct.toFixed(0)}%
               </div>
-              <div style={{ fontSize: 11, color: tc.muted }}>Avg Savings</div>
+              <div style={{ fontSize: 11, color: tc.muted }}>
+                {t('agent.contextDetail.summary.avgSavings')}
+              </div>
             </div>
           </div>
         </div>
@@ -324,9 +389,9 @@ export const ContextDetailPanel: FC = () => {
       {/* Compression History Timeline */}
       <div>
         <Title level={5} style={{ marginBottom: 12 }}>
-          Compression History
+          {t('agent.contextDetail.compressionHistory')}
         </Title>
-        <CompressionTimeline records={history?.recent_records ?? []} />
+        <CompressionTimeline records={history?.recent_records ?? []} t={t} />
       </div>
     </Drawer>
   );

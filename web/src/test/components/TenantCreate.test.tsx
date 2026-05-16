@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { TenantCreateModal } from '@/components/tenant/TenantCreateModal';
 
-import { render, screen, fireEvent, waitFor } from '../utils';
+import { act, render, screen, fireEvent, waitFor } from '../utils';
 
 // Mock the store module
 vi.mock('../../stores/tenant', () => ({
@@ -35,6 +35,16 @@ describe('TenantCreateModal', () => {
     mockedStore.isLoading = false;
   });
 
+  function createDeferred<T = void>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve;
+      reject = promiseReject;
+    });
+    return { promise, resolve, reject };
+  }
+
   describe('Rendering', () => {
     it('should render modal when isOpen is true', () => {
       render(<TenantCreateModal {...defaultProps} />);
@@ -54,6 +64,8 @@ describe('TenantCreateModal', () => {
   describe('User Interactions', () => {
     it('should call createTenant with correct parameters on submit', async () => {
       const store = mockedStore as any;
+      const createDeferredTenant = createDeferred();
+      store.createTenant.mockReturnValueOnce(createDeferredTenant.promise);
 
       render(<TenantCreateModal {...defaultProps} />);
 
@@ -72,9 +84,17 @@ describe('TenantCreateModal', () => {
           plan: 'free',
         });
       });
+      await act(async () => {
+        createDeferredTenant.resolve();
+      });
+      await waitFor(() => {
+        expect(nameInput).toHaveValue('');
+      });
     });
 
     it('should call onSuccess and onClose after successful creation', async () => {
+      const createDeferredTenant = createDeferred();
+      mockedStore.createTenant.mockReturnValueOnce(createDeferredTenant.promise);
       render(<TenantCreateModal {...defaultProps} />);
 
       const nameInput = screen.getByLabelText('Workspace name *');
@@ -83,6 +103,12 @@ describe('TenantCreateModal', () => {
       await fireEvent.change(nameInput, { target: { value: 'Test' } });
       await fireEvent.click(submitButton);
 
+      await waitFor(() => {
+        expect(mockedStore.createTenant).toHaveBeenCalled();
+      });
+      await act(async () => {
+        createDeferredTenant.resolve();
+      });
       await waitFor(() => {
         expect(mockOnSuccess).toHaveBeenCalled();
         expect(mockOnClose).toHaveBeenCalled();
@@ -127,12 +153,22 @@ describe('TenantCreateModal', () => {
 
   describe('Loading States', () => {
     it('should submit when form is valid', async () => {
+      const createDeferredTenant = createDeferred();
+      mockedStore.createTenant.mockReturnValueOnce(createDeferredTenant.promise);
       render(<TenantCreateModal {...defaultProps} />);
       const nameInput = screen.getByLabelText('Workspace name *');
       const submitButton = screen.getByText('Create');
       await fireEvent.change(nameInput, { target: { value: 'Test' } });
       await fireEvent.click(submitButton);
-      expect(mockedStore.createTenant).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(mockedStore.createTenant).toHaveBeenCalled();
+      });
+      await act(async () => {
+        createDeferredTenant.resolve();
+      });
+      await waitFor(() => {
+        expect(nameInput).toHaveValue('');
+      });
     });
 
     it('inputs remain enabled when not loading', async () => {

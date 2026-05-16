@@ -7,6 +7,15 @@
 
 import type { TimelineEvent } from '../types/agent';
 
+type LooseTimelineEvent = Omit<TimelineEvent, 'eventTimeUs' | 'eventCounter' | 'timestamp'> & {
+  eventTimeUs?: number | null | undefined;
+  eventCounter?: number | null | undefined;
+  timestamp?: number | null | undefined;
+};
+
+const toValidNumber = (value: number | null | undefined): number | null =>
+  typeof value === 'number' && !Number.isNaN(value) ? value : null;
+
 /**
  * Compare two timeline events by eventTimeUs and eventCounter for sorting.
  *
@@ -20,12 +29,13 @@ import type { TimelineEvent } from '../types/agent';
  * @returns Negative if a < b, positive if a > b, 0 if equal
  */
 export function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): number {
-  const timeA = a.eventTimeUs;
-  const timeB = b.eventTimeUs;
+  const looseA = a as LooseTimelineEvent;
+  const looseB = b as LooseTimelineEvent;
+  const timeA = toValidNumber(looseA.eventTimeUs);
+  const timeB = toValidNumber(looseB.eventTimeUs);
 
-  // Handle null/undefined eventTimeUs
-  const hasTimeA = timeA !== null && timeA !== undefined && !isNaN(timeA);
-  const hasTimeB = timeB !== null && timeB !== undefined && !isNaN(timeB);
+  const hasTimeA = timeA !== null;
+  const hasTimeB = timeB !== null;
 
   // Both have valid eventTimeUs - compare by time first, then counter
   if (hasTimeA && hasTimeB) {
@@ -33,8 +43,8 @@ export function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): numbe
       return timeA - timeB;
     }
     // Same time - compare by counter
-    const counterA = a.eventCounter ?? 0;
-    const counterB = b.eventCounter ?? 0;
+    const counterA = looseA.eventCounter ?? 0;
+    const counterB = looseB.eventCounter ?? 0;
     return counterA - counterB;
   }
 
@@ -49,8 +59,8 @@ export function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): numbe
   }
 
   // Neither has valid eventTimeUs - fall back to timestamp
-  const tsA = a.timestamp ?? 0;
-  const tsB = b.timestamp ?? 0;
+  const tsA = looseA.timestamp ?? 0;
+  const tsB = looseB.timestamp ?? 0;
 
   if (tsA !== tsB) {
     return tsA - tsB;
@@ -96,18 +106,13 @@ export function isTimelineSorted(timeline: TimelineEvent[]): boolean {
       continue;
     }
 
-    const prevTime = prev.eventTimeUs;
-    const currTime = curr.eventTimeUs;
+    const prevEvent = prev as LooseTimelineEvent;
+    const currEvent = curr as LooseTimelineEvent;
+    const prevTime = toValidNumber(prevEvent.eventTimeUs);
+    const currTime = toValidNumber(currEvent.eventTimeUs);
 
     // Skip comparison if either eventTimeUs is invalid
-    if (
-      prevTime === null ||
-      prevTime === undefined ||
-      isNaN(prevTime) ||
-      currTime === null ||
-      currTime === undefined ||
-      isNaN(currTime)
-    ) {
+    if (prevTime === null || currTime === null) {
       continue;
     }
 
@@ -115,8 +120,8 @@ export function isTimelineSorted(timeline: TimelineEvent[]): boolean {
       return false;
     }
     if (prevTime === currTime) {
-      const prevCounter = prev.eventCounter ?? 0;
-      const currCounter = curr.eventCounter ?? 0;
+      const prevCounter = prevEvent.eventCounter ?? 0;
+      const currCounter = currEvent.eventCounter ?? 0;
       if (prevCounter > currCounter) {
         return false;
       }

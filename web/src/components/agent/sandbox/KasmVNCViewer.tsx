@@ -6,7 +6,9 @@
  * Standard noVNC cannot handle these extensions and disconnects.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { Button, Select, Space, Spin, Tooltip } from 'antd';
 import {
@@ -26,6 +28,8 @@ import MouseButtonMapper, { XVNC_BUTTONS } from '@/vendor/kasmvnc/core/mousebutt
 // vendored KasmVNC noVNC fork (ES modules, no TS declarations)
 import RFB from '@/vendor/kasmvnc/core/rfb.js';
 
+import type { TFunction } from 'i18next';
+
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 const RESOLUTION_PRESETS = [
@@ -35,6 +39,11 @@ const RESOLUTION_PRESETS = [
   { label: '1920x1080 (FHD)', value: '1920x1080' },
   { label: '2560x1440 (QHD)', value: '2560x1440' },
 ];
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
 
 export interface KasmVNCViewerProps {
   /** WebSocket URL to the KasmVNC proxy endpoint */
@@ -68,6 +77,7 @@ export function KasmVNCViewer({
   onResolutionChange,
   showToolbar = true,
 }: KasmVNCViewerProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<InstanceType<typeof RFB> | null>(null);
@@ -78,6 +88,21 @@ export function KasmVNCViewer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(!audioEnabled);
   const [currentResolution, setCurrentResolution] = useState(resolution);
+  const muteAudioLabel = tFallback(t, 'components.kasmVNC.muteAudio', 'Mute audio');
+  const unmuteAudioLabel = tFallback(t, 'components.kasmVNC.unmuteAudio', 'Unmute audio');
+  const reconnectLabel = tFallback(t, 'components.kasmVNC.reconnect', 'Reconnect');
+  const fullscreenLabel = tFallback(t, 'components.kasmVNC.fullscreen', 'Fullscreen');
+  const exitFullscreenLabel = tFallback(t, 'components.kasmVNC.exitFullscreen', 'Exit fullscreen');
+  const connectingToDesktopLabel = tFallback(
+    t,
+    'components.kasmVNC.connectingToDesktop',
+    'Connecting to desktop...'
+  );
+  const failedToConnectLabel = tFallback(
+    t,
+    'components.kasmVNC.failedToConnect',
+    'Failed to connect'
+  );
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -183,7 +208,9 @@ export function KasmVNCViewer({
             const delay = Math.min(1000 * Math.pow(1.5, attempt), 15000);
             reconnectAttemptRef.current = attempt + 1;
             setConnectionState('connecting');
-            console.info(`[KasmVNC] Auto-reconnect attempt ${attempt + 1} in ${delay}ms`);
+            console.info(
+              `[KasmVNC] Auto-reconnect attempt ${(attempt + 1).toString()} in ${delay.toString()}ms`
+            );
             reconnectTimerRef.current = setTimeout(() => {
               connectRFB();
             }, delay);
@@ -208,7 +235,7 @@ export function KasmVNCViewer({
 
       rfb.addEventListener('clipboard', (e: { detail: { text: string } }) => {
         // Server clipboard -> browser clipboard
-        navigator.clipboard?.writeText(e.detail.text).catch(() => {
+        void navigator.clipboard.writeText(e.detail.text).catch(() => {
           // clipboard write may fail without user gesture
         });
       });
@@ -290,11 +317,36 @@ export function KasmVNCViewer({
     ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 50 }
     : { height: '100%', position: 'relative', width: '100%' };
 
+  const resolutionOptions = useMemo(
+    () =>
+      RESOLUTION_PRESETS.map((option) =>
+        option.value === 'auto'
+          ? {
+              ...option,
+              label: tFallback(t, 'components.kasmVNC.autoResolution', 'Auto (fit panel)'),
+            }
+          : option
+      ),
+    [t]
+  );
+
   const statusConfig: Record<ConnectionState, { color: string; text: string }> = {
-    disconnected: { color: '#888', text: 'Disconnected' },
-    connecting: { color: '#faad14', text: 'Connecting...' },
-    connected: { color: '#52c41a', text: 'Connected' },
-    error: { color: '#ff4d4f', text: 'Error' },
+    disconnected: {
+      color: '#888',
+      text: tFallback(t, 'components.kasmVNC.status.disconnected', 'Disconnected'),
+    },
+    connecting: {
+      color: '#faad14',
+      text: tFallback(t, 'components.kasmVNC.status.connecting', 'Connecting...'),
+    },
+    connected: {
+      color: '#52c41a',
+      text: tFallback(t, 'components.kasmVNC.status.connected', 'Connected'),
+    },
+    error: {
+      color: '#ff4d4f',
+      text: tFallback(t, 'components.kasmVNC.status.error', 'Error'),
+    },
   };
 
   const status = statusConfig[connectionState];
@@ -324,15 +376,15 @@ export function KasmVNCViewer({
                 size="small"
                 value={currentResolution}
                 onChange={handleResolutionChange}
-                options={RESOLUTION_PRESETS}
+                options={resolutionOptions}
                 className="w-36"
                 popupMatchSelectWidth={false}
-                suffixIcon={<Maximize2 size={16} className="text-gray-400" />}
+                suffix={<Maximize2 size={16} className="text-gray-400" />}
               />
             )}
 
             {/* Audio toggle */}
-            <Tooltip title={isMuted ? 'Unmute audio' : 'Mute audio'}>
+            <Tooltip title={isMuted ? unmuteAudioLabel : muteAudioLabel}>
               <Button
                 type="text"
                 size="small"
@@ -341,12 +393,12 @@ export function KasmVNCViewer({
                   setIsMuted((prev) => !prev);
                 }}
                 className={`text-gray-400 hover:text-white ${!isMuted ? '!text-blue-400' : ''}`}
-                aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
+                aria-label={isMuted ? unmuteAudioLabel : muteAudioLabel}
               />
             </Tooltip>
 
             {/* Reconnect */}
-            <Tooltip title="Reconnect">
+            <Tooltip title={reconnectLabel}>
               <Button
                 type="text"
                 size="small"
@@ -354,19 +406,21 @@ export function KasmVNCViewer({
                 onClick={handleReconnect}
                 disabled={connectionState === 'connecting'}
                 className="text-gray-400 hover:text-white"
-                aria-label="Reconnect"
+                aria-label={reconnectLabel}
               />
             </Tooltip>
 
             {/* Fullscreen */}
-            <Tooltip title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+            <Tooltip title={isFullscreen ? exitFullscreenLabel : fullscreenLabel}>
               <Button
                 type="text"
                 size="small"
                 icon={isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-                onClick={toggleFullscreen}
+                onClick={() => {
+                  void toggleFullscreen();
+                }}
                 className="text-gray-400 hover:text-white"
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                aria-label={isFullscreen ? exitFullscreenLabel : fullscreenLabel}
               />
             </Tooltip>
           </Space>
@@ -378,7 +432,7 @@ export function KasmVNCViewer({
         {connectionState === 'connecting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10 pointer-events-none">
             <Spin indicator={<Loader2 className="animate-spin" size={32} />} />
-            <span className="text-white text-sm">Connecting to desktop...</span>
+            <span className="text-white text-sm">{connectingToDesktopLabel}</span>
           </div>
         )}
 
@@ -386,10 +440,10 @@ export function KasmVNCViewer({
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
             <Unplug size={36} className="text-gray-500" />
             <span className="text-gray-400">
-              {connectionState === 'error' ? 'Failed to connect to desktop' : 'Disconnected'}
+              {connectionState === 'error' ? failedToConnectLabel : statusConfig.disconnected.text}
             </span>
             <Button size="small" onClick={handleReconnect}>
-              Reconnect
+              {reconnectLabel}
             </Button>
           </div>
         )}

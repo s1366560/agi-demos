@@ -63,11 +63,7 @@ vi.mock('@/components/layout/TenantChatSidebar', () => ({
 
 vi.mock('@/components/layout/TenantHeader', () => ({
   __esModule: true,
-  default: () => (
-    <div data-testid="tenant-header">
-      Header
-    </div>
-  ),
+  default: () => <div data-testid="tenant-header">Header</div>,
 }));
 
 vi.mock('@/components/common/RouteErrorBoundary', () => ({

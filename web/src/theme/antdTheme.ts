@@ -401,8 +401,7 @@ export const darkTheme: ThemeConfig = {
       activeBg: '#1c1c1f',
       activeBorderColor: '#737373',
       hoverBorderColor: '#3a3a40',
-      activeShadow:
-        '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
+      activeShadow: '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
     },
     Select: {
       colorBgContainer: '#1c1c1f',
@@ -423,8 +422,7 @@ export const darkTheme: ThemeConfig = {
       hoverBg: '#242428',
       activeBorderColor: '#737373',
       hoverBorderColor: '#3a3a40',
-      activeShadow:
-        '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
+      activeShadow: '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
     },
     InputNumber: {
       colorBgContainer: '#1c1c1f',
@@ -433,8 +431,7 @@ export const darkTheme: ThemeConfig = {
       hoverBg: '#242428',
       activeBorderColor: '#737373',
       hoverBorderColor: '#3a3a40',
-      activeShadow:
-        '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
+      activeShadow: '0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12)',
     },
     Modal: {
       headerBg: colors.surfaceDark,

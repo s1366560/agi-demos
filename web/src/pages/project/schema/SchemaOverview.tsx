@@ -19,48 +19,79 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { useSchemaData } from '../../../hooks/useSwr';
 
-// Memoized entity card component to prevent unnecessary re-renders
-interface EntityCardProps {
-  entity: any;
-  t: (key: string, params?: any) => string;
+import type { EdgeMapping, SchemaEdgeType, SchemaEntityType } from '@/types/memory';
+
+import type { TFunction } from 'i18next';
+
+interface SchemaEntityOverview extends SchemaEntityType {
+  schema?: Record<string, unknown> | undefined;
+  source?: string | undefined;
 }
 
-const EntityCard = memo(({ entity, t }: EntityCardProps) => (
-  <div className="group relative flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-surface-dark-alt bg-white dark:bg-surface-dark p-5 hover:border-emerald-500/50 dark:hover:border-emerald-500/30 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-lg hover:shadow-emerald-900/5">
-    <div className="flex items-start justify-between">
-      <div className="flex items-center gap-3">
-        <div className="size-10 rounded-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-surface-dark-alt flex items-center justify-center text-slate-700 dark:text-white font-bold text-sm">
-          {entity.name.slice(0, 2).toUpperCase()}
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h4 className="text-slate-900 dark:text-white font-bold text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-              {entity.name}
-            </h4>
-            {entity.source === 'generated' && (
-              <span className="text-2xs uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
-                {String(t('project.schema.overview.auto'))}
-              </span>
-            )}
+interface SchemaEdgeOverview extends SchemaEdgeType {
+  schema?: Record<string, unknown> | undefined;
+  source?: string | undefined;
+}
+
+type SchemaMappingOverview = EdgeMapping;
+
+function schemaEntries(schema?: Record<string, unknown>): Array<[string, unknown]> {
+  return Object.entries(schema ?? {});
+}
+
+function schemaValueLabel(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null && 'type' in value) {
+    const typeValue = (value as { type?: unknown }).type;
+    if (typeof typeValue === 'string') return typeValue;
+  }
+  return 'unknown';
+}
+
+// Memoized entity card component to prevent unnecessary re-renders
+interface EntityCardProps {
+  entity: SchemaEntityOverview;
+  t: TFunction;
+}
+
+const EntityCard = memo(({ entity, t }: EntityCardProps) => {
+  const entries = schemaEntries(entity.schema ?? entity.properties);
+  const hiddenCount = Math.max(entries.length - 4, 0);
+
+  return (
+    <div className="group relative flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-surface-dark-alt bg-white dark:bg-surface-dark p-5 hover:border-emerald-500/50 dark:hover:border-emerald-500/30 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:shadow-lg hover:shadow-emerald-900/5">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-surface-dark-alt flex items-center justify-center text-slate-700 dark:text-white font-bold text-sm">
+            {entity.name.slice(0, 2).toUpperCase()}
           </div>
-          <p className="text-slate-500 dark:text-text-muted text-sm">
-            {entity.description || String(t('project.schema.overview.entity_types.no_description'))}
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-slate-900 dark:text-white font-bold text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                {entity.name}
+              </h4>
+              {entity.source === 'generated' && (
+                <span className="text-2xs uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
+                  {t('project.schema.overview.auto')}
+                </span>
+              )}
+            </div>
+            <p className="text-slate-500 dark:text-text-muted text-sm">
+              {entity.description ?? t('project.schema.overview.entity_types.no_description')}
+            </p>
+          </div>
         </div>
+        <button className="text-slate-400 dark:text-text-muted-light hover:text-slate-900 dark:hover:text-white transition-colors">
+          <MoreVertical className="w-5 h-5" />
+        </button>
       </div>
-      <button className="text-slate-400 dark:text-text-muted-light hover:text-slate-900 dark:hover:text-white transition-colors">
-        <MoreVertical className="w-5 h-5" />
-      </button>
-    </div>
-    <div className="h-px w-full bg-slate-100 dark:bg-surface-dark-alt"></div>
-    <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold text-slate-400 dark:text-text-muted-light uppercase tracking-wider">
-        {String(t('project.schema.overview.entity_types.attributes'))}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(entity.schema || {})
-          .slice(0, 4)
-          .map(([key, val]: [string, any]) => (
+      <div className="h-px w-full bg-slate-100 dark:bg-surface-dark-alt"></div>
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-semibold text-slate-400 dark:text-text-muted-light uppercase tracking-wider">
+          {t('project.schema.overview.entity_types.attributes')}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {entries.slice(0, 4).map(([key, val]) => (
             <span
               key={key}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-surface-dark-alt text-xs font-mono text-slate-500 dark:text-text-muted"
@@ -68,29 +99,28 @@ const EntityCard = memo(({ entity, t }: EntityCardProps) => (
               <span
                 className={`size-1.5 rounded-full ${key === 'name' ? 'bg-emerald-500' : 'bg-blue-500'}`}
               ></span>
-              {key}: {typeof val === 'string' ? val : val.type}
+              {key}: {schemaValueLabel(val)}
             </span>
           ))}
-        {Object.keys(entity.schema || {}).length > 4 && (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-background-dark/50 border border-slate-200 dark:border-surface-dark-alt border-dashed text-xs font-medium text-slate-400 dark:text-text-muted-light">
-            {String(
-              t('project.schema.overview.entity_types.more', {
-                count: Object.keys(entity.schema || {}).length - 4,
-              })
-            )}
-          </span>
-        )}
+          {hiddenCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-background-dark/50 border border-slate-200 dark:border-surface-dark-alt border-dashed text-xs font-medium text-slate-400 dark:text-text-muted-light">
+              {t('project.schema.overview.entity_types.more', {
+                count: hiddenCount,
+              })}
+            </span>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-));
+  );
+});
 EntityCard.displayName = 'EntityCard';
 
 // Memoized edge card component
 interface EdgeCardProps {
-  edge: any;
-  mappings: any[];
-  t: (key: string, params?: any) => string;
+  edge: SchemaEdgeOverview;
+  mappings: SchemaMappingOverview[];
+  t: TFunction;
 }
 
 const EdgeCard = memo(({ edge, mappings, t }: EdgeCardProps) => (
@@ -107,7 +137,7 @@ const EdgeCard = memo(({ edge, mappings, t }: EdgeCardProps) => (
             </h4>
             {edge.source === 'generated' && (
               <span className="text-2xs uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">
-                {String(t('project.schema.overview.auto'))}
+                {t('project.schema.overview.auto')}
               </span>
             )}
           </div>
@@ -129,8 +159,8 @@ EdgeCard.displayName = 'EdgeCard';
 // Memoized edge mappings component
 interface EdgeMappingsProps {
   edgeName: string;
-  mappings: any[];
-  t: (key: string, params?: any) => string;
+  mappings: SchemaMappingOverview[];
+  t: TFunction;
 }
 
 const EdgeMappings = memo(({ edgeName, mappings, t }: EdgeMappingsProps) => {
@@ -143,7 +173,7 @@ const EdgeMappings = memo(({ edgeName, mappings, t }: EdgeMappingsProps) => {
     return (
       <div className="flex items-center justify-center p-3 rounded-lg bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-surface-dark-alt border-dashed">
         <span className="text-xs text-slate-400 dark:text-text-muted-light italic">
-          {String(t('project.schema.overview.relationship_types.no_active_mappings'))}
+          {t('project.schema.overview.relationship_types.no_active_mappings')}
         </span>
       </div>
     );
@@ -163,7 +193,7 @@ const EdgeMappings = memo(({ edgeName, mappings, t }: EdgeMappingsProps) => {
             <div className="h-px w-full bg-slate-300 dark:bg-text-muted-light"></div>
             {map.source === 'generated' && (
               <span className="absolute -top-2 text-[8px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-white dark:bg-background-dark px-1">
-                {String(t('project.schema.overview.auto'))}
+                {t('project.schema.overview.auto')}
               </span>
             )}
           </div>
@@ -180,34 +210,36 @@ EdgeMappings.displayName = 'EdgeMappings';
 
 // Memoized edge attributes component
 interface EdgeAttributesProps {
-  edge: any;
-  t: (key: string, params?: any) => string;
+  edge: SchemaEdgeOverview;
+  t: TFunction;
 }
 
-const EdgeAttributes = memo(({ edge, t }: EdgeAttributesProps) => (
-  <div className="flex flex-col gap-2">
-    <p className="text-xs font-semibold text-slate-400 dark:text-text-muted-light uppercase tracking-wider">
-      {String(t('project.schema.overview.relationship_types.edge_attributes'))}
-    </p>
-    <div className="flex flex-wrap gap-2">
-      {Object.entries(edge.schema || {})
-        .slice(0, 4)
-        .map(([key, val]: [string, any]) => (
+const EdgeAttributes = memo(({ edge, t }: EdgeAttributesProps) => {
+  const entries = schemaEntries(edge.schema);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-semibold text-slate-400 dark:text-text-muted-light uppercase tracking-wider">
+        {t('project.schema.overview.relationship_types.edge_attributes')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {entries.slice(0, 4).map(([key, val]) => (
           <span
             key={key}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-surface-dark-alt text-xs font-mono text-slate-500 dark:text-text-muted"
           >
-            {key}: {typeof val === 'string' ? val : val.type}
+            {key}: {schemaValueLabel(val)}
           </span>
         ))}
-      {Object.keys(edge.schema || {}).length === 0 && (
-        <span className="text-slate-400 dark:text-text-muted text-xs italic">
-          {String(t('project.schema.overview.relationship_types.no_attributes'))}
-        </span>
-      )}
+        {entries.length === 0 && (
+          <span className="text-slate-400 dark:text-text-muted text-xs italic">
+            {t('project.schema.overview.relationship_types.no_attributes')}
+          </span>
+        )}
+      </div>
     </div>
-  </div>
-));
+  );
+});
 EdgeAttributes.displayName = 'EdgeAttributes';
 
 export default function SchemaOverview() {
@@ -224,7 +256,7 @@ export default function SchemaOverview() {
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
         <div className="max-w-[1600px] mx-auto flex flex-col gap-8">
           {/* Page Heading & Actions */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -236,7 +268,7 @@ export default function SchemaOverview() {
                 {t('project.schema.overview.subtitle')}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 dark:border-surface-dark-alt bg-white dark:bg-background-dark text-slate-700 dark:text-white text-sm font-semibold hover:bg-slate-50 dark:hover:bg-surface-dark-alt transition-colors shadow-sm">
                 <Code className="w-5 h-5" />
                 {t('project.schema.overview.view_json')}
@@ -271,8 +303,8 @@ export default function SchemaOverview() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
             {/* Entity Types Section */}
             <section className="flex flex-col gap-5">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-surface-dark-alt">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 pb-2 border-b border-slate-200 dark:border-surface-dark-alt sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="size-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center border border-emerald-200 dark:border-emerald-500/20">
                     <Box className="text-emerald-600 dark:text-emerald-500 w-5 h-5" />
                   </div>
@@ -304,8 +336,8 @@ export default function SchemaOverview() {
 
             {/* Relationship Types Section */}
             <section className="flex flex-col gap-5">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-surface-dark-alt">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 pb-2 border-b border-slate-200 dark:border-surface-dark-alt sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="size-8 rounded-lg bg-blue-50 dark:bg-primary/10 flex items-center justify-center border border-blue-200 dark:border-primary/20">
                     <Network className="text-blue-600 dark:text-primary w-5 h-5" />
                   </div>

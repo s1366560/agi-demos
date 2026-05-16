@@ -8,6 +8,65 @@ import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
+import type { GraphConfig, MemoryRulesConfig, Project, ProjectUpdate } from '../../types/memory';
+
+const projectStatusOptions = ['active', 'paused', 'archived'] as const;
+
+type ProjectFormStatus = (typeof projectStatusOptions)[number];
+
+interface ProjectEditFormData {
+  name: string;
+  description: string;
+  status: ProjectFormStatus;
+  memory_rules: MemoryRulesConfig;
+  graph_config: GraphConfig;
+}
+
+const defaultMemoryRules: MemoryRulesConfig = {
+  max_episodes: 1000,
+  retention_days: 30,
+  auto_refresh: true,
+  refresh_interval: 24,
+};
+
+const defaultGraphConfig: GraphConfig = {
+  max_nodes: 5000,
+  max_edges: 10000,
+  similarity_threshold: 0.7,
+  community_detection: true,
+};
+
+const defaultFormData: ProjectEditFormData = {
+  name: '',
+  description: '',
+  status: 'active',
+  memory_rules: defaultMemoryRules,
+  graph_config: defaultGraphConfig,
+};
+
+const isProjectFormStatus = (value: string): value is ProjectFormStatus =>
+  projectStatusOptions.includes(value as ProjectFormStatus);
+
+const toProjectFormData = (project: Partial<Project>): ProjectEditFormData => ({
+  name: project.name ?? '',
+  description: project.description ?? '',
+  status: 'active',
+  memory_rules: {
+    max_episodes: project.memory_rules?.max_episodes ?? defaultMemoryRules.max_episodes,
+    retention_days: project.memory_rules?.retention_days ?? defaultMemoryRules.retention_days,
+    auto_refresh: project.memory_rules?.auto_refresh ?? defaultMemoryRules.auto_refresh,
+    refresh_interval: project.memory_rules?.refresh_interval ?? defaultMemoryRules.refresh_interval,
+  },
+  graph_config: {
+    max_nodes: project.graph_config?.max_nodes ?? defaultGraphConfig.max_nodes,
+    max_edges: project.graph_config?.max_edges ?? defaultGraphConfig.max_edges,
+    similarity_threshold:
+      project.graph_config?.similarity_threshold ?? defaultGraphConfig.similarity_threshold,
+    community_detection:
+      project.graph_config?.community_detection ?? defaultGraphConfig.community_detection,
+  },
+});
+
 export const EditProject: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -16,54 +75,25 @@ export const EditProject: React.FC = () => {
   const { currentTenant } = useTenantStore();
   const [isFetching, setIsFetching] = useState(true);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    status: 'active' as const,
-    memory_rules: {
-      max_episodes: 1000,
-      retention_days: 30,
-      auto_refresh: true,
-      refresh_interval: 24,
-    },
-    graph_config: {
-      max_nodes: 5000,
-      max_edges: 10000,
-      similarity_threshold: 0.7,
-      community_detection: true,
-    },
-  });
+  const [formData, setFormData] = useState<ProjectEditFormData>(defaultFormData);
 
   useEffect(() => {
     const fetchProject = async () => {
-      if (tenantId && projectId) {
-        try {
-          const project = await getProject(tenantId, projectId);
-          setFormData({
-            name: project.name,
-            description: project.description || '',
-            status: 'active', // Project model might not have status field exposed or it's different
-            memory_rules: {
-              max_episodes: project.memory_rules?.max_episodes || 1000,
-              retention_days: project.memory_rules?.retention_days || 30,
-              auto_refresh: project.memory_rules?.auto_refresh ?? true,
-              refresh_interval: project.memory_rules?.refresh_interval || 24,
-            },
-            graph_config: {
-              max_nodes: project.graph_config?.max_nodes || 5000,
-              max_edges: project.graph_config?.max_edges || 10000,
-              similarity_threshold: project.graph_config?.similarity_threshold || 0.7,
-              community_detection: project.graph_config?.community_detection ?? true,
-            },
-          });
-        } catch (err) {
-          console.error('Failed to fetch project:', err);
-        } finally {
-          setIsFetching(false);
-        }
+      if (!tenantId || !projectId) {
+        setIsFetching(false);
+        return;
+      }
+
+      try {
+        const project = await getProject(tenantId, projectId);
+        setFormData(toProjectFormData(project));
+      } catch (err) {
+        console.error('Failed to fetch project:', err);
+      } finally {
+        setIsFetching(false);
       }
     };
-    fetchProject();
+    void fetchProject();
   }, [tenantId, projectId, getProject]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,15 +101,20 @@ export const EditProject: React.FC = () => {
     if (!tenantId || !projectId) return;
 
     try {
-      // Remove status as it's not part of the API payload
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { status, ...projectData } = formData;
+      const projectData: ProjectUpdate = {
+        name: formData.name,
+        description: formData.description,
+        memory_rules: formData.memory_rules,
+        graph_config: formData.graph_config,
+      };
       await updateProject(tenantId, projectId, projectData);
-      navigate(`/tenant/${tenantId}/projects`);
+      void navigate(`/tenant/${tenantId}/projects`);
     } catch (err) {
       console.error('Failed to update project:', err);
     }
   };
+
+  const projectListPath = `/tenant/${tenantId ?? currentTenant?.id ?? ''}/projects`;
 
   if (isFetching) {
     return <div className="p-8 text-center text-slate-500">{t('tenant.projects.loading')}</div>;
@@ -102,7 +137,12 @@ export const EditProject: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+      <form
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+        className="flex flex-col gap-8"
+      >
         {/* Basic Information */}
         <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
@@ -137,7 +177,11 @@ export const EditProject: React.FC = () => {
               <select
                 value={formData.status}
                 onChange={(e) => {
-                  setFormData({ ...formData, status: e.target.value as any });
+                  const nextStatus = e.target.value;
+                  setFormData({
+                    ...formData,
+                    status: isProjectFormStatus(nextStatus) ? nextStatus : 'active',
+                  });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               >
@@ -157,7 +201,9 @@ export const EditProject: React.FC = () => {
                   setFormData({ ...formData, description: e.target.value });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform] resize-none"
-                placeholder="Briefly describe the purpose of this project..."
+                placeholder={t('project.edit.descriptionPlaceholder', {
+                  defaultValue: 'Briefly describe the purpose of this project...',
+                })}
               />
             </div>
           </div>
@@ -171,14 +217,16 @@ export const EditProject: React.FC = () => {
               <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg">
                 <Brain size={16} />
               </div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Memory Rules</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {t('project.edit.memory_rules.title')}
+              </h2>
             </div>
 
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Max Episodes
+                    {t('project.edit.memory_rules.max_episodes')}
                   </label>
                   <input
                     type="number"
@@ -199,7 +247,7 @@ export const EditProject: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Retention (Days)
+                    {t('project.edit.memory_rules.retention')}
                   </label>
                   <input
                     type="number"
@@ -222,7 +270,7 @@ export const EditProject: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Refresh Interval (Hours)
+                  {t('project.edit.memory_rules.refresh_interval')}
                 </label>
                 <input
                   type="number"
@@ -258,7 +306,7 @@ export const EditProject: React.FC = () => {
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
                 </label>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Enable Auto-Refresh
+                  {t('project.edit.memory_rules.auto_refresh')}
                 </span>
               </div>
             </div>
@@ -271,7 +319,7 @@ export const EditProject: React.FC = () => {
                 <Network size={16} />
               </div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Graph Configuration
+                {t('project.edit.graph_config.title')}
               </h2>
             </div>
 
@@ -279,7 +327,7 @@ export const EditProject: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Max Nodes
+                    {t('project.edit.graph_config.max_nodes')}
                   </label>
                   <input
                     type="number"
@@ -299,7 +347,7 @@ export const EditProject: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Max Edges
+                    {t('project.edit.graph_config.max_edges')}
                   </label>
                   <input
                     type="number"
@@ -322,7 +370,7 @@ export const EditProject: React.FC = () => {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Similarity Threshold
+                    {t('project.edit.graph_config.similarity')}
                   </label>
                   <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
                     {formData.graph_config.similarity_threshold}
@@ -346,8 +394,8 @@ export const EditProject: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
                 <div className="flex justify-between text-xs text-slate-400 mt-1">
-                  <span>Loose (0.1)</span>
-                  <span>Strict (1.0)</span>
+                  <span>{t('project.edit.graph_config.loose')}</span>
+                  <span>{t('project.edit.graph_config.strict')}</span>
                 </div>
               </div>
 
@@ -370,7 +418,7 @@ export const EditProject: React.FC = () => {
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 dark:peer-focus:ring-primary/40 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform dark:border-gray-600 peer-checked:bg-primary"></div>
                 </label>
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Enable Community Detection
+                  {t('project.edit.graph_config.community_detection')}
                 </span>
               </div>
             </div>
@@ -379,7 +427,7 @@ export const EditProject: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <Link to={`/tenant/${currentTenant?.id}/projects`}>
+          <Link to={projectListPath}>
             <button
               type="button"
               className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
@@ -392,9 +440,7 @@ export const EditProject: React.FC = () => {
             disabled={isLoading || !formData.name.trim()}
             className="px-6 py-2.5 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {isLoading && (
-              <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-            )}
+            {isLoading && <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />}
             {t('project.edit.actions.update')}
           </button>
         </div>

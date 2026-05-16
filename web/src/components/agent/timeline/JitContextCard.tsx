@@ -15,12 +15,14 @@
 import { useMemo, useState } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message } from 'antd';
 import { ChevronDown, ChevronRight, Copy, Database, Pin, PinOff } from 'lucide-react';
 
-import type { MemoryRecalledTimelineEvent } from '../../../types/agent';
-
 import { useJitContextPins } from './useJitContextPins';
+
+import type { MemoryRecalledTimelineEvent } from '../../../types/agent';
 
 interface JitContextCardProps {
   event: MemoryRecalledTimelineEvent;
@@ -39,13 +41,14 @@ function hitKey(eventId: string | null | undefined, idx: number): string {
 }
 
 export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId }) => {
+  const { t } = useTranslation();
   const [expandedRoot, setExpandedRoot] = useState(false);
   const [expandedHits, setExpandedHits] = useState<ReadonlySet<number>>(() => new Set<number>());
   const [activeSource, setActiveSource] = useState<string | null>(null);
   const pins = useJitContextPins(conversationId);
 
-  const hits = event.memories ?? [];
-  const eventId = event.id ?? null;
+  const hits = useMemo(() => event.memories, [event.memories]);
+  const eventId = event.id;
 
   const sourceBreakdown = useMemo(() => {
     const counts = new Map<string, number>();
@@ -80,10 +83,17 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
     });
   };
 
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text).catch(() => {
-      void message.warning('Failed to copy to clipboard');
-    });
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      void message.success(
+        t('components.jitContext.copySuccess', { defaultValue: 'Copied to clipboard' })
+      );
+    } catch {
+      void message.warning(
+        t('components.jitContext.copyFailed', { defaultValue: 'Failed to copy to clipboard' })
+      );
+    }
   };
 
   return (
@@ -100,15 +110,19 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
         {expandedRoot ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <Database size={12} />
         <span className="font-medium">
-          Recalled {String(event.count)} {event.count === 1 ? 'memory' : 'memories'}
+          {t('components.jitContext.recalled', {
+            defaultValue: 'Recalled {{count}} memories',
+            count: event.count,
+          })}
         </span>
-        <span className="text-blue-500/80 dark:text-blue-400/80">
-          ({String(event.searchMs)}ms)
-        </span>
+        <span className="text-blue-500/80 dark:text-blue-400/80">({String(event.searchMs)}ms)</span>
         {pinnedCount > 0 ? (
           <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
             <Pin size={10} />
-            {String(pinnedCount)} pinned
+            {t('components.jitContext.pinned', {
+              defaultValue: '{{count}} pinned',
+              count: pinnedCount,
+            })}
           </span>
         ) : null}
       </button>
@@ -118,7 +132,7 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
           {sourceBreakdown.length > 1 ? (
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <SourceChip
-                label="all"
+                label={t('components.jitContext.allSources', { defaultValue: 'all' })}
                 count={hits.length}
                 active={activeSource === null}
                 onClick={() => {
@@ -157,7 +171,10 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                   <div className="mb-1 flex flex-wrap items-center gap-1.5">
                     <span
                       className="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-mono font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-300"
-                      title={`Score: ${String(m.score)}`}
+                      title={t('components.jitContext.scoreTitle', {
+                        defaultValue: 'Score: {{score}}',
+                        score: String(m.score),
+                      })}
                     >
                       {formatScore(m.score)}
                     </span>
@@ -165,11 +182,18 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                       {m.category}
                     </span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                      via {m.source}
+                      {t('components.jitContext.viaSource', {
+                        defaultValue: 'via {{source}}',
+                        source: m.source,
+                      })}
                     </span>
                     <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                       <IconButton
-                        label={pinned ? 'Unpin' : 'Pin'}
+                        label={
+                          pinned
+                            ? t('components.jitContext.unpin', { defaultValue: 'Unpin' })
+                            : t('components.jitContext.pin', { defaultValue: 'Pin' })
+                        }
                         onClick={() => {
                           pins.toggle(key);
                         }}
@@ -177,9 +201,9 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                         {pinned ? <PinOff size={12} /> : <Pin size={12} />}
                       </IconButton>
                       <IconButton
-                        label="Copy"
+                        label={t('common.copy', { defaultValue: 'Copy' })}
                         onClick={() => {
-                          copyText(m.content);
+                          void copyText(m.content);
                         }}
                       >
                         <Copy size={12} />
@@ -195,7 +219,9 @@ export const JitContextCard: FC<JitContextCardProps> = ({ event, conversationId 
                       }}
                       className="mt-1 inline-flex items-center text-[10px] font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
                     >
-                      {isExpanded ? 'Show less' : 'Show full'}
+                      {isExpanded
+                        ? t('components.jitContext.showLess', { defaultValue: 'Show less' })
+                        : t('components.jitContext.showFull', { defaultValue: 'Show full' })}
                     </button>
                   ) : null}
                 </li>

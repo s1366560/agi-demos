@@ -26,7 +26,6 @@ export class BlackboardErrorBoundary extends Component<
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-     
     console.error('[BlackboardErrorBoundary]', error, info.componentStack);
   }
 

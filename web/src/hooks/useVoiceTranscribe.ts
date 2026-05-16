@@ -24,7 +24,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-import { createWebSocketUrl } from '@/services/client/urlUtils';
+import { createWebSocketAuthProtocols, createWebSocketUrl } from '@/services/client/urlUtils';
 
 import { getAuthToken } from '@/utils/tokenResolver';
 
@@ -189,12 +189,11 @@ export const useVoiceTranscribe = (
 
     // 1. Open WebSocket
     const wsUrl = createWebSocketUrl('/voice/chat', {
-      token,
       project_id: opts.projectId,
       conversation_id: opts.conversationId,
     });
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, createWebSocketAuthProtocols(token));
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
@@ -325,10 +324,11 @@ export const useVoiceTranscribe = (
 
   // Cleanup on unmount
   useEffect(() => {
+    const connectionId = connectionIdRef;
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      connectionIdRef.current++;
+      connectionId.current += 1;
       // Do NOT call stop() here -- React StrictMode double-mounts in dev.
       // The parent component is responsible for calling stop() on unmount
       // or when the component is no longer needed.

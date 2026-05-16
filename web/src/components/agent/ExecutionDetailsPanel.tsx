@@ -30,7 +30,6 @@ import React, { useMemo, useState, memo, useCallback, Children } from 'react';
 import { Segmented } from 'antd';
 import { BarChart3, Clock, Lightbulb, Wrench } from 'lucide-react';
 
-
 import {
   adaptTimelineData,
   adaptToolVisualizationData,
@@ -38,7 +37,11 @@ import {
   hasExecutionData,
 } from '../../utils/agentDataAdapters';
 
-import { ActivityTimeline } from './execution/ActivityTimeline';
+import {
+  ActivityTimeline,
+  type TimelineItem,
+  type ToolExecutionInfo,
+} from './execution/ActivityTimeline';
 import { TokenUsageChart } from './execution/TokenUsageChart';
 import { ToolCallVisualization, type ToolExecutionItem } from './execution/ToolCallVisualization';
 import { ThinkingChain } from './ThinkingChain';
@@ -63,6 +66,75 @@ const ACTIVITY_SYMBOL = Symbol('ExecutionDetailsPanelActivity');
 const TOOLS_SYMBOL = Symbol('ExecutionDetailsPanelTools');
 const TOKENS_SYMBOL = Symbol('ExecutionDetailsPanelTokens');
 const SELECTOR_SYMBOL = Symbol('ExecutionDetailsPanelViewSelector');
+
+type MarkerSymbol =
+  | typeof THINKING_SYMBOL
+  | typeof ACTIVITY_SYMBOL
+  | typeof TOOLS_SYMBOL
+  | typeof TOKENS_SYMBOL
+  | typeof SELECTOR_SYMBOL;
+
+type MarkedComponent<P> = React.FC<P> & Partial<Record<MarkerSymbol, true>>;
+type MarkableElementType = React.JSXElementConstructor<unknown> &
+  Partial<Record<MarkerSymbol, true>>;
+
+const markComponent = <P,>(
+  component: React.FC<P>,
+  marker: MarkerSymbol,
+  displayName: string
+): MarkedComponent<P> => {
+  const marked = component as MarkedComponent<P>;
+  marked[marker] = true;
+  marked.displayName = displayName;
+  return marked;
+};
+
+const hasMarker = <P,>(
+  child: React.ReactNode,
+  marker: MarkerSymbol
+): child is React.ReactElement<P> => {
+  if (!React.isValidElement(child) || typeof child.type === 'string') {
+    return false;
+  }
+
+  return Boolean((child.type as MarkableElementType)[marker]);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const toStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+const toTimeline = (value: unknown): TimelineItem[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is TimelineItem => {
+        if (!isRecord(item)) return false;
+        return (
+          (item.type === 'thought' || item.type === 'tool_call') &&
+          typeof item.id === 'string' &&
+          typeof item.timestamp === 'number'
+        );
+      })
+    : [];
+
+const toToolExecutions = (value: unknown): Record<string, ToolExecutionInfo> | undefined => {
+  if (!isRecord(value)) return undefined;
+
+  const entries = Object.entries(value).flatMap(([key, item]) => {
+    if (!isRecord(item)) return [];
+
+    const execution: ToolExecutionInfo = {
+      startTime: typeof item.startTime === 'number' ? item.startTime : undefined,
+      endTime: typeof item.endTime === 'number' ? item.endTime : undefined,
+      duration: typeof item.duration === 'number' ? item.duration : undefined,
+    };
+
+    return [[key, execution] as const];
+  });
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
 
 // ========================================
 // View Option Configuration
@@ -104,40 +176,48 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   // Memoized ThinkingChain props
   const thinkingChainProps = useMemo(() => {
     return {
-      thoughts: (message.metadata?.thoughts as string[]) || [],
+      thoughts: toStringArray(message.metadata?.thoughts),
       toolCalls: message.tool_calls,
       toolResults: message.tool_results,
       isThinking: isStreaming && message.content.length === 0,
-      toolExecutions: message.metadata?.tool_executions as Record<
-        string,
-        {
-          startTime?: number | undefined;
-          endTime?: number | undefined;
-          duration?: number | undefined;
-        }
-      >,
-      timeline: message.metadata?.timeline as any[],
+      toolExecutions: toToolExecutions(message.metadata?.tool_executions),
+      timeline: toTimeline(message.metadata?.timeline),
     };
   }, [message, isStreaming]);
 
   // Parse children to detect sub-components
   const childrenArray = Children.toArray(children);
-  const thinkingChild = childrenArray.find((child: any) => child?.type?.[THINKING_SYMBOL]) as any;
-  const activityChild = childrenArray.find((child: any) => child?.type?.[ACTIVITY_SYMBOL]) as any;
-  const toolsChild = childrenArray.find((child: any) => child?.type?.[TOOLS_SYMBOL]) as any;
-  const tokensChild = childrenArray.find((child: any) => child?.type?.[TOKENS_SYMBOL]) as any;
-  const selectorChild = childrenArray.find((child: any) => child?.type?.[SELECTOR_SYMBOL]) as any;
+  const thinkingChild = childrenArray.find(
+    (child): child is React.ReactElement<ExecutionThinkingProps> =>
+      hasMarker<ExecutionThinkingProps>(child, THINKING_SYMBOL)
+  );
+  const activityChild = childrenArray.find(
+    (child): child is React.ReactElement<ExecutionActivityProps> =>
+      hasMarker<ExecutionActivityProps>(child, ACTIVITY_SYMBOL)
+  );
+  const toolsChild = childrenArray.find((child): child is React.ReactElement<ExecutionToolsProps> =>
+    hasMarker<ExecutionToolsProps>(child, TOOLS_SYMBOL)
+  );
+  const tokensChild = childrenArray.find(
+    (child): child is React.ReactElement<ExecutionTokensProps> =>
+      hasMarker<ExecutionTokensProps>(child, TOKENS_SYMBOL)
+  );
+  const selectorChild = childrenArray.find(
+    (child): child is React.ReactElement<ExecutionViewSelectorProps> =>
+      hasMarker<ExecutionViewSelectorProps>(child, SELECTOR_SYMBOL)
+  );
 
   // Determine if using compound mode
-  const hasSubComponents =
-    thinkingChild || activityChild || toolsChild || tokensChild || selectorChild;
+  const hasSubComponents = Boolean(
+    thinkingChild ?? activityChild ?? toolsChild ?? tokensChild ?? selectorChild
+  );
 
   // In legacy mode, include all views by default
   // In compound mode, only include explicitly specified views
-  const includeThinking = hasSubComponents ? !!thinkingChild : true;
-  const includeActivity = hasSubComponents ? !!activityChild : true;
-  const includeTools = hasSubComponents ? !!toolsChild : true;
-  const includeTokens = hasSubComponents ? !!tokensChild : true;
+  const includeThinking = hasSubComponents ? thinkingChild !== undefined : true;
+  const includeActivity = hasSubComponents ? activityChild !== undefined : true;
+  const includeTools = hasSubComponents ? toolsChild !== undefined : true;
+  const includeTokens = hasSubComponents ? tokensChild !== undefined : true;
 
   // Count included views for selector logic
   const includedViewCount = [includeThinking, includeActivity, includeTools, includeTokens].filter(
@@ -149,7 +229,7 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   // - In compound mode with ViewSelector: respect showViewSelector
   // - In compound mode without ViewSelector: show only if multiple views included and prop is true
   const includeSelector =
-    !hasSubComponents || !!selectorChild
+    !hasSubComponents || selectorChild !== undefined
       ? showViewSelector
       : showViewSelector && includedViewCount > 1;
 
@@ -161,7 +241,7 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
     const hasTokens = tokenInfo.tokenData !== undefined;
 
     // All potential views
-    const allViews = [
+    const allViews: ViewOption[] = [
       {
         value: 'thinking' as ViewType,
         label: 'Thinking',
@@ -190,13 +270,14 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
 
     // In compound mode, only include views for which sub-components are provided
     if (hasSubComponents) {
-      return allViews.filter((view) => {
-        if (view.value === 'thinking') return !!thinkingChild;
-        if (view.value === 'activity') return !!activityChild;
-        if (view.value === 'tools') return !!toolsChild;
-        if (view.value === 'tokens') return !!tokensChild;
-        return false;
-      });
+      const includedViews: Record<ViewType, boolean> = {
+        thinking: thinkingChild !== undefined,
+        activity: activityChild !== undefined,
+        tools: toolsChild !== undefined,
+        tokens: tokensChild !== undefined,
+      };
+
+      return allViews.filter((view) => includedViews[view.value]);
     }
 
     return allViews;
@@ -307,17 +388,15 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   return (
     <div className="w-full space-y-3">
       {/* View selector */}
-      {includeSelector && (
-        <div className="flex justify-start">
-          <Segmented
-            size="small"
-            value={effectiveView}
-            onChange={handleViewChange}
-            options={segmentedOptions}
-            className="bg-slate-100 dark:bg-slate-800"
-          />
-        </div>
-      )}
+      <div className="flex justify-start">
+        <Segmented
+          size="small"
+          value={effectiveView}
+          onChange={handleViewChange}
+          options={segmentedOptions}
+          className="bg-slate-100 dark:bg-slate-800"
+        />
+      </div>
 
       {/* View content */}
       <div className="w-full">{viewContent}</div>
@@ -329,43 +408,45 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
 // Sub-Components (Marker Components)
 // ========================================
 
-const ThinkingMarker = function ExecutionDetailsPanelThinkingMarker(
-  _props: ExecutionThinkingProps
-) {
-  return null;
-};
-(ThinkingMarker as any)[THINKING_SYMBOL] = true;
+const ThinkingMarker = markComponent(
+  function ExecutionDetailsPanelThinkingMarker(_props: ExecutionThinkingProps) {
+    return null;
+  },
+  THINKING_SYMBOL,
+  'ExecutionDetailsPanelThinking'
+);
 
-const ActivityMarker = function ExecutionDetailsPanelActivityMarker(
-  _props: ExecutionActivityProps
-) {
-  return null;
-};
-(ActivityMarker as any)[ACTIVITY_SYMBOL] = true;
+const ActivityMarker = markComponent(
+  function ExecutionDetailsPanelActivityMarker(_props: ExecutionActivityProps) {
+    return null;
+  },
+  ACTIVITY_SYMBOL,
+  'ExecutionDetailsPanelActivity'
+);
 
-const ToolsMarker = function ExecutionDetailsPanelToolsMarker(_props: ExecutionToolsProps) {
-  return null;
-};
-(ToolsMarker as any)[TOOLS_SYMBOL] = true;
+const ToolsMarker = markComponent(
+  function ExecutionDetailsPanelToolsMarker(_props: ExecutionToolsProps) {
+    return null;
+  },
+  TOOLS_SYMBOL,
+  'ExecutionDetailsPanelTools'
+);
 
-const TokensMarker = function ExecutionDetailsPanelTokensMarker(_props: ExecutionTokensProps) {
-  return null;
-};
-(TokensMarker as any)[TOKENS_SYMBOL] = true;
+const TokensMarker = markComponent(
+  function ExecutionDetailsPanelTokensMarker(_props: ExecutionTokensProps) {
+    return null;
+  },
+  TOKENS_SYMBOL,
+  'ExecutionDetailsPanelTokens'
+);
 
-const ViewSelectorMarker = function ExecutionDetailsPanelViewSelectorMarker(
-  _props: ExecutionViewSelectorProps
-) {
-  return null;
-};
-(ViewSelectorMarker as any)[SELECTOR_SYMBOL] = true;
-
-// Set display names for testing
-(ThinkingMarker as any).displayName = 'ExecutionDetailsPanelThinking';
-(ActivityMarker as any).displayName = 'ExecutionDetailsPanelActivity';
-(ToolsMarker as any).displayName = 'ExecutionDetailsPanelTools';
-(TokensMarker as any).displayName = 'ExecutionDetailsPanelTokens';
-(ViewSelectorMarker as any).displayName = 'ExecutionDetailsPanelViewSelector';
+const ViewSelectorMarker = markComponent(
+  function ExecutionDetailsPanelViewSelectorMarker(_props: ExecutionViewSelectorProps) {
+    return null;
+  },
+  SELECTOR_SYMBOL,
+  'ExecutionDetailsPanelViewSelector'
+);
 
 // Create compound component with sub-components
 const ExecutionDetailsPanelMemo = memo(ExecutionDetailsPanelInner);

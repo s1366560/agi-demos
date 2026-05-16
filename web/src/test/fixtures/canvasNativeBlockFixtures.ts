@@ -43,9 +43,7 @@ export function getNativeBlockFixtureCase(caseId: string): NativeBlockFixtureCas
   return fixtureCase;
 }
 
-export function getNativeBlockFixtureCases(
-  target?: NativeBlockTarget
-): NativeBlockFixtureCase[] {
+export function getNativeBlockFixtureCases(target?: NativeBlockTarget): NativeBlockFixtureCase[] {
   if (!target) return nativeBlockFixtures.cases;
   return nativeBlockFixtures.cases.filter((fixtureCase) => fixtureCase.targets.includes(target));
 }

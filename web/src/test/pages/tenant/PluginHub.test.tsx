@@ -143,7 +143,7 @@ describe('PluginHub', () => {
   it('fetches schema when opening add-channel modal', async () => {
     render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
 
-    const addChannelLabel = await screen.findByText('Add Channel');
+    const addChannelLabel = await screen.findByText('tenant.pluginHub.channelsList.addChannel');
     const addButton = addChannelLabel.closest('button');
     expect(addButton).not.toBeNull();
     await waitFor(() => {
@@ -163,7 +163,9 @@ describe('PluginHub', () => {
   it('renders readable control-plane capability labels after reload', async () => {
     render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
 
-    const reloadButton = await screen.findByRole('button', { name: 'Reload' });
+    const reloadButton = await screen.findByRole('button', {
+      name: 'tenant.pluginHub.pluginsList.reload',
+    });
     fireEvent.click(reloadButton);
 
     await waitFor(() => {

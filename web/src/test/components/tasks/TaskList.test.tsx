@@ -4,9 +4,21 @@
  * TDD: GREEN - Tests passing after implementation
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+
+const antdMessage = vi.hoisted(() => ({
+  error: vi.fn(),
+}));
+const antdModal = vi.hoisted(() => ({
+  confirm: vi.fn((options?: { onOk?: () => void | Promise<void> }) => options?.onOk?.()),
+}));
+
+vi.mock('antd', () => ({
+  Modal: antdModal,
+  message: antdMessage,
+}));
 
 // Mock date-fns
 vi.mock('date-fns', () => ({
@@ -89,6 +101,20 @@ describe('TaskList (Compound Components)', () => {
         expect(container.querySelector('.border-0')).toBeInTheDocument();
       });
     });
+
+    it('should scope embedded task requests by entity id and type', async () => {
+      const { TaskList } = await import('../../../components/tasks/TaskList');
+      render(<TaskList entityId="community-123" entityType="community" embedded={true} />);
+
+      await waitFor(() => {
+        const lastParams = vi.mocked(taskAPI.getRecentTasks).mock.calls.at(-1)?.[0];
+        expect(lastParams).toMatchObject({
+          entity_id: 'community-123',
+          entity_type: 'community',
+        });
+        expect(lastParams).not.toHaveProperty('task_type');
+      });
+    });
   });
 
   describe('TaskList.Header', () => {
@@ -148,11 +174,8 @@ describe('TaskList (Compound Components)', () => {
       const { TaskList } = await import('../../../components/tasks/TaskList');
       render(<TaskList />);
 
-      // The component's fetchTasks maps only id/task_type/name/status/created_at,
-      // so duration is undefined and renders as '-'.
       await waitFor(() => {
-        const dashes = screen.getAllByText('-');
-        expect(dashes.length).toBeGreaterThan(0);
+        expect(screen.getByText('5s')).toBeInTheDocument();
       });
     });
 
@@ -160,27 +183,56 @@ describe('TaskList (Compound Components)', () => {
       const { TaskList } = await import('../../../components/tasks/TaskList');
       render(<TaskList />);
 
-      // The component checks task.status === 'Failed' (capitalized) for retry
-      // and 'Processing'/'Pending' for stop. Mock data uses lowercase statuses
-      // which don't match, so retry/stop buttons won't appear. Instead, verify
-      // the more-actions (MoreVertical) buttons render for each task row.
       await waitFor(() => {
-        const allButtons = screen.getAllByRole('button');
-        // At least the header refresh button + per-row action buttons
-        expect(allButtons.length).toBeGreaterThanOrEqual(4);
+        expect(screen.getByText('Retry')).toBeInTheDocument();
+        expect(screen.getByText('Stop')).toBeInTheDocument();
       });
+    });
+
+    it('shows in-app error feedback when retry fails', async () => {
+      vi.spyOn(taskAPI, 'retryTask').mockRejectedValueOnce(new Error('retry failed'));
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+
+      const { TaskList } = await import('../../../components/tasks/TaskList');
+      render(<TaskList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Retry')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Retry'));
+
+      await waitFor(() => {
+        expect(antdMessage.error).toHaveBeenCalledWith('Failed to retry task. Please try again.');
+      });
+      expect(alertSpy).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it('shows in-app error feedback when stop fails', async () => {
+      vi.spyOn(taskAPI, 'stopTask').mockRejectedValueOnce(new Error('stop failed'));
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+
+      const { TaskList } = await import('../../../components/tasks/TaskList');
+      render(<TaskList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Stop')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Stop'));
+
+      await waitFor(() => {
+        expect(antdMessage.error).toHaveBeenCalledWith('Failed to stop task. Please try again.');
+      });
+      expect(alertSpy).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
     });
 
     it('should render entity info for tasks without entityId prop', async () => {
       const { TaskList } = await import('../../../components/tasks/TaskList');
       render(<TaskList />);
 
-      // fetchTasks only maps id/task_type/name/status/created_at, so entity_id
-      // is always undefined and the Entity column renders '-' for each row.
       await waitFor(() => {
-        const dashes = screen.getAllByText('-');
-        // At least one dash from the Entity column (plus duration dashes)
-        expect(dashes.length).toBeGreaterThanOrEqual(3);
+        expect(screen.getByText('memory:entity-1...')).toBeInTheDocument();
       });
     });
   });

@@ -37,7 +37,7 @@ export const ForceChangePassword: React.FC = () => {
         setUser({ ...user, must_change_password: false });
       }
 
-      navigate('/tenant', { replace: true });
+      void navigate('/tenant', { replace: true });
     } catch (_error) {
       void message.error(t('forceChangePassword.failed'));
     } finally {

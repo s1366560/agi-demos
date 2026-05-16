@@ -5,9 +5,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 
 import { Timeline, Badge, Card, Typography, Alert, Collapse, Space } from 'antd';
 
-import { API_BASE_URL } from '@/services/client/httpClient';
-
-import { LazyButton, LazySpin, LazyEmpty, LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
+import {
+  LazyButton,
+  LazySpin,
+  LazyEmpty,
+  LazyPopconfirm,
+  useLazyMessage,
+} from '@/components/ui/lazyAntd';
 
 import { useAuthStore } from '../../stores/auth';
 import {
@@ -18,6 +22,7 @@ import {
   useDeployActions,
 } from '../../stores/deploy';
 
+import { streamDeployProgress } from './deployProgressStream';
 import { getStatusColor, formatDate } from './utils/instanceUtils';
 
 const { Title, Text, Paragraph } = Typography;
@@ -28,7 +33,8 @@ export const DeployProgress: React.FC = () => {
   const navigate = useNavigate();
   const messageApi = useLazyMessage();
 
-  const deploys = useDeploys();
+  const deploysFromStore = useDeploys();
+  const deploys = Array.isArray(deploysFromStore) ? deploysFromStore : [];
   const currentDeploy = useCurrentDeploy();
   const loading = useDeployLoading();
   const error = useDeployError();
@@ -37,12 +43,12 @@ export const DeployProgress: React.FC = () => {
 
   useEffect(() => {
     if (deployId) {
-      getDeploy(deployId).catch((err) => {
+      getDeploy(deployId).catch((err: unknown) => {
         console.error('Failed to get deploy:', err);
         messageApi?.error(t('tenant.deploy.errors.getFailed', 'Failed to fetch deploy details'));
       });
     } else if (instanceId) {
-      listDeploys({ instance_id: instanceId }).catch((err) => {
+      listDeploys({ instance_id: instanceId }).catch((err: unknown) => {
         console.error('Failed to list deploys:', err);
         messageApi?.error(t('tenant.deploy.errors.listFailed', 'Failed to fetch deploy history'));
       });
@@ -61,46 +67,49 @@ export const DeployProgress: React.FC = () => {
     const token = useAuthStore.getState().token;
     if (!token) return;
 
-    // TODO: Security - EventSource doesn't support custom headers, so token is in URL.
-    // Replace with a short-lived ticket endpoint to prevent token leakage in logs/history.
-    const es = new EventSource(`${API_BASE_URL}/deploys/${deployId}/progress?token=${token}`);
+    const controller = new AbortController();
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data as string) as { type: string };
+    const refreshDeploy = (context: string): void => {
+      getDeploy(deployId).catch((err: unknown) => {
+        console.error(`Failed to get deploy ${context}:`, err);
+      });
+    };
+
+    void streamDeployProgress({
+      deployId,
+      token,
+      signal: controller.signal,
+      onEvent: (data) => {
         if (data.type === 'status') {
-          getDeploy(deployId).catch((err) => {
-            console.error('Failed to get deploy status update:', err);
-          });
+          refreshDeploy('status update');
         }
         if (data.type === 'done') {
-          getDeploy(deployId).catch((err) => {
-            console.error('Failed to get final deploy status:', err);
-          });
-          es.close();
+          refreshDeploy('final status');
         }
-      } catch (err) {
-        console.error('Failed to parse SSE message:', err);
+      },
+    }).catch((err: unknown) => {
+      if (controller.signal.aborted) {
+        return;
       }
-    };
-
-    es.onerror = (err) => {
-      console.error('EventSource connection error:', err);
-      es.close();
-    };
+      try {
+        console.error('Deploy progress stream error:', err);
+      } catch {
+        // Ignore logger failures.
+      }
+    });
 
     return () => {
-      es.close();
+      controller.abort();
     };
   }, [deployId, currentDeploy, getDeploy]);
 
   const handleNewDeploy = () => {
     if (!instanceId) return;
-    createDeploy({ instance_id: instanceId, description: 'Manual deploy' })
+    void createDeploy({ instance_id: instanceId, description: 'Manual deploy' })
       .then((res) => {
-        navigate(`../deploy/${res.id}`);
+        void navigate(`../deploy/${res.id}`);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error('Failed to create deploy:', err);
         messageApi?.error(t('tenant.deploy.errors.createFailed', 'Failed to create new deploy'));
       });
@@ -116,7 +125,7 @@ export const DeployProgress: React.FC = () => {
 
   if (deployId) {
     if (!currentDeploy)
-      return <Alert type="warning" message={t('tenant.deploy.notFound', 'Deploy not found')} />;
+      return <Alert type="warning" title={t('tenant.deploy.notFound', 'Deploy not found')} />;
 
     const timelineItems = [
       {
@@ -161,13 +170,11 @@ export const DeployProgress: React.FC = () => {
             {currentDeploy.completed_at && (
               <>
                 <br />
-                <Text type="secondary">
-                  {formatDate(currentDeploy.completed_at)}
-                </Text>
+                <Text type="secondary">{formatDate(currentDeploy.completed_at)}</Text>
               </>
             )}
             {currentDeploy.error_message && (
-              <Alert type="error" message={currentDeploy.error_message} className="mt-2" />
+              <Alert type="error" title={currentDeploy.error_message} className="mt-2" />
             )}
           </>
         ),
@@ -177,7 +184,13 @@ export const DeployProgress: React.FC = () => {
     return (
       <div className="max-w-4xl mx-auto w-full flex flex-col gap-8">
         <div className="flex items-center gap-4">
-          <LazyButton onClick={() => navigate(-1)}>{t('tenant.deploy.actions.back', 'Back')}</LazyButton>
+          <LazyButton
+            onClick={() => {
+              void navigate(-1);
+            }}
+          >
+            {t('tenant.deploy.actions.back', 'Back')}
+          </LazyButton>
           <Title level={3} className="!mb-0">
             {t('tenant.deploy.detailTitle', 'Deployment Detail')}
           </Title>
@@ -188,7 +201,7 @@ export const DeployProgress: React.FC = () => {
           />
         </div>
 
-        {error && <Alert type="error" message={error} />}
+        {error && <Alert type="error" title={error} />}
 
         <Card className="bg-surface-light dark:bg-surface-dark rounded-lg p-6 border border-border-light dark:border-border-dark">
           <div className="grid grid-cols-2 gap-8 mb-8">
@@ -224,44 +237,64 @@ export const DeployProgress: React.FC = () => {
           <div className="mt-8 pt-4 border-t border-border-light dark:border-border-dark flex gap-4">
             {currentDeploy.status === 'in_progress' && (
               <LazyPopconfirm
-                title={t('tenant.deploy.actions.cancelConfirm', 'Are you sure you want to cancel this deploy?')}
+                title={t(
+                  'tenant.deploy.actions.cancelConfirm',
+                  'Are you sure you want to cancel this deploy?'
+                )}
                 okText={t('common.actions.yes', 'Yes')}
                 cancelText={t('common.actions.no', 'No')}
-                onConfirm={() => cancelDeploy(currentDeploy.id).catch((err) => {
-                  console.error('Failed to cancel deploy:', err);
-                  messageApi?.error(t('tenant.deploy.errors.cancelFailed', 'Failed to cancel deploy'));
-                })}
+                onConfirm={() => {
+                  void cancelDeploy(currentDeploy.id).catch((err: unknown) => {
+                    console.error('Failed to cancel deploy:', err);
+                    messageApi?.error(
+                      t('tenant.deploy.errors.cancelFailed', 'Failed to cancel deploy')
+                    );
+                  });
+                }}
               >
-                <LazyButton danger>
-                  {t('tenant.deploy.actions.cancel', 'Cancel Deploy')}
-                </LazyButton>
+                <LazyButton danger>{t('tenant.deploy.actions.cancel', 'Cancel Deploy')}</LazyButton>
               </LazyPopconfirm>
             )}
             <Space className="ml-auto">
               {currentDeploy.status !== 'success' && (
                 <LazyPopconfirm
-                  title={t('tenant.deploy.actions.markSuccessConfirm', 'Are you sure you want to mark this deploy as success?')}
+                  title={t(
+                    'tenant.deploy.actions.markSuccessConfirm',
+                    'Are you sure you want to mark this deploy as success?'
+                  )}
                   okText={t('common.actions.yes', 'Yes')}
                   cancelText={t('common.actions.no', 'No')}
-                  onConfirm={() => markSuccess(currentDeploy.id).catch((err) => {
-                    console.error('Failed to mark deploy as success:', err);
-                    messageApi?.error(t('tenant.deploy.errors.markSuccessFailed', 'Failed to update deploy status'));
-                  })}
+                  onConfirm={() => {
+                    void markSuccess(currentDeploy.id).catch((err: unknown) => {
+                      console.error('Failed to mark deploy as success:', err);
+                      messageApi?.error(
+                        t(
+                          'tenant.deploy.errors.markSuccessFailed',
+                          'Failed to update deploy status'
+                        )
+                      );
+                    });
+                  }}
                 >
-                  <LazyButton>
-                    {t('tenant.deploy.actions.markSuccess', 'Mark Success')}
-                  </LazyButton>
+                  <LazyButton>{t('tenant.deploy.actions.markSuccess', 'Mark Success')}</LazyButton>
                 </LazyPopconfirm>
               )}
               {currentDeploy.status !== 'failed' && (
                 <LazyPopconfirm
-                  title={t('tenant.deploy.actions.markFailedConfirm', 'Are you sure you want to mark this deploy as failed?')}
+                  title={t(
+                    'tenant.deploy.actions.markFailedConfirm',
+                    'Are you sure you want to mark this deploy as failed?'
+                  )}
                   okText={t('common.actions.yes', 'Yes')}
                   cancelText={t('common.actions.no', 'No')}
-                  onConfirm={() => markFailed(currentDeploy.id).catch((err) => {
-                    console.error('Failed to mark deploy as failed:', err);
-                    messageApi?.error(t('tenant.deploy.errors.markFailedFailed', 'Failed to update deploy status'));
-                  })}
+                  onConfirm={() => {
+                    void markFailed(currentDeploy.id).catch((err: unknown) => {
+                      console.error('Failed to mark deploy as failed:', err);
+                      messageApi?.error(
+                        t('tenant.deploy.errors.markFailedFailed', 'Failed to update deploy status')
+                      );
+                    });
+                  }}
                 >
                   <LazyButton danger>
                     {t('tenant.deploy.actions.markFailed', 'Mark Failed')}
@@ -277,7 +310,7 @@ export const DeployProgress: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <Title level={3} className="!mb-0">
           {t('tenant.deploy.listTitle', 'Deployment History')}
         </Title>
@@ -286,7 +319,7 @@ export const DeployProgress: React.FC = () => {
         </LazyButton>
       </div>
 
-      {error && <Alert type="error" message={error} />}
+      {error && <Alert type="error" title={error} />}
 
       <Card className="bg-surface-light dark:bg-surface-dark rounded-lg p-6 border border-border-light dark:border-border-dark">
         <Timeline
@@ -297,7 +330,9 @@ export const DeployProgress: React.FC = () => {
                 size="small"
                 hoverable
                 className="w-full cursor-pointer -ml-2"
-                onClick={() => navigate(`../deploy/${d.id}`)}
+                onClick={() => {
+                  void navigate(`../deploy/${d.id}`);
+                }}
               >
                 <div className="flex justify-between items-start mb-1">
                   <Text strong>

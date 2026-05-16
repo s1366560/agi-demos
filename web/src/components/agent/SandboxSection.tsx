@@ -6,6 +6,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Terminal, Monitor, Play, Square, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 
 import {
@@ -22,6 +24,8 @@ import { useSandboxStore } from '../../stores/sandbox';
 import { RemoteDesktopViewer } from './sandbox/RemoteDesktopViewer';
 import { SandboxTerminal } from './sandbox/SandboxTerminal';
 
+import type { DesktopStatus, TerminalStatus } from '../../types/agent';
+
 type SandboxTab = 'terminal' | 'desktop';
 
 interface SandboxSectionProps {
@@ -33,10 +37,11 @@ interface SandboxSectionProps {
 const TerminalTab: React.FC<{
   sandboxId: string;
   projectId?: string | undefined;
-  terminalStatus: any;
+  terminalStatus: TerminalStatus | null;
   onStartTerminal: () => Promise<void>;
   isTerminalLoading: boolean;
 }> = ({ sandboxId, projectId, terminalStatus, onStartTerminal, isTerminalLoading }) => {
+  const { t } = useTranslation();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   // Use ref to track auto-start attempt (avoids setState in effect)
@@ -53,7 +58,7 @@ const TerminalTab: React.FC<{
       sandboxId
     ) {
       autoStartAttemptedRef.current = true;
-      onStartTerminal();
+      void onStartTerminal();
     }
   }, [terminalStatus?.running, isTerminalLoading, isConnected, sandboxId, onStartTerminal]);
 
@@ -65,14 +70,18 @@ const TerminalTab: React.FC<{
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <div className="text-center">
-              <p className="text-slate-400 mb-4">Terminal is not running</p>
+              <p className="text-slate-400 mb-4">
+                {t('components.sandboxSection.terminalNotRunning')}
+              </p>
               <LazyButton
                 type="primary"
                 icon={<Play size={16} />}
-                onClick={onStartTerminal}
+                onClick={() => {
+                  void onStartTerminal();
+                }}
                 loading={isTerminalLoading}
               >
-                Start Terminal
+                {t('components.sandboxSection.startTerminal')}
               </LazyButton>
             </div>
           }
@@ -90,12 +99,14 @@ const TerminalTab: React.FC<{
             className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse motion-reduce:animate-none'}`}
           />
           <span className="text-xs text-slate-400">
-            {isConnected ? 'Connected' : 'Connecting...'}
+            {isConnected
+              ? t('components.sandboxSection.connected')
+              : t('components.sandboxSection.connecting')}
           </span>
           {sessionId && <span className="text-xs text-slate-600">({sessionId.slice(0, 8)})</span>}
         </div>
         <div className="flex items-center gap-1">
-          <LazyTooltip title="Reconnect">
+          <LazyTooltip title={t('components.sandboxSection.reconnect')}>
             <LazyButton
               type="text"
               size="small"
@@ -104,7 +115,7 @@ const TerminalTab: React.FC<{
               onClick={() => {
                 setSessionId(null);
                 setIsConnected(false);
-                onStartTerminal();
+                void onStartTerminal();
               }}
             />
           </LazyTooltip>
@@ -136,11 +147,12 @@ const TerminalTab: React.FC<{
 const DesktopTab: React.FC<{
   sandboxId: string;
   projectId?: string | undefined;
-  desktopStatus: any;
+  desktopStatus: DesktopStatus | null;
   onStartDesktop: () => Promise<void>;
   onStopDesktop: () => Promise<void>;
   isDesktopLoading: boolean;
 }> = ({ sandboxId, projectId, desktopStatus, onStartDesktop, onStopDesktop, isDesktopLoading }) => {
+  const { t } = useTranslation();
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Use ref to track auto-start attempt (avoids setState in effect)
   const autoStartAttemptedRef = useRef(false);
@@ -155,7 +167,7 @@ const DesktopTab: React.FC<{
       sandboxId
     ) {
       autoStartAttemptedRef.current = true;
-      onStartDesktop();
+      void onStartDesktop();
     }
   }, [desktopStatus?.running, isDesktopLoading, sandboxId, onStartDesktop]);
 
@@ -166,14 +178,18 @@ const DesktopTab: React.FC<{
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <div className="text-center">
-              <p className="text-slate-400 mb-4">Desktop is not running</p>
+              <p className="text-slate-400 mb-4">
+                {t('components.sandboxSection.desktopNotRunning')}
+              </p>
               <LazyButton
                 type="primary"
                 icon={<Play size={16} />}
-                onClick={onStartDesktop}
+                onClick={() => {
+                  void onStartDesktop();
+                }}
                 loading={isDesktopLoading}
               >
-                Start Desktop
+                {t('components.sandboxSection.startDesktop')}
               </LazyButton>
             </div>
           }
@@ -188,11 +204,19 @@ const DesktopTab: React.FC<{
       <div className="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-xs text-slate-300">Desktop Running</span>
+          <span className="text-xs text-slate-300">
+            {t('components.sandboxSection.desktopRunning')}
+          </span>
           <span className="text-xs text-slate-500">({sandboxId.slice(0, 8)})</span>
         </div>
         <div className="flex items-center gap-1">
-          <LazyTooltip title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
+          <LazyTooltip
+            title={
+              isFullscreen
+                ? t('components.sandboxSection.exitFullscreen')
+                : t('components.sandboxSection.fullscreen')
+            }
+          >
             <LazyButton
               type="text"
               size="small"
@@ -203,12 +227,14 @@ const DesktopTab: React.FC<{
               className="text-slate-400 hover:text-white"
             />
           </LazyTooltip>
-          <LazyTooltip title="Stop Desktop">
+          <LazyTooltip title={t('components.sandboxSection.stopDesktop')}>
             <LazyButton
               type="text"
               size="small"
               icon={<Square size={14} />}
-              onClick={onStopDesktop}
+              onClick={() => {
+                void onStopDesktop();
+              }}
               loading={isDesktopLoading}
               className="text-slate-400 hover:text-red-400"
             />
@@ -230,7 +256,8 @@ const DesktopTab: React.FC<{
   );
 };
 
-export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, className }) => {
+export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, className = '' }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
   const {
     activeProjectId,
@@ -249,7 +276,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
       label: (
         <div className="flex items-center gap-2">
           <Terminal size={16} />
-          <span>Terminal</span>
+          <span>{t('components.sandboxSection.terminal')}</span>
           {terminalStatus?.running && <LazyBadge status="success" className="ml-1" />}
         </div>
       ),
@@ -263,7 +290,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <LazyEmpty description="No sandbox connected" />
+          <LazyEmpty description={t('components.sandboxSection.noSandboxConnected')} />
         </div>
       ),
     },
@@ -272,7 +299,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
       label: (
         <div className="flex items-center gap-2">
           <Monitor size={16} />
-          <span>Desktop</span>
+          <span>{t('components.sandboxSection.desktop')}</span>
           {desktopStatus?.running && <LazyBadge status="success" className="ml-1" />}
         </div>
       ),
@@ -287,7 +314,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <LazyEmpty description="No sandbox connected" />
+          <LazyEmpty description={t('components.sandboxSection.noSandboxConnected')} />
         </div>
       ),
     },

@@ -22,14 +22,19 @@ export const Events: React.FC = () => {
   const [dateRange, setDateRange] = useState<[string, string] | undefined>();
 
   useEffect(() => {
-    eventService.getEventTypes().then(setTypes).catch(console.error);
+    void eventService
+      .getEventTypes()
+      .then(setTypes)
+      .catch((err: unknown) => {
+        console.error(err);
+      });
   }, []);
 
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
       try {
-        const params: any = { page, page_size: pageSize };
+        const params: Parameters<typeof eventService.listEvents>[0] = { page, page_size: pageSize };
         if (selectedType) params.event_type = selectedType;
         if (dateRange?.[0]) params.date_from = dateRange[0];
         if (dateRange?.[1]) params.date_to = dateRange[1];
@@ -42,7 +47,7 @@ export const Events: React.FC = () => {
         setLoading(false);
       }
     };
-    fetchEvents();
+    void fetchEvents();
   }, [page, pageSize, selectedType, dateRange]);
 
   const columns = [
@@ -80,7 +85,7 @@ export const Events: React.FC = () => {
           allowClear
           placeholder={t('events.filterByType')}
           style={{ width: 200 }}
-          onChange={(val) => {
+          onChange={(val: string | undefined) => {
             setSelectedType(val);
             setPage(1);
           }}

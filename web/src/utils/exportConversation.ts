@@ -7,6 +7,18 @@
 
 import type { TimelineEvent } from '@/types/agent';
 
+type Html2PdfOptions = {
+  margin?: number | [number, number] | [number, number, number, number];
+  filename?: string;
+  html2canvas?: Record<string, unknown>;
+  jsPDF?: {
+    unit?: string;
+    format?: string | [number, number];
+    orientation?: 'portrait' | 'landscape';
+  };
+  pagebreak?: { mode?: string[] };
+};
+
 function formatTimestamp(ts: number): string {
   return new Date(ts).toLocaleString();
 }
@@ -52,7 +64,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
 
       case 'act':
         lines.push(`> 🔧 **Tool Call**: \`${event.toolName}\``);
-        if (event.toolInput && Object.keys(event.toolInput).length > 0) {
+        if (Object.keys(event.toolInput).length > 0) {
           lines.push('> ```json');
           lines.push(`> ${JSON.stringify(event.toolInput, null, 2).split('\n').join('\n> ')}`);
           lines.push('> ```');
@@ -96,7 +108,7 @@ export function downloadConversationMarkdown(
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename || `conversation-${Date.now()}.md`;
+  a.download = filename || `conversation-${String(Date.now())}.md`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -206,16 +218,14 @@ export async function downloadConversationPdf(
   document.body.appendChild(container);
 
   try {
-    await html2pdf()
-      .set({
-        margin: [10, 10, 10, 10],
-        filename: filename || `conversation-${Date.now()}.pdf`,
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-      } as any)
-      .from(container)
-      .save();
+    const pdfOptions: Html2PdfOptions = {
+      margin: [10, 10, 10, 10],
+      filename: filename || `conversation-${String(Date.now())}.pdf`,
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+    };
+    await html2pdf().set(pdfOptions).from(container).save();
   } finally {
     document.body.removeChild(container);
   }

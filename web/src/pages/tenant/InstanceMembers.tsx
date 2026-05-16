@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { Input, Table } from 'antd';
-import { CheckCircle, Eye, Shield, UserPlus, Users } from 'lucide-react';
+import { CheckCircle, Eye, Search as SearchIcon, Shield, UserPlus, Users } from 'lucide-react';
 
 import {
   useLazyMessage,
@@ -58,7 +58,7 @@ export const InstanceMembers: React.FC = () => {
 
   useEffect(() => {
     if (instanceId) {
-      listMembers(instanceId);
+      void listMembers(instanceId);
     }
   }, [instanceId, listMembers]);
 
@@ -80,16 +80,18 @@ export const InstanceMembers: React.FC = () => {
       setUserSearchResults([]);
       return;
     }
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const results = await searchUsers(instanceId, userSearchQuery);
-        setUserSearchResults(results);
-      } catch (err) {
-        console.error('Failed to search users:', err);
-      } finally {
-        setIsSearching(false);
-      }
+    const timer = setTimeout(() => {
+      void (async () => {
+        setIsSearching(true);
+        try {
+          const results = await searchUsers(instanceId, userSearchQuery);
+          setUserSearchResults(results);
+        } catch (err) {
+          console.error('Failed to search users:', err);
+        } finally {
+          setIsSearching(false);
+        }
+      })();
     }, 300);
     return () => {
       clearTimeout(timer);
@@ -115,9 +117,7 @@ export const InstanceMembers: React.FC = () => {
       render: (_, member) => (
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="shrink-0 w-8 h-8 rounded-full bg-surface-alt dark:bg-surface-elevated flex items-center justify-center text-sm font-medium text-text-secondary dark:text-text-muted-light">
-            {(member.user_name ?? member.user_email ?? member.user_id)
-              .charAt(0)
-              .toUpperCase()}
+            {(member.user_name ?? member.user_email ?? member.user_id).charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-text-primary dark:text-text-inverse truncate">
@@ -152,7 +152,7 @@ export const InstanceMembers: React.FC = () => {
       render: (_, member) => new Date(member.created_at).toLocaleDateString(),
     },
     {
-      title: t('common.actions'),
+      title: t('common.actions.label'),
       key: 'actions',
       align: 'right',
       render: (_, member) => (
@@ -162,13 +162,7 @@ export const InstanceMembers: React.FC = () => {
           okText={t('common.confirm')}
           cancelText={t('common.cancel')}
         >
-          <LazyButton
-            type="link"
-            danger
-            size="small"
-            disabled={isSubmitting}
-            className="p-0"
-          >
+          <LazyButton type="link" danger size="small" disabled={isSubmitting} className="p-0">
             {t('common.remove')}
           </LazyButton>
         </LazyPopconfirm>
@@ -221,13 +215,12 @@ export const InstanceMembers: React.FC = () => {
     }
   }, [instanceId, selectedUserId, selectedRole, addMember, message, t]);
 
-
   if (!instanceId) return null;
 
   return (
     <div className="flex flex-col gap-6">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('tenant.instances.members.title')}
@@ -303,7 +296,13 @@ export const InstanceMembers: React.FC = () => {
             setSearch(e.target.value);
           }}
           allowClear
-          className="max-w-sm"
+          enterButton={
+            <>
+              <span className="sr-only">{t('common.search', 'Search')}</span>
+              <SearchIcon size={16} aria-hidden="true" />
+            </>
+          }
+          className="w-full max-w-sm"
         />
       </div>
 
@@ -323,7 +322,8 @@ export const InstanceMembers: React.FC = () => {
             dataSource={filteredMembers}
             rowKey="id"
             pagination={false}
-            className="w-full"
+            scroll={{ x: 'max-content' }}
+            className="max-w-full"
           />
         )}
       </div>
@@ -360,6 +360,12 @@ export const InstanceMembers: React.FC = () => {
               }}
               loading={isSearching}
               allowClear
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
             />
             {userSearchResults.length > 0 && (
               <div className="mt-2 border border-border-light dark:border-border-separator rounded-lg max-h-48 overflow-y-auto">

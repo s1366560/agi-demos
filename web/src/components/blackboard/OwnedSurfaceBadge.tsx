@@ -1,19 +1,13 @@
 import { useTranslation } from 'react-i18next';
 
-import {
-  AUTHORITATIVE,
-  OWNED,
-} from './blackboardSurfaceContract';
+import { AUTHORITATIVE, OWNED } from './blackboardSurfaceContract';
 
 interface OwnedSurfaceBadgeProps {
   labelKey: string;
   fallbackLabel: string;
 }
 
-export function OwnedSurfaceBadge({
-  labelKey,
-  fallbackLabel,
-}: OwnedSurfaceBadgeProps) {
+export function OwnedSurfaceBadge({ labelKey, fallbackLabel }: OwnedSurfaceBadgeProps) {
   const { t } = useTranslation();
 
   return (

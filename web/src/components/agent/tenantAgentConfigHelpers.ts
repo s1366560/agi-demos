@@ -30,7 +30,8 @@ export function hookKey(
     'plugin_name' | 'hook_name' | 'executor_kind' | 'source_ref' | 'entrypoint'
   >
 ): string {
-  const namespace = hook.plugin_name?.trim().toLowerCase() ?? hook.source_ref?.trim().toLowerCase() ?? '';
+  const namespace =
+    hook.plugin_name?.trim().toLowerCase() ?? hook.source_ref?.trim().toLowerCase() ?? '';
   return `${namespace}::${hook.hook_name.trim().toLowerCase()}`;
 }
 
@@ -43,7 +44,9 @@ function normalizeOptionalTextOrNull(value: string | null | undefined): string |
   return normalizeOptionalText(value) ?? null;
 }
 
-function normalizeHookFamily(value: RuntimeHookConfig['hook_family']): RuntimeHookConfig['hook_family'] {
+function normalizeHookFamily(
+  value: RuntimeHookConfig['hook_family']
+): RuntimeHookConfig['hook_family'] {
   const trimmed = normalizeOptionalText(value);
   return trimmed && HOOK_FAMILIES.has(trimmed as HookFamily) ? (trimmed as HookFamily) : null;
 }
@@ -73,10 +76,7 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
-function areSettingsEqual(
-  left: Record<string, unknown>,
-  right: Record<string, unknown>
-): boolean {
+function areSettingsEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   return JSON.stringify(normalizeValue(left)) === JSON.stringify(normalizeValue(right));
 }
 
@@ -110,7 +110,9 @@ export function normalizeRuntimeHookForSave(hook: RuntimeHookConfig): RuntimeHoo
   };
 }
 
-export function serializeCustomRuntimeHooks(runtimeHooks: RuntimeHookConfig[]): RuntimeHookConfig[] {
+export function serializeCustomRuntimeHooks(
+  runtimeHooks: RuntimeHookConfig[]
+): RuntimeHookConfig[] {
   return runtimeHooks.map(normalizeRuntimeHookForSave);
 }
 
@@ -180,16 +182,14 @@ export function getHookSchemaProperties(
   return rawProperties as Record<string, HookSettingSchemaProperty>;
 }
 
-export function isHookCustomized(
-  hook: RuntimeHookConfig,
-  entry: HookCatalogEntry
-): boolean {
+export function isHookCustomized(hook: RuntimeHookConfig, entry: HookCatalogEntry): boolean {
   const catalogDefault = getCatalogDefaultRuntimeHook(entry);
   const effectivePriority = hook.priority ?? catalogDefault.priority ?? entry.default_priority;
   return (
     hook.enabled !== catalogDefault.enabled ||
     effectivePriority !== catalogDefault.priority ||
-    normalizeOptionalTextOrNull(hook.plugin_name) !== normalizeOptionalTextOrNull(entry.plugin_name) ||
+    normalizeOptionalTextOrNull(hook.plugin_name) !==
+      normalizeOptionalTextOrNull(entry.plugin_name) ||
     normalizeHookFamily(hook.hook_family) !== catalogDefault.hook_family ||
     (normalizeExecutorKind(hook.executor_kind) ?? 'builtin') !== catalogDefault.executor_kind ||
     normalizeOptionalTextOrNull(hook.source_ref) !== catalogDefault.source_ref ||

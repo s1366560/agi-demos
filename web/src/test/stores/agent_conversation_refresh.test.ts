@@ -72,7 +72,7 @@ describe('conversation lifecycle refresh', () => {
       });
     });
 
-    expect(mockListConversations).toHaveBeenCalledWith('project-1', undefined, 20, 0, undefined);
+    expect(mockListConversations).toHaveBeenCalledWith('project-1', undefined, 20, 0);
     expect(set).toHaveBeenLastCalledWith({
       conversations: [conversation('new-conversation', 'project-1')],
       hasMoreConversations: false,

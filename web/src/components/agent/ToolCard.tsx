@@ -9,9 +9,10 @@
 
 import React, { memo, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Card, Tag, Collapse, Typography } from 'antd';
 import { CheckCircle2, Clock, RefreshCw, XCircle } from 'lucide-react';
-
 
 import { formatTimeOnly } from '@/utils/date';
 
@@ -33,6 +34,7 @@ interface ToolCardProps {
 
 export const ToolCard: React.FC<ToolCardProps> = memo(
   ({ toolName, input, result, status, startTime, endTime, duration, embedded = false }) => {
+    const { t } = useTranslation();
     // Memoize JSON.stringify to avoid re-computing on every render
     const formattedInput = useMemo(() => JSON.stringify(input, null, 2), [input]);
 
@@ -48,7 +50,7 @@ export const ToolCard: React.FC<ToolCardProps> = memo(
     };
 
     const formatDuration = (ms: number) => {
-      if (ms < 1000) return `${ms}ms`;
+      if (ms < 1000) return `${String(ms)}ms`;
       return `${(ms / 1000).toFixed(2)}s`;
     };
 
@@ -66,7 +68,7 @@ export const ToolCard: React.FC<ToolCardProps> = memo(
             className="mr-0 text-xs"
             color={status === 'success' ? 'success' : status === 'failed' ? 'error' : 'processing'}
           >
-            {status.toUpperCase()}
+            {t(`agent.toolCard.status.${status}`, { defaultValue: status.toUpperCase() })}
           </Tag>
         </div>
       </div>
@@ -79,14 +81,28 @@ export const ToolCard: React.FC<ToolCardProps> = memo(
             {/* Timing Info */}
             {(startTime || endTime) && !embedded && (
               <div className="flex gap-4 text-xs text-slate-400 mb-2 border-b border-slate-100 pb-2">
-                {startTime && <span>Start: {formatTimeOnly(startTime)}</span>}
-                {endTime && <span>End: {formatTimeOnly(endTime)}</span>}
+                {startTime && (
+                  <span>
+                    {t('agent.toolCard.startTime', {
+                      time: formatTimeOnly(startTime),
+                      defaultValue: 'Start: {{time}}',
+                    })}
+                  </span>
+                )}
+                {endTime && (
+                  <span>
+                    {t('agent.toolCard.endTime', {
+                      time: formatTimeOnly(endTime),
+                      defaultValue: 'End: {{time}}',
+                    })}
+                  </span>
+                )}
               </div>
             )}
 
             <div>
               <Text type="secondary" className="text-xs uppercase font-bold">
-                Input
+                {t('agent.toolCard.input', { defaultValue: 'Input' })}
               </Text>
               <pre
                 className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
@@ -99,7 +115,7 @@ export const ToolCard: React.FC<ToolCardProps> = memo(
             {result && (
               <div>
                 <Text type="secondary" className="text-xs uppercase font-bold">
-                  Result
+                  {t('agent.toolCard.result', { defaultValue: 'Result' })}
                 </Text>
                 <pre
                   className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${

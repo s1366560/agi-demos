@@ -9,7 +9,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input, DatePicker } from 'antd';
-import { BookOpen, Braces, Download, History, List, RefreshCw } from 'lucide-react';
+import {
+  BookOpen,
+  Braces,
+  Download,
+  History,
+  List,
+  RefreshCw,
+  Search as SearchIcon,
+} from 'lucide-react';
 
 import {
   useAuditLogs,
@@ -194,11 +202,13 @@ export const OrgAudit: React.FC = () => {
             {t('tenant.orgSettings.audit.description')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isLoading}
+            aria-label={t('common.refresh', 'Refresh')}
+            title={t('common.refresh', 'Refresh')}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={16} />
@@ -206,7 +216,9 @@ export const OrgAudit: React.FC = () => {
           <button
             type="button"
             disabled={isExporting}
-            onClick={() => handleExport('csv')}
+            onClick={() => {
+              void handleExport('csv');
+            }}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
           >
             <Download size={16} />
@@ -215,7 +227,9 @@ export const OrgAudit: React.FC = () => {
           <button
             type="button"
             disabled={isExporting}
-            onClick={() => handleExport('json')}
+            onClick={() => {
+              void handleExport('json');
+            }}
             className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <Braces size={16} />
@@ -278,6 +292,12 @@ export const OrgAudit: React.FC = () => {
               setUserFilter(e.target.value);
             }}
             allowClear
+            enterButton={
+              <>
+                <span className="sr-only">{t('common.search', 'Search')}</span>
+                <SearchIcon size={16} aria-hidden="true" />
+              </>
+            }
           />
           <LazySelect
             value={actionFilter}
@@ -345,7 +365,7 @@ export const OrgAudit: React.FC = () => {
                     {t('tenant.orgSettings.audit.colResourceId')}
                   </th>
                   <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    {t('common.actions')}
+                    {t('common.actions.label')}
                   </th>
                 </tr>
               </thead>
@@ -438,7 +458,7 @@ export const OrgAudit: React.FC = () => {
         onClose={() => {
           setSelectedEntry(null);
         }}
-        width={560}
+        size={560}
       >
         {selectedEntry && (
           <div className="space-y-6">

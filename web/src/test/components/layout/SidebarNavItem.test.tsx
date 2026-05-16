@@ -24,6 +24,12 @@ vi.mock('antd', () => ({
   },
 }));
 
+vi.mock('@/components/ui/lazyAntd', () => ({
+  LazyTooltip: ({ children, title }: { children: React.ReactNode; title: string }) => (
+    <div title={title}>{children}</div>
+  ),
+}));
+
 function renderItem(
   item: Partial<NavItem>,
   props: {

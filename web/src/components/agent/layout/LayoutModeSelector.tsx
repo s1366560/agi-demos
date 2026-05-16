@@ -74,7 +74,7 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
 
   const visibleModes = useMemo(
     () => ALL_MODES.filter((m) => !m.requiresWorkspace || hasWorkspace),
-    [hasWorkspace],
+    [hasWorkspace]
   );
 
   const handleKeyDown = useCallback(
@@ -113,7 +113,8 @@ export const LayoutModeSelector: FC<LayoutModeSelectorProps> = ({ hasWorkspace =
                 <div className="font-medium">
                   {m.label} Mode{' '}
                   <span className="opacity-60 ml-1">
-                    {/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent) ? 'Cmd' : 'Ctrl'}+{m.shortcut}
+                    {/(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent) ? 'Cmd' : 'Ctrl'}+
+                    {m.shortcut}
                   </span>
                 </div>
                 <div className="text-xs opacity-80">{m.description}</div>

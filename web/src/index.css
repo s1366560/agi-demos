@@ -662,8 +662,7 @@ body {
   --form-error-border: #dc2626;
   --form-error-focus-ring: 0 0 0 1px rgba(220, 38, 38, 0.28), 0 0 0 4px rgba(220, 38, 38, 0.12);
   --form-warning-border: #d97706;
-  --form-warning-focus-ring:
-    0 0 0 1px rgba(217, 119, 6, 0.28), 0 0 0 4px rgba(217, 119, 6, 0.12);
+  --form-warning-focus-ring: 0 0 0 1px rgba(217, 119, 6, 0.28), 0 0 0 4px rgba(217, 119, 6, 0.12);
   --button-primary-bg: #171717;
   --button-primary-bg-hover: #2a2a2a;
   --button-primary-bg-active: #111111;
@@ -692,11 +691,9 @@ body {
   --form-addon-bg: #181818;
   --form-focus-ring: 0 0 0 1px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(255, 255, 255, 0.12);
   --form-error-border: #f87171;
-  --form-error-focus-ring:
-    0 0 0 1px rgba(248, 113, 113, 0.32), 0 0 0 4px rgba(248, 113, 113, 0.14);
+  --form-error-focus-ring: 0 0 0 1px rgba(248, 113, 113, 0.32), 0 0 0 4px rgba(248, 113, 113, 0.14);
   --form-warning-border: #fbbf24;
-  --form-warning-focus-ring:
-    0 0 0 1px rgba(251, 191, 36, 0.32), 0 0 0 4px rgba(251, 191, 36, 0.14);
+  --form-warning-focus-ring: 0 0 0 1px rgba(251, 191, 36, 0.32), 0 0 0 4px rgba(251, 191, 36, 0.14);
   --button-primary-bg: #fafafa;
   --button-primary-bg-hover: #f0f0f0;
   --button-primary-bg-active: #e6e6e6;
@@ -845,8 +842,10 @@ input.ant-input,
 .ant-input-affix-wrapper,
 .ant-input-number,
 .ant-picker,
-.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless) .ant-select-selector,
-.ant-select-multiple:not(.ant-select-customize-input):not(.ant-select-borderless) .ant-select-selector {
+.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless)
+  .ant-select-selector,
+.ant-select-multiple:not(.ant-select-customize-input):not(.ant-select-borderless)
+  .ant-select-selector {
   min-height: var(--form-height);
 }
 
@@ -872,13 +871,16 @@ input.ant-input,
   min-height: var(--form-height-lg);
 }
 
-.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless) .ant-select-selector {
+.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless)
+  .ant-select-selector {
   padding-inline: 0.75rem !important;
 }
 
-.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless) .ant-select-selector
+.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless)
+  .ant-select-selector
   .ant-select-selection-item,
-.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless) .ant-select-selector
+.ant-select-single:not(.ant-select-customize-input):not(.ant-select-borderless)
+  .ant-select-selector
   .ant-select-selection-placeholder {
   line-height: calc(var(--form-height) - 2px) !important;
 }
@@ -901,7 +903,8 @@ input.ant-input,
   line-height: calc(var(--form-height-lg) - 2px) !important;
 }
 
-.ant-select-multiple:not(.ant-select-customize-input):not(.ant-select-borderless) .ant-select-selector {
+.ant-select-multiple:not(.ant-select-customize-input):not(.ant-select-borderless)
+  .ant-select-selector {
   padding-block: 2px !important;
 }
 
@@ -1217,23 +1220,33 @@ textarea.ant-input,
 }
 
 .ant-btn.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled),
-.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ) {
   background-color: var(--button-primary-bg);
   border-color: var(--button-primary-border);
   color: var(--button-primary-text);
 }
 
 .ant-btn.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible,
-.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible {
+.ant-btn.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible,
+.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):hover,
+.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible {
   background-color: var(--button-primary-bg-hover);
   border-color: var(--button-primary-bg-hover);
   color: var(--button-primary-text);
 }
 
 .ant-btn.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):active,
-.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):active {
+.ant-btn.ant-btn-color-primary.ant-btn-variant-solid:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):active {
   background-color: var(--button-primary-bg-active);
   border-color: var(--button-primary-bg-active);
   color: var(--button-primary-text);
@@ -1245,27 +1258,45 @@ textarea.ant-input,
   color: var(--button-secondary-text);
 }
 
-.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled),
-.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ),
+.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ) {
   background-color: var(--button-secondary-bg);
   border-color: var(--button-secondary-border);
   color: var(--button-secondary-text);
 }
 
 .ant-btn.ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible,
-.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible,
-.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible {
+.ant-btn.ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible,
+.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):hover,
+.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible,
+.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):hover,
+.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible {
   background-color: var(--button-secondary-bg-hover);
   border-color: var(--button-secondary-border);
   color: var(--button-secondary-text);
 }
 
 .ant-btn.ant-btn-default:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):active,
-.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):active,
-.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):active {
+.ant-btn.ant-btn-color-default.ant-btn-variant-outlined:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):active,
+.ant-btn.ant-btn-color-default.ant-btn-variant-filled:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):active {
   background-color: var(--button-secondary-bg-active);
   border-color: var(--button-secondary-border);
   color: var(--button-secondary-text);
@@ -1273,8 +1304,12 @@ textarea.ant-input,
 
 .ant-btn.ant-btn-link:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled),
 .ant-btn.ant-btn-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled),
-.ant-btn.ant-btn-color-default.ant-btn-variant-link:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled),
-.ant-btn.ant-btn-color-default.ant-btn-variant-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled) {
+.ant-btn.ant-btn-color-default.ant-btn-variant-link:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ),
+.ant-btn.ant-btn-color-default.ant-btn-variant-text:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ) {
   color: var(--button-secondary-text);
 }
 
@@ -1282,10 +1317,18 @@ textarea.ant-input,
 .ant-btn.ant-btn-link:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible,
 .ant-btn.ant-btn-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
 .ant-btn.ant-btn-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible,
-.ant-btn.ant-btn-color-default.ant-btn-variant-link:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-color-default.ant-btn-variant-link:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible,
-.ant-btn.ant-btn-color-default.ant-btn-variant-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):hover,
-.ant-btn.ant-btn-color-default.ant-btn-variant-text:not(.ant-btn-dangerous):not(:disabled):not(.ant-btn-disabled):focus-visible {
+.ant-btn.ant-btn-color-default.ant-btn-variant-link:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):hover,
+.ant-btn.ant-btn-color-default.ant-btn-variant-link:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible,
+.ant-btn.ant-btn-color-default.ant-btn-variant-text:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):hover,
+.ant-btn.ant-btn-color-default.ant-btn-variant-text:not(.ant-btn-dangerous):not(:disabled):not(
+    .ant-btn-disabled
+  ):focus-visible {
   color: var(--button-primary-bg-hover);
 }
 

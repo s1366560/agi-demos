@@ -8,7 +8,18 @@ import { ProjectAgentStatusBar } from '../../../components/agent/ProjectAgentSta
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (
+      _key: string,
+      fallbackOrOptions?: string | ({ defaultValue?: string } & Record<string, unknown>)
+    ) => {
+      if (typeof fallbackOrOptions === 'string') {
+        return fallbackOrOptions;
+      }
+      const template = fallbackOrOptions?.defaultValue ?? _key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) =>
+        String(fallbackOrOptions?.[key] ?? `{{${key}}}`)
+      );
+    },
   }),
 }));
 

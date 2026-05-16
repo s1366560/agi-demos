@@ -12,13 +12,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import * as AppHeaderModule from '@/components/layout/AppHeader';
 
+import type {
+  AppHeaderProps,
+  Breadcrumb,
+  CompoundComponentProps,
+} from '@/components/layout/AppHeader';
+
 // Import components after module is created
 const { AppHeader } = AppHeaderModule;
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, defaultValue?: string) => defaultValue || key,
+    t: (key: string, defaultValue?: string) =>
+      ({
+        'user.profile': '个人资料',
+        'user.settings': '设置',
+        'common.logout': '登出',
+      })[key] ??
+      defaultValue ??
+      key,
     i18n: { language: 'zh-CN', changeLanguage: vi.fn() },
   }),
 }));
@@ -595,18 +608,14 @@ describe('AppHeader (Compound Components)', () => {
   });
 
   describe('TypeScript Types', () => {
-    // Note: Type exports are verified by TypeScript compiler, not runtime tests
-    // These tests are skipped as types are erased during compilation
-    it.skip('should export Breadcrumb type', () => {
-      expect(AppHeaderModule.Breadcrumb).toBeDefined();
-    });
+    it('should expose public type exports at compile time', () => {
+      const breadcrumb = { label: 'Home', path: '/tenant' } satisfies Breadcrumb;
+      const headerProps = { basePath: '/tenant' } satisfies AppHeaderProps;
+      const compoundProps = { children: null } satisfies CompoundComponentProps;
 
-    it.skip('should export AppHeaderProps type', () => {
-      expect(AppHeaderModule.AppHeaderProps).toBeDefined();
-    });
-
-    it.skip('should export CompoundComponentProps type', () => {
-      expect(AppHeaderModule.CompoundComponentProps).toBeDefined();
+      expect(breadcrumb.label).toBe('Home');
+      expect(headerProps.basePath).toBe('/tenant');
+      expect(compoundProps.children).toBeNull();
     });
   });
 });

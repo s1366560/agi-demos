@@ -56,7 +56,7 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
           {summaries.map((summary) => (
             <button
               type="button"
-              key={`${summary.startIndex}-${summary.subagentId}`}
+              key={`${String(summary.startIndex)}-${summary.subagentId}`}
               className="group flex w-full cursor-pointer items-center justify-between rounded p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50"
               onClick={() => {
                 onScrollTo(summary.startIndex);

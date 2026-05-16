@@ -1,13 +1,10 @@
 import React, { useMemo, useState } from 'react';
 
 import { LazyDrawer, LazyEmpty, LazyTabs } from '@/components/ui/lazyAntd';
-import type { Artifact } from '@/types/agent/config';
 
-import {
-  buildEvidenceBundle,
-  EVIDENCE_TAB_ORDER,
-  type EvidenceTab,
-} from './evidenceBundle';
+import { buildEvidenceBundle, EVIDENCE_TAB_ORDER, type EvidenceTab } from './evidenceBundle';
+
+import type { Artifact } from '@/types/agent/config';
 
 const TAB_LABEL: Record<EvidenceTab, string> = {
   testRuns: 'Test runs',
@@ -86,22 +83,24 @@ export const EvidenceBundleDrawer: React.FC<EvidenceBundleDrawerProps> = ({
 
   const items = EVIDENCE_TAB_ORDER.map((tab) => ({
     key: tab,
-    label: `${TAB_LABEL[tab]} (${bundle[tab].length})`,
+    label: `${TAB_LABEL[tab]} (${bundle[tab].length.toString()})`,
     children: <TabPanel items={bundle[tab]} />,
   }));
 
   return (
     <LazyDrawer
-      title={`${title} · ${bundle.total}`}
+      title={`${title} · ${bundle.total.toString()}`}
       open={open}
       onClose={onClose}
-      width={width}
+      size={width}
       destroyOnHidden
       placement="right"
     >
       <LazyTabs
         activeKey={activeKey}
-        onChange={(key: string) => setActiveKey(key as EvidenceTab)}
+        onChange={(key: string) => {
+          setActiveKey(key as EvidenceTab);
+        }}
         items={items}
       />
     </LazyDrawer>

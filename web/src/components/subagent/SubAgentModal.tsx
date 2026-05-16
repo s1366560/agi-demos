@@ -40,6 +40,8 @@ import type {
   AgentIdentityConfig,
 } from '../../types/agent';
 import type { Color } from 'antd/es/color-picker';
+import type { RadioChangeEvent } from 'antd/es/radio';
+import type { DefaultOptionType } from 'antd/es/select';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -50,6 +52,37 @@ interface SubAgentModalProps {
   onSuccess: () => void;
   subagent: SubAgentResponse | null;
   subagents?: SubAgentResponse[];
+}
+
+interface SubAgentFormValues {
+  name: string;
+  display_name: string;
+  system_prompt: string;
+  trigger_description: string;
+  model?: string | undefined;
+  max_tokens?: number | undefined;
+  temperature?: number | undefined;
+  max_iterations?: number | undefined;
+  allowed_tools?: string[] | undefined;
+  allowed_skills?: string[] | undefined;
+  allowed_mcp_servers?: string[] | undefined;
+}
+
+interface FormValidationError {
+  errorFields: Array<{ name?: Array<string | number> | undefined }>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isFormValidationError(error: unknown): error is FormValidationError {
+  return isRecord(error) && Array.isArray(error.errorFields);
+}
+
+function filterSelectOption(input: string, option?: DefaultOptionType): boolean {
+  const label = typeof option?.label === 'string' ? option.label : '';
+  return label.toLowerCase().includes(input.toLowerCase());
 }
 
 // Available LLM models
@@ -87,7 +120,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   subagents = [],
 }) => {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<SubAgentFormValues>();
   const [activeTab, setActiveTab] = useState('basic');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [examples, setExamples] = useState<string[]>([]);
@@ -141,9 +174,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             mcpAPI.list({ limit: 100 }),
           ]);
 
-          setAvailableTools(toolsRes.tools || []);
-          setAvailableSkills(skillsRes.skills || []); // skillAPI returns { skills: [], total: number }
-          setAvailableMcpServers(mcpRes || []); // mcpAPI returns MCPServerResponse[]
+          setAvailableTools(toolsRes.tools);
+          setAvailableSkills(skillsRes.skills);
+          setAvailableMcpServers(mcpRes);
         } catch (error) {
           console.error('Failed to fetch resources:', error);
           message.error(
@@ -154,7 +187,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         }
       };
 
-      fetchResources();
+      void fetchResources();
     }
   }, [isOpen, t]);
 
@@ -177,7 +210,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           max_iterations: subagent.max_iterations,
           allowed_tools: subagent.allowed_tools,
           allowed_skills: subagent.allowed_skills,
-          allowed_mcp_servers: subagent.allowed_mcp_servers || [],
+          allowed_mcp_servers: subagent.allowed_mcp_servers,
         });
       } else {
         // Create mode - reset form
@@ -228,8 +261,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         }
         // Load identity
         if (subagent.identity) {
-          setIdentityDescription(subagent.identity.description || '');
-          const meta = subagent.identity.metadata || {};
+          setIdentityDescription(subagent.identity.description);
+          const meta = subagent.identity.metadata;
           setIdentityMetadata(Object.entries(meta));
         } else {
           setIdentityDescription('');
@@ -266,7 +299,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       // Build identity config if description is provided
       const identityConfig: Partial<AgentIdentityConfig> | undefined = identityDescription
         ? {
-            name: values.display_name || values.name,
+            name: values.display_name,
             description: identityDescription,
             metadata: Object.fromEntries(identityMetadata.filter(([k]) => k.trim())),
           }
@@ -279,21 +312,21 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         trigger_description: values.trigger_description,
         trigger_keywords: keywords,
         trigger_examples: examples,
-        model: values.model || 'inherit',
+        model: values.model ?? 'inherit',
         color: selectedColor,
-        max_tokens: values.max_tokens || 4096,
+        max_tokens: values.max_tokens ?? 4096,
         temperature: values.temperature ?? 0.7,
-        max_iterations: values.max_iterations || 10,
-        allowed_tools: values.allowed_tools || ['*'],
-        allowed_skills: values.allowed_skills || [],
-        allowed_mcp_servers: values.allowed_mcp_servers || [],
+        max_iterations: values.max_iterations ?? 10,
+        allowed_tools: values.allowed_tools ?? ['*'],
+        allowed_skills: values.allowed_skills ?? [],
+        allowed_mcp_servers: values.allowed_mcp_servers ?? [],
         // Add policy fields
         spawn_policy: spawnPolicy,
         tool_policy: toolPolicy,
         identity: identityConfig,
       };
 
-      if (isEditMode && subagent) {
+      if (subagent) {
         await updateSubAgent(subagent.id, data);
         message.success(t('tenant.subagents.updateSuccess'));
       } else {
@@ -303,11 +336,10 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
       onSuccess();
     } catch (error: unknown) {
-      const err = error as { errorFields?: Array<{ name?: string[] | undefined }> | undefined };
-      if (err.errorFields) {
+      if (isFormValidationError(error)) {
         // Form validation error - switch to the tab with the error
-        const firstErrorField = err.errorFields[0]?.name?.[0];
-        if (firstErrorField) {
+        const firstErrorField = error.errorFields[0]?.name?.[0];
+        if (typeof firstErrorField === 'string') {
           if (['name', 'display_name', 'system_prompt', 'model'].includes(firstErrorField)) {
             setActiveTab('basic');
           } else if (['trigger_description'].includes(firstErrorField)) {
@@ -319,7 +351,6 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     }
   }, [
     form,
-    isEditMode,
     subagent,
     keywords,
     examples,
@@ -622,8 +653,14 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 }`}
               >
                 {testResult.matched
-                  ? `✅ Matches keyword: "${testResult.keyword}"`
-                  : '⚠️ No exact keyword match found (Note: LLM may still route based on description)'}
+                  ? t('tenant.subagents.modal.keywordMatchFound', {
+                      keyword: testResult.keyword ?? '',
+                      defaultValue: 'Matches keyword: "{{keyword}}"',
+                    })
+                  : t(
+                      'tenant.subagents.modal.noExactKeywordMatch',
+                      'No exact keyword match found. The LLM may still route based on description.'
+                    )}
               </div>
             )}
           </div>
@@ -645,12 +682,10 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               mode="multiple"
               placeholder="Select tools"
               loading={loadingResources}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
+              showSearch={{ filterOption: filterSelectOption }}
               options={[
                 { label: 'All Tools (*)', value: '*' },
-                ...(availableTools || []).map((t) => ({
+                ...availableTools.map((t) => ({
                   label: t.name,
                   value: t.name,
                   title: t.description,
@@ -668,10 +703,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               mode="multiple"
               placeholder="Select skills (leave empty for none)"
               loading={loadingResources}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
-              options={(availableSkills || []).map((s) => ({
+              showSearch={{ filterOption: filterSelectOption }}
+              options={availableSkills.map((s) => ({
                 label: s.name,
                 value: s.id,
                 title: s.description,
@@ -691,10 +724,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               mode="multiple"
               placeholder="Select servers (leave empty for none)"
               loading={loadingResources}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
-              options={(availableMcpServers || []).map((s) => ({
+              showSearch={{ filterOption: filterSelectOption }}
+              options={availableMcpServers.map((s) => ({
                 label: s.name,
                 value: s.name,
                 title: s.description ?? '',
@@ -807,9 +838,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               onChange={(v) => {
                 setSpawnPolicy({ ...spawnPolicy, allowed_subagents: v.length > 0 ? v : null });
               }}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
+              showSearch={{ filterOption: filterSelectOption }}
               options={subagents
                 .filter((sa) => sa.id !== subagent?.id)
                 .map((sa) => ({
@@ -838,8 +867,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           <Form.Item label={t('tenant.subagents.modal.precedence', 'Precedence')}>
             <Radio.Group
               value={toolPolicy.precedence}
-              onChange={(e) => {
-                setToolPolicy({ ...toolPolicy, precedence: e.target.value });
+              onChange={(e: RadioChangeEvent) => {
+                const precedence = e.target.value as ToolPolicyConfig['precedence'];
+                setToolPolicy({ ...toolPolicy, precedence });
               }}
             >
               <Radio.Button value="deny_first">
@@ -874,12 +904,10 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 onChange={(v) => {
                   setToolPolicy({ ...toolPolicy, allow: v });
                 }}
-                filterOption={(input, option) =>
-                  (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                }
+                showSearch={{ filterOption: filterSelectOption }}
                 options={[
                   { label: 'All Tools (*)', value: '*' },
-                  ...(availableTools || []).map((t) => ({
+                  ...availableTools.map((t) => ({
                     label: t.name,
                     value: t.name,
                     title: t.description,
@@ -899,10 +927,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 onChange={(v) => {
                   setToolPolicy({ ...toolPolicy, deny: v });
                 }}
-                filterOption={(input, option) =>
-                  (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                }
-                options={(availableTools || []).map((t) => ({
+                showSearch={{ filterOption: filterSelectOption }}
+                options={availableTools.map((t) => ({
                   label: t.name,
                   value: t.name,
                   title: t.description,
@@ -930,7 +956,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 return t('tenant.subagents.modal.toolsAllowed', {
                   count: allowedCount,
                   total: availableTools.length,
-                  defaultValue: `${allowedCount} of ${availableTools.length} tools allowed`,
+                  defaultValue: '{{count}} of {{total}} tools allowed',
                 });
               })()}
             </div>
@@ -1026,7 +1052,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       }
       open={isOpen}
       onCancel={onClose}
-      onOk={handleSubmit}
+      onOk={() => {
+        void handleSubmit();
+      }}
       okText={isEditMode ? t('common.save') : t('common.create')}
       cancelText={t('common.cancel')}
       confirmLoading={isSubmitting}

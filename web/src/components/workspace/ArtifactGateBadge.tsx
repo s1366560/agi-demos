@@ -36,7 +36,7 @@ export function ArtifactGateBadge({ evaluation, className }: ArtifactGateBadgePr
 
   const [first, ...rest] = evaluation.missing;
   const label = first ? formatArtifactLabel(first) : 'evidence';
-  const suffix = rest.length > 0 ? ` +${rest.length}` : '';
+  const suffix = rest.length > 0 ? ` +${String(rest.length)}` : '';
   const tooltip = `Missing: ${evaluation.missing.map(formatArtifactLabel).join(', ')}`;
 
   return (

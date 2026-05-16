@@ -107,18 +107,21 @@ export const InputToolbar = memo<InputToolbarProps>(
     );
 
     return (
-      <div className="flex-shrink-0 px-3 pt-2 pb-2.5 flex items-center gap-1">
+      <div
+        data-testid="input-toolbar"
+        className="flex-shrink-0 px-3 pt-2 pb-2.5 flex flex-col gap-2 sm:flex-row sm:items-center"
+      >
         {/* Left Actions */}
-        <div className="flex items-center min-w-0 gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {onAgentSelect && (
             <>
               <AgentSwitcher
                 activeAgentId={activeAgentId}
                 onSelect={onAgentSelect}
                 disabled={!!(isStreaming || disabled)}
-                className="h-8 max-w-[240px]"
+                className="h-8 max-w-[180px] sm:max-w-[240px]"
               />
-              <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
+              <div className="hidden sm:block w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
             </>
           )}
 
@@ -244,9 +247,16 @@ export const InputToolbar = memo<InputToolbarProps>(
               </button>
             </LazyTooltip>
           </Popover>
+        </div>
 
-          <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1.5" />
+        {/* Spacer */}
+        <div className="hidden sm:block flex-1" />
 
+        {/* Right Actions */}
+        <div
+          data-testid="input-toolbar-actions"
+          className="flex w-full items-center justify-end gap-2 sm:w-auto sm:flex-none"
+        >
           {onTogglePlanMode && (
             <LazyTooltip
               title={
@@ -277,13 +287,7 @@ export const InputToolbar = memo<InputToolbarProps>(
               </button>
             </LazyTooltip>
           )}
-        </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2">
           {charCount > 0 && (
             <span
               className={`text-xs font-medium transition-colors ${charCount > 4000 ? 'text-amber-500' : 'text-slate-400'}`}
@@ -311,6 +315,7 @@ export const InputToolbar = memo<InputToolbarProps>(
               onClick={handleSend}
               disabled={!canSend}
               aria-label={t('agent.inputBar.send', 'Send message')}
+              data-testid="send-button"
               className={`
                 rounded-xl flex items-center gap-1.5 h-8 px-3
                 bg-gradient-to-r from-primary to-primary-600

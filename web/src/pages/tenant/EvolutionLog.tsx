@@ -3,17 +3,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 
-import {
-  Timeline,
-  Badge,
-  Card,
-  Typography,
-  Alert,
-  Pagination,
-  Tag,
-} from 'antd';
+import { Timeline, Badge, Card, Typography, Alert, Pagination, Tag } from 'antd';
 import { ArrowLeft } from 'lucide-react';
-
 
 import { LazyButton, LazySpin, LazyEmpty, LazySelect } from '@/components/ui/lazyAntd';
 
@@ -26,6 +17,8 @@ import {
 } from '../../stores/geneMarket';
 
 import { formatDate } from './utils/instanceUtils';
+
+import type { TFunction } from 'i18next';
 
 const { Title, Text } = Typography;
 
@@ -42,7 +35,7 @@ const getEventColor = (eventType: string): string => {
   return EVENT_TYPE_COLORS[eventType] ?? 'default';
 };
 
-const getEventTypeLabel = (t: any, type: string) => {
+const getEventTypeLabel = (t: TFunction, type: string) => {
   if (type === 'config_changed') return t('tenant.evolution.types.configChanged', 'Config Changed');
   return t(`tenant.evolution.types.${type}`, type);
 };
@@ -68,7 +61,7 @@ export const EvolutionLog: React.FC = () => {
     if (eventTypeFilter) {
       params.event_type = eventTypeFilter;
     }
-    listEvolutionEvents(instanceId, params).catch((err) => {
+    listEvolutionEvents(instanceId, params).catch((err: unknown) => {
       console.error('Failed to list evolution events:', err);
     });
   }, [instanceId, page, pageSize, eventTypeFilter, listEvolutionEvents]);
@@ -86,7 +79,7 @@ export const EvolutionLog: React.FC = () => {
 
   if (!instanceId) {
     return (
-      <Alert type="warning" message={t('tenant.evolution.noInstance', 'No instance selected')} />
+      <Alert type="warning" title={t('tenant.evolution.noInstance', 'No instance selected')} />
     );
   }
 
@@ -125,7 +118,7 @@ export const EvolutionLog: React.FC = () => {
         />
       </div>
 
-      {error && <Alert type="error" message={error} closable onClose={clearError} />}
+      {error && <Alert type="error" title={error} closable={{ onClose: clearError }} />}
 
       {loading && evolutionEvents.length === 0 ? (
         <div className="flex justify-center p-12">
@@ -144,7 +137,9 @@ export const EvolutionLog: React.FC = () => {
                 children: (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <Tag color={getEventColor(evt.event_type)}>{getEventTypeLabel(t, evt.event_type)}</Tag>
+                      <Tag color={getEventColor(evt.event_type)}>
+                        {getEventTypeLabel(t, evt.event_type)}
+                      </Tag>
                       <Badge
                         status={evt.status === 'success' ? 'success' : 'error'}
                         text={evt.status}

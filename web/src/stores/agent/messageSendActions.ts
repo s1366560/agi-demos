@@ -34,6 +34,7 @@ import { useStreamingStore } from './streamingStore';
 import { useTimelineStore } from './timelineStore';
 import { timelineToMessages } from './timelineUtils';
 
+import type { StreamHandlerDeps } from './streamEventHandlers';
 import type { AdditionalAgentHandlers, AgentV3State } from './types';
 import type { AgentStreamHandler, Message, UserMessageEvent } from '../../types/agent';
 import type { StoreApi } from 'zustand';
@@ -183,25 +184,27 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
         updateConversationState: get().updateConversationState,
       });
 
+      const streamHandlerDeps: StreamHandlerDeps = {
+        get,
+        set: set as StreamHandlerDeps['set'],
+        getDeltaBuffer,
+        clearDeltaBuffers,
+        clearAllDeltaBuffers,
+        timelineToMessages,
+        tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
+        thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+        queueTimelineEvent: (event, stateUpdates) => {
+          queueTimelineEventRaw(handlerConversationId, event, stateUpdates);
+        },
+        flushTimelineBufferSync: () => {
+          flushTimelineBufferSyncRaw(handlerConversationId);
+        },
+      };
+
       const handler: AgentStreamHandler = createStreamEventHandlers(
         handlerConversationId,
         additionalHandlers,
-        {
-          get: get as any,
-          set: set as any,
-          getDeltaBuffer,
-          clearDeltaBuffers,
-          clearAllDeltaBuffers,
-          timelineToMessages,
-          tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
-          thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
-          queueTimelineEvent: (event, stateUpdates) => {
-            queueTimelineEventRaw(handlerConversationId, event, stateUpdates);
-          },
-          flushTimelineBufferSync: () => {
-            flushTimelineBufferSyncRaw(handlerConversationId);
-          },
-        }
+        streamHandlerDeps
       );
 
       // For new conversations, return ID immediately and start stream in background

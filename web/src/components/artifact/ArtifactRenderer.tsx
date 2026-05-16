@@ -25,7 +25,9 @@
  * ```
  */
 
-import { useState, useCallback, Children } from 'react';
+import React, { useState, useCallback, Children, useEffect } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from 'antd';
 import {
@@ -113,10 +115,35 @@ const CATEGORY_COLORS: Record<ArtifactCategory, string> = {
 // ========================================
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function markComponent<P>(component: React.FC<P>, marker: symbol, displayName: string): void {
+  const marked = component as React.FC<P> &
+    Record<symbol, unknown> & {
+      displayName?: string | undefined;
+    };
+  marked[marker] = true;
+  marked.displayName = displayName;
+}
+
+function hasMarker<P>(child: React.ReactNode, marker: symbol): child is React.ReactElement<P> {
+  if (!React.isValidElement(child)) {
+    return false;
+  }
+
+  const elementType = child.type as unknown;
+  if (
+    typeof elementType !== 'function' &&
+    (typeof elementType !== 'object' || elementType === null)
+  ) {
+    return false;
+  }
+
+  return (elementType as Record<symbol, unknown>)[marker] === true;
 }
 
 // ========================================
@@ -126,70 +153,57 @@ function formatFileSize(bytes: number): string {
 ArtifactRenderer.Image = function ArtifactRendererImageMarker(_props: ArtifactImageProps) {
   return null;
 };
-(ArtifactRenderer.Image as any)[IMAGE_SYMBOL] = true;
+markComponent(ArtifactRenderer.Image, IMAGE_SYMBOL, 'ArtifactRendererImage');
 
 ArtifactRenderer.Video = function ArtifactRendererVideoMarker(_props: ArtifactVideoProps) {
   return null;
 };
-(ArtifactRenderer.Video as any)[VIDEO_SYMBOL] = true;
+markComponent(ArtifactRenderer.Video, VIDEO_SYMBOL, 'ArtifactRendererVideo');
 
 ArtifactRenderer.Audio = function ArtifactRendererAudioMarker(_props: ArtifactAudioProps) {
   return null;
 };
-(ArtifactRenderer.Audio as any)[AUDIO_SYMBOL] = true;
+markComponent(ArtifactRenderer.Audio, AUDIO_SYMBOL, 'ArtifactRendererAudio');
 
 ArtifactRenderer.Code = function ArtifactRendererCodeMarker(_props: ArtifactCodeProps) {
   return null;
 };
-(ArtifactRenderer.Code as any)[CODE_SYMBOL] = true;
+markComponent(ArtifactRenderer.Code, CODE_SYMBOL, 'ArtifactRendererCode');
 
 ArtifactRenderer.Document = function ArtifactRendererDocumentMarker(_props: ArtifactDocumentProps) {
   return null;
 };
-(ArtifactRenderer.Document as any)[DOCUMENT_SYMBOL] = true;
+markComponent(ArtifactRenderer.Document, DOCUMENT_SYMBOL, 'ArtifactRendererDocument');
 
 ArtifactRenderer.Download = function ArtifactRendererDownloadMarker(_props: ArtifactDownloadProps) {
   return null;
 };
-(ArtifactRenderer.Download as any)[DOWNLOAD_SYMBOL] = true;
+markComponent(ArtifactRenderer.Download, DOWNLOAD_SYMBOL, 'ArtifactRendererDownload');
 
 ArtifactRenderer.Loading = function ArtifactRendererLoadingMarker(_props: ArtifactLoadingProps) {
   return null;
 };
-(ArtifactRenderer.Loading as any)[LOADING_SYMBOL] = true;
+markComponent(ArtifactRenderer.Loading, LOADING_SYMBOL, 'ArtifactRendererLoading');
 
 ArtifactRenderer.Error = function ArtifactRendererErrorMarker(_props: ArtifactErrorProps) {
   return null;
 };
-(ArtifactRenderer.Error as any)[ERROR_SYMBOL] = true;
+markComponent(ArtifactRenderer.Error, ERROR_SYMBOL, 'ArtifactRendererError');
 
 ArtifactRenderer.Meta = function ArtifactRendererMetaMarker(_props: ArtifactMetaProps) {
   return null;
 };
-(ArtifactRenderer.Meta as any)[META_SYMBOL] = true;
+markComponent(ArtifactRenderer.Meta, META_SYMBOL, 'ArtifactRendererMeta');
 
 ArtifactRenderer.Header = function ArtifactRendererHeaderMarker(_props: ArtifactHeaderProps) {
   return null;
 };
-(ArtifactRenderer.Header as any)[HEADER_SYMBOL] = true;
+markComponent(ArtifactRenderer.Header, HEADER_SYMBOL, 'ArtifactRendererHeader');
 
 ArtifactRenderer.Actions = function ArtifactRendererActionsMarker(_props: ArtifactActionsProps) {
   return null;
 };
-(ArtifactRenderer.Actions as any)[ACTIONS_SYMBOL] = true;
-
-// Set display names for testing
-(ArtifactRenderer.Image as any).displayName = 'ArtifactRendererImage';
-(ArtifactRenderer.Video as any).displayName = 'ArtifactRendererVideo';
-(ArtifactRenderer.Audio as any).displayName = 'ArtifactRendererAudio';
-(ArtifactRenderer.Code as any).displayName = 'ArtifactRendererCode';
-(ArtifactRenderer.Document as any).displayName = 'ArtifactRendererDocument';
-(ArtifactRenderer.Download as any).displayName = 'ArtifactRendererDownload';
-(ArtifactRenderer.Loading as any).displayName = 'ArtifactRendererLoading';
-(ArtifactRenderer.Error as any).displayName = 'ArtifactRendererError';
-(ArtifactRenderer.Meta as any).displayName = 'ArtifactRendererMeta';
-(ArtifactRenderer.Header as any).displayName = 'ArtifactRendererHeader';
-(ArtifactRenderer.Actions as any).displayName = 'ArtifactRendererActions';
+markComponent(ArtifactRenderer.Actions, ACTIONS_SYMBOL, 'ArtifactRendererActions');
 
 // ========================================
 // Content Renderers
@@ -204,6 +218,8 @@ interface ContentRendererProps {
 }
 
 function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
+  const { t } = useTranslation();
+
   if (!artifact.url) return null;
   return (
     <ImageViewer
@@ -214,13 +230,17 @@ function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: Content
       compact={compact}
       onLoad={onLoad}
       onError={() => {
-        onError('Failed to load image');
+        onError(
+          t('components.artifactRenderer.loadImageFailed', { defaultValue: 'Failed to load image' })
+        );
       }}
     />
   );
 }
 
 function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
+  const { t } = useTranslation();
+
   if (!artifact.url) return null;
   return (
     <VideoPlayer
@@ -230,13 +250,17 @@ function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: Content
       compact={compact}
       onLoad={onLoad}
       onError={() => {
-        onError('Failed to load video');
+        onError(
+          t('components.artifactRenderer.loadVideoFailed', { defaultValue: 'Failed to load video' })
+        );
       }}
     />
   );
 }
 
 function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererProps) {
+  const { t } = useTranslation();
+
   if (!artifact.url) return null;
   return (
     <AudioPlayer
@@ -245,7 +269,9 @@ function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererPro
       compact={compact}
       onLoad={onLoad}
       onError={() => {
-        onError('Failed to load audio');
+        onError(
+          t('components.artifactRenderer.loadAudioFailed', { defaultValue: 'Failed to load audio' })
+        );
       }}
     />
   );
@@ -266,7 +292,15 @@ function CodeContent({ artifact, maxHeight, compact, onLoad, onError }: ContentR
   );
 }
 
-function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
+function DocumentContent({ artifact, maxHeight, onLoad, onError }: ContentRendererProps) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (artifact.url && artifact.mimeType !== 'application/pdf') {
+      onLoad();
+    }
+  }, [artifact.mimeType, artifact.url, onLoad]);
+
   if (!artifact.url) return null;
   // For PDFs, try to embed
   if (artifact.mimeType === 'application/pdf') {
@@ -275,19 +309,20 @@ function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
         src={artifact.url}
         style={{
           width: '100%',
-          height: typeof onError === 'number' ? onError : 400,
+          height: maxHeight,
           border: 'none',
         }}
         title={artifact.filename}
         onLoad={onLoad}
         onError={() => {
-          onError('Failed to load PDF');
+          onError(
+            t('components.artifactRenderer.loadPdfFailed', { defaultValue: 'Failed to load PDF' })
+          );
         }}
       />
     );
   }
   // For non-PDF documents, show download
-  onLoad();
   return (
     <FileDownloader
       url={artifact.url}
@@ -313,12 +348,16 @@ function DownloadContent({ artifact }: ContentRendererProps) {
 }
 
 function LoadingContent({ artifact }: { artifact: Artifact }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex items-center justify-center p-8">
       <Space orientation="vertical">
         <Spin indicator={<Loader2 className="animate-spin" size={24} />} />
         <Text type="secondary">
-          {artifact.status === 'pending' ? 'Preparing...' : 'Uploading...'}
+          {artifact.status === 'pending'
+            ? t('components.artifactRenderer.preparing', { defaultValue: 'Preparing...' })
+            : t('components.artifactRenderer.uploading', { defaultValue: 'Uploading...' })}
         </Text>
       </Space>
     </div>
@@ -326,10 +365,14 @@ function LoadingContent({ artifact }: { artifact: Artifact }) {
 }
 
 function ErrorContent({ artifact, error }: { artifact: Artifact; error: string | null }) {
+  const { t } = useTranslation();
+
   return (
     <Alert
       type="error"
-      message="Failed to load artifact"
+      title={t('components.artifactRenderer.loadFailed', {
+        defaultValue: 'Failed to load artifact',
+      })}
       description={artifact.errorMessage || error}
       showIcon
     />
@@ -337,22 +380,32 @@ function ErrorContent({ artifact, error }: { artifact: Artifact; error: string |
 }
 
 function DeletedContent() {
+  const { t } = useTranslation();
+
   return (
     <Alert
       type="warning"
-      message="Artifact deleted"
-      description="This artifact has been removed."
+      title={t('components.artifactRenderer.deletedTitle', { defaultValue: 'Artifact deleted' })}
+      description={t('components.artifactRenderer.deletedDescription', {
+        defaultValue: 'This artifact has been removed.',
+      })}
       showIcon
     />
   );
 }
 
 function NoUrlContent() {
+  const { t } = useTranslation();
+
   return (
     <Alert
       type="info"
-      message="No content available"
-      description="Artifact URL is not yet available."
+      title={t('components.artifactRenderer.noContentTitle', {
+        defaultValue: 'No content available',
+      })}
+      description={t('components.artifactRenderer.noContentDescription', {
+        defaultValue: 'Artifact URL is not yet available.',
+      })}
       showIcon
     />
   );
@@ -363,6 +416,7 @@ function NoUrlContent() {
 // ========================================
 
 export function ArtifactRenderer(props: ArtifactRendererRootProps) {
+  const { t } = useTranslation();
   const {
     artifact,
     compact = false,
@@ -390,20 +444,47 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
 
   // Parse children to detect sub-components
   const childrenArray = Children.toArray(children);
-  const imageChild = childrenArray.find((child: any) => child?.type?.[IMAGE_SYMBOL]) as any;
-  const videoChild = childrenArray.find((child: any) => child?.type?.[VIDEO_SYMBOL]) as any;
-  const audioChild = childrenArray.find((child: any) => child?.type?.[AUDIO_SYMBOL]) as any;
-  const codeChild = childrenArray.find((child: any) => child?.type?.[CODE_SYMBOL]) as any;
-  const documentChild = childrenArray.find((child: any) => child?.type?.[DOCUMENT_SYMBOL]) as any;
-  const downloadChild = childrenArray.find((child: any) => child?.type?.[DOWNLOAD_SYMBOL]) as any;
-  const loadingChild = childrenArray.find((child: any) => child?.type?.[LOADING_SYMBOL]) as any;
-  const errorChild = childrenArray.find((child: any) => child?.type?.[ERROR_SYMBOL]) as any;
-  const metaChild = childrenArray.find((child: any) => child?.type?.[META_SYMBOL]) as any;
-  const headerChild = childrenArray.find((child: any) => child?.type?.[HEADER_SYMBOL]) as any;
-  const actionsChild = childrenArray.find((child: any) => child?.type?.[ACTIONS_SYMBOL]) as any;
+  const imageChild = childrenArray.find((child): child is React.ReactElement<ArtifactImageProps> =>
+    hasMarker<ArtifactImageProps>(child, IMAGE_SYMBOL)
+  );
+  const videoChild = childrenArray.find((child): child is React.ReactElement<ArtifactVideoProps> =>
+    hasMarker<ArtifactVideoProps>(child, VIDEO_SYMBOL)
+  );
+  const audioChild = childrenArray.find((child): child is React.ReactElement<ArtifactAudioProps> =>
+    hasMarker<ArtifactAudioProps>(child, AUDIO_SYMBOL)
+  );
+  const codeChild = childrenArray.find((child): child is React.ReactElement<ArtifactCodeProps> =>
+    hasMarker<ArtifactCodeProps>(child, CODE_SYMBOL)
+  );
+  const documentChild = childrenArray.find(
+    (child): child is React.ReactElement<ArtifactDocumentProps> =>
+      hasMarker<ArtifactDocumentProps>(child, DOCUMENT_SYMBOL)
+  );
+  const downloadChild = childrenArray.find(
+    (child): child is React.ReactElement<ArtifactDownloadProps> =>
+      hasMarker<ArtifactDownloadProps>(child, DOWNLOAD_SYMBOL)
+  );
+  const loadingChild = childrenArray.find(
+    (child): child is React.ReactElement<ArtifactLoadingProps> =>
+      hasMarker<ArtifactLoadingProps>(child, LOADING_SYMBOL)
+  );
+  const errorChild = childrenArray.find((child): child is React.ReactElement<ArtifactErrorProps> =>
+    hasMarker<ArtifactErrorProps>(child, ERROR_SYMBOL)
+  );
+  const metaChild = childrenArray.find((child): child is React.ReactElement<ArtifactMetaProps> =>
+    hasMarker<ArtifactMetaProps>(child, META_SYMBOL)
+  );
+  const headerChild = childrenArray.find(
+    (child): child is React.ReactElement<ArtifactHeaderProps> =>
+      hasMarker<ArtifactHeaderProps>(child, HEADER_SYMBOL)
+  );
+  const actionsChild = childrenArray.find(
+    (child): child is React.ReactElement<ArtifactActionsProps> =>
+      hasMarker<ArtifactActionsProps>(child, ACTIONS_SYMBOL)
+  );
 
   // Determine if using compound mode
-  const hasSubComponents =
+  const hasSubComponents = Boolean(
     imageChild ||
     videoChild ||
     audioChild ||
@@ -414,7 +495,8 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
     errorChild ||
     metaChild ||
     headerChild ||
-    actionsChild;
+    actionsChild
+  );
 
   // In legacy mode, include default renderers
   const includeDefaultRenderer = !hasSubComponents;
@@ -558,7 +640,9 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
               </Text>
             )}
             {artifact.url && (
-              <Tooltip title="Download">
+              <Tooltip
+                title={t('components.artifactRenderer.download', { defaultValue: 'Download' })}
+              >
                 <Button
                   type="text"
                   size="small"
@@ -570,7 +654,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
               </Tooltip>
             )}
             {onExpand && (
-              <Tooltip title="Expand">
+              <Tooltip title={t('components.artifactRenderer.expand', { defaultValue: 'Expand' })}>
                 <Button
                   type="text"
                   size="small"
@@ -595,11 +679,13 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
       </div>
       {metaChild && showMeta && artifact.sourceTool && (
         <div className="mt-2 text-xs text-gray-400">
-          Generated by <code>{artifact.sourceTool}</code>
+          {t('components.artifactRenderer.generatedBy', { defaultValue: 'Generated by' })}{' '}
+          <code>{artifact.sourceTool}</code>
           {artifact.sourcePath && (
             <>
               {' '}
-              from <code>{artifact.sourcePath}</code>
+              {t('components.artifactRenderer.generatedFrom', { defaultValue: 'from' })}{' '}
+              <code>{artifact.sourcePath}</code>
             </>
           )}
         </div>

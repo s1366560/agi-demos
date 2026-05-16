@@ -2,25 +2,32 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, Plus, RefreshCw } from 'lucide-react';
-
+import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, RefreshCw } from 'lucide-react';
 
 import { formatTimeOnly } from '@/utils/date';
 
 import { TaskList } from '../../components/tasks/TaskList';
 import { taskAPI } from '../../services/api';
 
+import type { ChartData, ChartOptions, ScriptableContext } from 'chart.js';
+
 // Loading fallback for charts
-const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200px' }) => (
-  <div
-    className={`w-full ${height} flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg`}
-  >
-    <div className="text-center">
-      <Loader2 size={24} className="text-blue-600 animate-spin motion-reduce:animate-none" />
-      <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">Loading chart...</p>
+const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200px' }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      className={`w-full ${height} flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg`}
+    >
+      <div className="text-center">
+        <Loader2 size={24} className="text-blue-600 animate-spin motion-reduce:animate-none" />
+        <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
+          {t('tenant.tasks.charts.loading', { defaultValue: 'Loading chart...' })}
+        </p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface TaskStats {
   total: number;
@@ -40,10 +47,18 @@ interface QueueDepth {
   timestamp?: string | undefined;
 }
 
+type LineChartComponent = React.ComponentType<{
+  data: ChartData<'line', number[], string>;
+  options: ChartOptions<'line'>;
+}>;
+
+interface ChartComponents {
+  Line: LineChartComponent;
+}
+
 // Inner component that uses Chart.js
 const TaskDashboardInner: React.FC<{
-  ChartJS: any;
-  Line: any;
+  Line: LineChartComponent;
   stats: TaskStats | null;
   setStats: (s: TaskStats | null) => void;
   queueDepth: QueueDepth | null;
@@ -59,7 +74,6 @@ const TaskDashboardInner: React.FC<{
       | ((prev: { time: string; count: number }[]) => { time: string; count: number }[])
   ) => void;
 }> = ({
-  ChartJS: _ChartJS,
   Line,
   stats,
   setStats,
@@ -109,8 +123,10 @@ const TaskDashboardInner: React.FC<{
   }, [setStats, setQueueDepth, setQueueHistory, setLoading, setRefreshing]);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
+    void fetchData();
+    const interval = setInterval(() => {
+      void fetchData();
+    }, 5000);
     return () => {
       clearInterval(interval);
     };
@@ -118,11 +134,11 @@ const TaskDashboardInner: React.FC<{
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchData();
+    void fetchData();
   };
 
   // Chart Configurations
-  const lineChartOptions = useMemo(
+  const lineChartOptions = useMemo<ChartOptions<'line'>>(
     () => ({
       responsive: true,
       maintainAspectRatio: false,
@@ -179,7 +195,7 @@ const TaskDashboardInner: React.FC<{
     []
   );
 
-  const lineChartData = useMemo(
+  const lineChartData = useMemo<ChartData<'line', number[], string>>(
     () => ({
       labels: queueHistory.map((h) => h.time),
       datasets: [
@@ -187,7 +203,7 @@ const TaskDashboardInner: React.FC<{
           label: t('tenant.tasks.charts.pending_tasks'),
           data: queueHistory.map((h) => h.count),
           borderColor: '#2563eb',
-          backgroundColor: (context: any) => {
+          backgroundColor: (context: ScriptableContext<'line'>) => {
             const ctx = context.chart.ctx;
             const gradient = ctx.createLinearGradient(0, 0, 0, 200);
             gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)');
@@ -232,10 +248,6 @@ const TaskDashboardInner: React.FC<{
               className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
             />
             {t('tenant.tasks.refresh')}
-          </button>
-          <button className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors">
-            <Plus className="size-5" />
-            {t('tenant.tasks.new_task')}
           </button>
         </div>
       </div>
@@ -380,7 +392,9 @@ const TaskDashboardInner: React.FC<{
                 <div className="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div
                     className={`h-full ${item.color} rounded-full transition-[width] duration-500`}
-                    style={{ width: `${Math.max(2, (item.value / item.total) * 100)}%` }}
+                    style={{
+                      width: `${Math.max(2, (item.value / item.total) * 100).toString()}%`,
+                    }}
                   ></div>
                 </div>
               </div>
@@ -396,7 +410,9 @@ const TaskDashboardInner: React.FC<{
 };
 
 // Chart.js wrapper component - lazy loaded
-const ChartJSLib: React.FC<{ children: (props: any) => React.ReactNode }> = ({ children }) => {
+const ChartJSLib: React.FC<{ children: (props: ChartComponents) => React.ReactNode }> = ({
+  children,
+}) => {
   return (
     <React.Suspense fallback={<ChartLoading />}>
       <ChartJSLibInner>{children}</ChartJSLibInner>
@@ -404,13 +420,15 @@ const ChartJSLib: React.FC<{ children: (props: any) => React.ReactNode }> = ({ c
   );
 };
 
-const ChartJSLibInner: React.FC<{ children: (props: any) => React.ReactNode }> = ({ children }) => {
-  const [ChartJSModule, setChartJSModule] = React.useState<any>(null);
+const ChartJSLibInner: React.FC<{ children: (props: ChartComponents) => React.ReactNode }> = ({
+  children,
+}) => {
+  const [chartComponents, setChartComponents] = React.useState<ChartComponents | null>(null);
 
   React.useEffect(() => {
     let mounted = true;
-    Promise.all([import('chart.js'), import('react-chartjs-2')]).then(
-      ([chartJsModule, reactChartModule]) => {
+    void Promise.all([import('chart.js'), import('react-chartjs-2')])
+      .then(([chartJsModule, reactChartModule]) => {
         if (mounted) {
           const {
             Chart: ChartJS,
@@ -435,20 +453,22 @@ const ChartJSLibInner: React.FC<{ children: (props: any) => React.ReactNode }> =
             Filler
           );
 
-          setChartJSModule({ ChartJS, Line: reactChartModule.Line });
+          setChartComponents({ Line: reactChartModule.Line as LineChartComponent });
         }
-      }
-    );
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load chart modules:', error);
+      });
     return () => {
       mounted = false;
     };
   }, []);
 
-  if (!ChartJSModule) {
+  if (!chartComponents) {
     return <ChartLoading />;
   }
 
-  return <>{children({ ChartJS: ChartJSModule.ChartJS, Line: ChartJSModule.Line })}</>;
+  return <>{children(chartComponents)}</>;
 };
 
 // Public TaskDashboard component with lazy loaded charts
@@ -478,9 +498,8 @@ export const TaskDashboard: React.FC = () => {
 
   return (
     <ChartJSLib>
-      {({ ChartJS, Line }: any) => (
+      {({ Line }) => (
         <TaskDashboardInner
-          ChartJS={ChartJS}
           Line={Line}
           stats={stats}
           setStats={setStats}

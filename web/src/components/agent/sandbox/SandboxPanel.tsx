@@ -27,7 +27,10 @@
  * ```
  */
 
-import { useState, useCallback, Children } from 'react';
+import { useState, useCallback, Children, isValidElement } from 'react';
+import type { ReactNode } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { Tabs, Empty, Button, Tooltip, Badge, Space } from 'antd';
 import { Code, FileText, Monitor, X } from 'lucide-react';
@@ -40,15 +43,19 @@ import { SandboxOutputViewer } from './SandboxOutputViewer';
 import { SandboxPanelProvider } from './SandboxPanelContext';
 import { SandboxTerminal } from './SandboxTerminal';
 
+import type { ToolExecution as OutputToolExecution } from './SandboxOutputViewer';
 import type {
   SandboxTabKey,
   SandboxPanelRootProps,
+  SandboxPanelToolExecution,
   SandboxTerminalProps,
   SandboxDesktopProps,
   SandboxControlProps,
   SandboxOutputProps,
   SandboxHeaderProps,
 } from './types';
+import type { TabsProps } from 'antd';
+import type { TFunction } from 'i18next';
 
 // ========================================
 // Marker Symbols for Sub-Components
@@ -60,41 +67,105 @@ const CONTROL_SYMBOL = Symbol('SandboxPanelControl');
 const OUTPUT_SYMBOL = Symbol('SandboxPanelOutput');
 const HEADER_SYMBOL = Symbol('SandboxPanelHeader');
 
+type SandboxPanelMarker =
+  | typeof TERMINAL_SYMBOL
+  | typeof DESKTOP_SYMBOL
+  | typeof CONTROL_SYMBOL
+  | typeof OUTPUT_SYMBOL
+  | typeof HEADER_SYMBOL;
+
+type MarkerComponent<P> = ((props: P) => null) &
+  Partial<Record<SandboxPanelMarker, true>> & {
+    displayName?: string | undefined;
+  };
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+function markComponent<P>(
+  component: (props: P) => null,
+  marker: SandboxPanelMarker,
+  displayName: string
+): MarkerComponent<P> {
+  const markedComponent = component as MarkerComponent<P>;
+  markedComponent[marker] = true;
+  markedComponent.displayName = displayName;
+  return markedComponent;
+}
+
+function childHasMarker(child: ReactNode, marker: SandboxPanelMarker): boolean {
+  if (!isValidElement(child) || typeof child.type !== 'function') return false;
+  return (child.type as MarkerComponent<unknown>)[marker] === true;
+}
+
+function formatToolOutput(output: unknown): string | undefined {
+  if (output === undefined || output === null) return undefined;
+  if (typeof output === 'string') return output;
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return '[unserializable output]';
+  }
+}
+
+function normalizeToolExecutions(executions: SandboxPanelToolExecution[]): OutputToolExecution[] {
+  return executions.map((execution) => {
+    const output = formatToolOutput(execution.output);
+    return {
+      id: execution.id,
+      toolName: execution.toolName,
+      input: execution.input,
+      timestamp: execution.timestamp,
+      ...(output !== undefined ? { output } : {}),
+    };
+  });
+}
+
 // ========================================
 // Sub-Components (Marker Components)
 // ========================================
 
-SandboxPanel.Terminal = function SandboxPanelTerminalMarker(_props: SandboxTerminalProps) {
-  return null;
-};
-(SandboxPanel.Terminal as any)[TERMINAL_SYMBOL] = true;
+SandboxPanel.Terminal = markComponent(
+  function SandboxPanelTerminalMarker(_props: SandboxTerminalProps) {
+    return null;
+  },
+  TERMINAL_SYMBOL,
+  'SandboxPanelTerminal'
+);
 
-SandboxPanel.Desktop = function SandboxPanelDesktopMarker(_props: SandboxDesktopProps) {
-  return null;
-};
-(SandboxPanel.Desktop as any)[DESKTOP_SYMBOL] = true;
+SandboxPanel.Desktop = markComponent(
+  function SandboxPanelDesktopMarker(_props: SandboxDesktopProps) {
+    return null;
+  },
+  DESKTOP_SYMBOL,
+  'SandboxPanelDesktop'
+);
 
-SandboxPanel.Control = function SandboxPanelControlMarker(_props: SandboxControlProps) {
-  return null;
-};
-(SandboxPanel.Control as any)[CONTROL_SYMBOL] = true;
+SandboxPanel.Control = markComponent(
+  function SandboxPanelControlMarker(_props: SandboxControlProps) {
+    return null;
+  },
+  CONTROL_SYMBOL,
+  'SandboxPanelControl'
+);
 
-SandboxPanel.Output = function SandboxPanelOutputMarker(_props: SandboxOutputProps) {
-  return null;
-};
-(SandboxPanel.Output as any)[OUTPUT_SYMBOL] = true;
+SandboxPanel.Output = markComponent(
+  function SandboxPanelOutputMarker(_props: SandboxOutputProps) {
+    return null;
+  },
+  OUTPUT_SYMBOL,
+  'SandboxPanelOutput'
+);
 
-SandboxPanel.Header = function SandboxPanelHeaderMarker(_props: SandboxHeaderProps) {
-  return null;
-};
-(SandboxPanel.Header as any)[HEADER_SYMBOL] = true;
-
-// Set display names for testing
-(SandboxPanel.Terminal as any).displayName = 'SandboxPanelTerminal';
-(SandboxPanel.Desktop as any).displayName = 'SandboxPanelDesktop';
-(SandboxPanel.Control as any).displayName = 'SandboxPanelControl';
-(SandboxPanel.Output as any).displayName = 'SandboxPanelOutput';
-(SandboxPanel.Header as any).displayName = 'SandboxPanelHeader';
+SandboxPanel.Header = markComponent(
+  function SandboxPanelHeaderMarker(_props: SandboxHeaderProps) {
+    return null;
+  },
+  HEADER_SYMBOL,
+  'SandboxPanelHeader'
+);
 
 // ========================================
 // Internal Components
@@ -107,11 +178,14 @@ interface HeaderRenderProps {
 }
 
 function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderProps) {
+  const { t } = useTranslation();
+  const title = tFallback(t, 'components.sandboxPanel.title', 'Sandbox');
+
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50">
       <div className="flex items-center gap-2">
         <Code size={16} className="text-slate-500" />
-        <span className="font-medium text-slate-700">Sandbox</span>
+        <span className="font-medium text-slate-700">{title}</span>
         {sandboxId && <span className="text-xs text-slate-400">({sandboxId.slice(0, 12)})</span>}
       </div>
       <div className="flex items-center gap-1">
@@ -136,9 +210,9 @@ function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderPr
 
 interface TabContentProps {
   sandboxId?: string | null | undefined;
-  desktopStatus?: any | undefined;
-  terminalStatus?: any | undefined;
-  toolExecutions?: any[] | undefined;
+  desktopStatus?: SandboxPanelRootProps['desktopStatus'];
+  terminalStatus?: SandboxPanelRootProps['terminalStatus'];
+  toolExecutions?: SandboxPanelToolExecution[] | undefined;
   onFileClick?: ((filePath: string) => void) | undefined;
 }
 
@@ -178,7 +252,7 @@ function DesktopTabContent({ sandboxId, desktopStatus }: TabContentProps) {
       <RemoteDesktopViewer
         sandboxId={sandboxId}
         projectId={activeProjectId || undefined}
-        desktopStatus={desktopStatus}
+        desktopStatus={desktopStatus ?? null}
         height="100%"
         showToolbar={true}
       />
@@ -210,8 +284,8 @@ function ControlTabContent({
     <div className="h-full overflow-y-auto p-4">
       <SandboxControlPanel
         sandboxId={sandboxId}
-        desktopStatus={desktopStatus}
-        terminalStatus={terminalStatus}
+        desktopStatus={desktopStatus ?? null}
+        terminalStatus={terminalStatus ?? null}
         onDesktopStart={onDesktopStart}
         onDesktopStop={onDesktopStop}
         onTerminalStart={onTerminalStart}
@@ -226,15 +300,21 @@ function ControlTabContent({
 }
 
 function OutputTabContent({ toolExecutions = [], onFileClick }: TabContentProps) {
-  return (
-    <SandboxOutputViewer executions={toolExecutions} onFileClick={onFileClick} maxHeight="100%" />
-  );
+  const executions = normalizeToolExecutions(toolExecutions);
+  return <SandboxOutputViewer executions={executions} onFileClick={onFileClick} maxHeight="100%" />;
 }
 
 function EmptyState() {
+  const { t } = useTranslation();
+  const description = tFallback(
+    t,
+    'components.sandboxPanel.noSandboxConnected',
+    'No sandbox connected'
+  );
+
   return (
     <div className="h-full flex items-center justify-center">
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sandbox connected" />
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description} />
     </div>
   );
 }
@@ -244,6 +324,11 @@ function EmptyState() {
 // ========================================
 
 export function SandboxPanel(props: SandboxPanelRootProps) {
+  const { t } = useTranslation();
+  const terminalLabel = tFallback(t, 'components.sandboxPanel.terminal', 'Terminal');
+  const desktopLabel = tFallback(t, 'components.sandboxPanel.desktop', 'Desktop');
+  const controlLabel = tFallback(t, 'components.sandboxPanel.control', 'Control');
+  const outputLabel = tFallback(t, 'components.sandboxPanel.output', 'Output');
   const {
     sandboxId,
     defaultTab = 'terminal',
@@ -264,13 +349,17 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 
   // Parse children to detect sub-components
   const childrenArray = Children.toArray(children);
-  const terminalChild = childrenArray.find((child: any) => child?.type?.[TERMINAL_SYMBOL]) as any;
-  const desktopChild = childrenArray.find((child: any) => child?.type?.[DESKTOP_SYMBOL]) as any;
-  const controlChild = childrenArray.find((child: any) => child?.type?.[CONTROL_SYMBOL]) as any;
-  const outputChild = childrenArray.find((child: any) => child?.type?.[OUTPUT_SYMBOL]) as any;
+  const terminalChild = childrenArray.find((child) => childHasMarker(child, TERMINAL_SYMBOL));
+  const desktopChild = childrenArray.find((child) => childHasMarker(child, DESKTOP_SYMBOL));
+  const controlChild = childrenArray.find((child) => childHasMarker(child, CONTROL_SYMBOL));
+  const outputChild = childrenArray.find((child) => childHasMarker(child, OUTPUT_SYMBOL));
 
   // Determine if using compound mode (has explicit sub-components)
-  const hasSubComponents = terminalChild || desktopChild || controlChild || outputChild;
+  const hasSubComponents =
+    terminalChild !== undefined ||
+    desktopChild !== undefined ||
+    controlChild !== undefined ||
+    outputChild !== undefined;
 
   // In legacy mode, include all tabs by default
   // In compound mode, only include explicitly specified tabs
@@ -279,9 +368,6 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
   const includeDesktop = hasSubComponents ? !!desktopChild : true;
   const includeControl = hasSubComponents ? !!controlChild : true;
   const includeOutput = hasSubComponents ? !!outputChild : true;
-  // Header is always included by default
-  const includeHeader = true;
-
   // Determine the actual default tab
   // In compound mode, use defaultTab if that tab is included, otherwise use first available
   const getAvailableTabs = (): SandboxTabKey[] => {
@@ -296,10 +382,10 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
   const availableTabs = getAvailableTabs();
   const actualDefaultTab = availableTabs.includes(defaultTab)
     ? defaultTab
-    : availableTabs[0] || 'terminal';
+    : (availableTabs[0] ?? 'terminal');
 
   // Build tab items based on included sub-components
-  const tabItems: any[] = [];
+  const tabItems: NonNullable<TabsProps['items']> = [];
 
   const [internalActiveTab, setInternalActiveTab] = useState<SandboxTabKey>(actualDefaultTab);
 
@@ -309,7 +395,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       label: (
         <Space size={4}>
           <Code size={16} />
-          <span>Terminal</span>
+          <span>{terminalLabel}</span>
         </Space>
       ),
       children: <TerminalTabContent sandboxId={sandboxId} />,
@@ -322,7 +408,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       label: (
         <Space size={4}>
           <Monitor size={16} />
-          <span>Desktop</span>
+          <span>{desktopLabel}</span>
           {desktopStatus?.running && <Badge status="success" className="ml-1" />}
         </Space>
       ),
@@ -336,7 +422,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       label: (
         <Space size={4}>
           <Monitor size={16} />
-          <span>Control</span>
+          <span>{controlLabel}</span>
         </Space>
       ),
       children: (
@@ -361,7 +447,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       label: (
         <Space size={4}>
           <FileText size={16} />
-          <span>Output</span>
+          <span>{outputLabel}</span>
           {toolExecutions.length > 0 && (
             <Badge count={toolExecutions.length} size="small" className="ml-1" />
           )}
@@ -390,9 +476,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
     >
       <div className="h-full flex flex-col bg-white border-l border-slate-200">
         {/* Header */}
-        {includeHeader && (
-          <SandboxHeaderRender currentTool={currentTool} sandboxId={sandboxId} onClose={onClose} />
-        )}
+        <SandboxHeaderRender currentTool={currentTool} sandboxId={sandboxId} onClose={onClose} />
 
         {/* Tabs */}
         {tabItems.length > 0 && (

@@ -6,7 +6,11 @@
  * - RightPanel (refactored to use extracted components)
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
+
+import { MemoryRouter } from 'react-router-dom';
+
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock antd components completely to avoid complex dependencies
@@ -63,6 +67,10 @@ import { RightPanel } from '@/components/agent/RightPanel';
 // eslint-disable-next-line no-restricted-imports
 import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
 
+function renderRightPanel(ui: ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe('ResizeHandle (Extracted Component)', () => {
   it('should render resize handle with correct classes', () => {
     const onResize = vi.fn();
@@ -93,7 +101,9 @@ describe('ResizeHandle (Extracted Component)', () => {
     // Simulate mouse move
     const moveEvent = new MouseEvent('mousemove', { clientX: 150 });
     Object.defineProperty(moveEvent, 'clientX', { value: 150 });
-    document.dispatchEvent(moveEvent);
+    act(() => {
+      document.dispatchEvent(moveEvent);
+    });
 
     await waitFor(() => {
       // The delta should be calculated (150 - 100 = 50)
@@ -102,7 +112,9 @@ describe('ResizeHandle (Extracted Component)', () => {
 
     // Cleanup
     const upEvent = new MouseEvent('mouseup', {});
-    document.dispatchEvent(upEvent);
+    act(() => {
+      document.dispatchEvent(upEvent);
+    });
   });
 
   it('should show dragging state during drag', async () => {
@@ -123,7 +135,9 @@ describe('ResizeHandle (Extracted Component)', () => {
 
     // Cleanup
     const upEvent = new MouseEvent('mouseup', {});
-    document.dispatchEvent(upEvent);
+    act(() => {
+      document.dispatchEvent(upEvent);
+    });
   });
 
   it('should prevent default on mouse down', () => {
@@ -146,7 +160,7 @@ describe('RightPanel (Refactored)', () => {
   });
 
   it('should not render when collapsed', () => {
-    const { container } = render(<RightPanel collapsed={true} />);
+    const { container } = renderRightPanel(<RightPanel collapsed={true} />);
 
     expect(container.firstChild).toBe(null);
   });
@@ -164,7 +178,7 @@ describe('RightPanel (Refactored)', () => {
   });
 
   it('should render execution insights when provided', () => {
-    render(
+    renderRightPanel(
       <RightPanel
         tasks={[]}
         executionPathDecision={{
@@ -202,7 +216,7 @@ describe('RightPanel (Refactored)', () => {
   });
 
   it('should render execution narrative and toolset diagnostics', () => {
-    render(
+    renderRightPanel(
       <RightPanel
         tasks={[]}
         executionNarrative={[

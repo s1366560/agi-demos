@@ -44,7 +44,7 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
   // Load data if missing
   useEffect(() => {
     if (currentTenant && projects.length === 0) {
-      listProjects(currentTenant.id);
+      void listProjects(currentTenant.id);
     }
   }, [currentTenant, projects.length, listProjects]);
 
@@ -65,19 +65,19 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
       const subPath = currentPath.substring(
         currentPath.indexOf(`/project/${currentProjectId}`) + `/project/${currentProjectId}`.length
       );
-      navigate(`${tenantBasePath}/project/${project.id}${subPath}`);
+      void navigate(`${tenantBasePath}/project/${project.id}${subPath}`);
     } else {
       // Default to overview
-      navigate(`${tenantBasePath}/project/${project.id}`);
+      void navigate(`${tenantBasePath}/project/${project.id}`);
     }
   };
 
   const handleBackToTenantClick = () => {
     onBackToTenant?.();
     if (currentTenant) {
-      navigate(`/tenant/${currentTenant.id}`);
+      void navigate(`/tenant/${currentTenant.id}`);
     } else {
-      navigate('/tenant');
+      void navigate('/tenant');
     }
   };
 

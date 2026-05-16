@@ -8,7 +8,22 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { AlertCircle, CheckCircle, Cloud, Pencil, Plus, RefreshCcw, Server, Trash2, Zap, Container, GitMerge, XCircle, Loader2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle,
+  Cloud,
+  Pencil,
+  Plus,
+  RefreshCcw,
+  Server,
+  Trash2,
+  Zap,
+  Container,
+  GitMerge,
+  XCircle,
+  Loader2,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { useTenantStore } from '@/stores/tenant';
 
@@ -63,7 +78,7 @@ const getTypeIcon = (type: string) => {
 
 const getStatusConfig = (
   status: string
-): { color: string; bgColor: string; icon: any; label: string } => {
+): { color: string; bgColor: string; icon: LucideIcon; label: string } => {
   switch (status) {
     case 'connected':
       return {
@@ -267,7 +282,9 @@ const RegistryForm: React.FC<RegistryFormProps> = ({
         </button>
         <button
           type="button"
-          onClick={handleSubmit}
+          onClick={() => {
+            void handleSubmit();
+          }}
           disabled={isSubmitting || !name || !url}
           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -426,7 +443,7 @@ export const OrgRegistry: React.FC = () => {
         if (result.success) {
           message?.success(t('tenant.orgSettings.registry.testSuccess'));
         } else {
-          message?.error(result.message ?? t('tenant.orgSettings.registry.testFailed'));
+          message?.error(result.message || t('tenant.orgSettings.registry.testFailed'));
         }
       } catch {
         setRegistries((prev) =>
@@ -555,7 +572,7 @@ export const OrgRegistry: React.FC = () => {
                   {t('tenant.orgSettings.registry.colLastChecked')}
                 </th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('common.actions')}
+                  {t('common.actions.label')}
                 </th>
               </tr>
             </thead>
@@ -572,7 +589,10 @@ export const OrgRegistry: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className={`p-1.5 rounded-lg ${statusConfig.bgColor}`}>
-                          {(() => { const Icon = getTypeIcon(registry.type); return <Icon size={18} className={`\${statusConfig.color}`} />; })()}
+                          {(() => {
+                            const Icon = getTypeIcon(registry.type);
+                            return <Icon size={18} className={`\${statusConfig.color}`} />;
+                          })()}
                         </div>
                         <div>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -616,7 +636,9 @@ export const OrgRegistry: React.FC = () => {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => handleTestConnection(registry)}
+                          onClick={() => {
+                            void handleTestConnection(registry);
+                          }}
                           disabled={isTesting}
                           className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors disabled:opacity-50"
                         >

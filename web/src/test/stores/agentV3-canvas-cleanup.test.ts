@@ -91,9 +91,7 @@ describe('agentV3 canvas tab cleanup by conversation scope', () => {
   });
 
   it('marks creation in progress until the new conversation shell is ready', async () => {
-    let resolveCreate:
-      | ((value: Conversation) => void)
-      | undefined;
+    let resolveCreate: ((value: Conversation) => void) | undefined;
 
     vi.mocked(agentService.createConversation).mockImplementation(
       () =>

@@ -33,15 +33,11 @@ function readAgentId(conv: Conversation | null | undefined): string | null {
   return null;
 }
 
-export function ConversationAgentBadge({
-  conversation,
-}: ConversationAgentBadgeProps) {
+export function ConversationAgentBadge({ conversation }: ConversationAgentBadgeProps) {
   const agentId = readAgentId(conversation);
 
   const definitions = useAgentDefinitionStore((state) => state.definitions);
-  const listDefinitions = useAgentDefinitionStore(
-    (state) => state.listDefinitions
-  );
+  const listDefinitions = useAgentDefinitionStore((state) => state.listDefinitions);
 
   // Lazy-load the definitions list so the badge can resolve a display
   // name even if the user navigated directly to the conversation deep
@@ -61,10 +57,7 @@ export function ConversationAgentBadge({
 
   if (!agentId) return null;
 
-  const label =
-    definition?.display_name ||
-    definition?.name ||
-    `Agent ${agentId.slice(0, 8)}`;
+  const label = definition?.display_name || definition?.name || `Agent ${agentId.slice(0, 8)}`;
 
   return (
     <span

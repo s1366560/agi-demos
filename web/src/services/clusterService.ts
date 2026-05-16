@@ -47,7 +47,7 @@ export interface ClusterHealthResponse {
   node_count: number;
   cpu_usage: number | null;
   memory_usage: number | null;
-  checked_at: string;
+  checked_at: string | null;
 }
 
 export const clusterService = {

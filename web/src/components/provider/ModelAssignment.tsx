@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { App } from 'antd';
 import { AlertCircle, GitMerge, Info, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, TenantProviderMapping } from '../../types/memory';
+import { confirmAction } from '../../utils/confirmAction';
 
 import { AssignProviderModal } from './AssignProviderModal';
 import { ProviderIcon } from './ProviderIcon';
@@ -22,6 +25,7 @@ interface GroupedAssignments {
 }
 
 export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, providers }) => {
+  const { t } = useTranslation();
   const [assignments, setAssignments] = useState<TenantProviderMapping[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,34 +40,53 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
 
   const loadAssignments = useCallback(async () => {
     setIsLoading(true);
-    setIsLoading(true);
     setError(null);
     try {
       const data = await providerAPI.listTenantAssignments(tenantId);
       setAssignments(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load assignments:', err);
-      setError(err.message || 'Failed to load assignments');
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('components.provider.assignment.loadFailed', {
+              defaultValue: 'Failed to load assignments',
+            })
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, t]);
 
   useEffect(() => {
-    loadAssignments();
+    void loadAssignments();
   }, [tenantId, loadAssignments]);
 
   const handleUnassign = async (
     providerId: string,
     operationType: 'llm' | 'embedding' | 'rerank'
   ) => {
-    if (!confirm('Are you sure you want to remove this assignment?')) return;
+    if (
+      !(await confirmAction({
+        title: t('components.provider.assignment.removeConfirm', {
+          defaultValue: 'Are you sure you want to remove this assignment?',
+        }),
+        danger: true,
+      }))
+    )
+      return;
     try {
       await providerAPI.unassignFromTenant(providerId, tenantId, operationType);
-      loadAssignments();
+      void loadAssignments();
     } catch (err) {
       console.error('Failed to unassign provider:', err);
-      message.error(err instanceof Error ? err.message : 'Failed to unassign provider');
+      message.error(
+        err instanceof Error
+          ? err.message
+          : t('components.provider.assignment.unassignFailed', {
+              defaultValue: 'Failed to unassign provider',
+            })
+      );
     }
   };
 
@@ -107,7 +130,14 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
             {title}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {items.length === 0 ? 'No provider assigned' : `${items.length} provider(s) configured`}
+            {items.length === 0
+              ? t('components.provider.assignment.noneAssigned', {
+                  defaultValue: 'No provider assigned',
+                })
+              : t('components.provider.assignment.configuredCount', {
+                  count: items.length,
+                  defaultValue: '{{count}} provider(s) configured',
+                })}
           </p>
         </div>
         <button
@@ -117,7 +147,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           className="text-primary hover:text-primary-dark text-sm font-medium flex items-center gap-1 transition-colors"
         >
           <Plus size={16} />
-          Add
+          {t('common.add')}
         </button>
       </div>
 
@@ -161,14 +191,20 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
                         handleEditClick(assignment);
                       }}
                       className="p-1.5 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                      title="Edit Assignment"
+                      title={t('components.provider.assignment.editTitle', {
+                        defaultValue: 'Edit Assignment',
+                      })}
                     >
                       <Pencil size={16} />
                     </button>
                     <button
-                      onClick={() => handleUnassign(assignment.provider_id, type)}
+                      onClick={() => {
+                        void handleUnassign(assignment.provider_id, type);
+                      }}
                       className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      title="Remove Assignment"
+                      title={t('components.provider.assignment.removeTitle', {
+                        defaultValue: 'Remove Assignment',
+                      })}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -185,7 +221,10 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   if (isLoading) {
     return (
       <div className="p-12 text-center">
-        <Loader2 size={32} className="animate-spin motion-reduce:animate-none text-primary mx-auto" />
+        <Loader2
+          size={32}
+          className="animate-spin motion-reduce:animate-none text-primary mx-auto"
+        />
       </div>
     );
   }
@@ -204,19 +243,32 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info size={20} className="text-blue-600 dark:text-blue-400 shrink-0" />
         <div className="text-sm text-blue-800 dark:text-blue-200">
-          <p className="font-medium mb-1">Provider Routing Configuration</p>
+          <p className="font-medium mb-1">
+            {t('components.provider.assignment.heading', {
+              defaultValue: 'Provider Routing Configuration',
+            })}
+          </p>
           <p>
-            Configure which providers handle specific operations. Requests are routed based on
-            priority (lower number = higher priority). If the primary provider fails, the system
-            automatically falls back to the next available provider in the list.
+            {t('components.provider.assignment.description', {
+              defaultValue:
+                'Configure which providers handle specific operations. Requests are routed based on priority (lower number = higher priority). If the primary provider fails, the system automatically falls back to the next available provider in the list.',
+            })}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 auto-rows-fr">
-        {renderSection('LLM (Chat/Completion)', 'llm', groupedAssignments.llm)}
-        {renderSection('Embedding', 'embedding', groupedAssignments.embedding)}
-        {renderSection('Rerank', 'rerank', groupedAssignments.rerank)}
+        {renderSection(t('components.provider.operationTypes.llm'), 'llm', groupedAssignments.llm)}
+        {renderSection(
+          t('components.provider.operationTypes.embedding'),
+          'embedding',
+          groupedAssignments.embedding
+        )}
+        {renderSection(
+          t('components.provider.operationTypes.rerank'),
+          'rerank',
+          groupedAssignments.rerank
+        )}
       </div>
 
       {isSelectorOpen && (
@@ -231,7 +283,10 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
             setIsAssignModalOpen(true);
           }}
           providers={providers}
-          title={`Select Provider for ${targetType === 'llm' ? 'LLM' : targetType === 'embedding' ? 'Embedding' : 'Rerank'}`}
+          title={t('components.provider.assignment.selectorTitle', {
+            operation: t(`components.provider.operationTypes.${targetType}`),
+            defaultValue: 'Select Provider for {{operation}}',
+          })}
         />
       )}
 
@@ -243,7 +298,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           }}
           onSuccess={() => {
             setIsAssignModalOpen(false);
-            loadAssignments();
+            void loadAssignments();
           }}
           provider={selectedProvider}
           tenantId={tenantId}

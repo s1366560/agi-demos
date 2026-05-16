@@ -8,6 +8,8 @@
 
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { ChevronDown, ChevronRight, Database } from 'lucide-react';
 
 import type {
@@ -20,24 +22,30 @@ interface MemoryRecalledStepProps {
 }
 
 export const MemoryRecalledStep: React.FC<MemoryRecalledStepProps> = ({ event }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  if (!event.memories || event.memories.length === 0) {
+  if (event.memories.length === 0) {
     return null;
   }
 
   return (
     <div className="py-1 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30">
       <button
+        type="button"
         onClick={() => {
           setExpanded(!expanded);
         }}
+        aria-expanded={expanded}
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-blue-700 dark:text-blue-300"
       >
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <Database size={12} />
         <span>
-          Recalled {event.count} {event.count === 1 ? 'memory' : 'memories'}
+          {t('components.memoryTimeline.recalled', {
+            defaultValue: 'Recalled {{count}} memories',
+            count: event.count,
+          })}
         </span>
         <span className="text-blue-500 dark:text-blue-400">({event.searchMs}ms)</span>
       </button>
@@ -69,6 +77,8 @@ interface MemoryCapturedStepProps {
 }
 
 export const MemoryCapturedStep: React.FC<MemoryCapturedStepProps> = ({ event }) => {
+  const { t } = useTranslation();
+
   if (!event.capturedCount || event.capturedCount === 0) {
     return null;
   }
@@ -77,7 +87,10 @@ export const MemoryCapturedStep: React.FC<MemoryCapturedStepProps> = ({ event })
     <div className="py-1 flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300">
       <Database size={12} />
       <span>
-        Captured {event.capturedCount} {event.capturedCount === 1 ? 'memory' : 'memories'}
+        {t('components.memoryTimeline.captured', {
+          defaultValue: 'Captured {{count}} memories',
+          count: event.capturedCount,
+        })}
       </span>
       {event.categories.length > 0 && (
         <span className="text-green-500 dark:text-green-400">({event.categories.join(', ')})</span>

@@ -331,7 +331,11 @@ describe('RemoteDesktopViewer', () => {
   describe('Controls', () => {
     it('should have fullscreen button', () => {
       render(
-        <RemoteDesktopViewer sandboxId="test-sandbox" projectId="proj-1" desktopStatus={mockDesktopStatusRunning} />
+        <RemoteDesktopViewer
+          sandboxId="test-sandbox"
+          projectId="proj-1"
+          desktopStatus={mockDesktopStatusRunning}
+        />
       );
 
       const fullscreenButton = screen.getByRole('button', { name: /fullscreen/i });
@@ -340,7 +344,11 @@ describe('RemoteDesktopViewer', () => {
 
     it('should have reconnect button', () => {
       render(
-        <RemoteDesktopViewer sandboxId="test-sandbox" projectId="proj-1" desktopStatus={mockDesktopStatusRunning} />
+        <RemoteDesktopViewer
+          sandboxId="test-sandbox"
+          projectId="proj-1"
+          desktopStatus={mockDesktopStatusRunning}
+        />
       );
 
       const reconnectButton = screen.getByRole('button', { name: /reconnect/i });

@@ -6,8 +6,9 @@
 
 import { useMemo, useState } from 'react';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
   Checkbox,
@@ -375,7 +376,9 @@ export default function CuratedSkills() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <div>
-        <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>Library</div>
+        <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>
+          {t('skill.curated.eyebrow', { defaultValue: 'Library' })}
+        </div>
         <h1 className={`mt-2 text-2xl font-semibold leading-8 tracking-normal ${pageText}`}>
           {t('skill.curated.pageTitle')}
         </h1>
@@ -387,7 +390,11 @@ export default function CuratedSkills() {
         <Tabs
           items={[
             { key: 'curated', label: t('skill.curated.tabCurated'), children: <CuratedTab /> },
-            { key: 'submissions', label: t('skill.curated.tabSubmissions'), children: <SubmissionsTab /> },
+            {
+              key: 'submissions',
+              label: t('skill.curated.tabSubmissions'),
+              children: <SubmissionsTab />,
+            },
           ]}
         />
       </div>

@@ -330,22 +330,20 @@ const PoolDashboard: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="p-4 sm:p-6">
       {/* Header */}
-      <div
-        style={{
-          marginBottom: 24,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Title level={2} style={{ margin: 0 }}>
           {t('admin.poolDashboard.title')}
         </Title>
-        <Space>
+        <Space wrap>
           <Text type="secondary">{t('admin.poolDashboard.autoRefresh')}</Text>
-          <Switch checked={autoRefresh} onChange={setAutoRefresh} size="small" />
+          <Switch
+            checked={autoRefresh}
+            onChange={setAutoRefresh}
+            size="small"
+            aria-label={t('admin.poolDashboard.autoRefresh')}
+          />
           <Button
             icon={<RefreshCw size={16} />}
             onClick={handleRefresh}
@@ -420,7 +418,7 @@ const PoolDashboard: React.FC = () => {
         <Col xs={24} lg={12}>
           <Card title={t('admin.poolDashboard.tierDistribution')} loading={isStatusLoading}>
             <Row gutter={16}>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Statistic
                   title={
                     <Space>
@@ -431,7 +429,7 @@ const PoolDashboard: React.FC = () => {
                   value={status?.hot_instances ?? 0}
                 />
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Statistic
                   title={
                     <Space>
@@ -442,7 +440,7 @@ const PoolDashboard: React.FC = () => {
                   value={status?.warm_instances ?? 0}
                 />
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Statistic
                   title={
                     <Space>
@@ -485,21 +483,21 @@ const PoolDashboard: React.FC = () => {
         <Col span={24}>
           <Card title={t('admin.poolDashboard.prewarmPool')} loading={isStatusLoading}>
             <Row gutter={16}>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Statistic
                   title={t('admin.poolDashboard.prewarm.l1')}
                   value={status?.prewarm_pool.l1 ?? 0}
                   suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Statistic
                   title={t('admin.poolDashboard.prewarm.l2')}
                   value={status?.prewarm_pool.l2 ?? 0}
                   suffix={t('admin.poolDashboard.prewarm.instances')}
                 />
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Statistic
                   title={t('admin.poolDashboard.prewarm.l3')}
                   value={status?.prewarm_pool.l3 ?? 0}

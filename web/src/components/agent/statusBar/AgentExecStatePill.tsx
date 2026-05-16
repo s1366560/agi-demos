@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import type { FC } from 'react';
 
 import { Zap, Brain, Loader2, Eye, MessageCircle, RotateCcw, CheckCircle2 } from 'lucide-react';
@@ -77,7 +79,10 @@ export const execStateConfig: Record<AgentExecState, ExecStateConfig> = {
 /**
  * Status bar phase dot
  */
-export const StatusPhaseDot: FC<{ active: boolean; completed: boolean }> = ({ active, completed }) => (
+export const StatusPhaseDot: FC<{ active: boolean; completed: boolean }> = ({
+  active,
+  completed,
+}) => (
   <span
     className={`
       w-1.5 h-1.5 rounded-full transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300

@@ -142,8 +142,8 @@ export const useSkillStore = create<SkillState>()(
           };
           const response = await skillAPI.list(queryParams);
           set({
-            skills: response.skills || [],
-            total: response.total || 0,
+            skills: response.skills,
+            total: response.total,
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -158,7 +158,7 @@ export const useSkillStore = create<SkillState>()(
         try {
           const response = await skillAPI.listSystemSkills();
           set({
-            systemSkills: response.skills || [],
+            systemSkills: response.skills,
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -279,7 +279,7 @@ export const useSkillStore = create<SkillState>()(
         try {
           const response = await tenantSkillConfigAPI.list();
           set({
-            tenantConfigs: response.configs || [],
+            tenantConfigs: response.configs,
             isLoading: false,
           });
         } catch (error: unknown) {

@@ -17,14 +17,27 @@ import React, {
 
 import { useParams } from 'react-router-dom';
 
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Clock, Info as InfoIcon, Loader2, RefreshCw, Users, X } from 'lucide-react';
+import { message } from 'antd';
+import {
+  AlertCircle,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Info as InfoIcon,
+  Loader2,
+  RefreshCw,
+  Users,
+  X,
+} from 'lucide-react';
 
 import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { VirtualGrid } from '../../../components/common';
 import { TaskList } from '../../../components/tasks/TaskList';
-import { createApiUrl } from '../../../services/client/urlUtils';
 import { graphService } from '../../../services/graphService';
+import { subscribeToTaskEvents } from '../../../services/taskStream';
+import { confirmAction } from '../../../utils/confirmAction';
 import { logger } from '../../../utils/logger';
 
 import type { Community, Entity, BackgroundTask } from './types';
@@ -60,6 +73,7 @@ const TEXTS = {
   created: 'Created',
   tasks: 'Tasks',
   communityMembers: 'Community Members',
+  closeDetails: 'Close community details',
   noMembers: 'No members loaded',
   selectPrompt: 'Select a community to view details',
   clickPrompt: 'Click on any community card to see its members',
@@ -119,16 +133,137 @@ function useCommunitiesListContext(): CommunitiesListContextValue {
 }
 
 // ========================================
-// Color Palette (outside component for stability)
+// Structured parsing helpers
 // ========================================
 
-const COMMUNITY_COLORS = [
-  'from-blue-500 to-cyan-500',
-  'from-purple-500 to-pink-500',
-  'from-emerald-500 to-teal-500',
-  'from-orange-500 to-amber-500',
-  'from-rose-500 to-red-500',
+type RecordValue = Record<string, unknown>;
+type ErrorSource = 'load' | 'rebuild' | 'task' | 'cancel';
+
+interface ErrorState {
+  message: string;
+  source: ErrorSource;
+}
+
+const TASK_STATUS_MAP: Record<string, BackgroundTask['status']> = {
+  processing: 'running',
+  running: 'running',
+  pending: 'pending',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+};
+
+function isRecord(value: unknown): value is RecordValue {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseEventRecord(rawData: string): RecordValue | null {
+  try {
+    const data = JSON.parse(rawData) as unknown;
+    return isRecord(data) ? data : null;
+  } catch (error) {
+    logger.error('Failed to parse task event:', error);
+    return null;
+  }
+}
+
+function getStringField(record: RecordValue, field: string): string | undefined {
+  const value = record[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getNumberField(record: RecordValue, field: string): number | undefined {
+  const value = record[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+
+  if (!isRecord(error)) {
+    return fallback;
+  }
+
+  const response = error.response;
+  if (isRecord(response)) {
+    const data = response.data;
+    if (isRecord(data)) {
+      const detail = getStringField(data, 'detail');
+      if (detail) return detail;
+    }
+  }
+
+  return getStringField(error, 'message') ?? fallback;
+}
+
+function getTaskResult(value: unknown): BackgroundTask['result'] {
+  if (!isRecord(value)) return undefined;
+
+  const communitiesCount = getNumberField(value, 'communities_count');
+  const edgesCount = getNumberField(value, 'edges_count');
+
+  if (communitiesCount === undefined && edgesCount === undefined) {
+    return undefined;
+  }
+
+  return {
+    communities_count: communitiesCount,
+    edges_count: edgesCount,
+  };
+}
+
+function normalizeTaskStatus(value: unknown): BackgroundTask['status'] {
+  if (typeof value !== 'string') return 'pending';
+  return TASK_STATUS_MAP[value.toLowerCase()] ?? 'pending';
+}
+
+function buildTaskFromRecord(
+  record: RecordValue,
+  options: {
+    status?: BackgroundTask['status'] | undefined;
+    taskTypeFallback: string;
+    messageFallback: string;
+    progressFallback: number;
+    createdAtFallback?: string | undefined;
+  }
+): BackgroundTask {
+  return {
+    task_id: getStringField(record, 'id') ?? getStringField(record, 'task_id') ?? 'unknown',
+    task_type: getStringField(record, 'name') ?? options.taskTypeFallback,
+    status: options.status ?? normalizeTaskStatus(record.status),
+    created_at:
+      getStringField(record, 'created_at') ?? options.createdAtFallback ?? new Date().toISOString(),
+    started_at: getStringField(record, 'started_at'),
+    completed_at: getStringField(record, 'completed_at'),
+    progress: getNumberField(record, 'progress') ?? options.progressFallback,
+    message: getStringField(record, 'message') ?? options.messageFallback,
+    result: getTaskResult(record.result),
+    error: getStringField(record, 'error'),
+  };
+}
+
+const DEFAULT_COMMUNITY_ICON_CLASS =
+  'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900';
+
+const COMMUNITY_ICON_CLASSES = [
+  DEFAULT_COMMUNITY_ICON_CLASS,
+  'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-950',
+  'bg-slate-600 text-white dark:bg-slate-300 dark:text-slate-950',
+  'bg-zinc-700 text-white dark:bg-zinc-200 dark:text-zinc-950',
+  'bg-stone-700 text-white dark:bg-stone-200 dark:text-stone-950',
 ] as const;
+
+function getCommunityIconClass(index: number): string {
+  return (
+    COMMUNITY_ICON_CLASSES[index % COMMUNITY_ICON_CLASSES.length] ?? DEFAULT_COMMUNITY_ICON_CLASS
+  );
+}
+
+function formatPercent(value: number): string {
+  return `${String(Math.max(0, Math.min(100, value)))}%`;
+}
 
 // ========================================
 // Root Component
@@ -150,7 +285,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null);
     const [members, setMembers] = useState<Entity[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [errorState, setErrorState] = useState<ErrorState | null>(null);
     const [rebuilding, setRebuilding] = useState(false);
     const [totalCount, setTotalCount] = useState(0);
     const [page, setPage] = useState(0);
@@ -161,7 +296,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
       if (!projectId) return;
 
       setLoading(true);
-      setError(null);
+      setErrorState((current) => (current?.source === 'load' ? null : current));
       try {
         logger.debug('Loading communities...', {
           projectId,
@@ -184,9 +319,12 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
 
         setCommunities(result.communities);
         setTotalCount(result.total || result.communities.length);
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error('Failed to load communities:', err);
-        setError(err.response?.data?.detail || err.message || 'Failed to load communities');
+        setErrorState({
+          message: getErrorMessage(err, 'Failed to load communities'),
+          source: 'load',
+        });
       } finally {
         setLoading(false);
       }
@@ -205,117 +343,84 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     // Stream task status
     const streamTaskStatus = useCallback(
       (taskId: string) => {
-        const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
-        const eventSource = new EventSource(streamUrl);
+        return subscribeToTaskEvents(taskId, {
+          onOpen: () => {
+            logger.debug('SSE connection opened');
+          },
+          onProgress: (event) => {
+            const data = parseEventRecord(event.data);
+            if (!data) return;
 
-        eventSource.onopen = () => {
-          logger.debug('SSE connection opened');
-        };
+            setCurrentTask(
+              buildTaskFromRecord(data, {
+                taskTypeFallback: 'rebuild_communities',
+                messageFallback: 'Processing...',
+                progressFallback: 0,
+              })
+            );
+          },
+          onCompleted: (event) => {
+            const task = parseEventRecord(event.data);
+            if (!task) return;
 
-        eventSource.addEventListener('progress', (e: MessageEvent) => {
-          try {
-            const data = JSON.parse(e.data);
-            const statusMap: Record<string, string> = {
-              processing: 'running',
-              pending: 'pending',
-              completed: 'completed',
-              failed: 'failed',
-            };
-            const normalizedStatus =
-              statusMap[data.status?.toLowerCase()] || data.status?.toLowerCase() || 'pending';
-
-            setCurrentTask({
-              task_id: data.id,
-              task_type: 'rebuild_communities',
-              status: normalizedStatus,
-              created_at: new Date().toISOString(),
-              progress: data.progress || 0,
-              message: data.message || 'Processing...',
-              result: data.result,
-              error: data.error,
-            });
-          } catch (err) {
-            logger.error('Failed to parse progress event:', err);
-          }
-        });
-
-        eventSource.addEventListener('completed', (e: MessageEvent) => {
-          try {
-            const task = JSON.parse(e.data);
-            setCurrentTask({
-              task_id: task.id,
-              task_type: task.name,
-              status: 'completed',
-              created_at: task.created_at,
-              started_at: task.started_at,
-              completed_at: task.completed_at,
-              progress: task.progress || 100,
-              message: task.message || 'Community rebuild completed',
-              result: task.result,
-              error: task.error,
-            });
+            setCurrentTask(
+              buildTaskFromRecord(task, {
+                status: 'completed',
+                taskTypeFallback: 'rebuild_communities',
+                messageFallback: 'Community rebuild completed',
+                progressFallback: 100,
+              })
+            );
 
             setRebuilding(false);
-            eventSource.close();
-            loadCommunities();
+            void loadCommunities();
 
             setTimeout(() => {
               setCurrentTask(null);
             }, 5000);
-          } catch (err) {
-            logger.error('Failed to parse completed event:', err);
-          }
-        });
+          },
+          onFailed: (event) => {
+            const task = parseEventRecord(event.data);
+            if (!task) return;
 
-        eventSource.addEventListener('failed', (e: MessageEvent) => {
-          try {
-            const task = JSON.parse(e.data);
-            setCurrentTask({
-              task_id: task.id,
-              task_type: task.name,
-              status: 'failed',
-              created_at: task.created_at,
-              started_at: task.started_at,
-              completed_at: task.completed_at,
-              progress: task.progress || 0,
-              message: task.message || 'Community rebuild failed',
-              result: task.result,
-              error: task.error || 'Unknown error',
+            const taskError = getStringField(task, 'error') ?? 'Unknown error';
+
+            setCurrentTask(
+              buildTaskFromRecord(task, {
+                status: 'failed',
+                taskTypeFallback: 'rebuild_communities',
+                messageFallback: 'Community rebuild failed',
+                progressFallback: 0,
+              })
+            );
+
+            setRebuilding(false);
+            setErrorState({ message: `Rebuild failed: ${taskError}`, source: 'task' });
+          },
+          onError: (error) => {
+            logger.error('SSE connection error:', error);
+            setRebuilding(false);
+            setErrorState({
+              message: 'Failed to connect to task updates. Please refresh the page.',
+              source: 'task',
             });
-
-            setRebuilding(false);
-            setError(`Rebuild failed: ${task.error || 'Unknown error'}`);
-            eventSource.close();
-          } catch (err) {
-            logger.error('Failed to parse failed event:', err);
-          }
+          },
         });
-
-        eventSource.onerror = () => {
-          logger.error('SSE connection error');
-          if (eventSource.readyState === 2) {
-            eventSource.close();
-            setRebuilding(false);
-            setError('Failed to connect to task updates. Please refresh the page.');
-          }
-        };
-
-        return eventSource;
       },
       [loadCommunities]
     );
 
     // Rebuild communities
     const rebuildCommunities = useCallback(async () => {
-      if (!confirm(TEXTS.confirmRebuild)) {
+      if (!(await confirmAction({ title: TEXTS.confirmRebuild, danger: true }))) {
         return;
       }
 
       setRebuilding(true);
-      setError(null);
+      setErrorState((current) => (current?.source === 'rebuild' ? null : current));
 
       try {
-        logger.debug(`Starting community rebuild for project: ${projectId}`);
+        logger.debug('Starting community rebuild', { projectId });
 
         const result = await graphService.rebuildCommunities(true, projectId);
 
@@ -323,14 +428,13 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
           streamTaskStatus(result.task_id);
         } else {
           await loadCommunities();
-          alert(`Success! ${result.message}`);
+          void message.success(result.message || 'Communities rebuilt successfully');
           setRebuilding(false);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error('Failed to rebuild communities:', err);
-        const errorMsg =
-          err.response?.data?.detail || err.message || 'Failed to start community rebuild';
-        setError(`Failed to rebuild: ${errorMsg}`);
+        const errorMsg = getErrorMessage(err, 'Failed to start community rebuild');
+        setErrorState({ message: `Failed to rebuild: ${errorMsg}`, source: 'rebuild' });
         setRebuilding(false);
       }
     }, [projectId, streamTaskStatus, loadCommunities]);
@@ -343,10 +447,10 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         await graphService.cancelTask(currentTask.task_id);
         setCurrentTask(null);
         setRebuilding(false);
-        alert('Task cancelled');
-      } catch (err: any) {
+        void message.info('Task cancelled');
+      } catch (err: unknown) {
         logger.error('Failed to cancel task:', err);
-        setError('Failed to cancel task');
+        setErrorState({ message: 'Failed to cancel task', source: 'cancel' });
       }
     }, [currentTask]);
 
@@ -354,7 +458,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
     const selectCommunity = useCallback(
       (community: Community) => {
         setSelectedCommunity(community);
-        loadMembers(community.uuid);
+        void loadMembers(community.uuid);
       },
       [loadMembers]
     );
@@ -367,7 +471,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
 
     // Clear error
     const clearError = useCallback(() => {
-      setError(null);
+      setErrorState(null);
     }, []);
 
     // Dismiss task
@@ -385,7 +489,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
 
     // Initial load
     useEffect(() => {
-      loadCommunities();
+      void loadCommunities();
     }, [loadCommunities]);
 
     const contextValue = useMemo<CommunitiesListContextValue>(
@@ -394,7 +498,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         selectedCommunity,
         members,
         loading,
-        error,
+        error: errorState?.message ?? null,
         rebuilding,
         totalCount,
         page,
@@ -417,7 +521,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         selectedCommunity,
         members,
         loading,
-        error,
+        errorState,
         rebuilding,
         totalCount,
         page,
@@ -438,7 +542,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
 
     return (
       <CommunitiesListContext.Provider value={contextValue}>
-        <div data-testid="communities-list-root" className="space-y-6">
+        <div data-testid="communities-list-root" className="min-w-0 space-y-6">
           {children}
         </div>
       </CommunitiesListContext.Provider>
@@ -456,24 +560,30 @@ const Header: React.FC = memo(() => {
   const { rebuildCommunities, loadCommunities, loading, rebuilding } = useCommunitiesListContext();
 
   return (
-    <div className="flex justify-between items-start">
-      <div>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{TEXTS.title}</h1>
-        <p className="text-slate-600 dark:text-slate-400 mt-1">{TEXTS.subtitle}</p>
+        <p className="mt-1 break-words text-slate-600 dark:text-slate-400">{TEXTS.subtitle}</p>
       </div>
-      <div className="flex gap-2">
-        <button type="button"
-          onClick={rebuildCommunities}
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <button
+          type="button"
+          onClick={() => {
+            void rebuildCommunities();
+          }}
           disabled={rebuilding}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200"
         >
           <AlertCircle size={16} />
           {rebuilding ? TEXTS.rebuilding : TEXTS.rebuild}
         </button>
-        <button type="button"
-          onClick={loadCommunities}
+        <button
+          type="button"
+          onClick={() => {
+            void loadCommunities();
+          }}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-md bg-slate-100 px-4 py-2 text-slate-700 transition-colors hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
         >
           <RefreshCw size={16} />
           {TEXTS.refresh}
@@ -524,10 +634,6 @@ const List: React.FC = memo(() => {
     );
   }
 
-  const getCommunityColor = (index: number) => {
-    return COMMUNITY_COLORS[index % COMMUNITY_COLORS.length];
-  };
-
   return (
     <VirtualGrid
       items={communities}
@@ -544,17 +650,15 @@ const List: React.FC = memo(() => {
           }`}
         >
           <div className="flex items-start justify-between mb-3">
-            <div
-              className={`p-3 rounded-lg bg-gradient-to-br ${getCommunityColor(index)} text-white`}
-            >
+            <div className={`p-3 rounded-md ${getCommunityIconClass(index)}`}>
               <Users size={16} />
             </div>
-            <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 px-2 py-1 rounded-full text-xs font-medium">
+            <span className="bg-slate-100 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 px-2 py-1 rounded-full text-xs font-medium">
               {community.member_count} members
             </span>
           </div>
           <h3 className="font-semibold text-slate-900 dark:text-white mb-2">
-            {community.name || `Community ${index + 1}`}
+            {community.name || `Community ${String(index + 1)}`}
           </h3>
           {community.summary && (
             <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
@@ -591,7 +695,8 @@ const Pagination: React.FC = memo(() => {
 
   return (
     <div className="flex items-center justify-center gap-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-      <button type="button"
+      <button
+        type="button"
         onClick={() => {
           setPage(Math.max(0, page - 1));
         }}
@@ -604,7 +709,8 @@ const Pagination: React.FC = memo(() => {
       <span className="text-sm text-slate-600 dark:text-slate-400">
         Page {page + 1} of {totalPages}
       </span>
-      <button type="button"
+      <button
+        type="button"
         onClick={() => {
           setPage(page + 1);
         }}
@@ -638,8 +744,10 @@ const Detail: React.FC = memo(() => {
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">
           {TEXTS.communityDetails}
         </h2>
-        <button type="button"
+        <button
+          type="button"
           onClick={closeDetail}
+          aria-label={TEXTS.closeDetails}
           className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
         >
           <X size={16} />
@@ -661,9 +769,7 @@ const Detail: React.FC = memo(() => {
 
         {selectedCommunity.summary && (
           <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase">
-              {TEXTS.summary}
-            </span>
+            <span className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.summary}</span>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
               {selectedCommunity.summary}
             </p>
@@ -679,9 +785,7 @@ const Detail: React.FC = memo(() => {
 
         {selectedCommunity.created_at && (
           <div>
-            <span className="text-xs font-semibold text-slate-500 uppercase">
-              {TEXTS.created}
-            </span>
+            <span className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.created}</span>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {formatDateTime(selectedCommunity.created_at)}
             </p>
@@ -750,7 +854,10 @@ const TaskStatus: React.FC = memo(() => {
     >
       <div className="flex items-start gap-3">
         {currentTask.status === 'running' ? (
-          <Loader2 size={24} className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none" />
+          <Loader2
+            size={24}
+            className="text-blue-600 dark:text-blue-400 animate-spin motion-reduce:animate-none"
+          />
         ) : currentTask.status === 'completed' ? (
           <CheckCircle size={24} className="text-green-600 dark:text-green-400" />
         ) : currentTask.status === 'failed' ? (
@@ -778,15 +885,19 @@ const TaskStatus: React.FC = memo(() => {
                     : 'Rebuild Scheduled'}
             </h3>
             {(currentTask.status === 'running' || currentTask.status === 'pending') && (
-              <button type="button"
-                onClick={cancelTask}
+              <button
+                type="button"
+                onClick={() => {
+                  void cancelTask();
+                }}
                 className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
               >
                 {TEXTS.cancel}
               </button>
             )}
             {currentTask.status === 'failed' && (
-              <button type="button"
+              <button
+                type="button"
                 onClick={dismissTask}
                 className="px-3 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
               >
@@ -814,7 +925,7 @@ const TaskStatus: React.FC = memo(() => {
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                 <div
                   className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-[width] duration-300"
-                  style={{ width: `${currentTask.progress}%` }}
+                  style={{ width: formatPercent(currentTask.progress) }}
                 />
               </div>
             </div>
@@ -871,7 +982,10 @@ const ErrorMessage: React.FC = memo(() => {
         <h3 className="font-semibold text-red-900 dark:text-red-300">{TEXTS.error}</h3>
         <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
       </div>
-      <button type="button"
+      <button
+        type="button"
+        aria-label={TEXTS.dismiss}
+        title={TEXTS.dismiss}
         onClick={clearError}
         className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
       >
@@ -944,7 +1058,20 @@ Root.displayName = 'CommunitiesList';
 // Compound Component Assembly
 // ========================================
 
-const CommunitiesList = Root as any;
+interface CommunitiesListCompound extends React.FC<RootProps> {
+  Header: typeof Header;
+  Stats: typeof Stats;
+  List: typeof List;
+  Pagination: typeof Pagination;
+  Detail: typeof Detail;
+  TaskStatus: typeof TaskStatus;
+  Error: typeof ErrorMessage;
+  Info: typeof Info;
+  Root: typeof Root;
+  Provider: typeof CommunitiesListProvider;
+}
+
+const CommunitiesList = Root as CommunitiesListCompound;
 
 CommunitiesList.Header = Header;
 CommunitiesList.Stats = Stats;

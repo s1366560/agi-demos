@@ -4,14 +4,21 @@ import { useTranslation } from 'react-i18next';
 
 import { Globe } from 'lucide-react';
 
-import { LazySelect } from '@/components/ui/lazyAntd';
-import { authAPI } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 
+import { authAPI } from '@/services/api';
+
+import { LazySelect } from '@/components/ui/lazyAntd';
+
 export const LanguageSwitcher: React.FC = () => {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
+  const activeLanguage = (i18n.resolvedLanguage || i18n.language || 'en-US')
+    .toLowerCase()
+    .startsWith('zh')
+    ? 'zh-CN'
+    : 'en-US';
 
   const handleChange = (value: string) => {
     void i18n.changeLanguage(value);
@@ -30,8 +37,10 @@ export const LanguageSwitcher: React.FC = () => {
 
   return (
     <LazySelect
-      defaultValue={i18n.language || 'en-US'}
-      value={i18n.language}
+      aria-label={t('user.language', 'Language')}
+      data-testid="language-switcher"
+      defaultValue={activeLanguage}
+      value={activeLanguage}
       onChange={handleChange}
       style={{ width: 120 }}
       suffixIcon={<Globe size={16} />}

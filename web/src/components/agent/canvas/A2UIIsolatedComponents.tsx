@@ -12,6 +12,8 @@ import {
   useState,
 } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   ComponentNode,
   classMapToString,
@@ -22,6 +24,8 @@ import {
   useA2UIState,
   type A2UINodeLike,
 } from './a2uiInternals';
+
+import type { TFunction } from 'i18next';
 
 interface A2UIComponentNode extends A2UINodeLike {
   id?: string;
@@ -140,6 +144,11 @@ class A2UIRenderBoundary extends Component<A2UIRenderBoundaryProps, A2UIRenderBo
 const LOCAL_FALLBACK_CLASS =
   'rounded-[6px] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200';
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 const InlineSectionFallback = memo<{ title: string; detail: string }>(({ title, detail }) => (
   <div className={LOCAL_FALLBACK_CLASS} role="alert">
     <p className="font-medium">{title}</p>
@@ -149,9 +158,15 @@ const InlineSectionFallback = memo<{ title: string; detail: string }>(({ title, 
 
 InlineSectionFallback.displayName = 'InlineSectionFallback';
 
-const InlineButtonFallback = memo(() => (
-  <span className="text-sm font-medium opacity-80">Button unavailable</span>
-));
+const InlineButtonFallback = memo(() => {
+  const { t } = useTranslation();
+
+  return (
+    <span className="text-sm font-medium opacity-80">
+      {tFallback(t, 'components.a2uiIsolated.buttonUnavailable', 'Button unavailable')}
+    </span>
+  );
+});
 
 InlineButtonFallback.displayName = 'InlineButtonFallback';
 
@@ -184,6 +199,7 @@ const A2UIIsolatedNode = memo<A2UIIsolatedNodeProps>(
 A2UIIsolatedNode.displayName = 'A2UIIsolatedNode';
 
 export const A2UIRow = memo<A2UIComponentProps>(({ node, surfaceId }) => {
+  const { t } = useTranslation();
   const theme = useTypedTheme(node, surfaceId);
   const props = node.properties ?? {};
   const alignment = resolveAxisValue(props.alignment, 'stretch');
@@ -211,8 +227,16 @@ export const A2UIRow = memo<A2UIComponentProps>(({ node, surfaceId }) => {
               scopeLabel="row child"
               fallback={
                 <InlineSectionFallback
-                  title="This section could not be rendered."
-                  detail="Other content in this row is still available."
+                  title={tFallback(
+                    t,
+                    'components.a2uiIsolated.sectionFailed',
+                    'This section could not be rendered.'
+                  )}
+                  detail={tFallback(
+                    t,
+                    'components.a2uiIsolated.rowContentAvailable',
+                    'Other content in this row is still available.'
+                  )}
                 />
               }
             />
@@ -226,6 +250,7 @@ export const A2UIRow = memo<A2UIComponentProps>(({ node, surfaceId }) => {
 A2UIRow.displayName = 'A2UIRow';
 
 export const A2UIColumn = memo<A2UIComponentProps>(({ node, surfaceId }) => {
+  const { t } = useTranslation();
   const theme = useTypedTheme(node, surfaceId);
   const props = node.properties ?? {};
   const alignment = resolveAxisValue(props.alignment, 'stretch');
@@ -253,8 +278,16 @@ export const A2UIColumn = memo<A2UIComponentProps>(({ node, surfaceId }) => {
               scopeLabel="column child"
               fallback={
                 <InlineSectionFallback
-                  title="This section could not be rendered."
-                  detail="Other content in this layout is still available."
+                  title={tFallback(
+                    t,
+                    'components.a2uiIsolated.sectionFailed',
+                    'This section could not be rendered.'
+                  )}
+                  detail={tFallback(
+                    t,
+                    'components.a2uiIsolated.layoutContentAvailable',
+                    'Other content in this layout is still available.'
+                  )}
                 />
               }
             />
@@ -268,6 +301,7 @@ export const A2UIColumn = memo<A2UIComponentProps>(({ node, surfaceId }) => {
 A2UIColumn.displayName = 'A2UIColumn';
 
 export const A2UIList = memo<A2UIComponentProps>(({ node, surfaceId }) => {
+  const { t } = useTranslation();
   const theme = useTypedTheme(node, surfaceId);
   const props = node.properties ?? {};
   const direction = resolveAxisValue(props.direction, 'vertical');
@@ -289,8 +323,16 @@ export const A2UIList = memo<A2UIComponentProps>(({ node, surfaceId }) => {
               scopeLabel="list child"
               fallback={
                 <InlineSectionFallback
-                  title="This list item could not be rendered."
-                  detail="Other items in this list are still available."
+                  title={tFallback(
+                    t,
+                    'components.a2uiIsolated.listItemFailed',
+                    'This list item could not be rendered.'
+                  )}
+                  detail={tFallback(
+                    t,
+                    'components.a2uiIsolated.listItemsAvailable',
+                    'Other items in this list are still available.'
+                  )}
                 />
               }
             />
@@ -304,6 +346,7 @@ export const A2UIList = memo<A2UIComponentProps>(({ node, surfaceId }) => {
 A2UIList.displayName = 'A2UIList';
 
 export const A2UICard = memo<A2UIComponentProps>(({ node, surfaceId }) => {
+  const { t } = useTranslation();
   const theme = useTypedTheme(node, surfaceId);
   const props = node.properties ?? {};
   const rawChildren = props.children ?? (props.child ? [props.child] : []);
@@ -325,8 +368,16 @@ export const A2UICard = memo<A2UIComponentProps>(({ node, surfaceId }) => {
               scopeLabel="card child"
               fallback={
                 <InlineSectionFallback
-                  title="This card content could not be rendered."
-                  detail="Other content on this surface is still available."
+                  title={tFallback(
+                    t,
+                    'components.a2uiIsolated.cardContentFailed',
+                    'This card content could not be rendered.'
+                  )}
+                  detail={tFallback(
+                    t,
+                    'components.a2uiIsolated.surfaceContentAvailable',
+                    'Other content on this surface is still available.'
+                  )}
                 />
               }
             />
@@ -380,14 +431,24 @@ function resolveTabTitle(
   return title && title.trim().length > 0 ? title : `Tab ${String(index + 1)}`;
 }
 
-const TabFallback = memo<{ title: string }>(({ title }) => (
-  <InlineSectionFallback
-    title="This tab could not be rendered."
-    detail={`"${title}" failed to render. You can still switch to other tabs.`}
-  />
-));
+const TabFallback = memo<{ title: string }>(({ title }) => <TabFallbackContent title={title} />);
+
+const TabFallbackContent = memo<{ title: string }>(({ title }) => {
+  const { t } = useTranslation();
+
+  return (
+    <InlineSectionFallback
+      title={tFallback(t, 'components.a2uiIsolated.tabFailed', 'This tab could not be rendered.')}
+      detail={t('components.a2uiIsolated.tabDetail', {
+        defaultValue: '"{{title}}" failed to render. You can still switch to other tabs.',
+        title,
+      })}
+    />
+  );
+});
 
 TabFallback.displayName = 'TabFallback';
+TabFallbackContent.displayName = 'TabFallbackContent';
 
 export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
   const helpers = useA2UIComponent(node, surfaceId);
@@ -453,6 +514,7 @@ export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
 A2UITabs.displayName = 'A2UITabs';
 
 export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
+  const { t } = useTranslation();
   const theme = useTypedTheme(node, surfaceId);
   const props = node.properties ?? {};
   const [isOpen, setIsOpen] = useState(false);
@@ -521,8 +583,16 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
             scopeLabel="modal trigger"
             fallback={
               <InlineSectionFallback
-                title="This modal trigger could not be rendered."
-                detail="The rest of the surface is still available."
+                title={tFallback(
+                  t,
+                  'components.a2uiIsolated.modalTriggerFailed',
+                  'This modal trigger could not be rendered.'
+                )}
+                detail={tFallback(
+                  t,
+                  'components.a2uiIsolated.surfaceRestAvailable',
+                  'The rest of the surface is still available.'
+                )}
               />
             }
           />
@@ -548,7 +618,7 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
               onClick={() => {
                 closeModal();
               }}
-              aria-label="Close modal"
+              aria-label={tFallback(t, 'components.a2uiIsolated.closeModal', 'Close modal')}
             >
               <span className="g-icon">close</span>
             </button>
@@ -560,8 +630,16 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
             scopeLabel="modal content"
             fallback={
               <InlineSectionFallback
-                title="This modal content could not be rendered."
-                detail="Close the dialog or continue with other content."
+                title={tFallback(
+                  t,
+                  'components.a2uiIsolated.modalContentFailed',
+                  'This modal content could not be rendered.'
+                )}
+                detail={tFallback(
+                  t,
+                  'components.a2uiIsolated.modalContentDetail',
+                  'Close the dialog or continue with other content.'
+                )}
               />
             }
           />

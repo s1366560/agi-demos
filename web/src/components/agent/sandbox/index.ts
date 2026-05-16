@@ -34,6 +34,7 @@ export type {
   SandboxControlProps as SandboxPanelControlProps,
   SandboxOutputProps as SandboxPanelOutputProps,
   SandboxHeaderProps as SandboxPanelHeaderProps,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- public compatibility alias.
   LegacySandboxPanelProps,
 } from './types';
 

@@ -24,9 +24,8 @@ export const deviceAuthService = {
    * user with 30-day expiry and hands it to the waiting CLI.
    */
   approve: async (userCode: string): Promise<DeviceApproveResponse> => {
-    return await httpClient.post<DeviceApproveResponse>(
-      '/auth/device/approve',
-      { user_code: userCode.trim().toUpperCase() }
-    );
+    return await httpClient.post<DeviceApproveResponse>('/auth/device/approve', {
+      user_code: userCode.trim().toUpperCase(),
+    });
   },
 };

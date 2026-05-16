@@ -262,17 +262,14 @@ class AttachmentServiceClass {
    * Initiate multipart upload
    */
   async initiateUpload(request: InitiateUploadRequest): Promise<InitiateUploadResponse> {
-    const data = await httpClient.post<InitiateUploadApiResponse>(
-      `${HTTP_PATH}/upload/initiate`,
-      {
-        conversation_id: request.conversationId,
-        project_id: request.projectId,
-        filename: request.filename,
-        mime_type: request.mimeType,
-        size_bytes: request.sizeBytes,
-        purpose: request.purpose,
-      }
-    );
+    const data = await httpClient.post<InitiateUploadApiResponse>(`${HTTP_PATH}/upload/initiate`, {
+      conversation_id: request.conversationId,
+      project_id: request.projectId,
+      filename: request.filename,
+      mime_type: request.mimeType,
+      size_bytes: request.sizeBytes,
+      purpose: request.purpose,
+    });
     return {
       attachmentId: data.attachment_id,
       uploadId: data.upload_id,

@@ -145,10 +145,11 @@ class TabSyncManager {
    * Generate a unique ID for this tab
    */
   private generateTabId(): string {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- retain fallback for older runtimes.
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    return `${String(Date.now())}-${Math.random().toString(36).substring(2, 15)}`;
   }
 
   /**

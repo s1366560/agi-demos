@@ -14,11 +14,19 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useContext, useRef, memo } from 'react';
 
-
 import { useParams, Link } from 'react-router-dom';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, ChevronDown, FileText, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronDown,
+  FileText,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
@@ -26,7 +34,8 @@ import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { formatDateOnly } from '@/utils/date';
 
 import { memoryAPI } from '../../services/api';
-import { Memory } from '../../types/memory';
+
+import type { Memory } from '../../types/memory';
 
 // ============================================================================
 // Types
@@ -39,6 +48,8 @@ export interface MemoryTaskProgress {
     taskId: string;
   };
 }
+
+type MemoryApiItem = Partial<Memory> & Pick<Memory, 'id'>;
 
 // ============================================================================
 // Constants
@@ -83,6 +94,7 @@ const TEXTS = {
 };
 
 const ROW_HEIGHT = 80;
+const TABLE_MIN_WIDTH_CLASS = 'min-w-[920px]';
 
 // ============================================================================
 // Helper Functions
@@ -107,6 +119,27 @@ const getProcessingStatusStyles = (status: string | undefined) => {
       };
   }
 };
+
+const normalizeMemory = (memory: MemoryApiItem): Memory => ({
+  id: memory.id,
+  project_id: memory.project_id ?? '',
+  title: memory.title ?? 'Untitled',
+  content: memory.content ?? '',
+  content_type: memory.content_type ?? 'text',
+  tags: memory.tags ?? [],
+  entities: memory.entities ?? [],
+  relationships: memory.relationships ?? [],
+  version: memory.version ?? 1,
+  author_id: memory.author_id ?? '',
+  collaborators: memory.collaborators ?? [],
+  is_public: memory.is_public ?? false,
+  status: memory.status ?? 'ENABLED',
+  processing_status: memory.processing_status ?? 'PENDING',
+  metadata: memory.metadata ?? {},
+  created_at: memory.created_at ?? '',
+  updated_at: memory.updated_at,
+  task_id: memory.task_id,
+});
 
 // ============================================================================
 // Marker Symbols
@@ -199,8 +232,8 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
     const lowerSearch = debouncedSearch.toLowerCase();
     return memories.filter(
       (m) =>
-        m.title?.toLowerCase().includes(lowerSearch) ||
-        m.content_type?.toLowerCase().includes(lowerSearch)
+        m.title.toLowerCase().includes(lowerSearch) ||
+        m.content_type.toLowerCase().includes(lowerSearch)
     );
   }, [memories, debouncedSearch]);
 
@@ -219,7 +252,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
     setFetchError(null);
     try {
       const data = await memoryAPI.list(projectId, { page_size: 100 });
-      setMemories(data.memories || []);
+      setMemories(data.memories.map(normalizeMemory));
     } catch (error) {
       console.error('Failed to list memories:', error);
       setFetchError('Failed to load memories. Please check your connection and try again.');
@@ -273,7 +306,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
 
   // Initial fetch
   useEffect(() => {
-    fetchMemories();
+    void fetchMemories();
   }, [fetchMemories]);
 
   // Context value
@@ -310,7 +343,12 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
         <MemoryList.Toolbar />
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm overflow-hidden">
           {fetchError ? (
-            <MemoryList.Error error={fetchError} onRetry={actions.fetchMemories} />
+            <MemoryList.Error
+              error={fetchError}
+              onRetry={() => {
+                void actions.fetchMemories();
+              }}
+            />
           ) : isLoading ? (
             <MemoryList.Loading />
           ) : filteredMemories.length === 0 ? (
@@ -328,7 +366,9 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
           <MemoryList.DeleteModal
             isOpen={isDeleteModalOpen}
             onClose={closeDeleteModal}
-            onConfirm={handleDelete}
+            onConfirm={() => {
+              void handleDelete();
+            }}
             memoryTitle={memoryToDelete.title || 'Untitled'}
             isDeleting={deletingId === memoryToDelete.id}
           />
@@ -361,7 +401,10 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
       </div>
       <Link to={`${projectBasePath}/memories/new`}>
-        <button type="button" className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
+        <button
+          type="button"
+          className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+        >
           <Plus size={18} />
           <span>{TEXTS.addMemory}</span>
         </button>
@@ -411,7 +454,10 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
           {TEXTS.filterLabel}
         </span>
-        <button type="button" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 text-sm font-medium whitespace-nowrap transition-colors">
+        <button
+          type="button"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 text-sm font-medium whitespace-nowrap transition-colors"
+        >
           {TEXTS.allTypes}
           <ChevronDown size={18} />
         </button>
@@ -439,37 +485,38 @@ const VirtualListInternal: React.FC<VirtualListProps> = memo(
     const { state: _state, actions: _actions, projectId: _projectId } = useMemoryListContext();
 
     return (
-      <div className={`overflow-x-auto ${className}`}>
-        <table className="w-full text-left text-sm">
+      <div data-testid="memory-list-horizontal-scroll" className={`overflow-x-auto ${className}`}>
+        <table className={`w-full ${TABLE_MIN_WIDTH_CLASS} text-left text-sm`}>
           <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
             <tr>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+              <th className="w-[320px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
                 {TEXTS.tableName}
               </th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+              <th className="w-[110px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
                 {TEXTS.tableType}
               </th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+              <th className="w-[140px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
                 {TEXTS.tableStatus}
               </th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+              <th className="w-[150px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
                 {TEXTS.tableProcessing}
               </th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400 text-right">
+              <th className="w-[120px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400 text-right">
                 {TEXTS.tableCreated}
               </th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400"></th>
+              <th className="w-[100px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400"></th>
             </tr>
           </thead>
         </table>
         <div
           ref={parentRef}
-          className="overflow-auto"
-          style={{ height: `${Math.min(filteredMemories.length * ROW_HEIGHT, 600)}px` }}
+          data-testid="memory-list-vertical-scroll"
+          className={`${TABLE_MIN_WIDTH_CLASS} overflow-y-auto`}
+          style={{ height: `${String(Math.min(filteredMemories.length * ROW_HEIGHT, 600))}px` }}
         >
           <table
             className="w-full text-left text-sm"
-            style={{ position: 'relative', height: `${totalSize}px` }}
+            style={{ position: 'relative', height: `${String(totalSize)}px` }}
           >
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -527,13 +574,13 @@ const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles.badge}`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${styles.dot}`}></span>
-          {progress !== undefined ? `${progress}%` : getStatusText(status)}
+          {progress !== undefined ? `${String(progress)}%` : getStatusText(status)}
         </span>
         {progress !== undefined && (
           <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
-              style={{ width: `${progress}%` }}
+              style={{ width: `${String(progress)}%` }}
             />
           </div>
         )}
@@ -573,18 +620,18 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
           top: 0,
           left: 0,
           width: '100%',
-          transform: `translateY(${index * ROW_HEIGHT}px)`,
+          transform: `translateY(${String(index * ROW_HEIGHT)}px)`,
         }}
       >
-        <td className="px-6 py-3">
+        <td className="w-[320px] px-6 py-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+            <div className="shrink-0 p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
               <FileText size={16} style={{ fontSize: '20px' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <Link
                 to={`${projectBasePath}/memory/${memory.id}`}
-                className="font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                className="block max-w-[220px] truncate font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors sm:max-w-none"
               >
                 {memory.title || 'Untitled'}
               </Link>
@@ -594,10 +641,10 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
             </div>
           </div>
         </td>
-        <td className="px-6 py-3 text-slate-600 dark:text-slate-300 capitalize">
-          {memory.content_type || 'Unknown'}
+        <td className="w-[110px] px-6 py-3 text-slate-600 dark:text-slate-300 capitalize">
+          {memory.content_type}
         </td>
-        <td className="px-6 py-3">
+        <td className="w-[140px] px-6 py-3">
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
               memory.status === 'DISABLED'
@@ -608,21 +655,23 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
             <span
               className={`w-1.5 h-1.5 rounded-full ${memory.status === 'DISABLED' ? 'bg-red-500' : 'bg-green-500'}`}
             ></span>
-            {memory.status || TEXTS.statusEnabled}
+            {memory.status}
           </span>
         </td>
-        <td className="px-6 py-3">
+        <td className="w-[150px] px-6 py-3">
           <MemoryList.StatusBadge status={memory.processing_status} progress={progress} />
         </td>
-        <td className="px-6 py-3 text-slate-600 dark:text-slate-300 text-right">
-          {memory.created_at ? formatDateOnly(memory.created_at) : '-'}
+        <td className="w-[120px] px-6 py-3 text-slate-600 dark:text-slate-300 text-right">
+          {formatDateOnly(memory.created_at)}
         </td>
-        <td className="px-6 py-3 text-right">
-          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <td className="w-[100px] px-6 py-3 text-right">
+          <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
             {actions && (
               <button
                 type="button"
-                onClick={() => actions.handleReprocess(memory.id)}
+                onClick={() => {
+                  void actions.handleReprocess(memory.id);
+                }}
                 className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 title={TEXTS.reprocess}
               >
@@ -640,7 +689,11 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
                 title={TEXTS.deleteMemory}
               >
                 {state?.deletingId === memory.id ? (
-                  <Loader2 size={16} className="animate-spin motion-reduce:animate-none" style={{ fontSize: '20px' }} />
+                  <Loader2
+                    size={16}
+                    className="animate-spin motion-reduce:animate-none"
+                    style={{ fontSize: '20px' }}
+                  />
                 ) : (
                   <Trash2 size={16} style={{ fontSize: '20px' }} />
                 )}
@@ -765,8 +818,10 @@ DeleteModalInternal.displayName = 'MemoryList.DeleteModal';
 // Attach Sub-Components to Main Component
 // ============================================================================
 
-const attachMarker = <P extends object>(component: React.FC<P>, marker: symbol) => {
-  (component as any)[marker] = true;
+const attachMarker = <C extends object>(component: C, marker: symbol): C => {
+  Object.defineProperty(component, marker, {
+    value: true,
+  });
   return component;
 };
 

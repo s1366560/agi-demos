@@ -18,6 +18,11 @@ const PHASE_LABEL_KEYS: Record<string, [string, string]> = {
   review: ['blackboard.iterationPhaseReview', 'Review'],
 };
 
+function formatRepairTurnValue(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  return '';
+}
+
 interface PlanRunIterationLedgerProps {
   runs: WorkspacePlanIterationRun[];
   selectedIndex: number | null;
@@ -456,19 +461,24 @@ function IterationRunHealth({ run }: { run: WorkspacePlanIterationRun }) {
       )}
       {run.repairTurns.length > 0 && (
         <div className="mt-3 space-y-1 border-t border-border-separator pt-2 text-[11px] dark:border-border-dark">
-          {run.repairTurns.slice(-3).map((turn, index) => (
-            <div
-              key={`${String(turn.attempt_id ?? turn.event_type ?? 'repair')}-${index}`}
-              className="flex min-w-0 items-center justify-between gap-2"
-            >
-              <span className="truncate text-text-secondary dark:text-text-muted">
-                {String(turn.event_type ?? 'repair_turn')}
-              </span>
-              <span className="shrink-0 font-mono text-text-muted">
-                {shortId(String(turn.attempt_id ?? '')) || String(turn.repair_turn_index ?? '')}
-              </span>
-            </div>
-          ))}
+          {run.repairTurns.slice(-3).map((turn, index) => {
+            const attemptId = formatRepairTurnValue(turn.attempt_id);
+            const eventType = formatRepairTurnValue(turn.event_type) || 'repair_turn';
+            const repairTurnIndex = formatRepairTurnValue(turn.repair_turn_index);
+            return (
+              <div
+                key={`${attemptId || eventType || 'repair'}-${index.toString()}`}
+                className="flex min-w-0 items-center justify-between gap-2"
+              >
+                <span className="truncate text-text-secondary dark:text-text-muted">
+                  {eventType}
+                </span>
+                <span className="shrink-0 font-mono text-text-muted">
+                  {shortId(attemptId) || repairTurnIndex}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

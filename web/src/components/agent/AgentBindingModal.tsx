@@ -30,14 +30,19 @@ const CHANNEL_TYPES = [
 ];
 
 interface FormValues {
-  agent_id?: string;
-  channel_type?: string;
-  channel_id?: string;
-  account_id?: string;
-  peer_id?: string;
-  group_id?: string;
-  priority?: number;
+  agent_id: string;
+  channel_type?: string | undefined;
+  channel_id?: string | undefined;
+  account_id?: string | undefined;
+  peer_id?: string | undefined;
+  group_id?: string | undefined;
+  priority?: number | undefined;
 }
+
+const optionalString = (value: string | undefined) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
 
 /**
  * Calculate specificity score client-side based on field presence.
@@ -48,7 +53,7 @@ interface FormValues {
  * - channel_type: +1
  * - plus priority
  */
-function calculateSpecificityScore(values: FormValues): number {
+function calculateSpecificityScore(values: Partial<FormValues>): number {
   let score = 0;
   if (values.peer_id) score += 8;
   if (values.account_id) score += 4;
@@ -72,7 +77,7 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   onSuccess,
 }) => {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<FormValues>();
   const [definitionsLoaded, setDefinitionsLoaded] = useState(false);
 
   const isSubmitting = useBindingSubmitting();
@@ -87,7 +92,7 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   });
 
   // Watch form values for specificity score calculation
-  const formValues = Form.useWatch([], form) as FormValues | undefined;
+  const formValues = Form.useWatch([], form) as Partial<FormValues> | undefined;
   const specificityScore = useMemo(() => {
     if (!formValues) return 0;
     return calculateSpecificityScore(formValues);
@@ -119,15 +124,21 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   const handleSubmit = useCallback(async () => {
     try {
       const values = await form.validateFields();
-      const data: CreateBindingRequest = {
-        agent_id: values.agent_id,
-        channel_type: values.channel_type === 'default' ? undefined : values.channel_type,
-        channel_id: values.channel_id || undefined,
-        account_id: values.account_id || undefined,
-        peer_id: values.peer_id || undefined,
-        group_id: values.group_id || undefined,
-        priority: values.priority,
-      };
+      const data: CreateBindingRequest = { agent_id: values.agent_id };
+      const channelType =
+        values.channel_type === 'default' ? undefined : optionalString(values.channel_type);
+      const channelId = optionalString(values.channel_id);
+      const accountId = optionalString(values.account_id);
+      const peerId = optionalString(values.peer_id);
+      const groupId = optionalString(values.group_id);
+
+      if (channelType) data.channel_type = channelType;
+      if (channelId) data.channel_id = channelId;
+      if (accountId) data.account_id = accountId;
+      if (peerId) data.peer_id = peerId;
+      if (groupId) data.group_id = groupId;
+      if (values.priority !== undefined) data.priority = values.priority;
+
       await createBinding(data);
       message.success(t('tenant.agentBindings.messages.createSuccess', 'Binding created'));
       onSuccess();
@@ -144,7 +155,9 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
       title={t('tenant.agentBindings.modal.createTitle', 'Create Agent Binding')}
       open={isOpen}
       onCancel={onClose}
-      onOk={handleSubmit}
+      onOk={() => {
+        void handleSubmit();
+      }}
       okText={t('common.create', 'Create')}
       cancelText={t('common.cancel', 'Cancel')}
       confirmLoading={isSubmitting}
@@ -164,10 +177,10 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
         >
           <Select
             placeholder={t('tenant.agentBindings.modal.selectAgent', 'Select an agent definition')}
-            showSearch
-            filterOption={(input, option) =>
-              (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-            }
+            showSearch={{
+              filterOption: (input, option) =>
+                (option?.label ?? '').toLowerCase().includes(input.toLowerCase()),
+            }}
             options={definitions.map((d) => ({
               label: d.display_name ?? d.name,
               value: d.id,

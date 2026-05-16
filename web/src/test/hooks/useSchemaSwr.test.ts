@@ -5,7 +5,7 @@
  * Full async testing requires more complex setup - these tests verify the hooks are properly defined.
  */
 
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { schemaAPI } from '@/services/api';
@@ -22,7 +22,7 @@ vi.mock('@/services/api', () => ({
 }));
 
 describe('useEntityTypes', () => {
-  it('should return initial loading state', () => {
+  it('should return initial loading state', async () => {
     vi.mocked(schemaAPI.listEntityTypes).mockResolvedValue([]);
 
     const { result } = renderHook(() => useEntityTypes('proj-123'));
@@ -30,6 +30,11 @@ describe('useEntityTypes', () => {
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeUndefined();
     expect(typeof result.current.mutate).toBe('function');
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([]);
+      expect(result.current.isLoading).toBe(false);
+    });
   });
 
   it('should not fetch when projectId is null', () => {
@@ -41,24 +46,34 @@ describe('useEntityTypes', () => {
 });
 
 describe('useEdgeTypes', () => {
-  it('should return initial loading state', () => {
+  it('should return initial loading state', async () => {
     vi.mocked(schemaAPI.listEdgeTypes).mockResolvedValue([]);
 
     const { result } = renderHook(() => useEdgeTypes('proj-123'));
 
     expect(result.current.isLoading).toBe(true);
     expect(typeof result.current.mutate).toBe('function');
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([]);
+      expect(result.current.isLoading).toBe(false);
+    });
   });
 });
 
 describe('useEdgeMaps', () => {
-  it('should return initial loading state', () => {
+  it('should return initial loading state', async () => {
     vi.mocked(schemaAPI.listEdgeMaps).mockResolvedValue([]);
 
     const { result } = renderHook(() => useEdgeMaps('proj-123'));
 
     expect(result.current.isLoading).toBe(true);
     expect(typeof result.current.mutate).toBe('function');
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([]);
+      expect(result.current.isLoading).toBe(false);
+    });
   });
 });
 

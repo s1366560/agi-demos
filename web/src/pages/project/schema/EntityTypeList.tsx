@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useContext } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import {
@@ -34,6 +35,9 @@ import {
 import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import { schemaAPI } from '../../../services/api';
+import { confirmAction } from '../../../utils/confirmAction';
+
+import type { TFunction } from 'i18next';
 
 // ============================================================================
 // Types
@@ -43,12 +47,39 @@ export interface EntityType {
   id: string;
   name: string;
   description: string;
-  schema: Record<string, any>;
+  schema: EntitySchema;
   status: 'ENABLED' | 'DISABLED';
   source: 'user' | 'generated';
   created_at: string;
   updated_at: string;
 }
+
+interface EntitySchemaObject {
+  type?: string | undefined;
+  description?: string | undefined;
+  required?: boolean | undefined;
+  ge?: number | undefined;
+  le?: number | undefined;
+  min_len?: number | undefined;
+  max_len?: number | undefined;
+  regex?: string | undefined;
+  [key: string]: unknown;
+}
+
+type EntitySchemaValue = string | EntitySchemaObject;
+type EntitySchema = Record<string, EntitySchemaValue>;
+type EntityTypeFormData = {
+  name: string;
+  description: string;
+  schema: EntitySchema;
+};
+type AttributeUpdateField =
+  | 'name'
+  | 'type'
+  | 'description'
+  | 'required'
+  | `validation.${keyof Attribute['validation']}`;
+type AttributeUpdateValue = string | boolean | number | undefined;
 
 export interface Attribute {
   name: string;
@@ -141,6 +172,137 @@ const TEXTS = {
   regexPlaceholder: 'e.g. ^[a-z]+$',
 } as const;
 
+type TranslationValues = Record<string, number | string>;
+
+function entityText(
+  t: TFunction,
+  key: string,
+  defaultValue: string,
+  values: TranslationValues = {}
+): string {
+  return t(`project.schema.entityTypeList.${key}`, { defaultValue, ...values });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getStringField(record: Record<string, unknown>, field: string): string | undefined {
+  const value = record[field];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getNumberField(record: Record<string, unknown>, field: string): number | undefined {
+  const value = record[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function getBooleanField(record: Record<string, unknown>, field: string): boolean | undefined {
+  const value = record[field];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function toSchemaValue(value: unknown): EntitySchemaValue {
+  if (typeof value === 'string') return value;
+  if (!isRecord(value)) return { type: 'String' };
+
+  return {
+    ...value,
+    type: getStringField(value, 'type') ?? 'String',
+    description: getStringField(value, 'description') ?? '',
+    required: getBooleanField(value, 'required') ?? false,
+    ge: getNumberField(value, 'ge'),
+    le: getNumberField(value, 'le'),
+    min_len: getNumberField(value, 'min_len'),
+    max_len: getNumberField(value, 'max_len'),
+    regex: getStringField(value, 'regex'),
+  };
+}
+
+function toEntitySchema(properties: Record<string, unknown> | undefined): EntitySchema {
+  if (!properties) return {};
+
+  return Object.fromEntries(
+    Object.entries(properties).map(([key, value]) => [key, toSchemaValue(value)])
+  );
+}
+
+function attributeFromSchemaEntry(name: string, value: EntitySchemaValue): Attribute {
+  if (typeof value === 'string') {
+    return {
+      name,
+      type: value,
+      description: '',
+      required: false,
+      validation: {},
+    };
+  }
+
+  return {
+    name,
+    type: value.type ?? 'String',
+    description: value.description ?? '',
+    required: value.required ?? false,
+    validation: {
+      ge: value.ge,
+      le: value.le,
+      min_len: value.min_len,
+      max_len: value.max_len,
+      regex: value.regex,
+    },
+  };
+}
+
+function attributesFromSchema(schema: EntitySchema): Attribute[] {
+  return Object.entries(schema).map(([key, value]) => attributeFromSchemaEntry(key, value));
+}
+
+function isValidationField(value: string): value is keyof Attribute['validation'] {
+  return (
+    value === 'ge' ||
+    value === 'le' ||
+    value === 'min_len' ||
+    value === 'max_len' ||
+    value === 'regex'
+  );
+}
+
+function normalizeValidationValue(
+  field: keyof Attribute['validation'],
+  value: AttributeUpdateValue
+): string | number | undefined {
+  if (field === 'regex') {
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  return typeof value === 'number' ? value : undefined;
+}
+
+function updateAttributeValue(
+  attribute: Attribute,
+  field: AttributeUpdateField,
+  value: AttributeUpdateValue
+): Attribute {
+  if (field.startsWith('validation.')) {
+    const validationField = field.slice('validation.'.length);
+    if (!isValidationField(validationField)) return attribute;
+
+    return {
+      ...attribute,
+      validation: {
+        ...attribute.validation,
+        [validationField]: normalizeValidationValue(validationField, value),
+      },
+    };
+  }
+
+  if (field === 'required') {
+    return { ...attribute, required: value === true };
+  }
+
+  return { ...attribute, [field]: typeof value === 'string' ? value : '' };
+}
+
 // ============================================================================
 // Marker Symbols
 // ============================================================================
@@ -168,11 +330,7 @@ interface EntityTypeListState {
   isModalOpen: boolean;
   editingEntity: EntityType | null;
   activeTab: 'general' | 'attributes' | 'relationships';
-  formData: {
-    name: string;
-    description: string;
-    schema: Record<string, any>;
-  };
+  formData: EntityTypeFormData;
   attributes: Attribute[];
 }
 
@@ -184,10 +342,14 @@ interface EntityTypeListActions {
   handleSave: () => void;
   handleDelete: (id: string) => void;
   setActiveTab: (tab: 'general' | 'attributes' | 'relationships') => void;
-  setFormData: (data: { name: string; description: string; schema: Record<string, any> }) => void;
+  setFormData: (data: EntityTypeFormData) => void;
   setAttributes: (attrs: Attribute[]) => void;
   addAttribute: () => void;
-  updateAttribute: (index: number, field: string, value: any) => void;
+  updateAttribute: (
+    index: number,
+    field: AttributeUpdateField,
+    value: AttributeUpdateValue
+  ) => void;
   removeAttribute: (index: number) => void;
 }
 
@@ -220,6 +382,7 @@ interface EntityTypeListProps {
 }
 
 const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' }) => {
+  const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
 
   // State
@@ -234,10 +397,10 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
   );
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EntityTypeFormData>({
     name: '',
     description: '',
-    schema: {} as Record<string, any>,
+    schema: {},
   });
   const [attributes, setAttributes] = useState<Attribute[]>([]);
 
@@ -247,15 +410,16 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
     try {
       const data = await schemaAPI.listEntityTypes(projectId);
       // Convert SchemaEntityType to EntityType
+      const loadedAt = new Date().toISOString();
       const entityTypes: EntityType[] = data.map((item) => ({
         id: item.id,
         name: item.name,
-        description: item.description || '',
-        schema: (item.properties as Record<string, any>) || {},
-        status: 'ENABLED' as const,
-        source: 'user' as const,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        description: item.description ?? '',
+        schema: toEntitySchema(item.schema ?? item.properties),
+        status: item.status === 'DISABLED' ? 'DISABLED' : 'ENABLED',
+        source: item.source === 'generated' ? 'generated' : 'user',
+        created_at: item.created_at ?? loadedAt,
+        updated_at: item.updated_at ?? item.created_at ?? loadedAt,
       }));
       setEntities(entityTypes);
     } catch (error) {
@@ -266,35 +430,19 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
   }, [projectId]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   // Handlers
   const handleOpenModal = useCallback((entity: EntityType | null) => {
     if (entity) {
       setEditingEntity(entity);
-      const attrs = Object.entries(entity.schema || {}).map(([key, val]: [string, any]) => ({
-        name: key,
-        type: typeof val === 'string' ? val : val.type || 'String',
-        description: typeof val === 'string' ? '' : val.description || '',
-        required: typeof val === 'string' ? false : !!val.required,
-        validation:
-          typeof val === 'string'
-            ? {}
-            : {
-                ge: val.ge,
-                le: val.le,
-                min_len: val.min_len,
-                max_len: val.max_len,
-                regex: val.regex,
-              },
-      }));
       setFormData({
         name: entity.name,
-        description: entity.description || '',
+        description: entity.description,
         schema: entity.schema,
       });
-      setAttributes(attrs);
+      setAttributes(attributesFromSchema(entity.schema));
     } else {
       setEditingEntity(null);
       setFormData({ name: '', description: '', schema: {} });
@@ -312,7 +460,7 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
   const handleSave = useCallback(async () => {
     if (!projectId) return;
 
-    const schemaDict: Record<string, any> = {};
+    const schemaDict: EntitySchema = {};
     attributes.forEach((attr) => {
       if (attr.name) {
         schemaDict[attr.name] = {
@@ -337,7 +485,7 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
       }
       setIsModalOpen(false);
       setEditingEntity(null);
-      loadData();
+      void loadData();
     } catch (error) {
       console.error('Failed to save entity type:', error);
     }
@@ -345,16 +493,23 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
 
   const handleDelete = useCallback(
     async (id: string) => {
-      if (!confirm(TEXTS.deleteConfirm)) return;
+      if (
+        !(await confirmAction({
+          title: entityText(t, 'deleteConfirm', TEXTS.deleteConfirm),
+          danger: true,
+        }))
+      ) {
+        return;
+      }
       if (!projectId) return;
       try {
         await schemaAPI.deleteEntityType(projectId, id);
-        loadData();
+        void loadData();
       } catch (error) {
         console.error('Failed to delete:', error);
       }
     },
-    [projectId, loadData]
+    [projectId, loadData, t]
   );
 
   const addAttribute = useCallback(() => {
@@ -365,22 +520,11 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
   }, [attributes]);
 
   const updateAttribute = useCallback(
-    (index: number, field: string, value: any) => {
+    (index: number, field: AttributeUpdateField, value: AttributeUpdateValue) => {
       const newAttrs = [...attributes];
-      if (field.startsWith('validation.')) {
-        const validationField = field.split('.')[1];
-        const existing = newAttrs[index];
-        if (existing && validationField) {
-          newAttrs[index] = {
-            ...existing,
-            validation: { ...existing.validation, [validationField]: value },
-          };
-        }
-      } else {
-        const existing = newAttrs[index];
-        if (existing) {
-          newAttrs[index] = { ...existing, [field]: value };
-        }
+      const existing = newAttrs[index];
+      if (existing) {
+        newAttrs[index] = updateAttributeValue(existing, field, value);
       }
       setAttributes(newAttrs);
     },
@@ -401,7 +545,7 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
     return entities.filter(
       (e) =>
         e.name.toLowerCase().includes(lowerSearch) ||
-        e.description?.toLowerCase().includes(lowerSearch)
+        e.description.toLowerCase().includes(lowerSearch)
     );
   }, [entities, search]);
 
@@ -424,8 +568,12 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
     setViewMode,
     handleOpenModal,
     handleCloseModal,
-    handleSave,
-    handleDelete,
+    handleSave: () => {
+      void handleSave();
+    },
+    handleDelete: (id: string) => {
+      void handleDelete(id);
+    },
     setActiveTab,
     setFormData,
     setAttributes,
@@ -481,6 +629,7 @@ interface HeaderProps {
 }
 
 const HeaderInternal: React.FC<HeaderProps> = (props) => {
+  const { t } = useTranslation();
   const contextFromHook = useEntityTypeListContextOptional();
   const hasProps = props.onCreate !== undefined;
   const context = hasProps ? null : contextFromHook;
@@ -495,9 +644,11 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
         <div className="flex flex-wrap justify-between items-center gap-4">
           <div>
             <h2 className="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">
-              {TEXTS.title}
+              {entityText(t, 'title', TEXTS.title)}
             </h2>
-            <p className="text-slate-500 dark:text-text-muted text-sm mt-1">{TEXTS.subtitle}</p>
+            <p className="text-slate-500 dark:text-text-muted text-sm mt-1">
+              {entityText(t, 'subtitle', TEXTS.subtitle)}
+            </p>
           </div>
           <button
             onClick={() => {
@@ -506,7 +657,7 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
             className="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-blue-600 dark:bg-primary hover:bg-blue-700 dark:hover:bg-primary-light text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
           >
             <Plus className="w-5 h-5" />
-            <span>{TEXTS.create}</span>
+            <span>{entityText(t, 'createButton', TEXTS.create)}</span>
           </button>
         </div>
       </div>
@@ -528,6 +679,7 @@ interface ToolbarProps {
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
+  const { t } = useTranslation();
   const contextFromHook = useEntityTypeListContextOptional();
   const hasProps = props.onSearchChange !== undefined;
   const context = hasProps ? null : contextFromHook;
@@ -550,7 +702,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
           </div>
           <input
             className="w-full bg-transparent border-none text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-text-muted focus:ring-0 text-sm px-3 outline-none"
-            placeholder={TEXTS.searchPlaceholder}
+            placeholder={entityText(t, 'searchPlaceholder', TEXTS.searchPlaceholder)}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -559,12 +711,15 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
         </label>
       </div>
       <div className="flex items-center gap-3">
-        <button className="flex h-9 items-center gap-2 rounded-lg bg-slate-100 dark:bg-surface-dark-alt hover:bg-slate-200 dark:hover:bg-surface-elevated border border-slate-200 dark:border-border-dark px-3 transition-colors">
+        <div
+          className="flex h-9 items-center gap-2 rounded-lg bg-slate-100 dark:bg-surface-dark-alt border border-slate-200 dark:border-border-dark px-3"
+          aria-label={entityText(t, 'filterProject', TEXTS.filterProject)}
+        >
           <span className="text-slate-700 dark:text-white text-sm font-medium">
-            {TEXTS.filterProject}
+            {entityText(t, 'filterProject', TEXTS.filterProject)}
           </span>
           <ChevronDown className="w-4 h-4 text-slate-400 dark:text-text-muted" />
-        </button>
+        </div>
         <div className="h-6 w-px bg-slate-200 dark:bg-border-dark mx-1"></div>
         <button
           onClick={() => {
@@ -575,7 +730,8 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
               ? 'bg-slate-200 dark:bg-surface-dark-alt text-slate-900 dark:text-white'
               : 'bg-transparent text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white'
           }`}
-          title={TEXTS.listView}
+          title={entityText(t, 'listView', TEXTS.listView)}
+          aria-label={entityText(t, 'listView', TEXTS.listView)}
         >
           <List className="w-5 h-5" />
         </button>
@@ -588,7 +744,8 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
               ? 'bg-slate-200 dark:bg-surface-dark-alt text-slate-900 dark:text-white'
               : 'bg-transparent text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white'
           }`}
-          title={TEXTS.gridView}
+          title={entityText(t, 'gridView', TEXTS.gridView)}
+          aria-label={entityText(t, 'gridView', TEXTS.gridView)}
         >
           <Grid className="w-5 h-5" />
         </button>
@@ -607,17 +764,21 @@ interface StatusBadgeProps {
   status: string;
 }
 
-const StatusBadgeInternal: React.FC<StatusBadgeProps> = React.memo(({ status }) => (
-  <span
-    className={`px-2 py-1 rounded-full text-2xs font-bold uppercase tracking-wide border ${
-      status === 'ENABLED'
-        ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
-        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-    }`}
-  >
-    {status || 'ENABLED'}
-  </span>
-));
+const StatusBadgeInternal: React.FC<StatusBadgeProps> = React.memo(({ status }) => {
+  const { t } = useTranslation();
+
+  return (
+    <span
+      className={`px-2 py-1 rounded-full text-2xs font-bold uppercase tracking-wide border ${
+        status === 'ENABLED'
+          ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+      }`}
+    >
+      {entityText(t, `status.${status.toLowerCase()}`, status)}
+    </span>
+  );
+});
 
 StatusBadgeInternal.displayName = 'EntityTypeList.StatusBadge';
 
@@ -629,17 +790,22 @@ interface SourceBadgeProps {
   source: string;
 }
 
-const SourceBadgeInternal: React.FC<SourceBadgeProps> = React.memo(({ source }) => (
-  <span
-    className={`px-2 py-1 rounded-full text-2xs font-bold uppercase tracking-wide border ${
-      source === 'generated'
-        ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20'
-        : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
-    }`}
-  >
-    {source || 'user'}
-  </span>
-));
+const SourceBadgeInternal: React.FC<SourceBadgeProps> = React.memo(({ source }) => {
+  const { t } = useTranslation();
+  const sourceKey = source === 'generated' ? 'generated' : 'user';
+
+  return (
+    <span
+      className={`px-2 py-1 rounded-full text-2xs font-bold uppercase tracking-wide border ${
+        sourceKey === 'generated'
+          ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20'
+          : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
+      }`}
+    >
+      {entityText(t, `source.${sourceKey}`, sourceKey)}
+    </span>
+  );
+});
 
 SourceBadgeInternal.displayName = 'EntityTypeList.SourceBadge';
 
@@ -654,6 +820,7 @@ interface TableRowProps {
 }
 
 const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, onDelete }) => {
+  const { t } = useTranslation();
   const handleEdit = useCallback(() => {
     onEdit(entity);
   }, [entity, onEdit]);
@@ -673,7 +840,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
           <div className="flex items-center gap-2 mt-0.5">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
             <span className="text-xs text-slate-500 dark:text-text-muted">
-              {entity.description || 'Core Model'}
+              {entity.description || entityText(t, 'coreModel', 'Core Model')}
             </span>
           </div>
         </div>
@@ -684,24 +851,26 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
         </code>
       </div>
       <div className="col-span-3 flex flex-col gap-1.5">
-        {Object.entries(entity.schema || {})
+        {Object.entries(entity.schema)
           .slice(0, 3)
-          .map(([key, val]: [string, any]) => (
+          .map(([key, value]) => (
             <div key={key} className="flex items-center gap-2 text-xs">
               <span className="text-emerald-600 dark:text-emerald-300 font-mono">{key}</span>
               <span className="text-slate-500 dark:text-text-muted text-2xs">
-                : {typeof val === 'string' ? val : val.type}
+                : {typeof value === 'string' ? value : (value.type ?? 'String')}
               </span>
             </div>
           ))}
-        {Object.keys(entity.schema || {}).length > 3 && (
+        {Object.keys(entity.schema).length > 3 && (
           <div className="text-2xs text-slate-500 dark:text-text-muted mt-1 font-medium">
-            +{Object.keys(entity.schema || {}).length - 3} more
+            {entityText(t, 'table.moreAttributes', TEXTS.table.moreAttributes, {
+              count: Object.keys(entity.schema).length - 3,
+            })}
           </div>
         )}
-        {Object.keys(entity.schema || {}).length === 0 && (
+        {Object.keys(entity.schema).length === 0 && (
           <div className="text-2xs text-slate-400 dark:text-text-muted italic">
-            {TEXTS.table.noAttributes}
+            {entityText(t, 'table.noAttributes', TEXTS.table.noAttributes)}
           </div>
         )}
       </div>
@@ -713,22 +882,26 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
       </div>
       <div className="col-span-2 flex flex-col justify-start pt-1">
         <span className="text-sm text-slate-700 dark:text-white">
-          {entity.created_at ? formatDateOnly(entity.created_at) : '-'}
+          {formatDateOnly(entity.created_at)}
         </span>
-        <span className="text-xs text-slate-400 dark:text-text-muted">by Admin</span>
+        <span className="text-xs text-slate-400 dark:text-text-muted">
+          {entityText(t, 'updatedByAdmin', 'by Admin')}
+        </span>
       </div>
       <div className="col-span-1 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
         <button
           onClick={handleEdit}
           className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-primary/20 text-slate-400 dark:text-text-muted hover:text-blue-600 dark:hover:text-primary transition-colors"
-          title={TEXTS.edit}
+          title={entityText(t, 'edit', TEXTS.edit)}
+          aria-label={entityText(t, 'edit', TEXTS.edit)}
         >
           <FileEdit className="w-4 h-4" />
         </button>
         <button
           onClick={handleDelete}
           className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/20 text-slate-400 dark:text-text-muted hover:text-red-600 dark:hover:text-red-400 transition-colors"
-          title={TEXTS.delete}
+          title={entityText(t, 'delete', TEXTS.delete)}
+          aria-label={entityText(t, 'delete', TEXTS.delete)}
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -777,17 +950,35 @@ TableInternal.displayName = 'EntityTypeList.Table';
 // TableHeader Sub-Component
 // ============================================================================
 
-const TableHeaderInternal: React.FC = React.memo(() => (
-  <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark-alt/50 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-text-muted">
-    <div className="col-span-2 flex items-center">{TEXTS.table.entityType}</div>
-    <div className="col-span-2 flex items-center">{TEXTS.table.internalId}</div>
-    <div className="col-span-3 flex items-center">{TEXTS.table.schemaDefinition}</div>
-    <div className="col-span-1 flex items-center">{TEXTS.table.status}</div>
-    <div className="col-span-1 flex items-center">{TEXTS.table.source}</div>
-    <div className="col-span-2 flex items-center">{TEXTS.table.lastModified}</div>
-    <div className="col-span-1 flex items-center justify-end">{TEXTS.table.actions}</div>
-  </div>
-));
+const TableHeaderInternal: React.FC = React.memo(() => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="grid grid-cols-12 gap-4 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark-alt/50 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-text-muted">
+      <div className="col-span-2 flex items-center">
+        {entityText(t, 'table.entityType', TEXTS.table.entityType)}
+      </div>
+      <div className="col-span-2 flex items-center">
+        {entityText(t, 'table.internalId', TEXTS.table.internalId)}
+      </div>
+      <div className="col-span-3 flex items-center">
+        {entityText(t, 'table.schemaDefinition', TEXTS.table.schemaDefinition)}
+      </div>
+      <div className="col-span-1 flex items-center">
+        {entityText(t, 'table.status', TEXTS.table.status)}
+      </div>
+      <div className="col-span-1 flex items-center">
+        {entityText(t, 'table.source', TEXTS.table.source)}
+      </div>
+      <div className="col-span-2 flex items-center">
+        {entityText(t, 'table.lastModified', TEXTS.table.lastModified)}
+      </div>
+      <div className="col-span-1 flex items-center justify-end">
+        {entityText(t, 'table.actions', TEXTS.table.actions)}
+      </div>
+    </div>
+  );
+});
 
 TableHeaderInternal.displayName = 'EntityTypeList.TableHeader';
 
@@ -795,11 +986,15 @@ TableHeaderInternal.displayName = 'EntityTypeList.TableHeader';
 // Empty Sub-Component
 // ============================================================================
 
-const EmptyInternal: React.FC = () => (
-  <div className="px-6 py-8 text-center text-slate-500 dark:text-text-muted">
-    {TEXTS.table.empty}
-  </div>
-);
+const EmptyInternal: React.FC = () => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="px-6 py-8 text-center text-slate-500 dark:text-text-muted">
+      {entityText(t, 'table.empty', TEXTS.table.empty)}
+    </div>
+  );
+};
 
 EmptyInternal.displayName = 'EntityTypeList.Empty';
 
@@ -807,9 +1002,15 @@ EmptyInternal.displayName = 'EntityTypeList.Empty';
 // Loading Sub-Component
 // ============================================================================
 
-const LoadingInternal: React.FC = () => (
-  <div className="p-8 text-center text-slate-500 dark:text-gray-500">{TEXTS.loading}</div>
-);
+const LoadingInternal: React.FC = () => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="p-8 text-center text-slate-500 dark:text-gray-500">
+      {entityText(t, 'loading', TEXTS.loading)}
+    </div>
+  );
+};
 
 LoadingInternal.displayName = 'EntityTypeList.Loading';
 
@@ -826,103 +1027,65 @@ interface ModalProps {
 
 const ModalInternal: React.FC<ModalProps> = React.memo(
   ({ isOpen, onClose, onSave, editingEntity }) => {
+    const { t } = useTranslation();
+    const context = useEntityTypeListContextOptional();
     const [activeTab, setActiveTab] = useState<'general' | 'attributes' | 'relationships'>(
       'attributes'
     );
-    const [formData, setFormData] = useState({
-      name: editingEntity?.name || '',
-      description: editingEntity?.description || '',
-      schema: editingEntity?.schema || {},
+    const [localFormData, setLocalFormData] = useState<EntityTypeFormData>({
+      name: editingEntity ? editingEntity.name : '',
+      description: editingEntity ? editingEntity.description : '',
+      schema: editingEntity ? editingEntity.schema : {},
     });
-    const [attributes, setAttributes] = useState<Attribute[]>(
-      editingEntity
-        ? Object.entries(editingEntity.schema || {}).map(([key, val]: [string, any]) => ({
-            name: key,
-            type: typeof val === 'string' ? val : val.type || 'String',
-            description: typeof val === 'string' ? '' : val.description || '',
-            required: typeof val === 'string' ? false : !!val.required,
-            validation:
-              typeof val === 'string'
-                ? {}
-                : {
-                    ge: val.ge,
-                    le: val.le,
-                    min_len: val.min_len,
-                    max_len: val.max_len,
-                    regex: val.regex,
-                  },
-          }))
-        : []
+    const [localAttributes, setLocalAttributes] = useState<Attribute[]>(
+      editingEntity ? attributesFromSchema(editingEntity.schema) : []
     );
+
+    const formData = context?.state.formData ?? localFormData;
+    const attributes = context?.state.attributes ?? localAttributes;
+    const setFormData = context?.actions.setFormData ?? setLocalFormData;
+    const setAttributes = context?.actions.setAttributes ?? setLocalAttributes;
 
     // Reset form when editingEntity changes
     React.useEffect(() => {
       if (editingEntity) {
         setFormData({
           name: editingEntity.name,
-          description: editingEntity.description || '',
+          description: editingEntity.description,
           schema: editingEntity.schema,
         });
-        setAttributes(
-          Object.entries(editingEntity.schema || {}).map(([key, val]: [string, any]) => ({
-            name: key,
-            type: typeof val === 'string' ? val : val.type || 'String',
-            description: typeof val === 'string' ? '' : val.description || '',
-            required: typeof val === 'string' ? false : !!val.required,
-            validation:
-              typeof val === 'string'
-                ? {}
-                : {
-                    ge: val.ge,
-                    le: val.le,
-                    min_len: val.min_len,
-                    max_len: val.max_len,
-                    regex: val.regex,
-                  },
-          }))
-        );
+        setAttributes(attributesFromSchema(editingEntity.schema));
       } else {
         setFormData({ name: '', description: '', schema: {} });
         setAttributes([]);
       }
       setActiveTab('attributes');
-    }, [editingEntity]);
+    }, [editingEntity, setAttributes, setFormData]);
 
     const addAttribute = useCallback(() => {
       setAttributes([
         ...attributes,
         { name: '', type: 'String', description: '', required: false, validation: {} },
       ]);
-    }, [attributes]);
+    }, [attributes, setAttributes]);
 
     const updateAttribute = useCallback(
-      (index: number, field: string, value: any) => {
+      (index: number, field: AttributeUpdateField, value: AttributeUpdateValue) => {
         const newAttrs = [...attributes];
-        if (field.startsWith('validation.')) {
-          const validationField = field.split('.')[1];
-          const existing = newAttrs[index];
-          if (existing && validationField) {
-            newAttrs[index] = {
-              ...existing,
-              validation: { ...existing.validation, [validationField]: value },
-            };
-          }
-        } else {
-          const existing = newAttrs[index];
-          if (existing) {
-            newAttrs[index] = { ...existing, [field]: value };
-          }
+        const existing = newAttrs[index];
+        if (existing) {
+          newAttrs[index] = updateAttributeValue(existing, field, value);
         }
         setAttributes(newAttrs);
       },
-      [attributes]
+      [attributes, setAttributes]
     );
 
     const removeAttribute = useCallback(
       (index: number) => {
         setAttributes(attributes.filter((_, i) => i !== index));
       },
-      [attributes]
+      [attributes, setAttributes]
     );
 
     if (!isOpen) return null;
@@ -947,11 +1110,13 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-none">
                   {editingEntity
-                    ? `${TEXTS.modal.titleEdit} ${editingEntity.name}`
-                    : TEXTS.modal.titleNew}
+                    ? entityText(t, 'modal.titleEdit', TEXTS.modal.titleEdit, {
+                        name: editingEntity.name,
+                      })
+                    : entityText(t, 'modal.titleNew', TEXTS.modal.titleNew)}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-text-muted mt-1 font-mono">
-                  {editingEntity?.id || 'New ID'}
+                  {editingEntity?.id || entityText(t, 'newId', 'New ID')}
                 </p>
               </div>
             </div>
@@ -976,7 +1141,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {TEXTS.generalSettings}
+                {entityText(t, 'generalSettings', TEXTS.generalSettings)}
               </button>
               <button
                 onClick={() => {
@@ -988,7 +1153,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {TEXTS.attributesSchema}
+                {entityText(t, 'attributesSchema', TEXTS.attributesSchema)}
               </button>
               <button
                 onClick={() => {
@@ -1000,7 +1165,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     : 'text-slate-500 dark:text-text-muted border-transparent hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {TEXTS.relationships}
+                {entityText(t, 'relationships', TEXTS.relationships)}
               </button>
             </div>
 
@@ -1008,12 +1173,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
               {activeTab === 'general' && (
                 <div className="flex flex-col gap-4">
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    {TEXTS.modal.basicInfo}
+                    {entityText(t, 'modal.basicInfo', TEXTS.modal.basicInfo)}
                   </h4>
                   <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                        {TEXTS.modal.nameLabel}
+                        {entityText(t, 'modal.nameLabel', TEXTS.modal.nameLabel)}
                       </label>
                       <input
                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -1022,13 +1187,17 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                         onChange={(e) => {
                           setFormData({ ...formData, name: e.target.value });
                         }}
-                        placeholder={TEXTS.modal.namePlaceholder}
+                        placeholder={entityText(
+                          t,
+                          'modal.namePlaceholder',
+                          TEXTS.modal.namePlaceholder
+                        )}
                         disabled={!!editingEntity}
                       />
                     </div>
                     <div>
                       <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                        {TEXTS.modal.descLabel}
+                        {entityText(t, 'modal.descLabel', TEXTS.modal.descLabel)}
                       </label>
                       <textarea
                         className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors h-32"
@@ -1036,7 +1205,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                         onChange={(e) => {
                           setFormData({ ...formData, description: e.target.value });
                         }}
-                        placeholder={TEXTS.modal.descPlaceholder}
+                        placeholder={entityText(
+                          t,
+                          'modal.descPlaceholder',
+                          TEXTS.modal.descPlaceholder
+                        )}
                       />
                     </div>
                   </div>
@@ -1049,10 +1222,10 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
                     <div className="flex flex-col gap-1">
                       <h4 className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                        {TEXTS.modal.infoTitle}
+                        {entityText(t, 'modal.infoTitle', TEXTS.modal.infoTitle)}
                       </h4>
                       <p className="text-xs text-blue-700 dark:text-blue-200/70">
-                        {TEXTS.modal.infoDesc}
+                        {entityText(t, 'modal.infoDesc', TEXTS.modal.infoDesc)}
                       </p>
                     </div>
                   </div>
@@ -1060,13 +1233,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                        {TEXTS.modal.definedAttributes}
+                        {entityText(t, 'modal.definedAttributes', TEXTS.modal.definedAttributes)}
                       </h4>
                       <button
                         onClick={addAttribute}
                         className="text-blue-600 dark:text-primary text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-primary-light px-3 py-1.5 bg-blue-50 dark:bg-primary/10 rounded-lg border border-blue-200 dark:border-primary/20 transition-colors"
                       >
-                        <Plus className="w-4 h-4" /> {TEXTS.modal.addAttribute}
+                        <Plus className="w-4 h-4" />{' '}
+                        {entityText(t, 'modal.addAttribute', TEXTS.modal.addAttribute)}
                       </button>
                     </div>
                     <div className="flex flex-col gap-4">
@@ -1079,7 +1253,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                             <div className="flex items-center gap-2">
                               <FileEdit className="w-4 h-4 text-blue-600 dark:text-primary" />
                               <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wide">
-                                Attribute #{idx + 1}
+                                {entityText(t, 'modal.attributeTitle', TEXTS.modal.attributeTitle, {
+                                  index: idx + 1,
+                                })}
                               </span>
                             </div>
                             <button
@@ -1088,14 +1264,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               }}
                               className="text-xs text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 font-medium flex items-center gap-1"
                             >
-                              {TEXTS.modal.deleteField}
+                              {entityText(t, 'modal.deleteField', TEXTS.modal.deleteField)}
                             </button>
                           </div>
                           <div className="p-5 flex flex-col gap-6">
                             <div className="grid grid-cols-12 gap-4">
                               <div className="col-span-5">
                                 <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                                  {TEXTS.modal.attrNameLabel}
+                                  {entityText(t, 'modal.attrNameLabel', TEXTS.modal.attrNameLabel)}
                                 </label>
                                 <input
                                   className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -1104,12 +1280,16 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                   onChange={(e) => {
                                     updateAttribute(idx, 'name', e.target.value);
                                   }}
-                                  placeholder={TEXTS.modal.attrNamePlaceholder}
+                                  placeholder={entityText(
+                                    t,
+                                    'modal.attrNamePlaceholder',
+                                    TEXTS.modal.attrNamePlaceholder
+                                  )}
                                 />
                               </div>
                               <div className="col-span-4">
                                 <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                                  {TEXTS.modal.dataTypeLabel}
+                                  {entityText(t, 'modal.dataTypeLabel', TEXTS.modal.dataTypeLabel)}
                                 </label>
                                 <div className="relative">
                                   <select
@@ -1119,13 +1299,21 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                       updateAttribute(idx, 'type', e.target.value);
                                     }}
                                   >
-                                    <option value="String">String</option>
-                                    <option value="Integer">Integer</option>
-                                    <option value="Float">Float</option>
-                                    <option value="Boolean">Boolean</option>
-                                    <option value="DateTime">DateTime</option>
-                                    <option value="List">List</option>
-                                    <option value="Dict">Dict</option>
+                                    {(
+                                      [
+                                        'String',
+                                        'Integer',
+                                        'Float',
+                                        'Boolean',
+                                        'DateTime',
+                                        'List',
+                                        'Dict',
+                                      ] as const
+                                    ).map((type) => (
+                                      <option key={type} value={type}>
+                                        {type}
+                                      </option>
+                                    ))}
                                   </select>
                                   <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-slate-400 dark:text-text-muted pointer-events-none" />
                                 </div>
@@ -1141,14 +1329,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
                                   />
                                   <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                                    Required
+                                    {entityText(t, 'modal.required', 'Required')}
                                   </span>
                                 </label>
                               </div>
                             </div>
                             <div>
                               <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                                {TEXTS.modal.docstringLabel}
+                                {entityText(t, 'modal.docstringLabel', TEXTS.modal.docstringLabel)}
                               </label>
                               <input
                                 className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-500 dark:text-text-muted px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -1157,7 +1345,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 onChange={(e) => {
                                   updateAttribute(idx, 'description', e.target.value);
                                 }}
-                                placeholder={TEXTS.modal.docstringPlaceholder}
+                                placeholder={entityText(
+                                  t,
+                                  'modal.docstringPlaceholder',
+                                  TEXTS.modal.docstringPlaceholder
+                                )}
                               />
                             </div>
 
@@ -1166,7 +1358,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               <div className="flex items-center gap-2 mb-3">
                                 <Gavel className="w-4 h-4 text-blue-500" />
                                 <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wider">
-                                  Validation Rules ({attr.type})
+                                  {entityText(t, 'validationRules', TEXTS.validationRules, {
+                                    type: attr.type,
+                                  })}
                                 </span>
                               </div>
                               <div className="grid grid-cols-3 gap-4">
@@ -1174,12 +1368,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                   <>
                                     <div>
                                       <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
-                                        min_val (ge)
+                                        {entityText(t, 'minVal', TEXTS.minVal)}
                                       </label>
                                       <input
                                         type="number"
                                         className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
-                                        value={attr.validation?.ge || ''}
+                                        value={attr.validation.ge ?? ''}
                                         onChange={(e) => {
                                           updateAttribute(
                                             idx,
@@ -1191,12 +1385,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                     </div>
                                     <div>
                                       <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
-                                        max_val (le)
+                                        {entityText(t, 'maxVal', TEXTS.maxVal)}
                                       </label>
                                       <input
                                         type="number"
                                         className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
-                                        value={attr.validation?.le || ''}
+                                        value={attr.validation.le ?? ''}
                                         onChange={(e) => {
                                           updateAttribute(
                                             idx,
@@ -1212,12 +1406,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                   <>
                                     <div>
                                       <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
-                                        min_len
+                                        {entityText(t, 'minLen', TEXTS.minLen)}
                                       </label>
                                       <input
                                         type="number"
                                         className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
-                                        value={attr.validation?.min_len || ''}
+                                        value={attr.validation.min_len ?? ''}
                                         onChange={(e) => {
                                           updateAttribute(
                                             idx,
@@ -1229,12 +1423,12 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                     </div>
                                     <div>
                                       <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
-                                        max_len
+                                        {entityText(t, 'maxLen', TEXTS.maxLen)}
                                       </label>
                                       <input
                                         type="number"
                                         className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
-                                        value={attr.validation?.max_len || ''}
+                                        value={attr.validation.max_len ?? ''}
                                         onChange={(e) => {
                                           updateAttribute(
                                             idx,
@@ -1246,13 +1440,17 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                     </div>
                                     <div className="col-span-2">
                                       <label className="text-2xs text-slate-500 dark:text-text-muted block mb-1 font-mono">
-                                        regex
+                                        {entityText(t, 'regex', TEXTS.regex)}
                                       </label>
                                       <input
                                         type="text"
                                         className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
-                                        placeholder="e.g. ^[a-z]+$"
-                                        value={attr.validation?.regex || ''}
+                                        placeholder={entityText(
+                                          t,
+                                          'regexPlaceholder',
+                                          TEXTS.regexPlaceholder
+                                        )}
+                                        value={attr.validation.regex ?? ''}
                                         onChange={(e) => {
                                           updateAttribute(idx, 'validation.regex', e.target.value);
                                         }}
@@ -1276,10 +1474,10 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     <GripVertical className="w-8 h-8 text-slate-400" />
                   </div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {TEXTS.relationshipMapping}
+                    {entityText(t, 'relationshipMapping', TEXTS.relationshipMapping)}
                   </h3>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-sm">
-                    {TEXTS.relationshipsComingSoon}
+                    {entityText(t, 'relationshipsComingSoon', TEXTS.relationshipsComingSoon)}
                   </p>
                 </div>
               )}
@@ -1289,12 +1487,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             <div className="text-xs text-slate-500 dark:text-text-muted flex items-center gap-1">
               <History className="w-4 h-4" />
               <span>
-                {TEXTS.modal.lastSaved.replace(
-                  '{{time}}',
-                  editingEntity?.updated_at
+                {entityText(t, 'modal.lastSaved', TEXTS.modal.lastSaved, {
+                  time: editingEntity?.updated_at
                     ? formatDateTime(editingEntity.updated_at)
-                    : TEXTS.modal.neverSaved
-                )}
+                    : entityText(t, 'modal.neverSaved', TEXTS.modal.neverSaved),
+                })}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -1302,13 +1499,13 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
               >
-                {TEXTS.modal.discard}
+                {entityText(t, 'modal.discard', TEXTS.modal.discard)}
               </button>
               <button
                 onClick={onSave}
                 className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
               >
-                {TEXTS.modal.save}
+                {entityText(t, 'modal.save', TEXTS.modal.save)}
               </button>
             </div>
           </div>
@@ -1324,10 +1521,8 @@ ModalInternal.displayName = 'EntityTypeList.Modal';
 // Attach Sub-Components to Main Component
 // ============================================================================
 
-const attachMarker = <P extends object>(component: React.FC<P>, marker: symbol) => {
-  (component as any)[marker] = true;
-  return component;
-};
+const attachMarker = <P extends object>(component: React.FC<P>, marker: symbol): React.FC<P> =>
+  Object.assign(component, { [marker]: true });
 
 // Export the compound component
 export const EntityTypeList = Object.assign(EntityTypeListInternal, {

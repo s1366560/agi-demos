@@ -30,7 +30,10 @@ interface UseArrangementKeyboardParams {
   resetView: () => void;
   nudgePan: (x: number, y: number) => void;
   handleActivateHex: (q: number, r: number) => Promise<void>;
-  handleCreateNode: (nodeType: TopologyNode['node_type'], targetHex?: { q: number; r: number }) => Promise<void>;
+  handleCreateNode: (
+    nodeType: TopologyNode['node_type'],
+    targetHex?: { q: number; r: number }
+  ) => Promise<void>;
   handleDeleteSelection: () => Promise<void>;
   beginMoveMode: () => void;
 }
@@ -134,7 +137,11 @@ export function useArrangementKeyboard(
         coordKey(params.keyboardCursor.q, params.keyboardCursor.r) !== RESERVED_CENTER_KEY
       ) {
         event.preventDefault();
-        params.setSelection({ kind: 'empty', q: params.keyboardCursor.q, r: params.keyboardCursor.r });
+        params.setSelection({
+          kind: 'empty',
+          q: params.keyboardCursor.q,
+          r: params.keyboardCursor.r,
+        });
         params.setAddAgentOpen(true);
         return;
       }
@@ -153,7 +160,11 @@ export function useArrangementKeyboard(
         coordKey(params.keyboardCursor.q, params.keyboardCursor.r) !== RESERVED_CENTER_KEY
       ) {
         event.preventDefault();
-        params.setSelection({ kind: 'empty', q: params.keyboardCursor.q, r: params.keyboardCursor.r });
+        params.setSelection({
+          kind: 'empty',
+          q: params.keyboardCursor.q,
+          r: params.keyboardCursor.r,
+        });
         void params.handleCreateNode('corridor', params.keyboardCursor);
         return;
       }
@@ -172,7 +183,11 @@ export function useArrangementKeyboard(
         coordKey(params.keyboardCursor.q, params.keyboardCursor.r) !== RESERVED_CENTER_KEY
       ) {
         event.preventDefault();
-        params.setSelection({ kind: 'empty', q: params.keyboardCursor.q, r: params.keyboardCursor.r });
+        params.setSelection({
+          kind: 'empty',
+          q: params.keyboardCursor.q,
+          r: params.keyboardCursor.r,
+        });
         void params.handleCreateNode('human_seat', params.keyboardCursor);
         return;
       }

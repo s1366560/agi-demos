@@ -7,10 +7,7 @@ interface DerivedSurfaceBadgeProps {
   fallbackLabel: string;
 }
 
-export function DerivedSurfaceBadge({
-  labelKey,
-  fallbackLabel,
-}: DerivedSurfaceBadgeProps) {
+export function DerivedSurfaceBadge({ labelKey, fallbackLabel }: DerivedSurfaceBadgeProps) {
   const { t } = useTranslation();
 
   return (

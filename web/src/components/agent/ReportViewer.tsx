@@ -7,10 +7,11 @@
 
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
+import { message } from 'antd';
 import { Code, Copy, Download, FileText, Table } from 'lucide-react';
-
 
 import { LazyCard, LazyButton, Typography } from '@/components/ui/lazyAntd';
 
@@ -37,11 +38,14 @@ interface ReportViewerProps {
 export const ReportViewer: React.FC<ReportViewerProps> = ({
   content,
   format,
-  title = 'Report',
+  title,
   filename = 'report',
   showDownload = true,
 }) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const displayTitle =
+    title ?? t('components.reportViewer.defaultTitle', { defaultValue: 'Report' });
 
   // Get file extension based on format
   const getExtension = (): string => {
@@ -85,11 +89,14 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
+      void message.success(
+        t('components.reportViewer.copySuccess', { defaultValue: 'Copied to clipboard' })
+      );
       setTimeout(() => {
         setCopied(false);
       }, 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
+    } catch {
+      void message.error(t('components.reportViewer.copyFailed', { defaultValue: 'Copy failed' }));
     }
   };
 
@@ -135,7 +142,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {getIcon()}
-          <Text strong>{title}</Text>
+          <Text strong>{displayTitle}</Text>
           <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 12 }}>
             ({format.toUpperCase()})
           </Text>
@@ -144,8 +151,16 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
       extra={
         showDownload && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <LazyButton icon={<Copy size={16} />} size="small" onClick={handleCopy}>
-              {copied ? 'Copied!' : 'Copy'}
+            <LazyButton
+              icon={<Copy size={16} />}
+              size="small"
+              onClick={() => {
+                void handleCopy();
+              }}
+            >
+              {copied
+                ? t('components.reportViewer.copied', { defaultValue: 'Copied!' })
+                : t('common.copy', { defaultValue: 'Copy' })}
             </LazyButton>
             <LazyButton
               type="primary"
@@ -153,7 +168,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
               size="small"
               onClick={handleDownload}
             >
-              Download
+              {t('common.download', { defaultValue: 'Download' })}
             </LazyButton>
           </div>
         )

@@ -159,7 +159,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
             isInstancesLoading: false,
           });
 
-          logger.debug(`[PoolStore] Instances fetched: ${response.total} total`);
+          logger.debug(`[PoolStore] Instances fetched: ${String(response.total)} total`);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to fetch instances';
           set({ instancesError: message, isInstancesLoading: false });
@@ -169,22 +169,22 @@ export const usePoolStore = create<PoolState & PoolActions>()(
 
       setPage: (page: number) => {
         set({ currentPage: page });
-        get().fetchInstances({ page });
+        void get().fetchInstances({ page });
       },
 
       setPageSize: (size: number) => {
         set({ pageSize: size, currentPage: 1 });
-        get().fetchInstances({ page: 1, page_size: size });
+        void get().fetchInstances({ page: 1, page_size: size });
       },
 
       setTierFilter: (tier: ProjectTier | null) => {
         set({ tierFilter: tier, currentPage: 1 });
-        get().fetchInstances({ page: 1, tier: tier ?? undefined });
+        void get().fetchInstances({ page: 1, tier: tier ?? undefined });
       },
 
       setStatusFilter: (status: InstanceStatus | null) => {
         set({ statusFilter: status, currentPage: 1 });
-        get().fetchInstances({ page: 1, status: status ?? undefined });
+        void get().fetchInstances({ page: 1, status: status ?? undefined });
       },
 
       // ======================================================================

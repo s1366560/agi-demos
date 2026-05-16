@@ -85,8 +85,8 @@ vi.mock('../../../services/api', () => ({
 
 vi.mock('../../../services/projectSandboxService', () => ({
   projectSandboxService: {
-    getProjectSandbox: vi.fn(() => Promise.resolve(null)),
-    getStats: vi.fn(() => Promise.resolve(null)),
+    getProjectSandbox: vi.fn(() => new Promise(() => {})),
+    getStats: vi.fn(() => new Promise(() => {})),
     restartSandbox: vi.fn(() => Promise.resolve()),
     terminateSandbox: vi.fn(() => Promise.resolve()),
   },
@@ -163,37 +163,37 @@ describe('ProjectSettings Compound Component', () => {
     it('should render header with title', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('Project Settings')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.title')).toBeInTheDocument();
     });
 
     it('should render basic settings section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('Basic Settings')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.basicTitle')).toBeInTheDocument();
     });
 
     it('should render memory rules section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('Memory Rules')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.memoryTitle')).toBeInTheDocument();
     });
 
     it('should render graph config section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('Graph Configuration')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.graphTitle')).toBeInTheDocument();
     });
 
     it('should render advanced section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('Advanced')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.advancedTitle')).toBeInTheDocument();
     });
 
     it('should render danger zone', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('Danger Zone')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.dangerTitle')).toBeInTheDocument();
     });
 
     it('should show no project state when project is null', async () => {
@@ -201,7 +201,7 @@ describe('ProjectSettings Compound Component', () => {
       mockState.projects = [];
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('No project selected')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.noProject')).toBeInTheDocument();
     });
   });
 
@@ -321,7 +321,7 @@ describe('ProjectSettings Compound Component', () => {
     it('should disable save button when saving', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings.Basic {...{ ...defaultProps, isSaving: true }} />);
-      const saveButton = screen.getByText('Saving...');
+      const saveButton = screen.getByText('project.settings.basicSaving');
       expect(saveButton).toBeDisabled();
     });
   });
@@ -361,7 +361,7 @@ describe('ProjectSettings Compound Component', () => {
     it('should render auto refresh checkbox as checked', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings.Memory {...defaultProps} />);
-      const checkbox = screen.getByLabelText('Auto Refresh');
+      const checkbox = screen.getByLabelText('project.settings.memoryAutoRefresh');
       expect(checkbox).toBeChecked();
     });
 
@@ -385,7 +385,7 @@ describe('ProjectSettings Compound Component', () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       const onAutoRefreshChange = vi.fn();
       render(<ProjectSettings.Memory {...{ ...defaultProps, onAutoRefreshChange }} />);
-      const checkbox = screen.getByLabelText('Auto Refresh');
+      const checkbox = screen.getByLabelText('project.settings.memoryAutoRefresh');
       fireEvent.click(checkbox);
       expect(onAutoRefreshChange).toHaveBeenCalledWith(false);
     });
@@ -462,7 +462,7 @@ describe('ProjectSettings Compound Component', () => {
           onRebuildCommunities={vi.fn()}
         />
       );
-      expect(screen.getByText('Export Data')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.advancedExport')).toBeInTheDocument();
     });
 
     it('should render clear cache button', async () => {
@@ -474,7 +474,7 @@ describe('ProjectSettings Compound Component', () => {
           onRebuildCommunities={vi.fn()}
         />
       );
-      expect(screen.getByText('Clear Cache')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.advancedClearCache')).toBeInTheDocument();
     });
 
     it('should render rebuild communities button', async () => {
@@ -486,7 +486,7 @@ describe('ProjectSettings Compound Component', () => {
           onRebuildCommunities={vi.fn()}
         />
       );
-      expect(screen.getByText('Rebuild Communities')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.advancedRebuild')).toBeInTheDocument();
     });
 
     it('should call onExportData when export button clicked', async () => {
@@ -499,7 +499,7 @@ describe('ProjectSettings Compound Component', () => {
           onRebuildCommunities={vi.fn()}
         />
       );
-      fireEvent.click(screen.getByText('Export Data'));
+      fireEvent.click(screen.getByText('project.settings.advancedExport'));
       await waitFor(() => {
         expect(onExportData).toHaveBeenCalled();
       });
@@ -514,13 +514,13 @@ describe('ProjectSettings Compound Component', () => {
     it('should render danger title', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings.Danger projectName="Test Project" onDelete={vi.fn()} />);
-      expect(screen.getByText('Danger Zone')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.dangerTitle')).toBeInTheDocument();
     });
 
     it('should render delete button', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings.Danger projectName="Test Project" onDelete={vi.fn()} />);
-      const deleteButton = screen.getByText('Delete Project');
+      const deleteButton = screen.getByText('project.settings.dangerDelete');
       expect(deleteButton).toBeInTheDocument();
     });
   });
@@ -533,7 +533,7 @@ describe('ProjectSettings Compound Component', () => {
     it('should render no project message', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings.NoProject />);
-      expect(screen.getByText('No project selected')).toBeInTheDocument();
+      expect(screen.getByText('project.settings.noProject')).toBeInTheDocument();
     });
 
     it('should render settings icon', async () => {
@@ -551,9 +551,8 @@ describe('ProjectSettings Compound Component', () => {
     it('should save basic settings', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      const saveButtons = screen.getAllByText('Save');
-      expect(saveButtons.length).toBeGreaterThan(0);
-      fireEvent.click(saveButtons[0]); // First save button (basic settings)
+      const saveButton = screen.getByText('project.settings.basicSave');
+      fireEvent.click(saveButton);
       await waitFor(() => {
         expect(mockProjectAPI.update).toHaveBeenCalled();
       });
@@ -562,9 +561,8 @@ describe('ProjectSettings Compound Component', () => {
     it('should save memory rules', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      const saveButtons = screen.getAllByText('Save');
-      expect(saveButtons.length).toBeGreaterThan(1);
-      fireEvent.click(saveButtons[1]); // Second save button (memory rules)
+      const saveButton = screen.getByText('project.settings.memorySave');
+      fireEvent.click(saveButton);
       await waitFor(() => {
         expect(mockProjectAPI.update).toHaveBeenCalled();
       });
@@ -573,9 +571,8 @@ describe('ProjectSettings Compound Component', () => {
     it('should save graph config', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      const saveButtons = screen.getAllByText('Save');
-      expect(saveButtons.length).toBeGreaterThan(2);
-      fireEvent.click(saveButtons[2]); // Third save button (graph config)
+      const saveButton = screen.getByText('project.settings.graphSave');
+      fireEvent.click(saveButton);
       await waitFor(() => {
         expect(mockProjectAPI.update).toHaveBeenCalled();
       });

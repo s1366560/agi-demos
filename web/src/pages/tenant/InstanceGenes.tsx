@@ -4,7 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Input, Tag, Table } from 'antd';
-import { BarChart, CheckCircle, Package, Plus, Puzzle, Trash2 } from 'lucide-react';
+import {
+  BarChart,
+  CheckCircle,
+  Package,
+  Plus,
+  Puzzle,
+  Search as SearchIcon,
+  Trash2,
+} from 'lucide-react';
 
 import { geneMarketService } from '@/services/geneMarketService';
 import type { GeneResponse, InstanceGeneResponse } from '@/services/geneMarketService';
@@ -32,7 +40,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export const InstanceGenes: React.FC = () => {
   const { t } = useTranslation();
-  const { instanceId } = useParams<{ instanceId: string }>();
+  const { tenantId, instanceId } = useParams<{ tenantId: string; instanceId: string }>();
   const navigate = useNavigate();
   const messageApi = useLazyMessage();
 
@@ -73,12 +81,12 @@ export const InstanceGenes: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchInstanceGenes();
+    void fetchInstanceGenes();
   }, [fetchInstanceGenes]);
 
   useEffect(() => {
     if (isAddModalOpen) {
-      fetchAvailableGenes();
+      void fetchAvailableGenes();
     }
   }, [isAddModalOpen, fetchAvailableGenes]);
 
@@ -114,7 +122,7 @@ export const InstanceGenes: React.FC = () => {
       messageApi?.success(t('tenant.instances.genes.installSuccess'));
       setIsAddModalOpen(false);
       setSelectedGeneId(null);
-      fetchInstanceGenes();
+      void fetchInstanceGenes();
     } catch (err) {
       console.error('Failed to install gene:', err);
       messageApi?.error(t('tenant.instances.genes.installError'));
@@ -130,7 +138,7 @@ export const InstanceGenes: React.FC = () => {
       try {
         await geneMarketService.uninstallGene(instanceId, instanceGeneId);
         messageApi?.success(t('tenant.instances.genes.uninstallSuccess'));
-        fetchInstanceGenes();
+        void fetchInstanceGenes();
       } catch (err) {
         console.error('Failed to uninstall gene:', err);
         messageApi?.error(t('tenant.instances.genes.uninstallError'));
@@ -141,12 +149,12 @@ export const InstanceGenes: React.FC = () => {
     [instanceId, messageApi, t, fetchInstanceGenes]
   );
 
-
   const handleViewGene = useCallback(
     (geneId: string) => {
-      navigate(`/tenant/genes/${geneId}`);
+      if (!tenantId) return;
+      void navigate(`/tenant/${tenantId}/genes/${geneId}`);
     },
-    [navigate]
+    [navigate, tenantId]
   );
 
   const columns: ColumnsType<InstanceGeneResponse> = useMemo(
@@ -194,9 +202,7 @@ export const InstanceGenes: React.FC = () => {
         dataIndex: 'usage_count',
         key: 'usage_count',
         render: (count: number) => (
-          <span className="text-sm text-text-muted dark:text-text-muted">
-            {count}
-          </span>
+          <span className="text-sm text-text-muted dark:text-text-muted">{count}</span>
         ),
       },
       {
@@ -209,7 +215,7 @@ export const InstanceGenes: React.FC = () => {
         ),
       },
       {
-        title: t('common.actions'),
+        title: t('common.actions.label'),
         key: 'actions',
         align: 'right',
         render: (_, gene) => (
@@ -226,7 +232,9 @@ export const InstanceGenes: React.FC = () => {
             </LazyButton>
             <LazyPopconfirm
               title={t('tenant.instances.genes.uninstallConfirm')}
-              onConfirm={() => handleUninstallGene(gene.id)}
+              onConfirm={() => {
+                void handleUninstallGene(gene.id);
+              }}
               okText={t('common.confirm')}
               cancelText={t('common.cancel')}
             >
@@ -252,7 +260,7 @@ export const InstanceGenes: React.FC = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('tenant.instances.genes.title')}
@@ -328,7 +336,13 @@ export const InstanceGenes: React.FC = () => {
             setSearch(e.target.value);
           }}
           allowClear
-          className="max-w-sm"
+          enterButton={
+            <>
+              <span className="sr-only">{t('common.search', 'Search')}</span>
+              <SearchIcon size={16} aria-hidden="true" />
+            </>
+          }
+          className="w-full max-w-sm"
         />
       </div>
 
@@ -348,7 +362,8 @@ export const InstanceGenes: React.FC = () => {
             dataSource={filteredGenes}
             rowKey="id"
             pagination={false}
-            className="w-full"
+            scroll={{ x: 'max-content' }}
+            className="max-w-full"
           />
         )}
       </div>
@@ -376,7 +391,10 @@ export const InstanceGenes: React.FC = () => {
             </div>
           ) : genesNotInstalled.length === 0 ? (
             <div className="text-center py-8">
-              <Package size={16} className="text-4xl text-text-muted-light dark:text-text-secondary" />
+              <Package
+                size={16}
+                className="text-4xl text-text-muted-light dark:text-text-secondary"
+              />
               <p className="mt-2 text-sm text-text-muted dark:text-text-muted">
                 {t('tenant.instances.genes.noAvailableGenes')}
               </p>
@@ -407,7 +425,9 @@ export const InstanceGenes: React.FC = () => {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-                    <Tag color="blue" className="m-0">{gene.version}</Tag>
+                    <Tag color="blue" className="m-0">
+                      {gene.version}
+                    </Tag>
                     {gene.category && <Tag className="m-0">{gene.category}</Tag>}
                   </div>
                   {selectedGeneId === gene.id && (

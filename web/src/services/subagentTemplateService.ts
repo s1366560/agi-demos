@@ -97,23 +97,23 @@ export const subagentTemplateService = {
     const qs = query.toString();
     const url = `/subagents/templates/list${qs ? `?${qs}` : ''}`;
     const response = await apiFetch.get(url);
-    return response.json();
+    return (await response.json()) as SubAgentTemplateListResponse;
   },
 
   getCategories: async (): Promise<string[]> => {
     const response = await apiFetch.get('/subagents/templates/categories');
-    const data = await response.json();
-    return data.categories || [];
+    const data = (await response.json()) as { categories?: string[] | undefined };
+    return data.categories ?? [];
   },
 
   get: async (templateId: string): Promise<SubAgentTemplateDetail> => {
     const response = await apiFetch.get(`/subagents/templates/${templateId}`);
-    return response.json();
+    return (await response.json()) as SubAgentTemplateDetail;
   },
 
   create: async (data: SubAgentTemplateCreateRequest): Promise<SubAgentTemplateDetail> => {
     const response = await apiFetch.post('/subagents/templates/', data);
-    return response.json();
+    return (await response.json()) as SubAgentTemplateDetail;
   },
 
   update: async (
@@ -121,7 +121,7 @@ export const subagentTemplateService = {
     data: SubAgentTemplateUpdateRequest
   ): Promise<SubAgentTemplateDetail> => {
     const response = await apiFetch.put(`/subagents/templates/${templateId}`, data);
-    return response.json();
+    return (await response.json()) as SubAgentTemplateDetail;
   },
 
   delete: async (templateId: string): Promise<void> => {
@@ -135,16 +135,16 @@ export const subagentTemplateService = {
     const response = await apiFetch.post(`/subagents/templates/${templateId}/install`, {
       project_id: projectId,
     });
-    return response.json();
+    return (await response.json()) as { subagent_id: string; name: string };
   },
 
   exportFromSubAgent: async (subagentId: string): Promise<SubAgentTemplateDetail> => {
     const response = await apiFetch.post(`/subagents/templates/from-subagent/${subagentId}`);
-    return response.json();
+    return (await response.json()) as SubAgentTemplateDetail;
   },
 
   seed: async (): Promise<{ seeded: number }> => {
     const response = await apiFetch.post('/subagents/templates/seed');
-    return response.json();
+    return (await response.json()) as { seeded: number };
   },
 };

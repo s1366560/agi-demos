@@ -105,9 +105,9 @@ describe('Navigation Configuration', () => {
   describe('Canonical derivation', () => {
     it('should derive canonical tenant, project, agent, and agent-workspace paths', () => {
       expect(getCanonicalTenantPath('tenant-123')).toBe('/tenant/tenant-123');
-      expect(
-        getCanonicalProjectPath({ tenantId: 'tenant-123', projectId: 'proj-456' })
-      ).toBe('/tenant/tenant-123/project/proj-456');
+      expect(getCanonicalProjectPath({ tenantId: 'tenant-123', projectId: 'proj-456' })).toBe(
+        '/tenant/tenant-123/project/proj-456'
+      );
       expect(
         getCanonicalAgentPath({ tenantId: 'tenant-123', projectId: 'proj-456', path: 'logs' })
       ).toBe('/tenant/tenant-123/project/proj-456/agent/logs');
@@ -183,9 +183,7 @@ describe('Navigation Configuration', () => {
 
       expect(registry.length).toBeGreaterThan(0);
       expect(registry.some((item) => item.routeFamily === 'agent-workspace')).toBe(true);
-      expect(registry.some((item) => item.routeFamily === 'project-blackboard-dynamic')).toBe(
-        true
-      );
+      expect(registry.some((item) => item.routeFamily === 'project-blackboard-dynamic')).toBe(true);
     });
 
     it('should parse canonical project and agent-workspace routes correctly', () => {

@@ -2,7 +2,22 @@ import { memo, useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Loader2, PanelRight, Image as ImageIcon, Film, AudioLines, FileText, Code as CodeIcon, Table as TableIcon, FileArchive, Paperclip, AlertCircle, File as FileIcon, Download, LoaderCircle } from 'lucide-react';
+import {
+  Loader2,
+  PanelRight,
+  Image as ImageIcon,
+  Film,
+  AudioLines,
+  FileText,
+  Code as CodeIcon,
+  Table as TableIcon,
+  FileArchive,
+  Paperclip,
+  AlertCircle,
+  File as FileIcon,
+  Download,
+  LoaderCircle,
+} from 'lucide-react';
 
 import { type CanvasContentType, useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
@@ -16,7 +31,6 @@ import type { ArtifactCreatedEvent } from '../../../types/agent';
 interface ArtifactCreatedItemProps {
   event: ArtifactCreatedEvent & { error?: string | undefined };
 }
-
 
 function getCategoryIcon(category: string) {
   switch (category) {
@@ -227,12 +241,18 @@ export const ArtifactCreatedItem = memo(
       <div className="flex flex-col gap-1">
         <div className="flex items-start gap-4">
           <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-            {(() => { const Icon = getCategoryIcon(event.category); return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />; })()}
+            {(() => {
+              const Icon = getCategoryIcon(event.category);
+              return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />;
+            })()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-700/50">
               <div className="flex items-center gap-2 mb-3">
-                {(() => { const Icon = getCategoryIcon(event.category); return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />; })()}
+                {(() => {
+                  const Icon = getCategoryIcon(event.category);
+                  return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />;
+                })()}
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                   {t('agent.artifact.fileGenerated', 'File generated')}
                 </span>
@@ -247,7 +267,10 @@ export const ArtifactCreatedItem = memo(
                 <div className="mb-3 relative">
                   {!imageLoaded && (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg min-h-[100px]">
-                      <LoaderCircle size={24} className="animate-spin motion-reduce:animate-none text-slate-400" />
+                      <LoaderCircle
+                        size={24}
+                        className="animate-spin motion-reduce:animate-none text-slate-400"
+                      />
                     </div>
                   )}
                   <img

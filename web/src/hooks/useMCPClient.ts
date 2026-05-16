@@ -18,7 +18,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { useAuthStore } from '@/stores/auth';
 
 import { BrowserWebSocketTransport } from '@/services/mcp/BrowserWebSocketTransport';
+import { projectSandboxService } from '@/services/projectSandboxService';
 import { getWebSocketProtocol, getApiHost, getApiBasePath } from '@/services/sandboxWebSocketUtils';
+
+import { logger } from '@/utils/logger';
 
 /** Configuration for reconnection behavior */
 interface ReconnectionConfig {
@@ -65,11 +68,11 @@ export interface UseMCPClientResult {
 /**
  * Build the WebSocket URL for the MCP proxy endpoint.
  */
-function buildMCPProxyUrl(projectId: string, token: string): string {
+function buildMCPProxyUrl(projectId: string): string {
   const protocol = getWebSocketProtocol();
   const host = getApiHost();
   const basePath = getApiBasePath();
-  return `${protocol}//${host}${basePath}/projects/${projectId}/sandbox/mcp/proxy?token=${encodeURIComponent(token)}`;
+  return `${protocol}//${host}${basePath}/projects/${projectId}/sandbox/mcp/proxy`;
 }
 
 /**
@@ -185,7 +188,7 @@ export function useMCPClient({
 
     const { maxAttempts } = reconnectionConfig;
     if (reconnectAttemptsRef.current >= maxAttempts) {
-      console.warn(`[useMCPClient] Max reconnection attempts (${maxAttempts}) reached`);
+      console.warn(`[useMCPClient] Max reconnection attempts (${String(maxAttempts)}) reached`);
       setStatus('error');
       setError('Connection lost and reconnection failed');
       return;
@@ -194,15 +197,15 @@ export function useMCPClient({
     const delay = calculateBackoffDelay(reconnectAttemptsRef.current);
     reconnectAttemptsRef.current++;
 
-    console.log(
-      `[useMCPClient] Scheduling reconnect attempt ${reconnectAttemptsRef.current}/${maxAttempts} in ${delay}ms`
+    logger.debug(
+      `[useMCPClient] Scheduling reconnect attempt ${String(reconnectAttemptsRef.current)}/${String(maxAttempts)} in ${String(delay)}ms`
     );
 
     reconnectTimeoutRef.current = setTimeout(() => {
       reconnectTimeoutRef.current = null;
       // Trigger reconnection by calling connect again
       // Note: connect is intentionally omitted from deps to avoid circular dependency
-      connect();
+      void connect();
     }, delay);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reconnectionConfig, calculateBackoffDelay]);
@@ -232,7 +235,8 @@ export function useMCPClient({
     setError(null);
 
     try {
-      const url = buildMCPProxyUrl(projectId, token);
+      await projectSandboxService.ensureProxyAuthCookie(projectId);
+      const url = buildMCPProxyUrl(projectId);
       const transport = new BrowserWebSocketTransport({ url });
 
       const mcpClient = new Client(
@@ -243,7 +247,7 @@ export function useMCPClient({
       // Set onclose BEFORE connect to avoid missing early disconnects
       transport.onclose = () => {
         if (clientRef.current === mcpClient) {
-          console.log('[useMCPClient] Transport closed, starting grace period');
+          logger.debug('[useMCPClient] Transport closed, starting grace period');
 
           // Start grace period instead of immediately reporting disconnect
           startGracePeriod();
@@ -278,7 +282,7 @@ export function useMCPClient({
       reconnectAttemptsRef.current = 0;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[useMCPClient] Connection error:', message);
+      logger.error('[useMCPClient] Connection error:', message);
 
       // Only update status if not in grace period
       if (!isInGracePeriodRef.current) {
@@ -304,7 +308,7 @@ export function useMCPClient({
     reconnectAttemptsRef.current = 0;
     clearTimers();
     cancelGracePeriod();
-    connect();
+    void connect();
   }, [connect, clearTimers, cancelGracePeriod]);
 
   // Track dependencies in refs to avoid reconnect loops when callback references change
@@ -331,7 +335,7 @@ export function useMCPClient({
     }
 
     if (enabledRef.current && projectIdRef.current && tokenRef.current) {
-      connectRef.current();
+      void connectRef.current();
     }
 
     return () => {
@@ -346,7 +350,7 @@ export function useMCPClient({
         clearTimers();
         cancelGracePeriod();
         if (clientRef.current) {
-          clientRef.current.close().catch(() => {});
+          void clientRef.current.close().catch(() => {});
           clientRef.current = null;
         }
       }, DEFERRED_CLEANUP_MS);

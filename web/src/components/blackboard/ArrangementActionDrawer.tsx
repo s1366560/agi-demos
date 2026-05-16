@@ -1,19 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import {
-  Bot,
-  ExternalLink,
-  Move,
-  Route,
-  Trash2,
-  User,
-} from 'lucide-react';
+import { Bot, ExternalLink, Move, Route, Trash2, User } from 'lucide-react';
 
-import {
-  COLOR_SWATCHS,
-  getNodeLabel,
-} from './arrangementUtils';
+import { COLOR_SWATCHS, getNodeLabel } from './arrangementUtils';
 
 import type { TopologyNode, WorkspaceAgent } from '@/types/workspace';
 
@@ -66,7 +56,7 @@ export function ArrangementActionDrawer({
         <div>
           <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
             {selection?.kind === 'agent' && selectedAgent
-              ? selectedAgent.label ?? selectedAgent.display_name ?? selectedAgent.agent_id
+              ? (selectedAgent.label ?? selectedAgent.display_name ?? selectedAgent.agent_id)
               : selection?.kind === 'node' && selectedNode
                 ? getNodeLabel(
                     selectedNode,
@@ -228,33 +218,33 @@ export function ArrangementActionDrawer({
           )}
 
           {(selection?.kind === 'agent' || selection?.kind === 'node') && (
-              <div className="rounded-[20px] border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm text-text-primary dark:text-text-secondary">
-                    <span className="text-xs uppercase tracking-wider text-text-muted dark:text-text-muted">
-                      {selection.kind === 'agent'
-                        ? t('blackboard.arrangement.fields.agentLabel', 'Display label')
-                        : t('blackboard.arrangement.fields.nodeLabel', 'Seat label')}
+            <div className="rounded-[20px] border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2 text-sm text-text-primary dark:text-text-secondary">
+                  <span className="text-xs uppercase tracking-wider text-text-muted dark:text-text-muted">
+                    {selection.kind === 'agent'
+                      ? t('blackboard.arrangement.fields.agentLabel', 'Display label')
+                      : t('blackboard.arrangement.fields.nodeLabel', 'Seat label')}
                   </span>
                   <input
                     value={labelDraft}
-                      onChange={(event) => {
-                        setLabelDraft(event.target.value);
-                      }}
-                      maxLength={64}
-                      className="min-h-11 w-full rounded-2xl border border-border-light bg-surface-muted px-4 text-sm text-text-primary outline-none transition focus:border-primary/60 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                      placeholder={t(
-                        'blackboard.arrangement.fields.labelPlaceholder',
-                        'Name this workstation'
+                    onChange={(event) => {
+                      setLabelDraft(event.target.value);
+                    }}
+                    maxLength={64}
+                    className="min-h-11 w-full rounded-2xl border border-border-light bg-surface-muted px-4 text-sm text-text-primary outline-none transition focus:border-primary/60 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    placeholder={t(
+                      'blackboard.arrangement.fields.labelPlaceholder',
+                      'Name this workstation'
                     )}
                   />
                 </label>
 
-                  <div className="space-y-2 text-sm text-text-primary dark:text-text-secondary">
-                    <div className="text-xs uppercase tracking-wider text-text-muted dark:text-text-muted">
-                      {t('blackboard.arrangement.fields.accentColor', 'Accent color')}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
+                <div className="space-y-2 text-sm text-text-primary dark:text-text-secondary">
+                  <div className="text-xs uppercase tracking-wider text-text-muted dark:text-text-muted">
+                    {t('blackboard.arrangement.fields.accentColor', 'Accent color')}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     {COLOR_SWATCHS.map((swatch) => (
                       <button
                         key={swatch}
@@ -264,7 +254,9 @@ export function ArrangementActionDrawer({
                           setColorDraft(swatch);
                         }}
                         className={`h-10 w-10 rounded-2xl border transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
-                          colorDraft === swatch ? 'border-transparent ring-2 ring-white ring-offset-2 ring-offset-surface-dark' : 'border-white/10 hover:border-white/30 active:scale-[0.95]'
+                          colorDraft === swatch
+                            ? 'border-transparent ring-2 ring-white ring-offset-2 ring-offset-surface-dark'
+                            : 'border-white/10 hover:border-white/30 active:scale-[0.95]'
                         }`}
                         style={{ backgroundColor: swatch }}
                       />
@@ -280,27 +272,27 @@ export function ArrangementActionDrawer({
                     void handleSaveSelection();
                   }}
                   disabled={pendingAction != null}
-                   className="min-h-11 rounded-2xl bg-primary px-5 text-sm font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
-                 >
+                  className="min-h-11 rounded-2xl bg-primary px-5 text-sm font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   {pendingAction === 'save-agent' || pendingAction === 'save-node'
                     ? t('common.loading', 'Loading…')
                     : t('blackboard.save', 'Save')}
                 </button>
 
                 {selection.kind === 'agent' && selectedAgent?.status && (
-                    <span className="rounded-full border border-border-light bg-surface-muted px-3 py-2 text-xs text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary">
-                     {t('blackboard.arrangement.fields.status', 'Status')}: {selectedAgent.status}
-                   </span>
-                 )}
-               </div>
-             </div>
-           )}
+                  <span className="rounded-full border border-border-light bg-surface-muted px-3 py-2 text-xs text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary">
+                    {t('blackboard.arrangement.fields.status', 'Status')}: {selectedAgent.status}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
-           {selection == null && (
-              <div className="rounded-[20px] border border-dashed border-border-separator bg-surface-light p-4 text-sm leading-7 text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-               {t(
-                 'blackboard.arrangement.drawerEmpty',
-                 'Use the grid to stage a layout. The action drawer adapts to the selected workstation and keeps destructive actions away from the canvas.'
+          {selection == null && (
+            <div className="rounded-[20px] border border-dashed border-border-separator bg-surface-light p-4 text-sm leading-7 text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+              {t(
+                'blackboard.arrangement.drawerEmpty',
+                'Use the grid to stage a layout. The action drawer adapts to the selected workstation and keeps destructive actions away from the canvas.'
               )}
             </div>
           )}

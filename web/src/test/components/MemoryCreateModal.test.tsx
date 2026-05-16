@@ -60,8 +60,12 @@ describe('MemoryCreateModal', () => {
   it('submits form', async () => {
     render(<MemoryCreateModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Enter memory title'), { target: { value: 'Title' } });
-    fireEvent.change(screen.getByPlaceholderText('Enter memory content'), { target: { value: 'Content' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter memory title'), {
+      target: { value: 'Title' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Enter memory content'), {
+      target: { value: 'Content' },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Memory' }));
 
@@ -88,7 +92,9 @@ describe('MemoryCreateModal', () => {
     render(<MemoryCreateModal isOpen={true} onClose={mockOnClose} />);
 
     // Fill content
-    fireEvent.change(screen.getByPlaceholderText('Enter memory content'), { target: { value: 'Content' } });
+    fireEvent.change(screen.getByPlaceholderText('Enter memory content'), {
+      target: { value: 'Content' },
+    });
 
     // Switch to extraction tab - need to find tab button
     fireEvent.click(screen.getByText('Entity Extraction'));

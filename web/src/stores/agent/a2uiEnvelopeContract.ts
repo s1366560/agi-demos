@@ -466,10 +466,7 @@ function hoistNestedDataModelUpdate(
 
   const surfaceUpdatePayload = { ...normalizedPayload };
   delete surfaceUpdatePayload.dataModelUpdate;
-  return [
-    { surfaceUpdate: surfaceUpdatePayload },
-    { dataModelUpdate: hoistedPayload },
-  ];
+  return [{ surfaceUpdate: surfaceUpdatePayload }, { dataModelUpdate: hoistedPayload }];
 }
 
 function isIdentifierBoundary(char: string | undefined): boolean {
@@ -513,8 +510,7 @@ export function normalizeA2UIJsonLikeString(input: string): string {
         return false;
       }
       return (
-        isIdentifierBoundary(input[index - 1]) &&
-        isIdentifierBoundary(input[index + token.length])
+        isIdentifierBoundary(input[index - 1]) && isIdentifierBoundary(input[index + token.length])
       );
     });
 

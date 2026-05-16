@@ -5,7 +5,6 @@ import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 import type { TopologyEdge, TopologyNode } from '@/types/workspace';
 
-
 export interface TopologyTabProps {
   topologyNodes: TopologyNode[];
   topologyEdges: TopologyEdge[];
@@ -61,9 +60,7 @@ export function TopologyTab({
             ))}
 
             {topologyNodes.length === 0 && (
-              <EmptyState>
-                {t('blackboard.noTopologyNodes', 'No topology nodes yet.')}
-              </EmptyState>
+              <EmptyState>{t('blackboard.noTopologyNodes', 'No topology nodes yet.')}</EmptyState>
             )}
           </div>
         </div>
@@ -92,9 +89,7 @@ export function TopologyTab({
             ))}
 
             {topologyEdges.length === 0 && (
-              <EmptyState>
-                {t('blackboard.noTopologyEdges', 'No topology edges yet.')}
-              </EmptyState>
+              <EmptyState>{t('blackboard.noTopologyEdges', 'No topology edges yet.')}</EmptyState>
             )}
           </div>
         </div>

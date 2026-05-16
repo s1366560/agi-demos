@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { Table, Input, Tag, Space } from 'antd';
-import { Plus } from 'lucide-react';
+import { Plus, Search as SearchIcon } from 'lucide-react';
 
 import { LazyButton, LazyPopconfirm, LazySelect, useLazyMessage } from '@/components/ui/lazyAntd';
 
@@ -59,7 +59,7 @@ export const InstanceList: React.FC = () => {
   }, [instances, search, statusFilter]);
 
   useEffect(() => {
-    listInstances();
+    void listInstances();
   }, [listInstances]);
 
   useEffect(() => {
@@ -77,12 +77,12 @@ export const InstanceList: React.FC = () => {
   }, [error, messageApi]);
 
   const handleCreate = useCallback(() => {
-    navigate('./create');
+    void navigate('./create');
   }, [navigate]);
 
   const handleView = useCallback(
     (id: string) => {
-      navigate(`./${id}`);
+      void navigate(`./${id}`);
     },
     [navigate]
   );
@@ -120,7 +120,9 @@ export const InstanceList: React.FC = () => {
         dataIndex: 'name',
         key: 'name',
         render: (text: string) => (
-          <span className="font-medium text-text-primary dark:text-text-inverse">{text || '-'}</span>
+          <span className="font-medium text-text-primary dark:text-text-inverse">
+            {text || '-'}
+          </span>
         ),
       },
       {
@@ -140,7 +142,8 @@ export const InstanceList: React.FC = () => {
         title: t('tenant.instances.columns.replicas'),
         dataIndex: 'replicas',
         key: 'replicas',
-        render: (_, record) => `${record.available_replicas || 0} / ${record.replicas}`,
+        render: (_, record) =>
+          `${(record.available_replicas || 0).toString()} / ${record.replicas.toString()}`,
       },
       {
         title: t('tenant.instances.columns.clusterId'),
@@ -170,7 +173,9 @@ export const InstanceList: React.FC = () => {
             </LazyButton>
             <LazyPopconfirm
               title={t('tenant.instances.actions.restartConfirm')}
-              onConfirm={() => handleRestart(record.id)}
+              onConfirm={() => {
+                void handleRestart(record.id);
+              }}
               okText={t('common.yes')}
               cancelText={t('common.no')}
             >
@@ -180,7 +185,9 @@ export const InstanceList: React.FC = () => {
             </LazyPopconfirm>
             <LazyPopconfirm
               title={t('tenant.instances.actions.deleteConfirm')}
-              onConfirm={() => handleDelete(record.id)}
+              onConfirm={() => {
+                void handleDelete(record.id);
+              }}
               okText={t('common.yes')}
               cancelText={t('common.no')}
               okButtonProps={{ danger: true }}
@@ -204,20 +211,25 @@ export const InstanceList: React.FC = () => {
             {t('tenant.instances.title')}
           </h1>
           <p className="text-sm text-text-muted mt-1">{t('tenant.instances.subtitle')}</p>
-          <section 
+          <section
             aria-label={t('tenant.instances.stats.total')}
-            className="flex items-center gap-4 mt-2 text-sm text-text-secondary dark:text-text-muted"
+            className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-secondary dark:text-text-muted"
           >
             <span className="flex items-center gap-1">
-              {t('tenant.instances.stats.total')}: <span className="font-semibold text-text-primary dark:text-text-inverse">{total}</span>
+              {t('tenant.instances.stats.total')}:{' '}
+              <span className="font-semibold text-text-primary dark:text-text-inverse">
+                {total}
+              </span>
             </span>
-            <span className="text-border-light dark:text-border-dark">|</span>
+            <span className="hidden text-border-light dark:text-border-dark sm:inline">|</span>
             <span className="flex items-center gap-1">
-              {t('tenant.instances.stats.running')}: <span className="font-semibold text-success">{runningCount}</span>
+              {t('tenant.instances.stats.running')}:{' '}
+              <span className="font-semibold text-success">{runningCount}</span>
             </span>
-            <span className="text-border-light dark:text-border-dark">|</span>
+            <span className="hidden text-border-light dark:text-border-dark sm:inline">|</span>
             <span className="flex items-center gap-1">
-              {t('tenant.instances.stats.stopped')}: <span className="font-semibold text-text-muted">{stoppedCount}</span>
+              {t('tenant.instances.stats.stopped')}:{' '}
+              <span className="font-semibold text-text-muted">{stoppedCount}</span>
             </span>
           </section>
         </div>
@@ -233,23 +245,31 @@ export const InstanceList: React.FC = () => {
       </div>
 
       <div className="bg-surface-light dark:bg-surface-dark rounded-lg border border-border-light dark:border-border-dark transition-colors duration-200">
-        <div className="p-4 border-b border-border-light dark:border-border-dark flex flex-col sm:flex-row gap-4 justify-between items-center">
-          <Space>
+        <div className="p-4 border-b border-border-light dark:border-border-dark">
+          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-[minmax(0,300px)_150px]">
             <Search
               placeholder={t('tenant.instances.searchPlaceholder')}
               aria-label={t('tenant.instances.searchPlaceholder')}
               allowClear
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
               onSearch={setSearch}
               onChange={(e) => {
                 setSearch(e.target.value);
               }}
-              style={{ width: 300 }}
+              className="w-full"
+              style={{ width: '100%' }}
             />
             <LazySelect
               aria-label={t('tenant.instances.status.all')}
               value={statusFilter}
               onChange={setStatusFilter}
-              style={{ width: 150 }}
+              className="w-full"
+              style={{ width: '100%' }}
               options={[
                 { value: 'all', label: t('tenant.instances.status.all') },
                 { value: 'provisioning', label: t('tenant.instances.status.provisioning') },
@@ -259,7 +279,7 @@ export const InstanceList: React.FC = () => {
                 { value: 'terminated', label: t('tenant.instances.status.terminated') },
               ]}
             />
-          </Space>
+          </div>
         </div>
 
         <Table
@@ -268,6 +288,7 @@ export const InstanceList: React.FC = () => {
           rowKey="id"
           loading={isLoading}
           scroll={{ x: 'max-content' }}
+          className="max-w-full"
           locale={{ emptyText: t('tenant.instances.emptyText', 'No instances found') }}
           pagination={{
             pageSize: 10,

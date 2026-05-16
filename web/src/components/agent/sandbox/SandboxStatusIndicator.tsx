@@ -28,7 +28,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-
 import { useThemeColors } from '@/hooks/useThemeColor';
 
 import {
@@ -47,7 +46,7 @@ import type { LucideIcon } from 'lucide-react';
 interface SandboxStatusIndicatorProps {
   /** Project ID */
   projectId: string;
-  /** Tenant ID (reserved for future multi-tenant features) */
+  /** Tenant ID from the surrounding route context */
   tenantId?: string | undefined;
   /** Optional className */
   className?: string | undefined;
@@ -261,7 +260,9 @@ const MetricsPopover: FC<{
       {loading && !stats && (
         <div className="flex items-center justify-center py-4">
           <Loader2 size={16} className="animate-spin motion-reduce:animate-none text-slate-400" />
-          <span className="ml-2 text-sm text-slate-500">Loading...</span>
+          <span className="ml-2 text-sm text-slate-500">
+            {t('agent.sandbox.loading', 'Loading...')}
+          </span>
         </div>
       )}
 
@@ -273,7 +274,9 @@ const MetricsPopover: FC<{
             <Cpu size={14} className="text-blue-500 shrink-0" />
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-600 dark:text-slate-400">CPU</span>
+                <span className="text-slate-600 dark:text-slate-400">
+                  {t('agent.sandbox.metrics.cpu', 'CPU')}
+                </span>
                 <AnimatedValue className="text-slate-800 dark:text-slate-200 font-mono tabular-nums">
                   {stats.cpu_percent.toFixed(1)}%
                 </AnimatedValue>
@@ -391,7 +394,7 @@ MetricsPopover.displayName = 'MetricsPopover';
  */
 export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   projectId,
-  // tenantId reserved for future multi-tenant filtering
+  tenantId: _tenantId,
   className,
 }) => {
   const { t } = useTranslation();

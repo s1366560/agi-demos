@@ -318,9 +318,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
             title: (
               <span className="text-xs font-medium text-slate-700 dark:text-slate-300 break-words [overflow-wrap:anywhere]">
                 {step.name || step.subagentName}{' '}
-                <span className="text-2xs text-slate-400 font-normal">
-                  ({step.subagentName})
-                </span>
+                <span className="text-2xs text-slate-400 font-normal">({step.subagentName})</span>
               </span>
             ),
             description: step.summary ? (
@@ -722,7 +720,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* 2.2 - Inline Detail Panel refinement (moved to bottom of body) */}
           <div className="pt-1 flex justify-end">
-             <button
+            <button
               type="button"
               onClick={toggleDetail}
               className="text-2xs text-slate-400 hover:text-blue-500 transition-colors flex items-center gap-1 min-h-7 min-w-7 px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"

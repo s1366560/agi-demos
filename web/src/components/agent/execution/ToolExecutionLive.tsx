@@ -4,6 +4,8 @@
  * Shows tool execution in progress with pulsing animation and status.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import {
   CheckCircle,
   XCircle,
@@ -51,34 +53,36 @@ export function ToolExecutionLive({
   resultCount,
   expanded = true,
 }: ToolExecutionLiveProps) {
+  const { t } = useTranslation();
+
   const getStatusBadge = () => {
     switch (status) {
       case 'preparing':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-            Preparing
+            {t('components.toolExecutionLive.status.preparing', { defaultValue: 'Preparing' })}
           </span>
         );
       case 'running':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
-            Running
+            {t('components.toolExecutionLive.status.running', { defaultValue: 'Running' })}
           </span>
         );
       case 'completed':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
             <CheckCircle size={14} />
-            Success
+            {t('components.toolExecutionLive.status.success', { defaultValue: 'Success' })}
           </span>
         );
       case 'failed':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
             <XCircle size={14} />
-            Failed
+            {t('components.toolExecutionLive.status.failed', { defaultValue: 'Failed' })}
           </span>
         );
     }
@@ -106,11 +110,10 @@ export function ToolExecutionLive({
     return Puzzle;
   };
 
-   
   const ToolIcon = getToolIcon(toolName);
 
   return (
-    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl overflow-hidden mb-4">
+    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md overflow-hidden mb-4">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-3">
@@ -138,9 +141,11 @@ export function ToolExecutionLive({
           {toolInput && (
             <div>
               <h5 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Query Parameters
+                {t('components.toolExecutionLive.queryParameters', {
+                  defaultValue: 'Query Parameters',
+                })}
               </h5>
-              <div className="bg-slate-900 dark:bg-slate-950 rounded-lg p-3 overflow-x-auto">
+              <div className="bg-slate-900 dark:bg-slate-950 rounded-md p-3 overflow-x-auto">
                 <pre className="text-xs text-slate-300 font-mono">
                   {JSON.stringify(toolInput, null, 2)}
                 </pre>
@@ -151,7 +156,11 @@ export function ToolExecutionLive({
           {/* Execution Mode */}
           {executionMode && (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600 dark:text-slate-400">Execution Mode</span>
+              <span className="text-sm text-slate-600 dark:text-slate-400">
+                {t('components.toolExecutionLive.executionMode', {
+                  defaultValue: 'Execution Mode',
+                })}
+              </span>
               <span className="text-sm font-medium text-slate-900 dark:text-white">
                 {executionMode}
               </span>
@@ -160,17 +169,21 @@ export function ToolExecutionLive({
 
           {/* Live Results (placeholder for running state) */}
           {status === 'running' && (
-            <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-6 text-center">
+            <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-md p-6 text-center">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                   <Search size={24} className="text-slate-400" />
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Scanning knowledge graph...
+                    {t('components.toolExecutionLive.scanningTitle', {
+                      defaultValue: 'Scanning knowledge graph...',
+                    })}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Searching for relevant entities and relationships
+                    {t('components.toolExecutionLive.scanningDescription', {
+                      defaultValue: 'Searching for relevant entities and relationships',
+                    })}
                   </p>
                 </div>
               </div>
@@ -179,25 +192,32 @@ export function ToolExecutionLive({
 
           {/* Results Summary (for completed state) */}
           {status === 'completed' && resultCount !== undefined && (
-            <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-md">
               <div className="flex items-center gap-2">
                 <CheckCircle size={18} className="text-emerald-500" />
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  Search completed
+                  {t('components.toolExecutionLive.searchCompleted', {
+                    defaultValue: 'Search completed',
+                  })}
                 </span>
               </div>
               <span className="text-sm text-slate-600 dark:text-slate-400">
-                {resultCount} results found
+                {t('components.toolExecutionLive.resultsFound', {
+                  defaultValue: '{{count}} results found',
+                  count: resultCount,
+                })}
               </span>
             </div>
           )}
 
           {/* Error State */}
           {status === 'failed' && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-md">
               <XCircle size={18} className="text-red-500" />
               <span className="text-sm font-medium text-red-700 dark:text-red-400">
-                Tool execution failed. Please try again.
+                {t('components.toolExecutionLive.failedMessage', {
+                  defaultValue: 'Tool execution failed. Please try again.',
+                })}
               </span>
             </div>
           )}

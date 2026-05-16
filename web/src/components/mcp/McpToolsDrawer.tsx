@@ -25,7 +25,7 @@ export const McpToolsDrawer: React.FC<McpToolsDrawerProps> = ({ open, server, on
       open={open}
       onClose={onClose}
       size="large"
-      destroyOnClose
+      destroyOnHidden
     >
       {tools.length === 0 ? (
         <Empty description="No tools discovered. Try syncing the server." />

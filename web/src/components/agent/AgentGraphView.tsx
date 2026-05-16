@@ -1,5 +1,7 @@
 import { memo, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   Network,
   Clock,
@@ -17,7 +19,7 @@ import type { GraphNodeStatus } from '../../stores/graphStore';
 const formatDuration = (seconds?: number): string => {
   if (seconds == null) return '--';
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${String(Math.floor(seconds / 60))}m ${String(Math.round(seconds % 60))}s`;
 };
 
 const StatusIcon = memo(({ status }: { status: string }) => {
@@ -59,6 +61,7 @@ const getNodeStyles = (status: GraphNodeStatus) => {
 };
 
 export const AgentGraphView = memo(() => {
+  const { t } = useTranslation();
   const panelOpen = useGraphPanel();
   const run = useActiveGraphRun();
   const nodes = useActiveGraphRunNodes();
@@ -66,7 +69,7 @@ export const AgentGraphView = memo(() => {
   const layout = useMemo(() => {
     if (!run || nodes.length === 0) return null;
 
-    const handoffs = run.handoffs || [];
+    const handoffs = run.handoffs;
 
     const inDegree = new Map<string, number>();
     const adjacency = new Map<string, string[]>();
@@ -166,8 +169,14 @@ export const AgentGraphView = memo(() => {
     return (
       <div className="flex flex-col items-center justify-center h-full w-full p-8 text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
         <Network size={48} className="mb-4 opacity-20" />
-        <h3 className="text-lg font-medium mb-1">No Active Graph</h3>
-        <p className="text-sm">Start a multi-agent orchestration to see the graph.</p>
+        <h3 className="text-lg font-medium mb-1">
+          {t('agent.graphView.emptyTitle', { defaultValue: 'No Active Graph' })}
+        </h3>
+        <p className="text-sm">
+          {t('agent.graphView.emptyDescription', {
+            defaultValue: 'Start a multi-agent orchestration to see the graph.',
+          })}
+        </p>
       </div>
     );
   }
@@ -195,7 +204,9 @@ export const AgentGraphView = memo(() => {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
             <StatusIcon status={run.status} />
-            <span className="capitalize font-medium">{run.status}</span>
+            <span className="capitalize font-medium">
+              {t(`agent.graphView.status.${run.status}`, { defaultValue: run.status })}
+            </span>
           </div>
           <div className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
             <Clock size={16} />
@@ -208,12 +219,16 @@ export const AgentGraphView = memo(() => {
         <svg
           width={SVG_WIDTH}
           height={SVG_HEIGHT}
-          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+          viewBox={`0 0 ${String(SVG_WIDTH)} ${String(SVG_HEIGHT)}`}
           className="min-w-full min-h-full"
           role="img"
-          aria-label="Agent Graph Run Visualization"
+          aria-label={t('agent.graphView.ariaLabel', {
+            defaultValue: 'Agent Graph Run Visualization',
+          })}
         >
-          <title>Agent Graph Run Visualization</title>
+          <title>
+            {t('agent.graphView.ariaLabel', { defaultValue: 'Agent Graph Run Visualization' })}
+          </title>
           <defs>
             <marker
               id="arrowhead"
@@ -258,12 +273,12 @@ export const AgentGraphView = memo(() => {
               : 'stroke-indigo-400 dark:stroke-indigo-600 opacity-60';
 
             const markerId = isRecent ? 'url(#arrowhead-active)' : 'url(#arrowhead)';
-            const pathData = `M ${startX} ${startY} C ${startX} ${startY + 40}, ${endX} ${
-              endY - 40
-            }, ${endX} ${endY - 2}`;
+            const pathData = `M ${String(startX)} ${String(startY)} C ${String(startX)} ${String(
+              startY + 40
+            )}, ${String(endX)} ${String(endY - 40)}, ${String(endX)} ${String(endY - 2)}`;
 
             return (
-              <g key={`edge-${h.fromNodeId}-${h.toNodeId}-${h.timestamp}`}>
+              <g key={`edge-${h.fromNodeId}-${h.toNodeId}-${String(h.timestamp)}`}>
                 <path
                   d={pathData}
                   fill="none"
@@ -280,10 +295,10 @@ export const AgentGraphView = memo(() => {
                   className="overflow-visible"
                 >
                   <div className="flex justify-center w-full h-full items-center">
-                     <span className="text-2xs font-medium bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 shadow-sm truncate max-w-full">
-                       Handoff
-                     </span>
-                   </div>
+                    <span className="text-2xs font-medium bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 shadow-sm truncate max-w-full">
+                      {t('agent.graphView.handoff', { defaultValue: 'Handoff' })}
+                    </span>
+                  </div>
                 </foreignObject>
               </g>
             );
@@ -307,14 +322,14 @@ export const AgentGraphView = memo(() => {
               >
                 <div className="w-full h-full p-4 flex items-center justify-center">
                   <div
-                    className={`w-full h-full rounded-xl border-2 flex flex-col items-center justify-center p-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ${styleClass}`}
+                    className={`w-full h-full rounded-lg border-2 flex flex-col items-center justify-center p-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ${styleClass}`}
                   >
                     <span className="font-semibold text-sm truncate w-full text-center px-2">
                       {node.label}
                     </span>
                     <span className="text-2xs font-medium opacity-90 uppercase tracking-wider mt-0.5">
-                       {node.status}
-                     </span>
+                      {t(`agent.graphView.status.${node.status}`, { defaultValue: node.status })}
+                    </span>
                   </div>
                 </div>
               </foreignObject>

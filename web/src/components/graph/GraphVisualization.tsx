@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Network, MousePointer2, Move, Focus, Plus, Minus, X, Share2 } from 'lucide-react';
 
 import { StateDisplay } from '@/components/shared/ui/StateDisplay';
@@ -7,7 +9,8 @@ import { StateDisplay } from '@/components/shared/ui/StateDisplay';
 import { resolveThemeColor } from '../../hooks/useThemeColor';
 import { useMemoryStore } from '../../stores/memory';
 import { useProjectStore } from '../../stores/project';
-import { useThemeStore } from '../../stores/theme';
+
+import type { Entity, Relationship } from '../../types/memory';
 
 interface GraphVisualizationProps {
   width?: number | undefined;
@@ -21,21 +24,35 @@ interface GraphNode {
   type: string;
   x?: number | undefined;
   y?: number | undefined;
-  size?: number | undefined;
-  color?: string | undefined;
-  entity?: any | undefined;
+  size: number;
+  color: string;
+  entity: GraphEntity;
 }
 
 interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  label?: string | undefined;
-  type?: string | undefined;
-  weight?: number | undefined;
-  color?: string | undefined;
-  relationship?: any | undefined;
+  label: string;
+  type: string;
+  weight: number;
+  color: string;
+  relationship: GraphRelationship;
 }
+
+type GraphEntity = Omit<Entity, 'properties'> & {
+  properties: Record<string, unknown>;
+  importance?: number | undefined;
+  description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+};
+
+type GraphRelationship = Omit<Relationship, 'properties'> & {
+  properties: Record<string, unknown>;
+  source_entity_id?: string | undefined;
+  target_entity_id?: string | undefined;
+  weight?: number | undefined;
+};
 
 const getNodeColor = (type: string): string => {
   const colors: Record<string, string> = {
@@ -61,16 +78,31 @@ const getEdgeColor = (type: string): string => {
   return colors[type] || resolveThemeColor('--color-text-muted-light', '#9CA3AF');
 };
 
+const getNodeImpactScore = (entity: GraphEntity): number => (entity.importance ?? 1) * 10;
+
+const formatMetadataValue = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || value == null) {
+    return String(value);
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[complex value]';
+  }
+};
+
 export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
   width = 800,
   height = 600,
   showControls: _showControls = true,
 }) => {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { currentProject } = useProjectStore();
   const { graphData, getGraphData, isLoading: _isLoading } = useMemoryStore();
-  const { computedTheme } = useThemeStore();
 
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -96,29 +128,38 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
   const nodes: GraphNode[] = useMemo(
     () =>
-      graphData?.entities.map((entity: any) => ({
-        id: entity.id,
-        label: entity.name,
-        type: entity.type,
-        size: 20 + (entity.importance || 1) * 5,
-        color: getNodeColor(entity.type),
-        entity,
-      })) || [],
+      (graphData?.entities ?? []).map((entity) => {
+        const graphEntity = entity as GraphEntity;
+        const importance = graphEntity.importance ?? 1;
+
+        return {
+          id: graphEntity.id,
+          label: graphEntity.name,
+          type: graphEntity.type,
+          size: 20 + importance * 5,
+          color: getNodeColor(graphEntity.type),
+          entity: graphEntity,
+        };
+      }),
     [graphData]
   );
 
   const edges: GraphEdge[] = useMemo(
     () =>
-      graphData?.relationships.map((relationship: any) => ({
-        id: relationship.id,
-        source: relationship.source_entity_id,
-        target: relationship.target_entity_id,
-        label: relationship.type,
-        type: relationship.type,
-        weight: relationship.weight || 1,
-        color: getEdgeColor(relationship.type),
-        relationship,
-      })) || [],
+      (graphData?.relationships ?? []).map((relationship) => {
+        const graphRelationship = relationship as GraphRelationship;
+
+        return {
+          id: graphRelationship.id,
+          source: graphRelationship.source_entity_id ?? graphRelationship.source_id,
+          target: graphRelationship.target_entity_id ?? graphRelationship.target_id,
+          label: graphRelationship.type,
+          type: graphRelationship.type,
+          weight: graphRelationship.weight ?? 1,
+          color: getEdgeColor(graphRelationship.type),
+          relationship: graphRelationship,
+        };
+      }),
     [graphData]
   );
 
@@ -128,16 +169,17 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
     try {
       await getGraphData(currentProject.id, { limit: 100 });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to load graph data';
+      const msg =
+        error instanceof Error ? error.message : t('project.graph.graphVisualization.loadFailed');
       setGraphError(msg);
       console.error('GraphVisualization: load failed', error);
     }
-  }, [currentProject, getGraphData]);
+  }, [currentProject, getGraphData, t]);
 
   useEffect(() => {
     if (currentProject) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      loadGraphData();
+      void loadGraphData();
     }
   }, [currentProject, loadGraphData]);
 
@@ -147,8 +189,6 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    const isDark = computedTheme === 'dark' || true; // Force dark for now to match design visual
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -174,32 +214,29 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       if (!sourceNode || !targetNode) return;
 
+      const sourceX = sourceNode.x ?? 0;
+      const sourceY = sourceNode.y ?? 0;
+      const targetX = targetNode.x ?? 0;
+      const targetY = targetNode.y ?? 0;
+
       ctx.beginPath();
-      ctx.moveTo(sourceNode.x || 0, sourceNode.y || 0);
-      ctx.lineTo(targetNode.x || 0, targetNode.y || 0);
-      ctx.strokeStyle =
-        edge.color ||
-        (isDark
-          ? resolveThemeColor('--color-text-muted', '#4B5563')
-          : resolveThemeColor('--color-text-muted-light', '#9CA3AF'));
-      ctx.lineWidth = (edge.weight || 1) * 2;
+      ctx.moveTo(sourceX, sourceY);
+      ctx.lineTo(targetX, targetY);
+      ctx.strokeStyle = edge.color;
+      ctx.lineWidth = edge.weight * 2;
       ctx.stroke();
 
       // Draw edge label
-      if (showLabels && edge.label) {
-        const midX = ((sourceNode.x || 0) + (targetNode.x || 0)) / 2;
-        const midY = ((sourceNode.y || 0) + (targetNode.y || 0)) / 2;
+      if (showLabels) {
+        const midX = (sourceX + targetX) / 2;
+        const midY = (sourceY + targetY) / 2;
 
         // Label Background
-        ctx.fillStyle = isDark
-          ? resolveThemeColor('--color-background-dark', '#111521')
-          : resolveThemeColor('--color-background', '#FFFFFF');
+        ctx.fillStyle = resolveThemeColor('--color-background-dark', '#111521');
         const textWidth = ctx.measureText(edge.label).width;
         ctx.fillRect(midX - textWidth / 2 - 4, midY - 14, textWidth + 8, 18);
 
-        ctx.fillStyle = isDark
-          ? resolveThemeColor('--color-text-muted-light', '#9CA3AF')
-          : resolveThemeColor('--color-text-secondary', '#374151');
+        ctx.fillStyle = resolveThemeColor('--color-text-muted-light', '#9CA3AF');
         ctx.font = '10px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(edge.label, midX, midY - 2);
@@ -208,9 +245,9 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
     // Draw nodes
     filteredNodes.forEach((node) => {
-      const x = node.x || 0;
-      const y = node.y || 0;
-      const size = node.size || 20;
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
+      const { size } = node;
 
       // Glow effect for selected
       if (selectedNode?.id === node.id) {
@@ -223,35 +260,29 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       // Draw node circle
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
-      ctx.fillStyle = node.color || resolveThemeColor('--color-text-muted', '#6B7280');
+      ctx.fillStyle = node.color;
       ctx.fill();
 
       // Border
-      ctx.strokeStyle = isDark
-        ? resolveThemeColor('--color-surface-dark-alt', '#1F2937')
-        : resolveThemeColor('--color-background', '#FFFFFF');
+      ctx.strokeStyle = resolveThemeColor('--color-surface-dark-alt', '#1F2937');
       ctx.lineWidth = 2;
       ctx.stroke();
 
       // Draw node label
       if (showLabels) {
-        ctx.fillStyle = isDark
-          ? resolveThemeColor('--color-text-primary', '#E5E7EB')
-          : resolveThemeColor('--color-surface-dark-alt', '#1F2937');
+        ctx.fillStyle = resolveThemeColor('--color-text-primary', '#E5E7EB');
         ctx.font = 'bold 12px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(node.label, x, y + size + 16);
 
-        ctx.fillStyle = isDark
-          ? resolveThemeColor('--color-text-muted-light', '#9CA3AF')
-          : resolveThemeColor('--color-text-muted', '#6B7280');
+        ctx.fillStyle = resolveThemeColor('--color-text-muted-light', '#9CA3AF');
         ctx.font = '10px Inter, sans-serif';
         ctx.fillText(node.type.toUpperCase(), x, y + size + 28);
       }
     });
 
     ctx.restore();
-  }, [nodes, edges, scale, offset, showLabels, filterTypes, selectedNode, computedTheme]);
+  }, [nodes, edges, scale, offset, showLabels, filterTypes, selectedNode]);
 
   useEffect(() => {
     drawGraph();
@@ -267,10 +298,10 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
     // Check if clicking on a node
     const clickedNode = nodes.find((node) => {
-      const dx = (node.x || 0) - x;
-      const dy = (node.y || 0) - y;
+      const dx = (node.x ?? 0) - x;
+      const dy = (node.y ?? 0) - y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      return distance <= (node.size || 20);
+      return distance <= node.size;
     });
 
     if (clickedNode && interactionMode === 'select') {
@@ -319,7 +350,9 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       <div className="bg-background-dark rounded-lg shadow-sm border border-slate-800 p-8 h-full">
         <div className="text-center">
           <Network className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-white mb-2">Please select a project</h3>
+          <h3 className="text-lg font-medium text-white mb-2">
+            {t('project.graph.graphVisualization.selectProject')}
+          </h3>
         </div>
       </div>
     );
@@ -330,8 +363,10 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       <div className="bg-background-dark rounded-lg shadow-sm border border-slate-800 h-full flex items-center justify-center">
         <StateDisplay.Error
           error={graphError}
-          title="Graph load failed"
-          onRetry={() => { void loadGraphData(); }}
+          title={t('project.graph.graphVisualization.loadFailedTitle')}
+          onRetry={() => {
+            void loadGraphData();
+          }}
         />
       </div>
     );
@@ -342,8 +377,8 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       <div className="bg-background-dark rounded-lg shadow-sm border border-slate-800 h-full flex items-center justify-center">
         <StateDisplay.Empty
           icon={Share2}
-          title="No graph data"
-          description="Add memories or entities to see the knowledge graph"
+          title={t('project.graph.graphVisualization.emptyTitle')}
+          description={t('project.graph.graphVisualization.emptyDescription')}
           card={false}
         />
       </div>
@@ -372,7 +407,8 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
               setInteractionMode('select');
             }}
             className={`p-2.5 hover:bg-slate-700 border-b border-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${interactionMode === 'select' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
-            title="Select Tool"
+            title={t('project.graph.graphVisualization.selectTool')}
+            aria-label={t('project.graph.graphVisualization.selectTool')}
           >
             <MousePointer2 className="w-5 h-5" />
           </button>
@@ -381,7 +417,8 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
               setInteractionMode('pan');
             }}
             className={`p-2.5 hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${interactionMode === 'pan' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
-            title="Pan Tool"
+            title={t('project.graph.graphVisualization.panTool')}
+            aria-label={t('project.graph.graphVisualization.panTool')}
           >
             <Move className="w-5 h-5" />
           </button>
@@ -390,12 +427,16 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
           <button
             onClick={handleZoomIn}
             className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
+            title={t('project.graph.graphVisualization.zoomIn')}
+            aria-label={t('project.graph.graphVisualization.zoomIn')}
           >
             <Plus className="w-5 h-5" />
           </button>
           <button
             onClick={handleZoomOut}
             className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
+            title={t('project.graph.graphVisualization.zoomOut')}
+            aria-label={t('project.graph.graphVisualization.zoomOut')}
           >
             <Minus className="w-5 h-5" />
           </button>
@@ -403,6 +444,8 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
         <button
           onClick={handleResetView}
           className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 mt-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          title={t('project.graph.graphVisualization.resetView')}
+          aria-label={t('project.graph.graphVisualization.resetView')}
         >
           <Focus className="w-5 h-5" />
         </button>
@@ -412,7 +455,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       <div className="absolute bottom-6 left-6 z-10">
         <div className="bg-surface-dark/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl">
           <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
-            Entity Types
+            {t('project.graph.graphVisualization.entityTypes')}
           </div>
           <div className="flex flex-col gap-2">
             {availableTypes.map((type) => (
@@ -457,7 +500,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       {/* Node Details Panel (Right) */}
       {selectedNode && (
-        <div className="absolute top-6 right-6 bottom-6 w-80 bg-surface-dark border border-slate-700 shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+        <div className="absolute top-6 right-6 bottom-6 w-80 bg-surface-dark border border-slate-700 shadow-2xl rounded-lg z-20 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
           <div className="p-5 border-b border-slate-700 bg-gradient-to-r from-blue-900/20 to-transparent">
             <div className="flex justify-between items-start mb-2">
               <div className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border border-blue-500/30">
@@ -468,6 +511,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
                   setSelectedNode(null);
                 }}
                 className="text-slate-400 hover:text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                aria-label={t('common.close')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -483,37 +527,40 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             <div>
               <div className="flex justify-between items-end mb-1">
                 <label className="text-xs font-semibold text-slate-400 uppercase">
-                  Impact Score
+                  {t('project.graph.graphVisualization.impactScore')}
                 </label>
                 <span className="text-emerald-400 font-bold text-sm">
-                  {(selectedNode.entity.importance || 1) * 10}/100
+                  {getNodeImpactScore(selectedNode.entity)}/100
                 </span>
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                 <div
                   className="bg-gradient-to-r from-emerald-500 to-blue-600 h-full rounded-full"
-                  style={{ width: `${(selectedNode.entity.importance || 1) * 10}%` }}
+                  style={{ width: `${String(getNodeImpactScore(selectedNode.entity))}%` }}
                 ></div>
               </div>
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-400 uppercase mb-2 block">
-                Description
+                {t('project.graph.node_detail.description')}
               </label>
               <p className="text-sm text-slate-300 leading-relaxed">
-                {selectedNode.entity.description || 'No description available.'}
+                {selectedNode.entity.description ??
+                  t('project.graph.graphVisualization.noDescription')}
               </p>
             </div>
             <div>
               <div className="flex justify-between items-center mb-3">
-                <label className="text-xs font-semibold text-slate-400 uppercase">Attributes</label>
+                <label className="text-xs font-semibold text-slate-400 uppercase">
+                  {t('project.graph.graphVisualization.attributes')}
+                </label>
               </div>
               <div className="space-y-2">
-                {Object.entries(selectedNode.entity.metadata || {}).map(
-                  ([key, val]: [string, any]) => (
+                {Object.entries(selectedNode.entity.metadata ?? selectedNode.entity.properties).map(
+                  ([key, val]) => (
                     <div key={key} className="flex justify-between text-sm">
                       <span className="text-slate-500 capitalize">{key.replace('_', ' ')}:</span>
-                      <span className="text-slate-300">{String(val)}</span>
+                      <span className="text-slate-300">{formatMetadataValue(val)}</span>
                     </div>
                   )
                 )}
@@ -522,10 +569,10 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
           </div>
           <div className="p-4 border-t border-slate-700 bg-background-dark flex gap-2">
             <button className="flex-1 py-2 rounded-lg border border-slate-600 bg-surface-dark text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1">
-              Expand
+              {t('project.graph.node_detail.expand')}
             </button>
             <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1">
-              Edit Node
+              {t('project.graph.node_detail.edit')}
             </button>
           </div>
         </div>

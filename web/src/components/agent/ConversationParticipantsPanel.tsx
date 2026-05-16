@@ -113,8 +113,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
               const isCoordinator = agentId === coordinator_agent_id;
               const isFocused = agentId === focused_agent_id;
               const binding = participantBindingMap.get(agentId);
-              const participantLabel =
-                binding?.display_name || binding?.label || agentId;
+              const participantLabel = binding?.display_name || binding?.label || agentId;
               const sourceLabel =
                 binding?.source === 'workspace'
                   ? t('agent.participants.sourceWorkspace', { defaultValue: 'workspace' })
@@ -158,6 +157,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                           defaultValue: 'Set as focused agent',
                         })}
                         aria-label={t('agent.participants.setFocusedFor', {
+                          name: participantLabel,
                           defaultValue: `Set ${participantLabel} as focused agent`,
                         })}
                       >
@@ -175,6 +175,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                           defaultValue: 'Set as coordinator',
                         })}
                         aria-label={t('agent.participants.setCoordinatorFor', {
+                          name: participantLabel,
                           defaultValue: `Set ${participantLabel} as coordinator`,
                         })}
                       >
@@ -191,6 +192,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                       }}
                       className="rounded px-2 py-0.5 text-xs text-[#999] hover:bg-[#fafafa] hover:text-[#ee0000]"
                       aria-label={t('agent.participants.remove', {
+                        name: participantLabel,
                         defaultValue: `Remove ${participantLabel}`,
                       })}
                     >
@@ -202,14 +204,16 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
             })}
           </ul>
         )}
-        {effective_mode === 'autonomous' && !coordinator_agent_id && participant_agents.length > 0 && (
-          <p className="mt-3 text-xs text-[#ee0000]">
-            {t('agent.participants.autonomousRequiresCoordinator', {
-              defaultValue:
-                'Autonomous mode requires a coordinator. Click ★ on a participant to assign.',
-            })}
-          </p>
-        )}
+        {effective_mode === 'autonomous' &&
+          !coordinator_agent_id &&
+          participant_agents.length > 0 && (
+            <p className="mt-3 text-xs text-[#ee0000]">
+              {t('agent.participants.autonomousRequiresCoordinator', {
+                defaultValue:
+                  'Autonomous mode requires a coordinator. Click ★ on a participant to assign.',
+              })}
+            </p>
+          )}
         {effective_mode === 'multi_agent_isolated' &&
           !focused_agent_id &&
           participant_agents.length > 0 && (

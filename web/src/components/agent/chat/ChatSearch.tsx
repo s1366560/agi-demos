@@ -39,9 +39,7 @@ function getEventText(event: TimelineEvent): string {
     parts.push(event.content || '');
   } else if (event.type === 'act') {
     parts.push(event.toolName || '');
-    if (event.toolInput) {
-      parts.push(JSON.stringify(event.toolInput));
-    }
+    parts.push(JSON.stringify(event.toolInput));
   } else if (event.type === 'observe') {
     parts.push(event.toolOutput || '');
   }
@@ -94,7 +92,7 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
 
         found.push({
           eventIndex: idx,
-          eventId: event.id || `event-${idx}`,
+          eventId: event.id || `event-${String(idx)}`,
           preview,
         });
       }
@@ -184,7 +182,7 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
       {query && (
         <span className="text-xs text-slate-400 whitespace-nowrap">
           {matches.length > 0
-            ? `${currentIndex + 1}/${matches.length}`
+            ? `${String(currentIndex + 1)}/${String(matches.length)}`
             : t('agent.search.noResults', '0 results')}
         </span>
       )}

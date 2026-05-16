@@ -42,7 +42,7 @@ function isDiff(a: Artifact): boolean {
 
 function isTestRun(a: Artifact): boolean {
   if (a.sourceTool && TEST_TOOLS.has(a.sourceTool)) return true;
-  const meta = a.metadata as Record<string, unknown> | undefined;
+  const meta = a.metadata;
   return Boolean(meta && typeof meta['testRun'] === 'object');
 }
 
@@ -87,7 +87,7 @@ export function buildEvidenceBundle(artifacts: readonly Artifact[]): EvidenceBun
  */
 export function selectEvidenceBundle(
   artifacts: Iterable<Artifact>,
-  conversationId: string,
+  conversationId: string
 ): EvidenceBundle {
   const filtered: Artifact[] = [];
   for (const artifact of artifacts) {

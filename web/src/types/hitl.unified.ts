@@ -354,8 +354,9 @@ export function apiToUnifiedRequest(
   conversationId: string
 ): UnifiedHITLRequest {
   const hitlType =
-    (apiRequest.metadata?.hitl_type as HITLType) ||
-    mapRequestTypeToHitlType(apiRequest.request_type);
+    typeof apiRequest.metadata?.hitl_type === 'string'
+      ? (apiRequest.metadata.hitl_type as HITLType)
+      : mapRequestTypeToHitlType(apiRequest.request_type);
 
   return {
     requestId: apiRequest.id,
@@ -373,7 +374,9 @@ export function apiToUnifiedRequest(
         ? {
             question: apiRequest.question,
             clarificationType: 'custom',
-            options: (apiRequest.options as ClarificationOption[]) || [],
+            options: Array.isArray(apiRequest.options)
+              ? (apiRequest.options as ClarificationOption[])
+              : [],
             allowCustom: true,
             context: apiRequest.context || {},
           }
@@ -382,20 +385,36 @@ export function apiToUnifiedRequest(
       hitlType === 'decision'
         ? {
             question: apiRequest.question,
-            decisionType: (apiRequest.metadata?.decision_type as DecisionType) || 'single_choice',
-            options: (apiRequest.options as DecisionOption[]) || [],
-            allowCustom: (apiRequest.metadata?.allow_custom as boolean) ?? false,
+            decisionType:
+              typeof apiRequest.metadata?.decision_type === 'string'
+                ? (apiRequest.metadata.decision_type as DecisionType)
+                : 'single_choice',
+            options: Array.isArray(apiRequest.options)
+              ? (apiRequest.options as DecisionOption[])
+              : [],
+            allowCustom:
+              typeof apiRequest.metadata?.allow_custom === 'boolean'
+                ? apiRequest.metadata.allow_custom
+                : false,
             context: apiRequest.context || {},
             selectionMode:
-              (apiRequest.metadata?.selection_mode as 'single' | 'multiple') || 'single',
-            maxSelections: (apiRequest.metadata?.max_selections as number) || undefined,
+              typeof apiRequest.metadata?.selection_mode === 'string'
+                ? (apiRequest.metadata.selection_mode as 'single' | 'multiple')
+                : 'single',
+            maxSelections:
+              typeof apiRequest.metadata?.max_selections === 'number'
+                ? apiRequest.metadata.max_selections
+                : undefined,
           }
         : undefined,
     envVarData:
       hitlType === 'env_var'
         ? {
-            toolName: (apiRequest.metadata?.tool_name as string) || 'unknown',
-            fields: (apiRequest.options as EnvVarField[]) || [],
+            toolName:
+              typeof apiRequest.metadata?.tool_name === 'string'
+                ? apiRequest.metadata.tool_name
+                : 'unknown',
+            fields: Array.isArray(apiRequest.options) ? (apiRequest.options as EnvVarField[]) : [],
             message: apiRequest.question,
             allowSave: true,
             context: apiRequest.context || {},

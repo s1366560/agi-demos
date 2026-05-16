@@ -40,6 +40,22 @@ import type {
 // Use centralized HTTP client instead of creating a new axios instance
 const api = httpClient;
 
+type TenantMembersApiResponse = UserTenant[] | { members?: UserTenant[] };
+type RecentTasksApiResponse =
+  | RecentTask[]
+  | {
+      tasks?: RecentTask[] | undefined;
+      items?: RecentTask[] | undefined;
+      results?: RecentTask[] | undefined;
+    };
+
+const normalizeRecentTasksResponse = (response: RecentTasksApiResponse): RecentTask[] => {
+  if (Array.isArray(response)) {
+    return response;
+  }
+  return response.tasks ?? response.items ?? response.results ?? [];
+};
+
 // Token response from auth endpoint
 interface TokenResponse {
   access_token: string;
@@ -180,7 +196,8 @@ export const tenantAPI = {
     await api.delete(`/tenants/${tenantId}/members/${userId}`);
   },
   listMembers: async (tenantId: string): Promise<UserTenant[]> => {
-    return await api.get<UserTenant[]>(`/tenants/${tenantId}/members`);
+    const response = await api.get<TenantMembersApiResponse>(`/tenants/${tenantId}/members`);
+    return Array.isArray(response) ? response : (response.members ?? []);
   },
   get: async (id: string): Promise<Tenant> => {
     return await api.get(`/tenants/${id}`);
@@ -322,10 +339,13 @@ export const taskAPI = {
       offset?: number | undefined;
       status?: string | undefined;
       task_type?: string | undefined;
+      entity_id?: string | undefined;
+      entity_type?: string | undefined;
       search?: string | undefined;
     } = {}
   ): Promise<RecentTask[]> => {
-    return await api.get('/tasks/recent', { params });
+    const response = await api.get<RecentTasksApiResponse>('/tasks/recent', { params });
+    return normalizeRecentTasksResponse(response);
   },
   getStatusBreakdown: async (): Promise<StatusBreakdown> => {
     return await api.get('/tasks/status-breakdown');

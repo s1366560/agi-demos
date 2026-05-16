@@ -56,7 +56,6 @@ export function setCurrentProject(id: string | null): void {
     try {
       cb(id);
     } catch (err) {
-       
       console.error('[currentProject] subscriber threw', err);
     }
   }

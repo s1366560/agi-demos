@@ -1,6 +1,8 @@
 import type { GeneResponse } from '@/services/geneMarketService';
-import type { GenePayload } from './GeneEditorModal';
+
 import type { CyberGeneCategory } from '@/types/workspace';
+
+import type { GenePayload } from './GeneEditorModal';
 
 const KNOWN_CATEGORIES: ReadonlySet<CyberGeneCategory> = new Set([
   'skill',
@@ -25,14 +27,12 @@ const normalizeCategory = (raw: string | null | undefined): CyberGeneCategory =>
  * workspace gene's `config_json` so the editor can present and refine it.
  * The user can then adjust fields before saving.
  */
-export const marketplaceGeneToPayload = (
-  gene: GeneResponse
-): Partial<GenePayload> => {
+export const marketplaceGeneToPayload = (gene: GeneResponse): Partial<GenePayload> => {
   return {
     name: gene.name,
     category: normalizeCategory(gene.category),
     description: gene.description ?? null,
-    config_json: JSON.stringify(gene.manifest ?? {}, null, 2),
+    config_json: JSON.stringify(gene.manifest, null, 2),
     version: gene.version,
     is_active: true,
   };

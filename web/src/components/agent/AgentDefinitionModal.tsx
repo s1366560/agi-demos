@@ -26,7 +26,9 @@ import type {
   AgentDefinition,
   CreateDefinitionRequest,
   UpdateDefinitionRequest,
+  WorkspaceConfig,
 } from '../../types/multiAgent';
+import type { DefaultOptionType } from 'antd/es/select';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -36,6 +38,91 @@ export interface AgentDefinitionModalProps {
   onClose: () => void;
   onSuccess: () => void;
   definition: AgentDefinition | null;
+}
+
+interface WorkspaceConfigFormValues {
+  type?: 'shared' | 'isolated' | 'inherited';
+  base_dir?: string;
+  base_path?: string;
+  sandbox_scope?: 'session' | 'agent' | 'shared';
+  max_size_mb?: number;
+  persona_files?: string[];
+  shared_files?: string[];
+  auto_cleanup?: boolean;
+  retention_days?: number;
+}
+
+interface AgentDefinitionFormValues {
+  name: string;
+  display_name: string;
+  system_prompt: string;
+  model: string;
+  temperature?: number | undefined;
+  max_tokens?: number | undefined;
+  max_iterations?: number | undefined;
+  allowed_tools?: string[] | undefined;
+  allowed_skills?: string[] | undefined;
+  allowed_mcp_servers?: string[] | undefined;
+  can_spawn?: boolean | undefined;
+  max_spawn_depth?: number | undefined;
+  agent_to_agent_enabled?: boolean | undefined;
+  agent_to_agent_allowlist?: string[] | null | undefined;
+  discoverable?: boolean | undefined;
+  max_retries?: number | undefined;
+  workspace_config?: WorkspaceConfigFormValues | undefined;
+  spawn_policy_max_active_runs?: number | undefined;
+  spawn_policy_max_children_per_requester?: number | undefined;
+  spawn_policy_allowed_subagents?: string[] | undefined;
+  tool_policy_allow?: string[] | undefined;
+  tool_policy_deny?: string[] | undefined;
+}
+
+function getMetadataNumber(metadata: Record<string, unknown>, key: string): number | undefined {
+  const value = metadata[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function getMetadataStringArray(
+  metadata: Record<string, unknown>,
+  key: string
+): string[] | undefined {
+  const value = metadata[key];
+  return Array.isArray(value) && value.every((item): item is string => typeof item === 'string')
+    ? value
+    : undefined;
+}
+
+function toWorkspaceConfigFormValues(
+  workspaceConfig: WorkspaceConfig | null
+): WorkspaceConfigFormValues {
+  if (!workspaceConfig) {
+    return { type: 'shared' };
+  }
+
+  const values: WorkspaceConfigFormValues = {};
+  if (workspaceConfig.type !== undefined) values.type = workspaceConfig.type;
+  if (workspaceConfig.base_dir !== undefined) values.base_dir = workspaceConfig.base_dir;
+  if (workspaceConfig.base_path !== undefined) values.base_path = workspaceConfig.base_path;
+  if (workspaceConfig.sandbox_scope !== undefined) {
+    values.sandbox_scope = workspaceConfig.sandbox_scope;
+  }
+  if (workspaceConfig.max_size_mb !== undefined) values.max_size_mb = workspaceConfig.max_size_mb;
+  if (workspaceConfig.persona_files !== undefined) {
+    values.persona_files = workspaceConfig.persona_files;
+  }
+  if (workspaceConfig.shared_files !== undefined)
+    values.shared_files = workspaceConfig.shared_files;
+  if (workspaceConfig.auto_cleanup !== undefined)
+    values.auto_cleanup = workspaceConfig.auto_cleanup;
+  if (workspaceConfig.retention_days !== undefined) {
+    values.retention_days = workspaceConfig.retention_days;
+  }
+  return values;
+}
+
+function filterSelectOption(input: string, option?: DefaultOptionType): boolean {
+  const label = typeof option?.label === 'string' ? option.label : '';
+  return label.toLowerCase().includes(input.toLowerCase());
 }
 
 const LLM_MODELS = [
@@ -59,7 +146,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
   definition,
 }) => {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<AgentDefinitionFormValues>();
   const [activeTab, setActiveTab] = useState('basic');
 
   // Trigger keywords/examples local state
@@ -93,9 +180,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             skillAPI.list({ limit: 100 }),
             mcpAPI.list({ limit: 100 }),
           ]);
-          setAvailableTools(toolsRes.tools || []);
-          setAvailableSkills(skillsRes.skills || []);
-          setAvailableMcpServers(mcpRes || []);
+          setAvailableTools(toolsRes.tools);
+          setAvailableSkills(skillsRes.skills);
+          setAvailableMcpServers(mcpRes);
         } catch (error) {
           console.error('Failed to fetch resources:', error);
           message.error(
@@ -108,7 +195,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           setLoadingResources(false);
         }
       };
-      fetchResources();
+      void fetchResources();
     }
   }, [isOpen, t]);
 
@@ -119,31 +206,59 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
 
     if (isOpen && (definitionChanged || openStateChanged)) {
       if (definition) {
-        form.setFieldsValue({
+        const metadata = definition.metadata;
+        const fieldValues: Partial<AgentDefinitionFormValues> = {
           name: definition.name,
           display_name: definition.display_name ?? '',
           system_prompt: definition.system_prompt ?? '',
           model: definition.model ?? 'inherit',
           temperature: definition.temperature ?? 0.7,
           max_tokens: definition.max_tokens ?? 4096,
-          max_iterations: definition.max_iterations ?? 10,
+          max_iterations: definition.max_iterations,
           allowed_tools: definition.allowed_tools ?? ['*'],
           allowed_skills: definition.allowed_skills ?? [],
           allowed_mcp_servers: definition.allowed_mcp_servers ?? [],
           can_spawn: definition.can_spawn,
           max_spawn_depth: definition.max_spawn_depth,
           agent_to_agent_enabled: definition.agent_to_agent_enabled,
-          agent_to_agent_allowlist: definition.agent_to_agent_allowlist ?? undefined,
           discoverable: definition.discoverable,
           max_retries: definition.max_retries,
-          workspace_config: definition.workspace_config ?? { type: 'shared' },
-          spawn_policy_max_active_runs: definition.metadata?.spawn_policy_max_active_runs,
-          spawn_policy_max_children_per_requester:
-            definition.metadata?.spawn_policy_max_children_per_requester,
-          spawn_policy_allowed_subagents: definition.metadata?.spawn_policy_allowed_subagents,
-          tool_policy_allow: definition.metadata?.tool_policy_allow,
-          tool_policy_deny: definition.metadata?.tool_policy_deny,
-        });
+          workspace_config: toWorkspaceConfigFormValues(definition.workspace_config),
+        };
+
+        if (definition.agent_to_agent_allowlist !== null) {
+          fieldValues.agent_to_agent_allowlist = definition.agent_to_agent_allowlist;
+        }
+
+        const spawnMaxActiveRuns = getMetadataNumber(metadata, 'spawn_policy_max_active_runs');
+        if (spawnMaxActiveRuns !== undefined) {
+          fieldValues.spawn_policy_max_active_runs = spawnMaxActiveRuns;
+        }
+
+        const spawnMaxChildrenPerRequester = getMetadataNumber(
+          metadata,
+          'spawn_policy_max_children_per_requester'
+        );
+        if (spawnMaxChildrenPerRequester !== undefined) {
+          fieldValues.spawn_policy_max_children_per_requester = spawnMaxChildrenPerRequester;
+        }
+
+        const allowedSubagents = getMetadataStringArray(metadata, 'spawn_policy_allowed_subagents');
+        if (allowedSubagents !== undefined) {
+          fieldValues.spawn_policy_allowed_subagents = allowedSubagents;
+        }
+
+        const toolPolicyAllow = getMetadataStringArray(metadata, 'tool_policy_allow');
+        if (toolPolicyAllow !== undefined) {
+          fieldValues.tool_policy_allow = toolPolicyAllow;
+        }
+
+        const toolPolicyDeny = getMetadataStringArray(metadata, 'tool_policy_deny');
+        if (toolPolicyDeny !== undefined) {
+          fieldValues.tool_policy_deny = toolPolicyDeny;
+        }
+
+        form.setFieldsValue(fieldValues as Parameters<typeof form.setFieldsValue>[0]);
         setKeywords(definition.trigger?.keywords ?? []);
       } else {
         form.resetFields();
@@ -156,7 +271,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
       }
     }
 
-    prevDefinitionRef.current = definition || null;
+    prevDefinitionRef.current = definition ?? null;
     prevIsOpenRef.current = isOpen;
   }, [isOpen, definition, form]);
 
@@ -165,7 +280,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
     try {
       const values = await form.validateFields();
 
-      if (isEditMode && definition) {
+      if (definition) {
         const data: UpdateDefinitionRequest = {
           name: values.name,
           display_name: values.display_name,
@@ -186,7 +301,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           max_retries: values.max_retries,
           workspace_config: values.workspace_config,
           metadata: {
-            ...(definition.metadata || {}),
+            ...definition.metadata,
             spawn_policy_max_active_runs: values.spawn_policy_max_active_runs,
             spawn_policy_max_children_per_requester: values.spawn_policy_max_children_per_requester,
             spawn_policy_allowed_subagents: values.spawn_policy_allowed_subagents,
@@ -249,7 +364,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
         }
       }
     }
-  }, [form, isEditMode, definition, keywords, createDefinition, updateDefinition, onSuccess, t]);
+  }, [form, definition, keywords, createDefinition, updateDefinition, onSuccess, t]);
 
   // Keyword handlers
   const handleAddKeyword = useCallback(() => {
@@ -479,12 +594,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               mode="multiple"
               placeholder="Select tools"
               loading={loadingResources}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
+              showSearch={{ filterOption: filterSelectOption }}
               options={[
                 { label: 'All Tools (*)', value: '*' },
-                ...(availableTools || []).map((tool) => ({
+                ...availableTools.map((tool) => ({
                   label: tool.name,
                   value: tool.name,
                   title: tool.description,
@@ -505,10 +618,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               mode="multiple"
               placeholder="Select skills (leave empty for none)"
               loading={loadingResources}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
-              options={(availableSkills || []).map((s) => ({
+              showSearch={{ filterOption: filterSelectOption }}
+              options={availableSkills.map((s) => ({
                 label: s.name,
                 value: s.id,
                 title: s.description,
@@ -528,10 +639,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               mode="multiple"
               placeholder="Select servers (leave empty for none)"
               loading={loadingResources}
-              filterOption={(input, option) =>
-                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
-              options={(availableMcpServers || []).map((s) => ({
+              showSearch={{ filterOption: filterSelectOption }}
+              options={availableMcpServers.map((s) => ({
                 label: s.name,
                 value: s.name,
                 title: s.description ?? '',
@@ -624,9 +733,15 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
                 initialValue="shared"
               >
                 <Select>
-                  <Option value="shared">Shared</Option>
-                  <Option value="isolated">Isolated</Option>
-                  <Option value="inherited">Inherited</Option>
+                  <Option value="shared">
+                    {t('tenant.agentDefinitions.modal.workspaceTypes.shared', 'Shared')}
+                  </Option>
+                  <Option value="isolated">
+                    {t('tenant.agentDefinitions.modal.workspaceTypes.isolated', 'Isolated')}
+                  </Option>
+                  <Option value="inherited">
+                    {t('tenant.agentDefinitions.modal.workspaceTypes.inherited', 'Inherited')}
+                  </Option>
                 </Select>
               </Form.Item>
               <Form.Item
@@ -683,7 +798,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
       }
       open={isOpen}
       onCancel={onClose}
-      onOk={handleSubmit}
+      onOk={() => {
+        void handleSubmit();
+      }}
       okText={isEditMode ? t('common.save', 'Save') : t('common.create', 'Create')}
       cancelText={t('common.cancel', 'Cancel')}
       confirmLoading={isSubmitting}

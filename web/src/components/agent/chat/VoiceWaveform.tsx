@@ -29,7 +29,7 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
         if (contextRef.current) {
           cancelAnimationFrame(contextRef.current.animationId);
           contextRef.current.source.disconnect();
-          contextRef.current.audioContext.close();
+          void contextRef.current.audioContext.close();
           contextRef.current.stream.getTracks().forEach((t) => {
             t.stop();
           });
@@ -84,7 +84,7 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
               const x = i * barWidth + gap / 2;
               const y = (h - barHeight) / 2;
 
-              ctx.fillStyle = `rgba(239, 68, 68, ${0.6 + value * 0.4})`;
+              ctx.fillStyle = `rgba(239, 68, 68, ${String(0.6 + value * 0.4)})`;
               ctx.beginPath();
               ctx.roundRect(x, y, barWidth - gap, barHeight, 2);
               ctx.fill();
@@ -108,14 +108,14 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
         }
       };
 
-      start();
+      void start();
 
       return () => {
         cancelled = true;
         if (contextRef.current) {
           cancelAnimationFrame(contextRef.current.animationId);
           contextRef.current.source.disconnect();
-          contextRef.current.audioContext.close();
+          void contextRef.current.audioContext.close();
           contextRef.current.stream.getTracks().forEach((t) => {
             t.stop();
           });

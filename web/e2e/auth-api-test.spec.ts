@@ -2,7 +2,7 @@
  * Test API authentication directly
  */
 
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test('test API authentication', async ({ page }) => {
   // Login first
@@ -25,8 +25,7 @@ test('test API authentication', async ({ page }) => {
     return null;
   });
 
-  console.log('Token:', token?.substring(0, 50));
-  console.log('Token length:', token?.length);
+  console.log('Token present:', Boolean(token), 'length:', token?.length ?? 0);
 
   // Test API call using fetch
   const apiResult = await page.evaluate(async (accessToken) => {
@@ -37,15 +36,14 @@ test('test API authentication', async ({ page }) => {
           'Content-Type': 'application/json',
         },
       });
-      const status = response.status;
-      const text = await response.text();
-      return { status, text };
+      return { ok: response.ok, status: response.status };
     } catch (error) {
       return { error: String(error) };
     }
   }, token);
 
-  console.log('API Result:', apiResult);
+  console.log('Projects API result:', apiResult);
+  expect(apiResult).toEqual({ ok: true, status: 200 });
 
   // Test sandbox API
   const sandboxResult = await page.evaluate(async (accessToken) => {
@@ -56,15 +54,14 @@ test('test API authentication', async ({ page }) => {
           'Content-Type': 'application/json',
         },
       });
-      const status = response.status;
-      const text = await response.text();
-      return { status, text };
+      return { ok: response.ok, status: response.status };
     } catch (error) {
       return { error: String(error) };
     }
   }, token);
 
-  console.log('Sandbox API Result:', sandboxResult);
+  console.log('Sandbox API result:', sandboxResult);
+  expect(sandboxResult).toEqual({ ok: true, status: 200 });
 
   await page.waitForTimeout(3000);
 });

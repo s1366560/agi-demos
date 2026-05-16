@@ -111,6 +111,8 @@ describe('blackboardUtils', () => {
     );
 
     expect(stats.totalTasks).toBe(3);
+    expect(stats.todoTasks).toBe(1);
+    expect(stats.inProgressTasks).toBe(0);
     expect(stats.completedTasks).toBe(1);
     expect(stats.blockedTasks).toBe(1);
     expect(stats.pendingAdjudicationTasks).toBe(0);

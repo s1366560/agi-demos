@@ -9,6 +9,8 @@
 
 import React, { useState, useMemo, memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Tooltip, Drawer, Tag, Empty, Segmented } from 'antd';
 import {
   CheckCircle,
@@ -78,7 +80,7 @@ const getToolIcon = (toolName: string): React.ReactNode => {
 
 // Format duration
 const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return `${String(ms)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 };
 
@@ -111,6 +113,8 @@ interface GridViewProps {
 }
 
 const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = false }) => {
+  const { t } = useTranslation();
+
   return (
     <div
       className={`grid gap-3 ${
@@ -158,7 +162,9 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
               }
               className="mr-0 text-2xs"
             >
-              {exec.status.toUpperCase()}
+              {t(`agent.toolCallVisualization.status.${exec.status}`, {
+                defaultValue: exec.status.toUpperCase(),
+              })}
             </Tag>
           </div>
         </div>
@@ -176,6 +182,8 @@ interface TimelineViewProps {
 }
 
 const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) => {
+  const { t } = useTranslation();
+
   // Calculate time range
   const timeRange = useMemo(() => {
     if (executions.length === 0) return { min: 0, max: 1000, range: 1000 };
@@ -193,7 +201,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) 
     const left = ((exec.startTime - timeRange.min) / timeRange.range) * 100;
     const end = exec.endTime || exec.startTime + (exec.duration || timeRange.range * 0.1);
     const width = ((end - exec.startTime) / timeRange.range) * 100;
-    return { left: `${left}%`, width: `${Math.max(width, 2)}%` };
+    return { left: `${String(left)}%`, width: `${String(Math.max(width, 2))}%` };
   };
 
   return (
@@ -229,8 +237,22 @@ const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) 
                 title={
                   <div>
                     <div>{exec.toolName}</div>
-                    {exec.duration && <div>Duration: {formatDuration(exec.duration)}</div>}
-                    <div>Status: {exec.status}</div>
+                    {exec.duration && (
+                      <div>
+                        {t('agent.toolCallVisualization.duration', {
+                          duration: formatDuration(exec.duration),
+                          defaultValue: 'Duration: {{duration}}',
+                        })}
+                      </div>
+                    )}
+                    <div>
+                      {t('agent.toolCallVisualization.statusLine', {
+                        status: t(`agent.toolCallVisualization.status.${exec.status}`, {
+                          defaultValue: exec.status.toUpperCase(),
+                        }),
+                        defaultValue: 'Status: {{status}}',
+                      })}
+                    </div>
                   </div>
                 }
               >
@@ -267,6 +289,8 @@ interface FlowViewProps {
 }
 
 const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {executions.map((exec, index) => (
@@ -276,8 +300,22 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
             title={
               <div>
                 <div className="font-medium">{exec.toolName}</div>
-                {exec.duration && <div>Duration: {formatDuration(exec.duration)}</div>}
-                <div>Status: {exec.status}</div>
+                {exec.duration && (
+                  <div>
+                    {t('agent.toolCallVisualization.duration', {
+                      duration: formatDuration(exec.duration),
+                      defaultValue: 'Duration: {{duration}}',
+                    })}
+                  </div>
+                )}
+                <div>
+                  {t('agent.toolCallVisualization.statusLine', {
+                    status: t(`agent.toolCallVisualization.status.${exec.status}`, {
+                      defaultValue: exec.status.toUpperCase(),
+                    }),
+                    defaultValue: 'Status: {{status}}',
+                  })}
+                </div>
               </div>
             }
           >
@@ -326,6 +364,8 @@ interface DetailDrawerProps {
 }
 
 const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose }) => {
+  const { t } = useTranslation();
+
   if (!execution) return null;
 
   return (
@@ -345,7 +385,9 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose
         {/* Status and timing */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Status</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+              {t('agent.toolCallVisualization.labels.status', { defaultValue: 'Status' })}
+            </div>
             <Tag
               color={
                 execution.status === 'success'
@@ -355,22 +397,30 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose
                     : 'processing'
               }
             >
-              {execution.status.toUpperCase()}
+              {t(`agent.toolCallVisualization.status.${execution.status}`, {
+                defaultValue: execution.status.toUpperCase(),
+              })}
             </Tag>
           </div>
           {execution.duration !== undefined && (
             <div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Duration</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                {t('agent.toolCallVisualization.labels.duration', { defaultValue: 'Duration' })}
+              </div>
               <span className="font-mono">{formatDuration(execution.duration)}</span>
             </div>
           )}
           <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Start Time</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+              {t('agent.toolCallVisualization.labels.startTime', { defaultValue: 'Start Time' })}
+            </div>
             <span className="font-mono text-sm">{formatTime(execution.startTime)}</span>
           </div>
           {execution.endTime && (
             <div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">End Time</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                {t('agent.toolCallVisualization.labels.endTime', { defaultValue: 'End Time' })}
+              </div>
               <span className="font-mono text-sm">{formatTime(execution.endTime)}</span>
             </div>
           )}
@@ -378,7 +428,9 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose
 
         {/* Input */}
         <div>
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">INPUT</div>
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+            {t('agent.toolCallVisualization.labels.input', { defaultValue: 'INPUT' })}
+          </div>
           <pre className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-xs overflow-x-auto max-h-60">
             {JSON.stringify(execution.input, null, 2)}
           </pre>
@@ -388,7 +440,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose
         {execution.output && (
           <div>
             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-              OUTPUT
+              {t('agent.toolCallVisualization.labels.output', { defaultValue: 'OUTPUT' })}
             </div>
             <pre className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-xs overflow-x-auto max-h-60 whitespace-pre-wrap">
               {execution.output}
@@ -399,7 +451,9 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose
         {/* Error */}
         {execution.error && (
           <div>
-            <div className="text-xs font-semibold text-red-500 mb-2">ERROR</div>
+            <div className="text-xs font-semibold text-red-500 mb-2">
+              {t('agent.toolCallVisualization.labels.error', { defaultValue: 'ERROR' })}
+            </div>
             <pre className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 overflow-x-auto">
               {execution.error}
             </pre>
@@ -422,6 +476,7 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
   allowModeSwitch = true,
   compact = false,
 }) => {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<'grid' | 'timeline' | 'flow'>(initialMode);
   const [selectedExecution, setSelectedExecution] = useState<ToolExecutionItem | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -446,16 +501,30 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="No tool executions"
+        description={t('agent.toolCallVisualization.empty', {
+          defaultValue: 'No tool executions',
+        })}
         className="py-8"
       />
     );
   }
 
   const modeOptions = [
-    { value: 'grid', icon: <LayoutGrid size={16} />, label: 'Grid' },
-    { value: 'timeline', icon: <List size={16} />, label: 'Timeline' },
-    { value: 'flow', icon: <Network size={16} />, label: 'Flow' },
+    {
+      value: 'grid',
+      icon: <LayoutGrid size={16} />,
+      label: t('agent.toolCallVisualization.modes.grid', { defaultValue: 'Grid' }),
+    },
+    {
+      value: 'timeline',
+      icon: <List size={16} />,
+      label: t('agent.toolCallVisualization.modes.timeline', { defaultValue: 'Timeline' }),
+    },
+    {
+      value: 'flow',
+      icon: <Network size={16} />,
+      label: t('agent.toolCallVisualization.modes.flow', { defaultValue: 'Flow' }),
+    },
   ];
 
   return (

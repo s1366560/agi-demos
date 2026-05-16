@@ -12,7 +12,10 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal } from '@xterm/xterm';
 
 import { useThemeColors } from '../../../hooks/useThemeColor';
-import { createWebSocketUrl } from '../../../services/client/urlUtils';
+import {
+  createWebSocketAuthProtocols,
+  createWebSocketUrl,
+} from '../../../services/client/urlUtils';
 import { getAuthToken } from '../../../utils/tokenResolver';
 
 interface TerminalMessage {
@@ -23,6 +26,23 @@ interface TerminalMessage {
   cols?: number | undefined;
   rows?: number | undefined;
 }
+
+const TERMINAL_MESSAGE_TYPES = new Set<TerminalMessage['type']>([
+  'input',
+  'output',
+  'resize',
+  'error',
+  'connected',
+  'pong',
+]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isTerminalMessage = (value: unknown): value is TerminalMessage => {
+  if (!isRecord(value) || typeof value.type !== 'string') return false;
+  return TERMINAL_MESSAGE_TYPES.has(value.type as TerminalMessage['type']);
+};
 
 interface TerminalImplProps {
   sandboxId: string;
@@ -101,7 +121,7 @@ export function TerminalImpl({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Ref to hold connect function for use in onclose callback
-  const connectRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const connectRef = useRef<() => void>(() => undefined);
 
   const resolvedColors = useThemeColors(TERMINAL_TOKEN_MAP);
 
@@ -121,14 +141,9 @@ export function TerminalImpl({
   // Get WebSocket URL using centralized utility
   // Use project-scoped WebSocket proxy endpoint if projectId is available
   const getWsUrl = useCallback(() => {
-    // Get token for WebSocket authentication using centralized resolver
-    const token = getAuthToken();
     const params: Record<string, string> = {};
     if (sessionId) {
       params.session_id = sessionId;
-    }
-    if (token) {
-      params.token = token;
     }
 
     if (projectId) {
@@ -196,18 +211,24 @@ export function TerminalImpl({
   }, []);
 
   // Connect WebSocket
-  const connect = useCallback(async () => {
+  const connect = useCallback(() => {
     // Check if WebSocket is available (not in test environment) and already open
     if (typeof WebSocket === 'undefined') return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(getWsUrl());
+    const token = getAuthToken();
+    const ws = token
+      ? new WebSocket(getWsUrl(), createWebSocketAuthProtocols(token))
+      : new WebSocket(getWsUrl());
 
     ws.onopen = () => {};
 
     ws.onmessage = (event) => {
       try {
-        const msg: TerminalMessage = JSON.parse(event.data);
+        if (typeof event.data !== 'string') return;
+        const parsed: unknown = JSON.parse(event.data);
+        if (!isTerminalMessage(parsed)) return;
+        const msg = parsed;
 
         switch (msg.type) {
           case 'connected':

@@ -11,6 +11,7 @@ import type {
   GraphLayoutConfig,
   CytoscapeStyle,
 } from './types';
+import type cytoscape from 'cytoscape';
 
 // ========================================
 // Default Configurations
@@ -139,6 +140,37 @@ export const THEME_COLORS = {
   dark: DARK_THEME,
 };
 
+type GraphTheme = typeof LIGHT_THEME;
+
+function getStringData(ele: cytoscape.Singular, key: string): string {
+  const value = ele.data(key) as unknown;
+  return typeof value === 'string' ? value : '';
+}
+
+function getNodeAccentColor(theme: GraphTheme, type: string, entityType: string): string {
+  if (type === 'Episodic') return theme.colors.episodic;
+  if (type === 'Community') return theme.colors.community;
+
+  switch (entityType) {
+    case 'Person':
+      return theme.colors.person;
+    case 'Organization':
+      return theme.colors.organization;
+    case 'Location':
+      return theme.colors.location;
+    case 'Event':
+      return theme.colors.event;
+    case 'Product':
+      return theme.colors.product;
+    default:
+      return theme.colors.default;
+  }
+}
+
+function truncateLabel(value: string, maxLength: number): string {
+  return value.length > maxLength ? value.substring(0, maxLength) + '...' : value;
+}
+
 // ========================================
 // Cytoscape Layout Options
 // ========================================
@@ -170,43 +202,22 @@ export function toCytoscapeLayoutOptions(config: GraphLayoutConfig = DEFAULT_LAY
 /**
  * Generate Cytoscape styles based on theme
  */
-export function generateCytoscapeStyles(
-  theme: typeof LIGHT_THEME,
-  isDark: boolean
-): CytoscapeStyle[] {
+export function generateCytoscapeStyles(theme: GraphTheme, isDark: boolean): CytoscapeStyle[] {
   return [
     {
       selector: 'node',
       style: {
-        'background-color': (ele: any) => {
-          const type = ele.data('type');
-          const entityType = ele.data('entity_type');
-
-          if (type === 'Episodic') return theme.colors.episodic;
-          if (type === 'Community') return theme.colors.community;
-
-          switch (entityType) {
-            case 'Person':
-              return theme.colors.person;
-            case 'Organization':
-              return theme.colors.organization;
-            case 'Location':
-              return theme.colors.location;
-            case 'Event':
-              return theme.colors.event;
-            case 'Product':
-              return theme.colors.product;
-            default:
-              return theme.colors.default;
-          }
+        'background-color': (ele: cytoscape.Singular) => {
+          const type = getStringData(ele, 'type');
+          const entityType = getStringData(ele, 'entity_type');
+          return getNodeAccentColor(theme, type, entityType);
         },
-        label: (ele: any) => {
-          const name = ele.data('name') || '';
-          return name.length > 20 ? name.substring(0, 20) + '...' : name;
+        label: (ele: cytoscape.Singular) => {
+          return truncateLabel(getStringData(ele, 'name'), 20);
         },
         color: isDark ? '#e2e8f0' : '#1e293b',
-        width: (ele: any) => (ele.data('type') === 'Community' ? 70 : 50),
-        height: (ele: any) => (ele.data('type') === 'Community' ? 70 : 50),
+        width: (ele: cytoscape.Singular) => (getStringData(ele, 'type') === 'Community' ? 70 : 50),
+        height: (ele: cytoscape.Singular) => (getStringData(ele, 'type') === 'Community' ? 70 : 50),
         'font-size': '5px',
         'font-weight': '600',
         'font-family': 'Inter, "Noto Sans SC", sans-serif',
@@ -216,29 +227,6 @@ export function generateCytoscapeStyles(
         'border-width': 2,
         'border-color': theme.nodeBorder,
         'border-opacity': isDark ? 0.2 : 0.6,
-        'shadow-blur': 20,
-        'shadow-color': (ele: any) => {
-          const type = ele.data('type');
-          const entityType = ele.data('entity_type');
-          let color = theme.colors.default;
-
-          if (type === 'Episodic') color = theme.colors.episodic;
-          else if (type === 'Community') color = theme.colors.community;
-          else {
-            switch (entityType) {
-              case 'Person':
-                color = theme.colors.person;
-                break;
-              case 'Organization':
-                color = theme.colors.organization;
-                break;
-              default:
-                color = theme.colors.default;
-            }
-          }
-          return color;
-        },
-        'shadow-opacity': isDark ? 0.6 : 0.3,
         'z-index': 10,
       },
     },
@@ -260,9 +248,8 @@ export function generateCytoscapeStyles(
         'curve-style': 'bezier',
         'arrow-scale': 0.8,
         opacity: isDark ? 0.5 : 0.6,
-        label: (ele: any) => {
-          const label = ele.data('label') || '';
-          return label.length > 15 ? label.substring(0, 15) + '...' : label;
+        label: (ele: cytoscape.Singular) => {
+          return truncateLabel(getStringData(ele, 'label'), 15);
         },
         'font-size': '5px',
         'font-family': 'Inter, "Noto Sans SC", sans-serif',

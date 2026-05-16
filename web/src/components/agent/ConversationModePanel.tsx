@@ -181,14 +181,14 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
       conversationCoordinatorId || roster?.coordinator_agent_id,
       roster?.participant_bindings
     );
-    const linkedTask = tasks.find((task) => task.id === conversation?.linked_workspace_task_id) ?? null;
+    const linkedTask =
+      tasks.find((task) => task.id === conversation?.linked_workspace_task_id) ?? null;
     const participantCount =
       conversationParticipantIds.length > 0
         ? conversationParticipantIds.length
         : (roster?.participant_agents.length ?? 0);
 
-    const showTaskPicker =
-      effectiveMode === 'autonomous' && !!conversation?.workspace_id;
+    const showTaskPicker = effectiveMode === 'autonomous' && !!conversation?.workspace_id;
 
     return (
       <div
@@ -269,7 +269,10 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
               )}
             </div>
             {linkedTask ? (
-              <div className="mt-2 text-[11px] text-[#666]" data-testid="conversation-linked-task-summary">
+              <div
+                className="mt-2 text-[11px] text-[#666]"
+                data-testid="conversation-linked-task-summary"
+              >
                 {`${t('agent.workspace.task.summaryLabel', 'Linked task')}: ${linkedTask.title} · ${linkedTask.status}`}
               </div>
             ) : null}

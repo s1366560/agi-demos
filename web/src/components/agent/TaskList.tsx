@@ -35,7 +35,7 @@ const PRIORITY_DOT: Record<string, string> = {
 };
 
 const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
-  const config = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
+  const config = STATUS_CONFIG[task.status];
   const Icon = config.icon;
   const isCompleted = task.status === 'completed';
   const isActive = task.status === 'in_progress';
@@ -108,7 +108,7 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
         <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
           <div
             className="h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-[width] duration-500"
-            style={{ width: `${stats.pct}%` }}
+            style={{ width: `${String(stats.pct)}%` }}
           />
         </div>
         {stats.active > 0 && (

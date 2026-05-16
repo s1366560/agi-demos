@@ -409,10 +409,10 @@ const ConversationItem = memo<ConversationItemProps>(
                   const colorDef =
                     LABEL_COLORS.find((c) => c.name === label.color) ?? LABEL_COLORS[1];
                   return (
-                     <span
-                       key={label.id}
-                       className={`inline-flex items-center gap-1 text-2xs px-1.5 py-0 rounded-full ${colorDef.bg} ${colorDef.text} font-medium leading-4`}
-                     >
+                    <span
+                      key={label.id}
+                      className={`inline-flex items-center gap-1 text-2xs px-1.5 py-0 rounded-full ${colorDef.bg} ${colorDef.text} font-medium leading-4`}
+                    >
                       <span className={`w-1.5 h-1.5 rounded-full ${colorDef.dot} shrink-0`} />
                       {label.name}
                     </span>
@@ -423,22 +423,22 @@ const ConversationItem = memo<ConversationItemProps>(
             <div className="flex items-center gap-2 mt-1">
               <p className="text-xs text-slate-400">{timeAgo}</p>
               {/* Status badges */}
-               {hasHITL ? (
-                 <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-medium">
-                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
-                   {t('agent.sidebar.needsInput', 'Input needed')}
-                 </span>
-               ) : isStreaming ? (
-                 <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium">
-                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
-                   {t('agent.sidebar.processing', 'Processing')}
-                 </span>
-               ) : conversation.status === 'active' ? (
-                 <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium">
-                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                   {t('agent.sidebar.active', 'Active')}
-                 </span>
-               ) : null}
+              {hasHITL ? (
+                <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
+                  {t('agent.sidebar.needsInput', 'Input needed')}
+                </span>
+              ) : isStreaming ? (
+                <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
+                  {t('agent.sidebar.processing', 'Processing')}
+                </span>
+              ) : conversation.status === 'active' ? (
+                <span className="inline-flex items-center gap-1 text-2xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  {t('agent.sidebar.active', 'Active')}
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -542,7 +542,10 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   };
 
   return (
-    <nav aria-label="Conversations" className="h-full flex flex-col bg-slate-50 dark:bg-slate-900">
+    <nav
+      aria-label={t('agent.sidebar.conversations', { defaultValue: 'Conversations' })}
+      className="h-full flex flex-col bg-slate-50 dark:bg-slate-900"
+    >
       {/* Header */}
       <div
         className={`
@@ -556,17 +559,15 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
               <Bot className="text-white" size={24} />
             </div>
             {/* Collapse Toggle Button - Compact mode */}
-            {onToggleCollapse && (
-              <button
-                type="button"
-                onClick={onToggleCollapse}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                aria-label={t('agent.sidebar.expandSidebar', 'Expand sidebar')}
-                title={t('agent.sidebar.expandSidebar', 'Expand sidebar')}
-              >
-                <PanelLeft size={18} />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={t('agent.sidebar.expandSidebar', 'Expand sidebar')}
+              title={t('agent.sidebar.expandSidebar', 'Expand sidebar')}
+            >
+              <PanelLeft size={18} />
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -584,17 +585,15 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
                 </p>
               </div>
               {/* Collapse Toggle Button */}
-              {onToggleCollapse && (
-                <button
-                  type="button"
-                  onClick={onToggleCollapse}
-                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  aria-label={t('agent.sidebar.collapseSidebar', 'Collapse sidebar')}
-                  title={t('agent.sidebar.collapseSidebar', 'Collapse sidebar')}
-                >
-                  <PanelLeftClose size={18} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white dark:hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                aria-label={t('agent.sidebar.collapseSidebar', 'Collapse sidebar')}
+                title={t('agent.sidebar.collapseSidebar', 'Collapse sidebar')}
+              >
+                <PanelLeftClose size={18} />
+              </button>
             </div>
 
             {/* Extra Header Content (e.g., Project Selector) */}

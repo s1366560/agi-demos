@@ -3,9 +3,6 @@
  *
  * Extracted from agentV3.ts to reduce file size and improve maintainability.
  * Handles IndexedDB persistence, LRU cache eviction, and beforeunload flushing.
- *
- * NOTE: flushPendingSaves() uses a lazy import of useAgentV3Store to break
- * the circular dependency (persistence -> store -> persistence).
  */
 
 import { saveConversationState } from '../../utils/conversationDB';
@@ -25,12 +22,24 @@ export const MAX_CACHED_CONVERSATIONS = 10;
  */
 const pendingSaves = new Map<string, NodeJS.Timeout>();
 const SAVE_DEBOUNCE_MS = 500;
+type ConversationStatesReader = () => Map<string, ConversationState>;
+let conversationStatesReader: ConversationStatesReader | null = null;
 
 /**
  * LRU access order tracking for conversation state cache eviction.
  * Most recently accessed conversation ID is at the end.
  */
 const conversationAccessOrder: string[] = [];
+
+export function registerConversationStatesReader(reader: ConversationStatesReader): () => void {
+  conversationStatesReader = reader;
+
+  return () => {
+    if (conversationStatesReader === reader) {
+      conversationStatesReader = null;
+    }
+  };
+}
 
 /**
  * Record a conversation as recently accessed (move to end of LRU list)
@@ -101,7 +110,6 @@ export function scheduleSave(conversationId: string, state: ConversationState): 
 
 /**
  * Flush all pending saves immediately (for beforeunload).
- * Uses lazy import to avoid circular dependency with the store.
  */
 export async function flushPendingSaves(): Promise<void> {
   // Clear all timers
@@ -110,14 +118,14 @@ export async function flushPendingSaves(): Promise<void> {
   });
   pendingSaves.clear();
 
-  // Lazy import to break circular dependency
-  const { useAgentV3Store } = await import('../agentV3');
+  const conversationStates = conversationStatesReader?.();
+  if (!conversationStates) {
+    return;
+  }
 
-  // Get current store state and save all conversation states
-  const state = useAgentV3Store.getState();
   const savePromises: Promise<void>[] = [];
 
-  state.conversationStates.forEach((convState: ConversationState, conversationId: string) => {
+  conversationStates.forEach((convState: ConversationState, conversationId: string) => {
     savePromises.push(saveConversationState(conversationId, convState).catch(console.error));
   });
 
@@ -129,13 +137,13 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     // Use synchronous approach for beforeunload
     // Note: IndexedDB operations may not complete, but we try our best
-    flushPendingSaves();
+    void flushPendingSaves();
   });
 
   // Also handle visibilitychange for mobile browsers
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      flushPendingSaves();
+      void flushPendingSaves();
     }
   });
 }

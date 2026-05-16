@@ -1,3 +1,5 @@
+type ExtensibleString<TKnown extends string> = TKnown | (string & Record<never, never>);
+
 export type WorkspaceMemberRole = 'owner' | 'editor' | 'viewer';
 
 export type BlackboardPostStatus = 'open' | 'archived';
@@ -202,7 +204,7 @@ export interface WorkspaceTask {
 export interface WorkspaceTaskTransitionGate {
   target_status: WorkspaceTaskStatus;
   would_block: boolean;
-  severity: 'ready' | 'warning' | string;
+  severity: ExtensibleString<'ready' | 'warning'>;
   missing: string[];
   reasons: string[];
 }
@@ -263,7 +265,7 @@ export type TaskRecoveryAction =
 
 export interface TaskExecutionIncident {
   type: string;
-  severity: 'info' | 'warning' | 'error' | string;
+  severity: ExtensibleString<'info' | 'warning' | 'error'>;
   summary: string;
   evidence: Record<string, unknown>;
   opened_at?: string | null | undefined;
@@ -272,9 +274,9 @@ export interface TaskExecutionIncident {
 export interface TaskExecutionSession {
   workspace_id: string;
   task_id: string;
-  task_status: WorkspaceTaskStatus | string;
-  health: TaskExecutionSessionHealth | string;
-  session_status: TaskExecutionSessionStatus | string;
+  task_status: ExtensibleString<WorkspaceTaskStatus>;
+  health: ExtensibleString<TaskExecutionSessionHealth>;
+  session_status: ExtensibleString<TaskExecutionSessionStatus>;
   conversation_id?: string | null | undefined;
   attempt_id?: string | null | undefined;
   attempt_status?: string | null | undefined;
@@ -285,7 +287,10 @@ export interface TaskExecutionSession {
   has_user_input: boolean;
   has_assistant_output: boolean;
   incidents: TaskExecutionIncident[];
-  recommended_recovery_action?: TaskRecoveryAction | 'suppress' | null | undefined;
+  recommended_recovery_action?:
+    | ExtensibleString<TaskRecoveryAction | 'suppress'>
+    | null
+    | undefined;
   available_interventions: TaskRecoveryAction[];
   recent_events: Array<Record<string, unknown>>;
   recovery_actions: Array<Record<string, unknown>>;
@@ -300,7 +305,7 @@ export interface TaskRecoveryActionRequest {
 export interface TaskRecoveryActionResult {
   workspace_id: string;
   task_id: string;
-  action: TaskRecoveryAction | string;
+  action: ExtensibleString<TaskRecoveryAction>;
   status: string;
   message: string;
   conversation_id?: string | null | undefined;

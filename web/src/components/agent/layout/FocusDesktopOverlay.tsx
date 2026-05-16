@@ -9,10 +9,14 @@
 import type { FC } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { MessageSquare, X, Minimize2, Send } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useLayoutModeStore } from '@/stores/layoutMode';
+
+import type { TFunction } from 'i18next';
 
 interface FocusDesktopOverlayProps {
   /** Remote desktop content */
@@ -25,12 +29,18 @@ interface FocusDesktopOverlayProps {
   isStreaming?: boolean | undefined;
 }
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
   desktopContent,
   chatContent,
   onSend,
   isStreaming,
 }) => {
+  const { t } = useTranslation();
   const [focusChatExpanded, setFocusChatExpanded] = useState(false);
   const toggleFocusChat = useCallback(() => {
     setFocusChatExpanded((v) => !v);
@@ -82,7 +92,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
         className="absolute top-4 right-4 z-[60] flex items-center gap-2 px-3 py-1.5 rounded-lg
           bg-black/60 hover:bg-black/80 text-white/80 hover:text-white text-xs font-medium
           backdrop-blur-sm transition-[color,background-color,border-color,box-shadow,opacity,transform] cursor-pointer"
-        title="Exit focus mode (ESC)"
+        title={tFallback(t, 'agent.focusDesktop.exitFocusMode', 'Exit focus mode (ESC)')}
       >
         <Minimize2 size={14} />
         <span>ESC</span>
@@ -100,7 +110,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
             transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 hover:scale-110
             ${isStreaming ? 'animate-pulse motion-reduce:animate-none' : ''}
           `}
-          aria-label="Open chat"
+          aria-label={tFallback(t, 'agent.focusDesktop.openChat', 'Open chat')}
         >
           <MessageSquare size={20} />
           {isStreaming && (
@@ -118,11 +128,13 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
             <div className="flex items-center gap-2">
               <MessageSquare size={16} className="text-blue-500" />
-              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">Chat</span>
+              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                {tFallback(t, 'agent.focusDesktop.chat', 'Chat')}
+              </span>
               {isStreaming && (
                 <span className="flex items-center gap-1 text-xs text-amber-600">
                   <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse motion-reduce:animate-none" />
-                  Streaming
+                  {tFallback(t, 'agent.focusDesktop.streaming', 'Streaming')}
                 </span>
               )}
             </div>
@@ -130,7 +142,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
               type="button"
               onClick={toggleFocusChat}
               className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-              aria-label="Close chat"
+              aria-label={tFallback(t, 'agent.focusDesktop.closeChat', 'Close chat')}
             >
               <X size={16} />
             </button>
@@ -154,7 +166,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
                     handleSend();
                   }
                 }}
-                placeholder="Send a message..."
+                placeholder={tFallback(t, 'agent.focusDesktop.placeholder', 'Send a message...')}
                 rows={1}
                 className="flex-1 resize-none rounded-lg border border-slate-300 dark:border-slate-600
                   bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm
@@ -175,7 +187,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                   }
                 `}
-                aria-label="Send message"
+                aria-label={tFallback(t, 'agent.focusDesktop.sendMessage', 'Send message')}
               >
                 <Send size={16} />
               </button>

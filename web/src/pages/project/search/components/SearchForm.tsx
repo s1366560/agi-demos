@@ -14,6 +14,7 @@ import {
   Network,
   Grid,
   MessageSquare,
+  Download,
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
@@ -44,6 +45,7 @@ interface SearchFormProps {
   onHistoryToggle: () => void;
   onHistoryItemClick: (item: { query: string; mode: string }) => void;
   onExportResults?: (() => void) | undefined;
+  canExportResults?: boolean | undefined;
 }
 
 export const SearchForm = memo<SearchFormProps>(
@@ -68,7 +70,8 @@ export const SearchForm = memo<SearchFormProps>(
     onConfigToggle,
     onHistoryToggle,
     onHistoryItemClick,
-    onExportResults: _onExportResults, // Intentionally unused - for future feature
+    onExportResults,
+    canExportResults = false,
   }) => {
     const { t } = useTranslation();
 
@@ -93,6 +96,12 @@ export const SearchForm = memo<SearchFormProps>(
       if (isSearchFocused) return '';
       return t('project.search.input.placeholder.default');
     }, [searchMode, isSearchFocused, t]);
+
+    const getInputLabel = useCallback(() => {
+      if (searchMode === 'graphTraversal') return t('project.search.input.label.graph');
+      if (searchMode === 'community') return t('project.search.input.label.community');
+      return t('project.search.input.label.default');
+    }, [searchMode, t]);
 
     return (
       <header className="flex flex-col gap-4 px-6 pt-6 pb-2 shrink-0">
@@ -153,6 +162,18 @@ export const SearchForm = memo<SearchFormProps>(
               onClick={onHistoryToggle}
             />
           )}
+          {onExportResults && (
+            <button
+              type="button"
+              onClick={onExportResults}
+              disabled={!canExportResults}
+              aria-label={t('project.search.actions.export')}
+              title={t('project.search.actions.export')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
+            >
+              <Download className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Search History Dropdown */}
@@ -173,6 +194,7 @@ export const SearchForm = memo<SearchFormProps>(
                 )}
               </div>
               <input
+                aria-label={getInputLabel()}
                 className="block w-full pl-10 pr-12 py-3 bg-white dark:bg-[#1e212b] border border-transparent focus:border-blue-600/50 ring-0 focus:ring-4 focus:ring-blue-600/10 rounded-xl text-sm placeholder-slate-400 text-slate-900 dark:text-white shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                 placeholder={getPlaceholder()}
                 type="text"
@@ -195,6 +217,7 @@ export const SearchForm = memo<SearchFormProps>(
                 searchMode === 'faceted') && (
                 <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
                   <button
+                    type="button"
                     onClick={onVoiceSearch}
                     className={`p-1.5 rounded-lg transition-colors ${
                       isListening
@@ -213,6 +236,7 @@ export const SearchForm = memo<SearchFormProps>(
               )}
             </label>
             <button
+              type="button"
               onClick={onSearch}
               disabled={loading}
               className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95 shrink-0 disabled:opacity-50"
@@ -281,19 +305,24 @@ interface HistoryButtonProps {
   onClick: () => void;
 }
 
-const HistoryButton = memo<HistoryButtonProps>(({ showHistory, count, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`px-3 py-2 rounded-lg text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1.5 ${
-      showHistory
-        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
-        : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-    }`}
-  >
-    <MessageSquare className="w-3.5 h-3.5" />
-    History ({count})
-  </button>
-));
+const HistoryButton = memo<HistoryButtonProps>(({ showHistory, count, onClick }) => {
+  const { t } = useTranslation();
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-2 rounded-lg text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1.5 ${
+        showHistory
+          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+          : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+      }`}
+    >
+      <MessageSquare className="w-3.5 h-3.5" />
+      {t('project.search.actions.history')} ({count})
+    </button>
+  );
+});
 HistoryButton.displayName = 'HistoryButton';
 
 interface SearchHistoryDropdownProps {
@@ -301,26 +330,33 @@ interface SearchHistoryDropdownProps {
   onItemClick: (item: { query: string; mode: string }) => void;
 }
 
-const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onItemClick }) => (
-  <div className="bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-3 max-h-64 overflow-y-auto">
-    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Recent</div>
-    {history.map((item, idx) => (
-      <button
-        key={idx}
-        onClick={() => {
-          onItemClick(item);
-        }}
-        className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group"
-      >
-        <div className="flex flex-col">
-          <span className="text-sm text-slate-900 dark:text-white truncate max-w-md">
-            {item.query}
-          </span>
-          <span className="text-xs text-slate-500 capitalize">{item.mode}</span>
-        </div>
-        <span className="text-xs text-slate-400">{formatTimeOnly(item.timestamp)}</span>
-      </button>
-    ))}
-  </div>
-));
+const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onItemClick }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-3 max-h-64 overflow-y-auto">
+      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+        {t('project.search.actions.recent')}
+      </div>
+      {history.map((item, idx) => (
+        <button
+          key={idx}
+          type="button"
+          onClick={() => {
+            onItemClick(item);
+          }}
+          className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group"
+        >
+          <div className="flex flex-col">
+            <span className="text-sm text-slate-900 dark:text-white truncate max-w-md">
+              {item.query}
+            </span>
+            <span className="text-xs text-slate-500 capitalize">{item.mode}</span>
+          </div>
+          <span className="text-xs text-slate-400">{formatTimeOnly(item.timestamp)}</span>
+        </button>
+      ))}
+    </div>
+  );
+});
 SearchHistoryDropdown.displayName = 'SearchHistoryDropdown';

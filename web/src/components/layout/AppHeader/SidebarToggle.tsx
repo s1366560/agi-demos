@@ -10,7 +10,7 @@ import { PanelLeft, PanelRight } from 'lucide-react';
 
 export interface SidebarToggleProps {
   collapsed: boolean;
-  onToggle: () => void;
+  onToggle?: (() => void) | undefined;
   ariaLabel?: string | undefined;
   /** @internal Slot for positioning */
   slot?: 'left' | 'right' | undefined;

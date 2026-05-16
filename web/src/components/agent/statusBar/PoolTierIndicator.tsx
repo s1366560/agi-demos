@@ -104,7 +104,7 @@ export const PoolTierIndicator: FC<PoolTierIndicatorProps> = ({
                   </div>
                 </div>
                 <div className="text-xs opacity-70 pt-1 border-t border-border-dark mt-1">
-                  {poolInstance?.tier ? t(`agent.lifecycle.pool.tiers.${poolInstance.tier}`) : ''}
+                  {t(`agent.lifecycle.pool.tiers.${poolInstance.tier}`)}
                 </div>
               </>
             ) : (

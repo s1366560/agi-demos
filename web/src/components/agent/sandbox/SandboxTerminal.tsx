@@ -10,6 +10,8 @@
 
 import { lazy, Suspense, useState, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Spin, Alert, Button } from 'antd';
 import { RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 
@@ -50,6 +52,7 @@ export function SandboxTerminal({
   height = '100%',
   showToolbar = true,
 }: SandboxTerminalProps) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [error, setError] = useState<string | null>(null);
@@ -110,12 +113,19 @@ export function SandboxTerminal({
             />
             <span className="text-xs text-gray-400">
               {status === 'connected'
-                ? `Terminal (${sessionId?.slice(0, 8)})`
+                ? t('components.sandboxTerminal.connected', {
+                    defaultValue: 'Terminal ({{sessionId}})',
+                    sessionId:
+                      sessionId?.slice(0, 8) ??
+                      t('components.sandboxTerminal.unknown', { defaultValue: 'unknown' }),
+                  })
                 : status === 'connecting'
-                  ? 'Connecting...'
+                  ? t('components.sandboxTerminal.connecting', { defaultValue: 'Connecting...' })
                   : status === 'error'
-                    ? 'Error'
-                    : 'Disconnected'}
+                    ? t('components.sandboxTerminal.error', { defaultValue: 'Error' })
+                    : t('components.sandboxTerminal.disconnected', {
+                        defaultValue: 'Disconnected',
+                      })}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -125,7 +135,10 @@ export function SandboxTerminal({
               icon={<RefreshCw size={16} />}
               onClick={reconnect}
               className="text-gray-400 hover:text-white"
-              title="Reconnect"
+              title={t('components.sandboxTerminal.reconnect', { defaultValue: 'Reconnect' })}
+              aria-label={t('components.sandboxTerminal.reconnect', {
+                defaultValue: 'Reconnect',
+              })}
             />
             <Button
               type="text"
@@ -133,7 +146,20 @@ export function SandboxTerminal({
               icon={isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               onClick={toggleFullscreen}
               className="text-gray-400 hover:text-white"
-              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              title={
+                isFullscreen
+                  ? t('components.sandboxTerminal.exitFullscreen', {
+                      defaultValue: 'Exit Fullscreen',
+                    })
+                  : t('components.sandboxTerminal.fullscreen', { defaultValue: 'Fullscreen' })
+              }
+              aria-label={
+                isFullscreen
+                  ? t('components.sandboxTerminal.exitFullscreen', {
+                      defaultValue: 'Exit Fullscreen',
+                    })
+                  : t('components.sandboxTerminal.fullscreen', { defaultValue: 'Fullscreen' })
+              }
             />
           </div>
         </div>
@@ -144,20 +170,26 @@ export function SandboxTerminal({
         {status === 'connecting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background-dark z-10">
             <Spin />
-            <span className="text-slate-400">Connecting to terminal...</span>
+            <span className="text-slate-400">
+              {t('components.sandboxTerminal.connectingToTerminal', {
+                defaultValue: 'Connecting to terminal...',
+              })}
+            </span>
           </div>
         )}
 
         {error && status === 'error' && (
           <Alert
             type="error"
-            message="Connection Error"
+            title={t('components.sandboxTerminal.connectionError', {
+              defaultValue: 'Connection Error',
+            })}
             description={error}
             showIcon
             className="m-4"
             action={
               <Button size="small" onClick={reconnect}>
-                Retry
+                {t('components.sandboxTerminal.retry', { defaultValue: 'Retry' })}
               </Button>
             }
           />
@@ -166,7 +198,10 @@ export function SandboxTerminal({
         <Suspense
           fallback={
             <div className="h-full w-full flex items-center justify-center bg-background-dark text-slate-400">
-              <Spin /> Loading terminal...
+              <Spin />{' '}
+              {t('components.sandboxTerminal.loadingTerminal', {
+                defaultValue: 'Loading terminal...',
+              })}
             </div>
           }
         >

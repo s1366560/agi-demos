@@ -1,6 +1,8 @@
 import { memo, useState, useCallback } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Bot, ChevronRight, ChevronDown, Circle } from 'lucide-react';
 
 import type { AgentNode } from '../../../types/multiAgent';
@@ -9,31 +11,39 @@ interface MultiAgentPanelProps {
   agentNodes: Map<string, AgentNode> | undefined;
 }
 
-const STATUS_STYLES: Record<AgentNode['status'], { color: string; bg: string; label: string }> = {
+const STATUS_STYLES: Record<
+  AgentNode['status'],
+  { color: string; bg: string; labelKey: string; defaultLabel: string }
+> = {
   pending: {
     color: 'text-slate-500 dark:text-slate-400',
     bg: 'bg-slate-100 dark:bg-slate-800',
-    label: 'Pending',
+    labelKey: 'agent.multiAgent.status.pending',
+    defaultLabel: 'Pending',
   },
   running: {
     color: 'text-blue-600 dark:text-blue-400',
     bg: 'bg-blue-50 dark:bg-blue-900/30',
-    label: 'Running',
+    labelKey: 'agent.multiAgent.status.running',
+    defaultLabel: 'Running',
   },
   completed: {
     color: 'text-green-600 dark:text-green-400',
     bg: 'bg-green-50 dark:bg-green-900/30',
-    label: 'Completed',
+    labelKey: 'agent.multiAgent.status.completed',
+    defaultLabel: 'Completed',
   },
   failed: {
     color: 'text-red-600 dark:text-red-400',
     bg: 'bg-red-50 dark:bg-red-900/30',
-    label: 'Failed',
+    labelKey: 'agent.multiAgent.status.failed',
+    defaultLabel: 'Failed',
   },
   stopped: {
     color: 'text-amber-600 dark:text-amber-400',
     bg: 'bg-amber-50 dark:bg-amber-900/30',
-    label: 'Stopped',
+    labelKey: 'agent.multiAgent.status.stopped',
+    defaultLabel: 'Stopped',
   },
 };
 
@@ -44,6 +54,7 @@ interface AgentNodeItemProps {
 }
 
 const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
   const style = STATUS_STYLES[node.status];
@@ -57,7 +68,7 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth })
       <div
         className={`flex items-start gap-2 rounded-lg p-2 transition-colors
             hover:bg-slate-50 dark:hover:bg-slate-800/50`}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        style={{ paddingLeft: `${String(depth * 16 + 8)}px` }}
       >
         {hasChildren ? (
           <button
@@ -88,7 +99,7 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth })
               className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs
                   font-medium ${style.color} ${style.bg}`}
             >
-              {style.label}
+              {t(style.labelKey, { defaultValue: style.defaultLabel })}
             </span>
           </div>
 
@@ -126,17 +137,26 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth })
 
 AgentNodeItem.displayName = 'AgentNodeItem';
 
-const EmptyAgentState: FC = memo(() => (
-  <div className="flex flex-col items-center justify-center p-8 text-center">
-    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-      <Bot size={24} className="text-slate-400 dark:text-slate-500" />
+const EmptyAgentState: FC = memo(() => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+        <Bot size={24} className="text-slate-400 dark:text-slate-500" />
+      </div>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {t('agent.multiAgent.empty.title', { defaultValue: 'No agents spawned yet' })}
+      </p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+        {t('agent.multiAgent.empty.description', {
+          defaultValue:
+            'Multi-agent activity will appear here when agents are spawned during a conversation.',
+        })}
+      </p>
     </div>
-    <p className="text-sm text-slate-500 dark:text-slate-400">No agents spawned yet</p>
-    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-      Multi-agent activity will appear here when agents are spawned during a conversation.
-    </p>
-  </div>
-));
+  );
+});
 
 EmptyAgentState.displayName = 'EmptyAgentState';
 

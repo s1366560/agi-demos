@@ -13,11 +13,14 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useTranslation } from 'react-i18next';
+
 import { useShallow } from 'zustand/react/shallow';
 
 import { restApi } from '../../services/agent/restApi';
 import { useAgentV3Store } from '../../stores/agentV3';
+
 import type { DecisionOption, HITLRequestFromApi } from '../../types/hitl.unified';
 
 export interface HITLCenterPanelProps {
@@ -76,7 +79,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
       try {
         const requestType = filter === 'all' ? undefined : filter;
         const resp = await restApi.getPendingHITLRequests(conversationId, requestType);
-        setRequests(resp.requests ?? []);
+        setRequests(resp.requests);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
@@ -90,7 +93,9 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
       const id = setInterval(() => {
         void fetchPending();
       }, autoRefreshMs);
-      return () => clearInterval(id);
+      return () => {
+        clearInterval(id);
+      };
     }, [fetchPending, conversationId, autoRefreshMs]);
 
     const visible = useMemo(() => requests, [requests]);
@@ -163,7 +168,9 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
           </h3>
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value as FilterType)}
+            onChange={(e) => {
+              setFilter(e.target.value as FilterType);
+            }}
             className="h-[26px] rounded border border-[rgba(0,0,0,0.08)] bg-white px-2 text-xs text-[#171717]"
             aria-label={t('agent.hitl.center.filterAria', {
               defaultValue: 'Filter by HITL type',
@@ -196,11 +203,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         )}
 
         {resolveError && (
-          <p
-            className="mb-2 text-xs text-[#ee0000]"
-            role="alert"
-            data-testid="hitl-resolve-error"
-          >
+          <p className="mb-2 text-xs text-[#ee0000]" role="alert" data-testid="hitl-resolve-error">
             {resolveError}
           </p>
         )}
@@ -221,7 +224,9 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                 <button
                   type="button"
                   className="block w-full cursor-pointer text-left"
-                  onClick={() => onSelectRequest?.(req.id)}
+                  onClick={() => {
+                    onSelectRequest?.(req.id);
+                  }}
                 >
                   <div className="mb-1 flex items-center gap-1">
                     <span className={badgeBase} data-testid="hitl-type-badge">

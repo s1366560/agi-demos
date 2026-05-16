@@ -14,6 +14,8 @@
 
 import React, { useState, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -27,6 +29,7 @@ import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 const { Option } = Select;
+const PROJECT_SELECTOR_KEY = 'agent.projectSelector';
 
 interface ProjectSelectorProps {
   /** Currently selected project ID */
@@ -42,6 +45,15 @@ interface ProjectOption {
   name: string;
   tenant_id: string;
   tenant_name?: string | undefined;
+}
+
+function useProjectSelectorText(): (key: string, fallback: string) => string {
+  const { t } = useTranslation();
+  return (key: string, fallback: string) => {
+    const fullKey = `${PROJECT_SELECTOR_KEY}.${key}`;
+    const translated = t(fullKey, fallback);
+    return translated === fullKey ? fallback : translated;
+  };
 }
 
 /**
@@ -60,12 +72,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onProjectChange,
   className,
 }) => {
+  const text = useProjectSelectorText();
   const { projects, currentProject, isLoading: projectsLoading } = useProjectStore();
-  const {
-    activeConversationId,
-    setActiveConversation,
-    loadConversations,
-  } = useAgentV3Store(
+  const { activeConversationId, setActiveConversation, loadConversations } = useAgentV3Store(
     useShallow((state) => ({
       activeConversationId: state.activeConversationId,
       setActiveConversation: state.setActiveConversation,
@@ -111,7 +120,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       setPendingProjectId(projectId);
       setIsModalOpen(true);
     } else {
-      executeProjectSwitch(projectId);
+      void executeProjectSwitch(projectId);
     }
   };
 
@@ -140,7 +149,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   // Handle modal confirmation
   const handleConfirmSwitch = () => {
     if (pendingProjectId) {
-      executeProjectSwitch(pendingProjectId);
+      void executeProjectSwitch(pendingProjectId);
     }
   };
 
@@ -155,7 +164,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     return (
       <div className={className} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <Spin indicator={<Loader2 className="animate-spin" size={16} />} size="small" />
-        <span>Loading conversations...</span>
+        <span>{text('loadingConversations', 'Loading conversations...')}</span>
       </div>
     );
   }
@@ -164,10 +173,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   if (projectOptions.length === 0) {
     return (
       <Select
-        placeholder="No projects available"
+        placeholder={text('noProjectsAvailable', 'No projects available')}
         disabled
         {...(className != null ? { className } : { className: 'w-64' })}
-        aria-label="Select project for agent conversation"
+        aria-label={text('aria', 'Select project for agent conversation')}
       />
     );
   }
@@ -179,21 +188,26 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     <>
       <Select
         {...(currentProjectId ? { value: currentProjectId } : {})}
-        placeholder="Select a project"
+        placeholder={text('selectProject', 'Select a project')}
         onChange={handleProjectSelect}
         loading={projectsLoading}
         disabled={projectOptions.length === 1}
         {...(className != null ? { className } : { className: 'w-64' })}
-        aria-label="Select project for agent conversation"
-        showSearch
-        optionFilterProp="children"
-        notFoundContent={projectsLoading ? <Spin size="small" /> : 'No projects found'}
+        aria-label={text('aria', 'Select project for agent conversation')}
+        showSearch={{ optionFilterProp: 'children' }}
+        notFoundContent={
+          projectsLoading ? <Spin size="small" /> : text('noProjectsFound', 'No projects found')
+        }
       >
         {projectOptions.map((project) => {
           // Display label with tenant context if duplicate names exist
           const label =
             hasDuplicateNames && currentTenant
-              ? `${project.name} (${project.tenant_id === currentTenant.id ? 'Current' : 'Other'} tenant)`
+              ? `${project.name} (${
+                  project.tenant_id === currentTenant.id
+                    ? text('currentTenant', 'Current')
+                    : text('otherTenant', 'Other')
+                } ${text('tenantSuffix', 'tenant')})`
               : project.name;
 
           return (
@@ -208,33 +222,38 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       <Modal
         title={
           <span>
-            <AlertCircle style={{ color: '#faad14', marginRight: 8}} size={16} />
-            Switch Project?
+            <AlertCircle style={{ color: '#faad14', marginRight: 8 }} size={16} />
+            {text('switchTitle', 'Switch Project?')}
           </span>
         }
         open={isModalOpen}
         onOk={handleConfirmSwitch}
         onCancel={handleCancelSwitch}
-        okText="Switch Project"
-        cancelText="Cancel"
+        okText={text('switchAction', 'Switch Project')}
+        cancelText={text('cancel', 'Cancel')}
         confirmLoading={isSubmitting}
         okButtonProps={{ danger: true }}
       >
         <p>
-          You have an active conversation in{' '}
-          <strong>{currentProjectName || 'the current project'}</strong>. Switching projects will
-          clear this conversation from your view.
+          {text('activeConversationPrefix', 'You have an active conversation in')}{' '}
+          <strong>
+            {currentProjectName || text('currentProjectFallback', 'the current project')}
+          </strong>
+          .{' '}
+          {text('switchWarning', 'Switching projects will clear this conversation from your view.')}
         </p>
         <p className="text-slate-500 dark:text-slate-400">
-          The conversation will be preserved and can be accessed again by switching back to this
-          project.
+          {text(
+            'switchPreserve',
+            'The conversation will be preserved and can be accessed again by switching back to this project.'
+          )}
         </p>
       </Modal>
 
       {/* Error display */}
       {error && (
         <Alert
-          message="Failed to load conversations"
+          title={text('loadConversationsFailed', 'Failed to load conversations')}
           description={error}
           type="error"
           closable
@@ -250,26 +269,32 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
  */
 export const ProjectSelectorLoading: React.FC<{ className?: string | undefined }> = ({
   className,
-}) => (
-  <div
-    {...(className != null ? { className } : {})}
-    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-  >
-    <Spin indicator={<Loader2 className="animate-spin" size={16} />} size="small" />
-    <span data-testid="loading-indicator">Loading...</span>
-  </div>
-);
+}) => {
+  const text = useProjectSelectorText();
+  return (
+    <div
+      {...(className != null ? { className } : {})}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+    >
+      <Spin indicator={<Loader2 className="animate-spin" size={16} />} size="small" />
+      <span data-testid="loading-indicator">{text('loading', 'Loading...')}</span>
+    </div>
+  );
+};
 
 /**
  * Empty state component when no projects are available
  */
 export const ProjectSelectorEmpty: React.FC<{ className?: string | undefined }> = ({
   className,
-}) => (
-  <Select
-    placeholder="No projects available"
-    disabled
-    {...(className != null ? { className } : { className: 'w-64' })}
-    aria-label="Select project for agent conversation"
-  />
-);
+}) => {
+  const text = useProjectSelectorText();
+  return (
+    <Select
+      placeholder={text('noProjectsAvailable', 'No projects available')}
+      disabled
+      {...(className != null ? { className } : { className: 'w-64' })}
+      aria-label={text('aria', 'Select project for agent conversation')}
+    />
+  );
+};

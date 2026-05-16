@@ -12,19 +12,18 @@ import React, { memo, useMemo } from 'react';
 import { Collapse } from 'antd';
 import { Lightbulb, Wrench } from 'lucide-react';
 
-
 import { formatTimeOnly } from '@/utils/date';
 
-import { ToolCall, ToolResult } from '../../types/agent';
-
 import { ToolCard } from './ToolCard';
+
+import type { ToolCall, ToolResult } from '../../types/agent';
 
 interface TimelineItem {
   type: 'thought' | 'tool_call';
   id: string;
   content?: string | undefined;
   toolName?: string | undefined;
-  toolInput?: any | undefined;
+  toolInput?: Record<string, unknown> | undefined;
   timestamp: number;
 }
 
@@ -50,8 +49,8 @@ interface ThinkingChainProps {
 const formatRelativeTime = (timestamp: number): string => {
   const diff = Date.now() - timestamp;
   if (diff < 1000) return 'now';
-  if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 60000) return `${String(Math.floor(diff / 1000))}s ago`;
+  if (diff < 3600000) return `${String(Math.floor(diff / 60000))}m ago`;
   return formatTimeOnly(timestamp);
 };
 
@@ -79,7 +78,7 @@ const formatSequenceNumber = (num: number): string => {
     '⑲',
     '⑳',
   ];
-  return num <= 20 ? (circledNumbers[num - 1] ?? `${num}.`) : `${num}.`;
+  return num <= 20 ? (circledNumbers[num - 1] ?? `${String(num)}.`) : `${String(num)}.`;
 };
 
 // TimelineNode component for individual items
@@ -162,7 +161,10 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
     const header = useMemo(
       () => (
         <div className="flex items-center gap-2 text-slate-500">
-          <Lightbulb className={isThinking ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''} size={16} />
+          <Lightbulb
+            className={isThinking ? 'animate-pulse motion-reduce:animate-none text-amber-500' : ''}
+            size={16}
+          />
           <span className="text-xs font-medium">
             {isThinking ? 'Thinking...' : 'Thought Process'}
           </span>
@@ -193,10 +195,11 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
                 <span className="break-words">{item.content}</span>
               </TimelineNode>
             );
-          } else if (item.type === 'tool_call') {
-            const result = toolResults.find((r) => r.tool_name === item.toolName);
+          } else {
+            const toolName = item.toolName ?? 'unknown';
+            const result = toolResults.find((r) => r.tool_name === toolName);
             const status = result ? (result.error ? 'failed' : 'success') : 'running';
-            const execution = toolExecutions[item.toolName!];
+            const execution = toolExecutions[toolName];
 
             items.push(
               <TimelineNode
@@ -207,9 +210,9 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
                 isLast={isLast}
               >
                 <ToolCard
-                  toolName={item.toolName!}
-                  input={item.toolInput}
-                  result={result?.result || result?.error}
+                  toolName={toolName}
+                  input={item.toolInput ?? {}}
+                  result={result?.result ?? result?.error}
                   status={status}
                   startTime={execution?.startTime}
                   endTime={execution?.endTime}
@@ -226,7 +229,7 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
           type: 'thought' | 'tool_call';
           content?: string | undefined;
           toolName?: string | undefined;
-          toolInput?: any | undefined;
+          toolInput?: Record<string, unknown> | undefined;
           timestamp: number;
         }> = [];
 
@@ -253,7 +256,7 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
           if (item.type === 'thought') {
             items.push(
               <TimelineNode
-                key={`fallback-thought-${index}`}
+                key={`fallback-thought-${String(index)}`}
                 type="thought"
                 sequence={sequence}
                 timestamp={item.timestamp}
@@ -265,20 +268,21 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
           } else {
             const result = toolResults.find((r) => r.tool_name === item.toolName);
             const status = result ? (result.error ? 'failed' : 'success') : 'running';
-            const execution = toolExecutions[item.toolName!];
+            const toolName = item.toolName ?? 'unknown';
+            const execution = toolExecutions[toolName];
 
             items.push(
               <TimelineNode
-                key={`fallback-tool-${index}`}
+                key={`fallback-tool-${String(index)}`}
                 type="tool_call"
                 sequence={sequence}
                 timestamp={item.timestamp}
                 isLast={isLast}
               >
                 <ToolCard
-                  toolName={item.toolName!}
-                  input={item.toolInput}
-                  result={result?.result || result?.error}
+                  toolName={toolName}
+                  input={item.toolInput ?? {}}
+                  result={result?.result ?? result?.error}
                   status={status}
                   startTime={execution?.startTime}
                   endTime={execution?.endTime}

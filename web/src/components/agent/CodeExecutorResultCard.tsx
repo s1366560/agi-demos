@@ -9,9 +9,10 @@
 
 import React, { useState } from 'react';
 
-import { Card, Typography, Space, Tag, Alert, Collapse } from 'antd';
-import { CheckCircle2, Clock, Code, File, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
+import { Alert, Card, Collapse, Space, Tag, Typography } from 'antd';
+import { CheckCircle2, Clock, Code, File, XCircle } from 'lucide-react';
 
 import { FileDownloadButton } from './FileDownloadButton';
 
@@ -38,13 +39,25 @@ interface CodeExecutorResultCardProps {
   result: CodeExecutorResult;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isCodeExecutorResult = (value: unknown): value is CodeExecutorResult => {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.success === 'boolean' &&
+    typeof value.exit_code === 'number' &&
+    typeof value.execution_time_ms === 'number'
+  );
+};
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function parseCodeExecutorResult(resultStr: string): CodeExecutorResult | null {
   try {
     // Try to parse as JSON first
-    const parsed = JSON.parse(resultStr);
-    if (typeof parsed === 'object' && 'success' in parsed) {
-      return parsed as CodeExecutorResult;
+    const parsed: unknown = JSON.parse(resultStr);
+    if (isCodeExecutorResult(parsed)) {
+      return parsed;
     }
     return null;
   } catch {
@@ -81,7 +94,7 @@ export function parseCodeExecutorResult(resultStr: string): CodeExecutorResult |
       result.output_files = urls.map((url, index) => {
         // Try to extract filename from URL
         const urlPath = new URL(url).pathname;
-        const filename = urlPath.split('/').pop() || `file_${index + 1}`;
+        const filename = urlPath.split('/').pop() || `file_${(index + 1).toString()}`;
         return { filename, url };
       });
     }
@@ -97,9 +110,11 @@ export function parseCodeExecutorResult(resultStr: string): CodeExecutorResult |
 }
 
 export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ result }) => {
+  const { t } = useTranslation();
   const [showLogs, setShowLogs] = useState(false);
 
-  const hasFiles = result.output_files && result.output_files.length > 0;
+  const outputFiles = result.output_files ?? [];
+  const hasFiles = outputFiles.length > 0;
   const hasStdout = result.stdout && result.stdout.trim().length > 0;
   const hasStderr = result.stderr && result.stderr.trim().length > 0;
 
@@ -113,26 +128,37 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
         marginTop: 8,
       }}
     >
-      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="small" style={{ width: '100%' }}>
         {/* Status Header */}
         <Space wrap>
           <Code size={16} />
-          <Text strong>Code Execution</Text>
+          <Text strong>
+            {t('components.codeExecutorResult.title', { defaultValue: 'Code Execution' })}
+          </Text>
           <Tag
             icon={result.success ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
             color={result.success ? 'success' : 'error'}
           >
-            {result.success ? 'Success' : 'Failed'}
+            {result.success
+              ? t('components.codeExecutorResult.status.success', { defaultValue: 'Success' })
+              : t('components.codeExecutorResult.status.failed', { defaultValue: 'Failed' })}
           </Tag>
           <Tag icon={<Clock size={16} />} color="default">
             {result.execution_time_ms}ms
           </Tag>
-          {result.exit_code !== 0 && <Tag color="warning">Exit: {result.exit_code}</Tag>}
+          {result.exit_code !== 0 && (
+            <Tag color="warning">
+              {t('components.codeExecutorResult.exitCode', {
+                defaultValue: 'Exit: {{exitCode}}',
+                exitCode: result.exit_code,
+              })}
+            </Tag>
+          )}
         </Space>
 
         {/* Error Message */}
         {result.error && (
-          <Alert type="error" message={result.error} showIcon style={{ marginTop: 8 }} />
+          <Alert type="error" title={result.error} showIcon style={{ marginTop: 8 }} />
         )}
 
         {/* Output Files */}
@@ -140,10 +166,14 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
           <div style={{ marginTop: 8 }}>
             <Space wrap>
               <File size={16} />
-              <Text type="secondary">Generated Files:</Text>
+              <Text type="secondary">
+                {t('components.codeExecutorResult.generatedFiles', {
+                  defaultValue: 'Generated Files:',
+                })}
+              </Text>
             </Space>
             <div style={{ marginTop: 8 }}>
-              {result.output_files!.map((file, index) => (
+              {outputFiles.map((file, index) => (
                 <FileDownloadButton
                   key={index}
                   filename={file.filename}
@@ -169,15 +199,23 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
                 key: 'logs',
                 label: (
                   <Text type="secondary" style={{ fontSize: 11 }}>
-                    {showLogs ? 'Hide' : 'Show'} Execution Logs
+                    {showLogs
+                      ? t('components.codeExecutorResult.logs.hide', {
+                          defaultValue: 'Hide Execution Logs',
+                        })
+                      : t('components.codeExecutorResult.logs.show', {
+                          defaultValue: 'Show Execution Logs',
+                        })}
                   </Text>
                 ),
                 children: (
-                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                     {hasStdout && (
                       <div>
                         <Text type="secondary" style={{ fontSize: 11 }}>
-                          stdout:
+                          {t('components.codeExecutorResult.logs.stdout', {
+                            defaultValue: 'stdout:',
+                          })}
                         </Text>
                         <pre
                           style={{
@@ -198,7 +236,9 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
                     {hasStderr && (
                       <div>
                         <Text type="danger" style={{ fontSize: 11 }}>
-                          stderr:
+                          {t('components.codeExecutorResult.logs.stderr', {
+                            defaultValue: 'stderr:',
+                          })}
                         </Text>
                         <pre
                           style={{

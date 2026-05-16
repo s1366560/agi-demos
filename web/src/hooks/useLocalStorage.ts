@@ -23,6 +23,13 @@ import { useState, useEffect, useCallback } from 'react';
 // In-memory cache for localStorage reads to avoid synchronous I/O
 const localStorageCache = new Map<string, unknown>();
 
+const serializeForLocalStorage = (value: unknown): string | null => {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
+    return null;
+  }
+  return JSON.stringify(value);
+};
+
 export interface UseLocalStorageReturn<T> {
   value: T;
   setValue: (value: T | ((prev: T) => T)) => void;
@@ -68,7 +75,12 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
           localStorageCache.set(key, valueToStore);
 
           if (typeof window !== 'undefined') {
-            window.localStorage.setItem(key, JSON.stringify(valueToStore));
+            const serialized = serializeForLocalStorage(valueToStore);
+            if (serialized === null) {
+              window.localStorage.removeItem(key);
+            } else {
+              window.localStorage.setItem(key, serialized);
+            }
           }
           return valueToStore;
         } catch (error) {
@@ -124,7 +136,10 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
       try {
         const item = window.localStorage.getItem(key);
         if (item === null) {
-          window.localStorage.setItem(key, JSON.stringify(initialValue));
+          const serialized = serializeForLocalStorage(initialValue);
+          if (serialized !== null) {
+            window.localStorage.setItem(key, serialized);
+          }
         }
       } catch (error) {
         console.warn(`Error initializing localStorage key "${key}":`, error);

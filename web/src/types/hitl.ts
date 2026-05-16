@@ -382,7 +382,10 @@ export function createHITLRequest(
         ...base,
         requestType: 'clarification',
         question: data.question as string,
-        clarificationType: (data.clarification_type as ClarificationType) || 'text_input',
+        clarificationType:
+          typeof data.clarification_type === 'string'
+            ? (data.clarification_type as ClarificationType)
+            : 'text_input',
         options: data.options as string[] | undefined,
         allowCustom: data.allow_custom as boolean | undefined,
         defaultValue: data.default_value as string | undefined,
@@ -394,8 +397,11 @@ export function createHITLRequest(
         requestType: 'permission',
         toolName: data.tool_name as string,
         action: data.action as string,
-        riskLevel: (data.risk_level as RiskLevel) || 'medium',
-        details: (data.details as Record<string, unknown>) || {},
+        riskLevel: typeof data.risk_level === 'string' ? (data.risk_level as RiskLevel) : 'medium',
+        details:
+          data.details && typeof data.details === 'object' && !Array.isArray(data.details)
+            ? (data.details as Record<string, unknown>)
+            : {},
         description: data.description as string | undefined,
         allowRemember: data.allow_remember as boolean | undefined,
         defaultAction: data.default_action as 'allow' | 'deny' | undefined,
@@ -406,8 +412,11 @@ export function createHITLRequest(
         ...base,
         requestType: 'decision',
         question: data.question as string,
-        decisionType: (data.decision_type as DecisionType) || 'single_choice',
-        options: (data.options as DecisionOption[]) || [],
+        decisionType:
+          typeof data.decision_type === 'string'
+            ? (data.decision_type as DecisionType)
+            : 'single_choice',
+        options: Array.isArray(data.options) ? (data.options as DecisionOption[]) : [],
         allowCustom: data.allow_custom as boolean | undefined,
         defaultOption: data.default_option as string | undefined,
         maxSelections: data.max_selections as number | undefined,
@@ -418,7 +427,7 @@ export function createHITLRequest(
         ...base,
         requestType: 'env_var',
         toolName: data.tool_name as string,
-        fields: (data.fields as EnvVarField[]) || [],
+        fields: Array.isArray(data.fields) ? (data.fields as EnvVarField[]) : [],
         message: data.message as string,
         allowSave: data.allow_save as boolean | undefined,
       };

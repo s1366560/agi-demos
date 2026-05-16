@@ -127,13 +127,7 @@ describe('TenantAgentConfigEditor runtime rollout', () => {
   });
 
   it('shows runtime rollout warning when memory runtime is globally disabled', async () => {
-    render(
-      <TenantAgentConfigEditor
-        tenantId="tenant-1"
-        open
-        onClose={vi.fn()}
-      />
-    );
+    render(<TenantAgentConfigEditor tenantId="tenant-1" open onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(mockGetConfig).toHaveBeenCalledWith('tenant-1');
@@ -155,13 +149,7 @@ describe('TenantAgentConfigEditor runtime rollout', () => {
       },
     });
 
-    render(
-      <TenantAgentConfigEditor
-        tenantId="tenant-1"
-        open
-        onClose={vi.fn()}
-      />
-    );
+    render(<TenantAgentConfigEditor tenantId="tenant-1" open onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(mockGetConfig).toHaveBeenCalledWith('tenant-1');

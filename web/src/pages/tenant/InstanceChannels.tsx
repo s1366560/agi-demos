@@ -4,7 +4,19 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { Input, Tag, InputNumber, Table, Space } from 'antd';
-import { AlertCircle, Link, Network, Plus, Unlink, Webhook, Plug, MessageCircle, MessageSquare, Mail } from 'lucide-react';
+import {
+  AlertCircle,
+  Link,
+  Network,
+  Plus,
+  Unlink,
+  Webhook,
+  Plug,
+  MessageCircle,
+  MessageSquare,
+  Mail,
+  Search as SearchIcon,
+} from 'lucide-react';
 
 import { instanceChannelService } from '@/services/instanceChannelService';
 
@@ -38,8 +50,20 @@ interface ChannelConfig {
 type ChannelType = 'mcp' | 'webhook' | 'websocket' | 'api' | 'slack' | 'discord' | 'email';
 type ChannelStatus = 'connected' | 'disconnected' | 'error' | 'pending';
 
-const CHANNEL_TYPE_OPTIONS: { value: ChannelType; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-  { value: 'mcp', label: 'MCP Server', icon: Network },
+interface ChannelTypeOption {
+  value: ChannelType;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}
+
+const DEFAULT_CHANNEL_TYPE_OPTION: ChannelTypeOption = {
+  value: 'mcp',
+  label: 'MCP Server',
+  icon: Network,
+};
+
+const CHANNEL_TYPE_OPTIONS: ChannelTypeOption[] = [
+  DEFAULT_CHANNEL_TYPE_OPTION,
   { value: 'webhook', label: 'Webhook', icon: Webhook },
   { value: 'websocket', label: 'WebSocket', icon: Link },
   { value: 'api', label: 'REST API', icon: Plug },
@@ -87,7 +111,7 @@ export const InstanceChannels: React.FC = () => {
   }, [instanceId, messageApi, t]);
 
   useEffect(() => {
-    fetchChannels();
+    void fetchChannels();
   }, [fetchChannels]);
 
   const filteredChannels = useMemo(() => {
@@ -144,7 +168,7 @@ export const InstanceChannels: React.FC = () => {
           : t('tenant.instances.channels.createSuccess')
       );
       handleCloseModal();
-      fetchChannels();
+      void fetchChannels();
     } catch {
       messageApi?.error(t('tenant.instances.channels.saveError'));
     } finally {
@@ -169,7 +193,7 @@ export const InstanceChannels: React.FC = () => {
       try {
         await instanceChannelService.deleteChannel(instanceId, channelId);
         messageApi?.success(t('tenant.instances.channels.deleteSuccess'));
-        fetchChannels();
+        void fetchChannels();
       } catch {
         messageApi?.error(t('tenant.instances.channels.deleteError'));
       } finally {
@@ -185,8 +209,12 @@ export const InstanceChannels: React.FC = () => {
       setTestingChannelId(channelId);
       try {
         const result = await instanceChannelService.testConnection(instanceId, channelId);
-        messageApi?.success(result.message || t('tenant.instances.channels.testSuccess'));
-        fetchChannels();
+        if (result.status === 'ok') {
+          messageApi?.success(result.message || t('tenant.instances.channels.testSuccess'));
+        } else {
+          messageApi?.error(result.message || t('tenant.instances.channels.testError'));
+        }
+        void fetchChannels();
       } catch {
         messageApi?.error(t('tenant.instances.channels.testError'));
       } finally {
@@ -196,9 +224,8 @@ export const InstanceChannels: React.FC = () => {
     [instanceId, messageApi, t, fetchChannels]
   );
 
-
   const getChannelTypeInfo = useCallback((type: ChannelType) => {
-    return CHANNEL_TYPE_OPTIONS.find((o) => o.value === type) || CHANNEL_TYPE_OPTIONS[0];
+    return CHANNEL_TYPE_OPTIONS.find((o) => o.value === type) ?? DEFAULT_CHANNEL_TYPE_OPTION;
   }, []);
 
   const columns: ColumnsType<ChannelConfig> = [
@@ -207,7 +234,7 @@ export const InstanceChannels: React.FC = () => {
       key: 'name',
       ellipsis: true,
       render: (_, channel) => {
-        const typeInfo = getChannelTypeInfo(channel.channel_type)!;
+        const typeInfo = getChannelTypeInfo(channel.channel_type);
         return (
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="shrink-0 w-10 h-10 rounded-lg bg-info-bg dark:bg-info-bg-dark flex items-center justify-center">
@@ -226,7 +253,7 @@ export const InstanceChannels: React.FC = () => {
       title: t('tenant.instances.channels.colType'),
       key: 'type',
       render: (_, channel) => {
-        const typeInfo = getChannelTypeInfo(channel.channel_type)!;
+        const typeInfo = getChannelTypeInfo(channel.channel_type);
         return <Tag>{typeInfo.label}</Tag>;
       },
     },
@@ -243,9 +270,7 @@ export const InstanceChannels: React.FC = () => {
       title: t('tenant.instances.channels.colLastConnected'),
       key: 'last_connected_at',
       render: (_, channel) =>
-        channel.last_connected_at
-          ? new Date(channel.last_connected_at).toLocaleString()
-          : '-',
+        channel.last_connected_at ? new Date(channel.last_connected_at).toLocaleString() : '-',
     },
     {
       title: t('tenant.instances.channels.colActions'),
@@ -256,7 +281,9 @@ export const InstanceChannels: React.FC = () => {
           <LazyButton
             type="link"
             size="small"
-            onClick={() => handleTestConnection(channel.id)}
+            onClick={() => {
+              void handleTestConnection(channel.id);
+            }}
             loading={testingChannelId === channel.id}
             className="p-0"
           >
@@ -265,24 +292,22 @@ export const InstanceChannels: React.FC = () => {
           <LazyButton
             type="link"
             size="small"
-            onClick={() => { handleOpenModal(channel); }}
+            onClick={() => {
+              handleOpenModal(channel);
+            }}
             className="p-0"
           >
             {t('common.edit')}
           </LazyButton>
           <LazyPopconfirm
             title={t('tenant.instances.channels.deleteConfirm')}
-            onConfirm={() => handleDeleteChannel(channel.id)}
+            onConfirm={() => {
+              void handleDeleteChannel(channel.id);
+            }}
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
           >
-            <LazyButton
-              type="link"
-              danger
-              size="small"
-              disabled={isSubmitting}
-              className="p-0"
-            >
+            <LazyButton type="link" danger size="small" disabled={isSubmitting} className="p-0">
               {t('common.delete')}
             </LazyButton>
           </LazyPopconfirm>
@@ -297,7 +322,10 @@ export const InstanceChannels: React.FC = () => {
         return (
           <>
             <div>
-              <label htmlFor="mcp-server-url" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="mcp-server-url"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.channels.config.serverUrl')}
               </label>
               <Input
@@ -310,7 +338,10 @@ export const InstanceChannels: React.FC = () => {
               />
             </div>
             <div>
-              <label htmlFor="mcp-timeout" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="mcp-timeout"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.channels.config.timeout')}
               </label>
               <InputNumber
@@ -330,7 +361,10 @@ export const InstanceChannels: React.FC = () => {
         return (
           <>
             <div>
-              <label htmlFor="webhook-url" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="webhook-url"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.channels.config.url')}
               </label>
               <Input
@@ -343,7 +377,10 @@ export const InstanceChannels: React.FC = () => {
               />
             </div>
             <div>
-              <label htmlFor="webhook-secret" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="webhook-secret"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.channels.config.secret')}
               </label>
               <Input.Password
@@ -361,7 +398,10 @@ export const InstanceChannels: React.FC = () => {
         return (
           <>
             <div>
-              <label htmlFor="api-base-url" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="api-base-url"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.channels.config.baseUrl')}
               </label>
               <Input
@@ -374,7 +414,10 @@ export const InstanceChannels: React.FC = () => {
               />
             </div>
             <div>
-              <label htmlFor="api-key" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="api-key"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.channels.config.apiKey')}
               </label>
               <Input.Password
@@ -402,7 +445,7 @@ export const InstanceChannels: React.FC = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('tenant.instances.channels.title')}
@@ -412,7 +455,9 @@ export const InstanceChannels: React.FC = () => {
         <LazyButton
           type="primary"
           icon={<Plus size={16} />}
-          onClick={() => { handleOpenModal(); }}
+          onClick={() => {
+            handleOpenModal();
+          }}
         >
           {t('tenant.instances.channels.addChannel')}
         </LazyButton>
@@ -457,7 +502,10 @@ export const InstanceChannels: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {channels.filter((c) => c.status === 'disconnected' || c.status === 'pending').length}
+                {
+                  channels.filter((c) => c.status === 'disconnected' || c.status === 'pending')
+                    .length
+                }
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.channels.disconnected')}
@@ -491,7 +539,13 @@ export const InstanceChannels: React.FC = () => {
             setSearch(e.target.value);
           }}
           allowClear
-          className="max-w-sm"
+          enterButton={
+            <>
+              <span className="sr-only">{t('common.search', 'Search')}</span>
+              <SearchIcon size={16} aria-hidden="true" />
+            </>
+          }
+          className="w-full max-w-sm"
         />
       </div>
 
@@ -511,7 +565,8 @@ export const InstanceChannels: React.FC = () => {
             dataSource={filteredChannels}
             rowKey="id"
             pagination={false}
-            className="w-full"
+            scroll={{ x: 'max-content' }}
+            className="max-w-full"
           />
         )}
       </div>
@@ -524,7 +579,9 @@ export const InstanceChannels: React.FC = () => {
             : t('tenant.instances.channels.addChannel')
         }
         open={isModalOpen}
-        onOk={handleSaveChannel}
+        onOk={() => {
+          void handleSaveChannel();
+        }}
         onCancel={handleCloseModal}
         confirmLoading={isSubmitting}
         okButtonProps={{ disabled: !formName.trim() }}
@@ -532,7 +589,10 @@ export const InstanceChannels: React.FC = () => {
       >
         <div className="space-y-4 py-2">
           <div>
-            <label htmlFor="channel-name" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+            <label
+              htmlFor="channel-name"
+              className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+            >
               {t('tenant.instances.channels.channelName')}
             </label>
             <Input
@@ -545,7 +605,10 @@ export const InstanceChannels: React.FC = () => {
             />
           </div>
           <div>
-            <label htmlFor="channel-type" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+            <label
+              htmlFor="channel-type"
+              className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+            >
               {t('tenant.instances.channels.channelType')}
             </label>
             <LazySelect

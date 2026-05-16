@@ -1,19 +1,13 @@
 import { useTranslation } from 'react-i18next';
 
-import {
-  NON_AUTHORITATIVE,
-  SENSING_CAPABLE,
-} from './blackboardSurfaceContract';
+import { NON_AUTHORITATIVE, SENSING_CAPABLE } from './blackboardSurfaceContract';
 
 interface SensingSurfaceBadgeProps {
   labelKey: string;
   fallbackLabel: string;
 }
 
-export function SensingSurfaceBadge({
-  labelKey,
-  fallbackLabel,
-}: SensingSurfaceBadgeProps) {
+export function SensingSurfaceBadge({ labelKey, fallbackLabel }: SensingSurfaceBadgeProps) {
   const { t } = useTranslation();
 
   return (

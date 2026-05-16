@@ -184,7 +184,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
       className="fixed inset-0 z-[100]"
       role="dialog"
       aria-modal="true"
-      aria-label="Onboarding tour"
+      aria-label={t('agent.onboarding.ariaLabel', { defaultValue: 'Onboarding tour' })}
     >
       {/* Backdrop - only when no spotlight target */}
       {!targetRect && <div className="absolute inset-0 bg-black/55" style={{ transition }} />}

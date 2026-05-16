@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 
-import { render, screen } from '../../utils';
+import { fireEvent, render, screen, waitFor } from '../../utils';
 
 const { modalConfirm } = vi.hoisted(() => ({
   modalConfirm: vi.fn(),
@@ -142,6 +142,11 @@ vi.mock('@/components/ui/lazyAntd', () => ({
 describe('TenantChatSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    agentState.createNewConversation.mockResolvedValue('conv-new');
+    projectState.projects = [
+      { id: 'project-1', name: 'Project One' },
+      { id: 'project-2', name: 'Project Two' },
+    ];
     projectState.currentProject = { id: 'project-1', name: 'Project One' };
   });
 
@@ -196,7 +201,29 @@ describe('TenantChatSidebar', () => {
     const projectSwitcher = screen.getByRole('combobox', { name: 'Project switcher' });
     const conversation = screen.getByText('Conversation One');
 
-    expect(projectSwitcher.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
+    expect(
+      projectSwitcher.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('uses the URL project id when creating a new conversation', async () => {
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
+    });
+
+    const newChatButton = await screen.findByRole('button', { name: 'New Chat' });
+    await waitFor(() => {
+      expect(newChatButton).toBeEnabled();
+    });
+
+    fireEvent.click(newChatButton);
+
+    await waitFor(() => {
+      expect(agentState.createNewConversation).toHaveBeenCalledWith('project-2');
+    });
+    expect(projectState.setCurrentProject).toHaveBeenCalledWith({
+      id: 'project-2',
+      name: 'Project Two',
+    });
   });
 });

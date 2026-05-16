@@ -119,6 +119,11 @@ describe('workspace/agent workspace bridge', () => {
       currentProject: { id: 'project-1', tenant_id: 'tenant-1', name: 'Project 1' },
       setCurrentProject: vi.fn(),
       listProjects: vi.fn().mockResolvedValue(undefined),
+      getProject: vi.fn().mockResolvedValue({
+        id: 'project-2',
+        tenant_id: 'tenant-1',
+        name: 'Project 2',
+      }),
     };
 
     workspaceState = {
@@ -146,6 +151,25 @@ describe('workspace/agent workspace bridge', () => {
     });
   });
 
+  it('uses a URL project id instead of showing the empty-project state before the project list loads', () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
+    });
+
+    return waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+      expect(screen.queryByText("You haven't created any projects yet")).not.toBeInTheDocument();
+      expect(agentChatContentProps).toHaveBeenCalledWith(
+        expect.objectContaining({
+          externalProjectId: 'project-2',
+        })
+      );
+    });
+  });
+
   it('redirects legacy workspace detail routes to the project blackboard with workspace context', async () => {
     const LocationProbe = () => {
       const location = useLocation();
@@ -158,10 +182,7 @@ describe('workspace/agent workspace bridge', () => {
           path="/tenant/:tenantId/project/:projectId/workspaces/:workspaceId"
           element={<WorkspaceBlackboardRedirect />}
         />
-        <Route
-          path="/tenant/:tenantId/project/:projectId/blackboard"
-          element={<LocationProbe />}
-        />
+        <Route path="/tenant/:tenantId/project/:projectId/blackboard" element={<LocationProbe />} />
       </Routes>,
       {
         route: '/tenant/tenant-1/project/project-1/workspaces/ws-1',

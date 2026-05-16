@@ -217,21 +217,21 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
                       <span className="font-medium truncate max-w-full">
                         {agent.display_name || agent.name}
                       </span>
-                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                         <span
-                           className={`text-2xs leading-none px-1.5 py-0.5 rounded-sm border ${
-                             agent.source === 'database'
-                               ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/50'
-                               : 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50'
-                           }`}
-                         >
-                           {agent.source === 'database' ? 'DB' : 'System'}
-                         </span>
-                         <span className="text-2xs leading-none text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                           {t('agent.enabled', 'Enabled')}
-                         </span>
-                       </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span
+                          className={`text-2xs leading-none px-1.5 py-0.5 rounded-sm border ${
+                            agent.source === 'database'
+                              ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/50'
+                              : 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50'
+                          }`}
+                        >
+                          {agent.source === 'database' ? 'DB' : 'System'}
+                        </span>
+                        <span className="text-2xs leading-none text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          {t('agent.enabled', 'Enabled')}
+                        </span>
+                      </div>
                     </div>
                     {isSelected && (
                       <Check size={16} className="text-blue-600 dark:text-blue-400 shrink-0" />

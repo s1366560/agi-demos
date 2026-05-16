@@ -1,5 +1,7 @@
 import React, { memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { MessageSquare } from 'lucide-react';
 /**
  * TimelineEventRenderer - Unified TimelineEvent renderer
@@ -9,7 +11,6 @@ import { MessageSquare } from 'lucide-react';
  *
  * @module components/agent/chat/TimelineEventRenderer
  */
-
 
 import { TimelineEventItem } from '../TimelineEventItem';
 
@@ -55,6 +56,8 @@ export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(
     showExecutionDetails: _showExecutionDetails = true,
     className = '',
   }) => {
+    const { t } = useTranslation();
+
     // Empty state
     if (events.length === 0) {
       return (
@@ -62,7 +65,11 @@ export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(
           <div className="flex items-center justify-center h-96">
             <div className="text-center text-slate-500 dark:text-slate-400">
               <MessageSquare size={36} className="mx-auto mb-2" />
-              <p>No messages yet. Start a conversation!</p>
+              <p>
+                {t('components.timelineEventRenderer.empty', {
+                  defaultValue: 'No messages yet. Start a conversation!',
+                })}
+              </p>
             </div>
           </div>
         </MessageStream>

@@ -187,6 +187,26 @@ describe('parseResponseError', () => {
     expect(error.details).toBeDefined();
   });
 
+  it('should format structured validation response details', async () => {
+    const response = {
+      ok: false,
+      status: 422,
+      statusText: 'Unprocessable Entity',
+      json: async () => ({
+        detail: [
+          {
+            loc: ['query', 'page_size'],
+            msg: 'Input should be less than or equal to 100',
+          },
+        ],
+      }),
+    } as Response;
+
+    const error = await parseResponseError(response);
+
+    expect(error.message).toBe('query.page_size: Input should be less than or equal to 100');
+  });
+
   it('should parse 500+ response as server error', async () => {
     const response = {
       ok: false,
@@ -244,6 +264,27 @@ describe('parseAxiosError', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error.type).toBe(ApiErrorType.AUTHENTICATION);
     expect(error.statusCode).toBe(401);
+  });
+
+  it('should parse axios structured validation details into a readable message', () => {
+    const axiosError = {
+      response: {
+        status: 422,
+        data: {
+          detail: [
+            {
+              loc: ['query', 'page_size'],
+              msg: 'Input should be less than or equal to 100',
+            },
+          ],
+        },
+      },
+    };
+
+    const error = parseAxiosError(axiosError);
+
+    expect(error.type).toBe(ApiErrorType.VALIDATION);
+    expect(error.message).toBe('query.page_size: Input should be less than or equal to 100');
   });
 
   it('should parse axios network error (no response)', () => {

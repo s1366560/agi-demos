@@ -3,8 +3,9 @@
  * has collapsed a conversation turn. Click to expand again.
  */
 
-import { ChevronDown } from 'lucide-react';
 import type { FC } from 'react';
+
+import { ChevronDown } from 'lucide-react';
 
 interface TurnPlaceholderRowProps {
   hiddenCount: number;

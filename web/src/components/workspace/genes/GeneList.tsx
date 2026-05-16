@@ -57,22 +57,27 @@ export const GeneList: React.FC<GeneListProps> = ({
             { label: t('workspaceDetail.genes.skill'), value: 'Skill' },
             { label: t('workspaceDetail.genes.knowledge'), value: 'Knowledge' },
             { label: t('workspaceDetail.genes.tool'), value: 'Tool' },
-            { label: t('workspaceDetail.genes.workflow'), value: 'Workflow' }
+            { label: t('workspaceDetail.genes.workflow'), value: 'Workflow' },
           ]}
           value={filterCategory}
-          onChange={(value) => { setFilterCategory(value); }}
+          onChange={(value) => {
+            setFilterCategory(value);
+          }}
         />
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-3">
         {filteredGenes.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <Empty description={t('workspaceDetail.genes.noGenes')} image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                {filterCategory === 'All' && onCreate && (
-                  <Button type="primary" onClick={onCreate}>
-                    {t('workspaceDetail.genes.createFirst')}
-                  </Button>
-                )}
+          <div className="h-full flex items-center justify-center">
+            <Empty
+              description={t('workspaceDetail.genes.noGenes')}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              {filterCategory === 'All' && onCreate && (
+                <Button type="primary" onClick={onCreate}>
+                  {t('workspaceDetail.genes.createFirst')}
+                </Button>
+              )}
             </Empty>
           </div>
         ) : (

@@ -39,6 +39,7 @@ export type {
   ArtifactMetaProps,
   ArtifactHeaderProps,
   ArtifactActionsProps,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- public compatibility alias.
   LegacyArtifactRendererProps as ArtifactRendererProps,
 } from './types';
 

@@ -1,16 +1,49 @@
 import React, { useState } from 'react';
 
-import { X, Brain, AlertCircle, Type, Hash, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { X, Brain, AlertCircle, Type, Hash, Settings } from 'lucide-react';
 
 import { useMemoryStore } from '../stores/memory';
 import { useProjectStore } from '../stores/project';
+
+import type { Entity, Relationship } from '../types/memory';
 
 interface MemoryCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (() => void) | undefined;
 }
+
+type MemoryContentType = 'text' | 'document' | 'image' | 'video';
+
+interface MemoryFormMetadata {
+  enable_search?: boolean | undefined;
+  enable_graph?: boolean | undefined;
+  tags?: string[] | undefined;
+  [key: string]: unknown;
+}
+
+interface MemoryFormData {
+  title: string;
+  content: string;
+  content_type: MemoryContentType;
+  author_id: string;
+  metadata: MemoryFormMetadata;
+}
+
+const CONTENT_TYPES = new Set<MemoryContentType>(['text', 'document', 'image', 'video']);
+
+const createInitialFormData = (): MemoryFormData => ({
+  title: '',
+  content: '',
+  content_type: 'text',
+  author_id: '',
+  metadata: {},
+});
+
+const toMemoryContentType = (value: string): MemoryContentType =>
+  CONTENT_TYPES.has(value as MemoryContentType) ? (value as MemoryContentType) : 'text';
 
 export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
   isOpen,
@@ -22,20 +55,14 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
     useMemoryStore();
   const { currentProject } = useProjectStore();
 
-  const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    content_type: 'text' as const,
-    author_id: '',
-    metadata: {} as any,
-  });
+  const [formData, setFormData] = useState<MemoryFormData>(() => createInitialFormData());
 
-  const [extractedEntities, setExtractedEntities] = useState<any[]>([]);
-  const [extractedRelationships, setExtractedRelationships] = useState<any[]>([]);
+  const [extractedEntities, setExtractedEntities] = useState<Entity[]>([]);
+  const [extractedRelationships, setExtractedRelationships] = useState<Relationship[]>([]);
   const [activeTab, setActiveTab] = useState<'basic' | 'extraction' | 'advanced'>('basic');
   const [isExtracting, setIsExtracting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!currentProject) return;
 
@@ -86,11 +113,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
 
   const resetForm = () => {
     setFormData({
-      title: '',
-      content: '',
-      content_type: 'text',
-      author_id: '',
-      metadata: {},
+      ...createInitialFormData(),
     });
     setExtractedEntities([]);
     setExtractedRelationships([]);
@@ -110,12 +133,16 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('memory.create.title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('memory.create.title')}
+            </h2>
           </div>
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            aria-label="Close create memory dialog"
+            aria-label={t('memory.create.closeAria', {
+              defaultValue: 'Close create memory dialog',
+            })}
           >
             <X className="h-5 w-5" />
           </button>
@@ -171,7 +198,13 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           </nav>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto" id="memory-form">
+        <form
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+          className="flex-1 overflow-y-auto"
+          id="memory-form"
+        >
           <div className="p-6 space-y-4">
             {error && (
               <div
@@ -245,7 +278,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       id="memory-create-type"
                       value={formData.content_type}
                       onChange={(e) => {
-                        setFormData({ ...formData, content_type: e.target.value as any });
+                        setFormData({
+                          ...formData,
+                          content_type: toMemoryContentType(e.target.value),
+                        });
                       }}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                       disabled={isLoading}
@@ -304,7 +340,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 <div className="flex space-x-4 mb-4">
                   <button
                     type="button"
-                    onClick={handleExtractEntities}
+                    onClick={() => {
+                      void handleExtractEntities();
+                    }}
                     disabled={!formData.content.trim() || isExtracting || isLoading}
                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -319,7 +357,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={handleExtractRelationships}
+                    onClick={() => {
+                      void handleExtractRelationships();
+                    }}
                     disabled={!formData.content.trim() || isExtracting || isLoading}
                     className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -395,7 +435,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       <input
                         type="checkbox"
                         id="enable_search"
-                        checked={formData.metadata?.enable_search ?? true}
+                        checked={formData.metadata.enable_search ?? true}
                         onChange={(e) => {
                           setFormData({
                             ...formData,
@@ -419,7 +459,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       <input
                         type="checkbox"
                         id="enable_graph"
-                        checked={formData.metadata?.enable_graph ?? true}
+                        checked={formData.metadata.enable_graph ?? true}
                         onChange={(e) => {
                           setFormData({
                             ...formData,
@@ -452,7 +492,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   <input
                     type="text"
                     id="memory-create-tags"
-                    value={formData.metadata?.tags?.join(', ') || ''}
+                    value={formData.metadata.tags?.join(', ') ?? ''}
                     onChange={(e) => {
                       setFormData({
                         ...formData,
@@ -496,7 +536,6 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             form="memory-form"
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading || !formData.title.trim() || !formData.content.trim()}
-            onClick={handleSubmit}
           >
             {isLoading ? (
               <div className="flex items-center justify-center space-x-2">

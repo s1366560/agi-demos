@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   normalizeNumberValue,
   normalizeStringValue,
@@ -12,21 +14,21 @@ import {
 import { useA2UIActions, useA2UIState } from './a2uiInternals';
 
 interface TableColumn {
-  header?: StringValue | string;
-  align?: 'left' | 'center' | 'right';
-  width?: string;
+  header?: StringValue | string | undefined;
+  align?: unknown;
+  width?: unknown;
 }
 
 interface TableRow {
-  key?: string;
-  cells?: unknown[];
+  key?: unknown;
+  cells?: unknown;
 }
 
 interface TableProperties {
   caption?: StringValue | string;
   emptyText?: StringValue | string;
-  columns?: Array<TableColumn | string>;
-  rows?: Array<TableRow | unknown[]>;
+  columns?: unknown[];
+  rows?: unknown[];
   style?: Record<string, unknown>;
 }
 
@@ -47,6 +49,10 @@ interface ResolvedColumn {
 interface ResolvedRow {
   key: string;
   cells: string[];
+}
+
+function normalizeColumnAlign(input: unknown): ResolvedColumn['align'] {
+  return input === 'center' || input === 'right' ? input : 'left';
 }
 
 function resolveCellValue(
@@ -105,22 +111,23 @@ function normalizeColumns(
   const normalizedColumns: ResolvedColumn[] = [];
   input.forEach((column, index) => {
     if (typeof column === 'string') {
-      normalizedColumns.push({ key: `column-${index}`, header: column, align: 'left' });
+      normalizedColumns.push({ key: `column-${String(index)}`, header: column, align: 'left' });
       return;
     }
     if (!column || typeof column !== 'object' || Array.isArray(column)) {
       return;
     }
 
-    const header = resolveBoundStringValue(column.header, node, surfaceId, actions);
+    const columnRecord = column as TableColumn;
+    const header = resolveBoundStringValue(columnRecord.header, node, surfaceId, actions);
     if (!header) {
       return;
     }
     normalizedColumns.push({
-      key: `column-${index}`,
+      key: `column-${String(index)}`,
       header,
-      align: column.align ?? 'left',
-      ...(typeof column.width === 'string' ? { width: column.width } : {}),
+      align: normalizeColumnAlign(columnRecord.align),
+      ...(typeof columnRecord.width === 'string' ? { width: columnRecord.width } : {}),
     });
   });
   return normalizedColumns;
@@ -137,11 +144,9 @@ function normalizeRows(
   }
 
   return input.flatMap((row, rowIndex) => {
-    const rawCells = Array.isArray(row)
-      ? row
-      : row && typeof row === 'object' && !Array.isArray(row)
-        ? row.cells
-        : undefined;
+    const rowRecord =
+      row && typeof row === 'object' && !Array.isArray(row) ? (row as TableRow) : null;
+    const rawCells = Array.isArray(row) ? row : rowRecord ? rowRecord.cells : undefined;
     if (!Array.isArray(rawCells)) {
       return [];
     }
@@ -149,9 +154,9 @@ function normalizeRows(
     return [
       {
         key:
-          row && typeof row === 'object' && !Array.isArray(row) && typeof row.key === 'string'
-            ? row.key
-            : `row-${rowIndex}`,
+          rowRecord && typeof rowRecord.key === 'string'
+            ? rowRecord.key
+            : `row-${String(rowIndex)}`,
         cells: rawCells.map((cell) => resolveCellValue(cell, node, surfaceId, actions)),
       },
     ];
@@ -165,26 +170,30 @@ export const A2UITable = memo(function A2UITable({
   node: TableNode;
   surfaceId: string;
 }) {
+  const { t } = useTranslation();
   const actions = useA2UIActions();
   const { version } = useA2UIState();
 
-  const props = (node.properties ?? {});
-  const caption = useMemo(
-    () => resolveBoundStringValue(props.caption, node, surfaceId, actions),
-    [actions, node, props.caption, surfaceId, version]
-  );
-  const emptyText = useMemo(
-    () => resolveBoundStringValue(props.emptyText, node, surfaceId, actions) ?? 'No data',
-    [actions, node, props.emptyText, surfaceId, version]
-  );
-  const columns = useMemo(
-    () => normalizeColumns(props.columns, node, surfaceId, actions),
-    [actions, node, props.columns, surfaceId, version]
-  );
-  const rows = useMemo(
-    () => normalizeRows(props.rows, node, surfaceId, actions),
-    [actions, node, props.rows, surfaceId, version]
-  );
+  const props = node.properties ?? {};
+  const caption = useMemo(() => {
+    void version;
+    return resolveBoundStringValue(props.caption, node, surfaceId, actions);
+  }, [actions, node, props.caption, surfaceId, version]);
+  const emptyText = useMemo(() => {
+    void version;
+    return (
+      resolveBoundStringValue(props.emptyText, node, surfaceId, actions) ??
+      t('components.a2uiTable.noData')
+    );
+  }, [actions, node, props.emptyText, surfaceId, version, t]);
+  const columns = useMemo(() => {
+    void version;
+    return normalizeColumns(props.columns, node, surfaceId, actions);
+  }, [actions, node, props.columns, surfaceId, version]);
+  const rows = useMemo(() => {
+    void version;
+    return normalizeRows(props.rows, node, surfaceId, actions);
+  }, [actions, node, props.rows, surfaceId, version]);
 
   const rootStyle =
     node.weight !== undefined ? ({ '--weight': node.weight } as CSSProperties) : undefined;

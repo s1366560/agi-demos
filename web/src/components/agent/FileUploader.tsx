@@ -8,6 +8,8 @@
 
 import { useState, useCallback, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { sandboxUploadService, type FileMetadata } from '@/services/sandboxUploadService';
 
 import { message } from '@/components/ui/lazyAntd';
@@ -35,18 +37,19 @@ interface UseFileUploadOptions {
 }
 
 export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: UseFileUploadOptions) {
+  const { t } = useTranslation();
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const idCounter = useRef(0);
 
   const generateId = useCallback(() => {
     idCounter.current += 1;
-    return `file-${Date.now()}-${idCounter.current}`;
+    return `file-${String(Date.now())}-${String(idCounter.current)}`;
   }, []);
 
   const uploadSingleFile = useCallback(
     async (file: File, tempId: string) => {
       if (!projectId) {
-        message.error('Cannot upload: missing project context');
+        message.error(t('components.fileUpload.messages.missingProject'));
         return;
       }
 
@@ -72,11 +75,14 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
             )
           );
         } else {
-          throw new Error(result.error || 'Upload to sandbox failed');
+          throw new Error(result.error || t('components.fileUpload.errors.sandboxFailed'));
         }
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-        message.error(`Failed to upload "${file.name}": ${errorMsg}`);
+        const errorMsg =
+          error instanceof Error ? error.message : t('components.fileUpload.errors.uploadFailed');
+        message.error(
+          t('components.fileUpload.messages.uploadFailed', { name: file.name, errorMsg })
+        );
         setAttachments((prev) =>
           prev.map((a) =>
             a.id === tempId ? { ...a, status: 'error' as const, error: errorMsg } : a
@@ -84,7 +90,7 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
         );
       }
     },
-    [projectId]
+    [projectId, t]
   );
 
   const addFiles = useCallback(
@@ -94,19 +100,21 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
       setAttachments((prev) => {
         const available = maxFiles - prev.length;
         if (available <= 0) {
-          message.warning(`Maximum ${maxFiles} files allowed`);
+          message.warning(t('components.fileUpload.messages.maxFiles', { count: maxFiles }));
           return prev;
         }
 
         const toAdd = files.slice(0, available);
         if (toAdd.length < files.length) {
-          message.warning(`Only ${available} more file(s) can be added`);
+          message.warning(t('components.fileUpload.messages.remainingFiles', { count: available }));
         }
 
         const newAttachments: PendingAttachment[] = [];
         for (const file of toAdd) {
           if (file.size > maxSizeMB * 1024 * 1024) {
-            message.error(`"${file.name}" exceeds ${maxSizeMB}MB limit`);
+            message.error(
+              t('components.fileUpload.messages.sizeLimit', { name: file.name, maxSizeMB })
+            );
             continue;
           }
           const id = generateId();
@@ -120,13 +128,13 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
             progress: 0,
           });
           // Fire upload (runs concurrently, updates state via setAttachments)
-          uploadSingleFile(file, id);
+          void uploadSingleFile(file, id);
         }
 
         return [...prev, ...newAttachments];
       });
     },
-    [maxFiles, maxSizeMB, generateId, uploadSingleFile]
+    [maxFiles, maxSizeMB, generateId, uploadSingleFile, t]
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -140,7 +148,7 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
         if (!target || target.status !== 'error') return prev;
 
         const newId = generateId();
-        uploadSingleFile(target.file, newId);
+        void uploadSingleFile(target.file, newId);
 
         return prev.map((a) =>
           a.id === id

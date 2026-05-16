@@ -12,9 +12,10 @@
 
 import React, { useMemo } from 'react';
 
-import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from 'antd';
-import { Check, CheckCircle2, X, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
+import { Modal, Tag, Button, Space, Typography, Empty, Alert } from 'antd';
+import { Check, CheckCircle2, X, XCircle } from 'lucide-react';
 
 import type { StepAdjustment, AdjustmentType } from '../../types/agent';
 
@@ -73,70 +74,65 @@ interface AdjustmentItemProps {
 }
 
 const AdjustmentItem: React.FC<AdjustmentItemProps> = ({ adjustment, onApprove, onReject }) => {
+  const { t } = useTranslation();
   const hasNewInput =
     adjustment.new_tool_input && Object.keys(adjustment.new_tool_input).length > 0;
 
   return (
-    <List.Item
-      className="border-b border-slate-100 last:border-0"
-      actions={[
+    <li className="flex flex-col gap-3 border-b border-slate-100 py-4 last:border-0 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Tag color={getAdjustmentTypeColor(adjustment.adjustment_type)}>
+            {adjustment.adjustment_type}
+          </Tag>
+          <Text strong className="break-all">
+            {adjustment.step_id}
+          </Text>
+        </div>
+        <div className="mt-2">
+          <Paragraph className="mb-1 text-sm">{adjustment.reason}</Paragraph>
+          {hasNewInput && (
+            <Alert
+              type="info"
+              title={t('agent.stepAdjustment.newToolInput', {
+                defaultValue: 'New Tool Input',
+              })}
+              description={
+                <pre className="text-xs bg-slate-50 p-2 rounded mt-1 overflow-x-auto">
+                  {JSON.stringify(adjustment.new_tool_input, null, 2)}
+                </pre>
+              }
+              className="mt-2"
+              banner
+            />
+          )}
+        </div>
+      </div>
+      <Space className="shrink-0 self-start">
         <Button
-          key="approve"
           type="text"
           icon={<Check size={16} />}
           onClick={() => {
             onApprove(adjustment.step_id);
           }}
           className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-          title="Approve adjustment"
+          title={t('agent.stepAdjustment.approveTitle', { defaultValue: 'Approve adjustment' })}
         >
-          Approve
-        </Button>,
+          {t('agent.stepAdjustment.approve', { defaultValue: 'Approve' })}
+        </Button>
         <Button
-          key="reject"
           type="text"
           icon={<X size={16} />}
           onClick={() => {
             onReject(adjustment.step_id);
           }}
           className="text-red-500 hover:text-red-600 hover:bg-red-50"
-          title="Reject adjustment"
+          title={t('agent.stepAdjustment.rejectTitle', { defaultValue: 'Reject adjustment' })}
         >
-          Reject
-        </Button>,
-      ]}
-    >
-      <List.Item.Meta
-        avatar={
-          <Tag color={getAdjustmentTypeColor(adjustment.adjustment_type) as any}>
-            {adjustment.adjustment_type}
-          </Tag>
-        }
-        title={
-          <Space>
-            <Text strong>{adjustment.step_id}</Text>
-          </Space>
-        }
-        description={
-          <div className="mt-1">
-            <Paragraph className="mb-1 text-sm">{adjustment.reason}</Paragraph>
-            {hasNewInput && (
-              <Alert
-                type="info"
-                title="New Tool Input"
-                description={
-                  <pre className="text-xs bg-slate-50 p-2 rounded mt-1 overflow-x-auto">
-                    {JSON.stringify(adjustment.new_tool_input, null, 2)}
-                  </pre>
-                }
-                className="mt-2"
-                banner
-              />
-            )}
-          </div>
-        }
-      />
-    </List.Item>
+          {t('agent.stepAdjustment.reject', { defaultValue: 'Reject' })}
+        </Button>
+      </Space>
+    </li>
   );
 };
 
@@ -156,6 +152,8 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
   onClose,
   className = '',
 }) => {
+  const { t } = useTranslation();
+
   const { hasAdjustments, adjustmentCount, footer } = useMemo(() => {
     const count = adjustments?.length ?? 0;
     const has = count > 0;
@@ -164,13 +162,13 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
       <div className="flex justify-between">
         <Space>
           <Button icon={<XCircle size={16} />} onClick={onRejectAll} className="text-red-500">
-            Reject All
+            {t('agent.stepAdjustment.rejectAll', { defaultValue: 'Reject All' })}
           </Button>
           <Button icon={<CheckCircle2 size={16} />} onClick={onApproveAll} type="primary">
-            Approve All
+            {t('agent.stepAdjustment.approveAll', { defaultValue: 'Approve All' })}
           </Button>
         </Space>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{t('common.cancel', { defaultValue: 'Cancel' })}</Button>
         <Button
           type="primary"
           onClick={() => {
@@ -178,23 +176,32 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
             onClose();
           }}
         >
-          Confirm
+          {t('common.confirm', { defaultValue: 'Confirm' })}
         </Button>
       </div>
     ) : (
-      <Button onClick={onClose}>Close</Button>
+      <Button onClick={onClose}>{t('common.close', { defaultValue: 'Close' })}</Button>
     );
 
     return { hasAdjustments: has, adjustmentCount: count, footer: modalFooter };
-  }, [adjustments, onApproveAll, onRejectAll, onClose]);
+  }, [adjustments, onApproveAll, onRejectAll, onClose, t]);
 
   return (
     <Modal
       title={
         <Space>
           <CheckCircle2 className="text-blue-500" size={16} />
-          <span>Step Adjustments Review</span>
-          {hasAdjustments && <Tag color="blue">{adjustmentCount} pending</Tag>}
+          <span>
+            {t('agent.stepAdjustment.title', { defaultValue: 'Step Adjustments Review' })}
+          </span>
+          {hasAdjustments && (
+            <Tag color="blue">
+              {t('agent.stepAdjustment.pendingCount', {
+                count: adjustmentCount,
+                defaultValue: '{{count}} pending',
+              })}
+            </Tag>
+          )}
         </Space>
       }
       open={visible}
@@ -205,20 +212,28 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
       className={className}
     >
       {!hasAdjustments ? (
-        <Empty description="No adjustments to review" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <Empty
+          description={t('agent.stepAdjustment.empty', {
+            defaultValue: 'No adjustments to review',
+          })}
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       ) : (
-        <List
-          dataSource={adjustments!}
-          renderItem={(adjustment) => (
+        <ul
+          aria-label={t('agent.stepAdjustment.listLabel', {
+            defaultValue: 'Step adjustments',
+          })}
+          className="m-0 max-h-96 list-none overflow-y-auto p-0"
+        >
+          {(adjustments ?? []).map((adjustment) => (
             <AdjustmentItem
               key={adjustment.step_id}
               adjustment={adjustment}
               onApprove={onApprove}
               onReject={onReject}
             />
-          )}
-          className="max-h-96 overflow-y-auto"
-        />
+          ))}
+        </ul>
       )}
     </Modal>
   );

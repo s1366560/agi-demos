@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
@@ -37,6 +36,8 @@ import { TaskBoard } from '@/components/workspace/TaskBoard';
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
 
 import type { CyberObjective, WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+
+import type { TFunction } from 'i18next';
 
 export interface GoalsTabProps {
   objectives: CyberObjective[];
@@ -946,7 +947,7 @@ export function GoalsTab({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <ObjectiveList
         objectives={objectives}
         tasks={tasks}
@@ -982,7 +983,7 @@ export function GoalsTab({
       </section>
 
       {executionFeedback.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
+        <section className="min-w-0 space-y-3 overflow-hidden rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-primary dark:text-primary-200" />
             <h3 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
@@ -993,33 +994,58 @@ export function GoalsTab({
             labelKey="blackboard.executionFeedbackSurfaceHint"
             fallbackLabel="workspace objective and task projection"
           />
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
             {executionFeedback.map((item) => (
               <article
                 key={item.objectiveId}
-                className={`rounded-lg border px-4 py-3 transition-colors duration-200 ${item.accentClassName} ${item.pulse ? 'shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_32px_-24px_rgba(99,102,241,0.45)]' : ''}`}
+                className={`min-w-0 overflow-hidden rounded-lg border px-4 py-3 transition-colors duration-200 ${item.accentClassName} ${item.pulse ? 'shadow-[0_0_0_1px_rgba(99,102,241,0.08),0_12px_32px_-24px_rgba(99,102,241,0.45)]' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs font-semibold uppercase tracking-wide opacity-80">
                       {item.stageLabel}
                     </div>
-                    <div className="mt-1 text-sm font-semibold">{item.objectiveTitle}</div>
-                    <p className="mt-1 text-xs leading-5 opacity-90">{item.helperText}</p>
+                    <div className="mt-1 break-words text-sm font-semibold">
+                      {item.objectiveTitle}
+                    </div>
+                    <p className="mt-1 break-words text-xs leading-5 opacity-90">
+                      {item.helperText}
+                    </p>
                   </div>
                   <div className="mt-0.5 flex items-center gap-1">
                     {item.rootStatus === 'missing' ? (
                       <LoaderCircle
                         size={16}
                         className={item.pulse ? 'animate-spin' : undefined}
-                        aria-label="orchestration-waiting"
+                        aria-label={t(
+                          'blackboard.executionFeedback.aria.waiting',
+                          'Orchestration waiting'
+                        )}
                       />
                     ) : item.inProgressCount > 0 ? (
-                      <PlayCircle size={16} aria-label="orchestration-running" />
+                      <PlayCircle
+                        size={16}
+                        aria-label={t(
+                          'blackboard.executionFeedback.aria.running',
+                          'Orchestration running'
+                        )}
+                      />
                     ) : item.doneCount > 0 && item.doneCount === item.childCount ? (
-                      <CheckCircle2 size={16} aria-label="orchestration-complete" />
+                      <CheckCircle2
+                        size={16}
+                        aria-label={t(
+                          'blackboard.executionFeedback.aria.complete',
+                          'Orchestration complete'
+                        )}
+                      />
                     ) : (
-                      <Orbit size={16} aria-label="orchestration-active" />
+                      <Orbit
+                        size={16}
+                        aria-label={t(
+                          'blackboard.executionFeedback.aria.active',
+                          'Orchestration active'
+                        )}
+                      />
                     )}
                   </div>
                 </div>
@@ -1071,7 +1097,7 @@ export function GoalsTab({
                 </div>
 
                 <div className="mt-4 rounded-lg border border-current/10 bg-white/30 p-3 dark:bg-black/10">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-[11px] font-semibold uppercase tracking-wide opacity-75">
                       {t('blackboard.executionFeedback.eventLogTitle', 'Event stream log')}
                     </div>
@@ -1188,7 +1214,7 @@ export function GoalsTab({
 
                 {item.rootTask &&
                   typeof item.rootTask.metadata.goal_progress_summary === 'string' && (
-                    <div className="mt-3 rounded-lg border border-current/10 bg-white/40 px-3 py-2 text-[11px] opacity-90 dark:bg-black/10">
+                    <div className="mt-3 break-words rounded-lg border border-current/10 bg-white/40 px-3 py-2 text-[11px] opacity-90 dark:bg-black/10">
                       {item.rootTask.metadata.goal_progress_summary}
                     </div>
                   )}

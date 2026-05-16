@@ -71,13 +71,14 @@ describe('Analytics', () => {
       expect(screen.getByText('common.loading')).toBeInTheDocument();
     });
 
-    it('should render loading state when loading projects', () => {
+    it('should render loading state when loading projects', async () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'premium' },
       });
       render(<Analytics />);
       // Should show loading initially
       expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      await screen.findByText('tenant.analytics.title');
     });
 
     it('should render KPI cards after data loads', async () => {
@@ -156,6 +157,7 @@ describe('Analytics', () => {
 
       // Suspense fallback should be shown initially
       expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      await screen.findByTestId('chart-components');
     });
   });
 

@@ -11,14 +11,17 @@
  * for the foreseeable future.
  */
 
-import { AlertCircle, BookOpen, Loader2, RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FC, ReactNode } from 'react';
+
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { formatDateOnly } from '@/utils/date';
+import { AlertCircle, BookOpen, Loader2, RefreshCw, Sparkles } from 'lucide-react';
+
 import { unifiedEventService } from '@/services/unifiedEventService';
+
+import { formatDateOnly } from '@/utils/date';
 
 import {
   type Playbook,
@@ -66,46 +69,54 @@ const Section: FC<SectionProps> = ({ title, icon, count, children }) => (
   </section>
 );
 
-const PlaybookCard: FC<{ playbook: Playbook }> = ({ playbook }) => (
-  <article className="rounded-md border border-zinc-200 p-4 hover:border-zinc-300">
-    <header className="flex items-start justify-between gap-4">
-      <div>
-        <h3 className="text-sm font-medium text-zinc-900">{playbook.name}</h3>
-        <p className="mt-0.5 text-xs text-zinc-500">
-          Status: <span className="text-zinc-700">{playbook.status}</span>
-          {' · '}
-          Hits: <span className="text-zinc-700">{playbook.hit_count}</span>
-          {playbook.last_used_at !== null && (
-            <>
-              {' · '}
-              Last used:{' '}
-              <span className="text-zinc-700">{formatDateOnly(playbook.last_used_at)}</span>
-            </>
-          )}
-        </p>
-      </div>
-    </header>
-    {playbook.trigger.description.length > 0 && (
-      <p className="mt-2 text-xs text-zinc-600">
-        <span className="font-medium text-zinc-700">Trigger:</span>{' '}
-        {playbook.trigger.description}
-      </p>
-    )}
-    {playbook.steps.length > 0 && (
-      <ol className="mt-3 space-y-1.5 border-l border-zinc-200 pl-4 text-xs text-zinc-700">
-        {playbook.steps.map((step) => (
-          <li key={step.order}>
-            <span className="font-medium text-zinc-900">Step {step.order}:</span>{' '}
-            {step.instruction}
-            {step.rationale !== null && step.rationale.length > 0 && (
-              <span className="block text-zinc-500">{step.rationale}</span>
+const PlaybookCard: FC<{ playbook: Playbook }> = ({ playbook }) => {
+  const { t } = useTranslation();
+
+  return (
+    <article className="rounded-md border border-zinc-200 p-4 hover:border-zinc-300">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-medium text-zinc-900">{playbook.name}</h3>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            {t('playbooks.status', 'Status')}:{' '}
+            <span className="text-zinc-700">{playbook.status}</span>
+            {' · '}
+            {t('playbooks.hits', 'Hits')}:{' '}
+            <span className="text-zinc-700">{playbook.hit_count}</span>
+            {playbook.last_used_at !== null && (
+              <>
+                {' · '}
+                {t('playbooks.lastUsed', 'Last used')}:{' '}
+                <span className="text-zinc-700">{formatDateOnly(playbook.last_used_at)}</span>
+              </>
             )}
-          </li>
-        ))}
-      </ol>
-    )}
-  </article>
-);
+          </p>
+        </div>
+      </header>
+      {playbook.trigger.description.length > 0 && (
+        <p className="mt-2 text-xs text-zinc-600">
+          <span className="font-medium text-zinc-700">{t('playbooks.trigger', 'Trigger')}:</span>{' '}
+          {playbook.trigger.description}
+        </p>
+      )}
+      {playbook.steps.length > 0 && (
+        <ol className="mt-3 space-y-1.5 border-l border-zinc-200 pl-4 text-xs text-zinc-700">
+          {playbook.steps.map((step) => (
+            <li key={step.order}>
+              <span className="font-medium text-zinc-900">
+                {t('playbooks.step', 'Step')} {step.order}:
+              </span>{' '}
+              {step.instruction}
+              {step.rationale !== null && step.rationale.length > 0 && (
+                <span className="block text-zinc-500">{step.rationale}</span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </article>
+  );
+};
 
 const VerdictRow: FC<{ verdict: ReflectionVerdict }> = ({ verdict }) => (
   <li className="flex gap-3 py-3 first:pt-0 last:pb-0">
@@ -142,9 +153,9 @@ export const PlaybookLibrary: FC = () => {
   const refreshTimerRef = useRef<number | undefined>(undefined);
 
   const load = useCallback(
-    async (silent: boolean = false) => {
+    async (silent?: boolean) => {
       if (projectId === undefined) return;
-      if (!silent) setLoading(true);
+      if (silent !== true) setLoading(true);
       setError(null);
       try {
         const [pbs, vds] = await Promise.all([
@@ -156,10 +167,10 @@ export const PlaybookLibrary: FC = () => {
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        if (!silent) setLoading(false);
+        if (silent !== true) setLoading(false);
       }
     },
-    [projectId],
+    [projectId]
   );
 
   useEffect(() => {
@@ -201,7 +212,7 @@ export const PlaybookLibrary: FC = () => {
           refreshTimerRef.current = undefined;
         }, EVENT_REFRESH_DEBOUNCE_MS);
       },
-      lastSequenceRef.current,
+      lastSequenceRef.current
     );
 
     return () => {
@@ -223,7 +234,7 @@ export const PlaybookLibrary: FC = () => {
           <p className="mt-0.5 text-sm text-zinc-500">
             {t(
               'playbooks.description',
-              'Distilled patterns the reflector has learned from this project, with the audit trail of every verdict.',
+              'Distilled patterns the reflector has learned from this project, with the audit trail of every verdict.'
             )}
           </p>
         </div>
@@ -260,7 +271,7 @@ export const PlaybookLibrary: FC = () => {
           <p className="py-6 text-center text-sm text-zinc-500">
             {t(
               'playbooks.empty.playbooks',
-              'No playbooks yet. The reflector will distill them as friction signals accumulate.',
+              'No playbooks yet. The reflector will distill them as friction signals accumulate.'
             )}
           </p>
         ) : (
@@ -279,10 +290,7 @@ export const PlaybookLibrary: FC = () => {
       >
         {verdicts.length === 0 ? (
           <p className="py-6 text-center text-sm text-zinc-500">
-            {t(
-              'playbooks.empty.verdicts',
-              'No verdicts recorded yet.',
-            )}
+            {t('playbooks.empty.verdicts', 'No verdicts recorded yet.')}
           </p>
         ) : (
           <ul className="divide-y divide-zinc-100">

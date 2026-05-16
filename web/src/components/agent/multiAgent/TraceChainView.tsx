@@ -1,6 +1,8 @@
 import { memo, useCallback } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   GitBranch,
   ArrowRight,
@@ -19,6 +21,7 @@ import type {
   TraceChainDTO,
   UntracedRunDetailsDTO,
 } from '../../../types/multiAgent';
+import type { TFunction } from 'i18next';
 
 function formatDuration(ms: number | null): string {
   if (ms === null) return '-';
@@ -168,48 +171,77 @@ interface TraceChainViewProps {
   onSelectRun?: (run: SubAgentRunDTO) => void;
 }
 
-const EmptyChainState: FC = memo(() => (
-  <div className="flex flex-col items-center justify-center p-8 text-center">
-    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-      <GitBranch size={24} className="text-slate-400 dark:text-slate-500" />
+const EmptyChainState: FC = memo(() => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+        <GitBranch size={24} className="text-slate-400 dark:text-slate-500" />
+      </div>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {t('agent.multiAgent.traceChain.emptyTitle', { defaultValue: 'No chain data' })}
+      </p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+        {t('agent.multiAgent.traceChain.emptyDescription', {
+          defaultValue: 'Select a trace to view its execution chain.',
+        })}
+      </p>
     </div>
-    <p className="text-sm text-slate-500 dark:text-slate-400">No chain data</p>
-    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-      Select a trace to view its execution chain.
-    </p>
-  </div>
-));
+  );
+});
 EmptyChainState.displayName = 'EmptyChainState';
 
-const LoadingState: FC = memo(() => (
-  <div className="flex items-center justify-center p-8">
-    <Loader2 size={24} className="text-blue-500 animate-spin motion-reduce:animate-none" />
-    <span className="ml-2 text-sm text-slate-500">Loading trace chain...</span>
-  </div>
-));
+const LoadingState: FC = memo(() => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex items-center justify-center p-8">
+      <Loader2 size={24} className="text-blue-500 animate-spin motion-reduce:animate-none" />
+      <span className="ml-2 text-sm text-slate-500">
+        {t('agent.multiAgent.traceChain.loading', { defaultValue: 'Loading trace chain...' })}
+      </span>
+    </div>
+  );
+});
 LoadingState.displayName = 'LoadingState';
 
-function getChainRuns(data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO): SubAgentRunDTO[] {
+function getChainRuns(
+  data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO
+): SubAgentRunDTO[] {
   if ('runs' in data) return data.runs;
   if ('descendants' in data) return data.descendants;
   return [];
 }
 
-function getChainLabel(data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO): string {
+function getChainLabel(
+  data: TraceChainDTO | DescendantTreeDTO | UntracedRunDetailsDTO,
+  t: TFunction
+): string {
   if ('trace_id' in data && 'runs' in data) {
     if (data.trace_id === null) {
-      return data.runs.length === 1 ? 'Run details' : 'Untraced runs';
+      return data.runs.length === 1
+        ? t('agent.multiAgent.traceChain.runDetails', { defaultValue: 'Run details' })
+        : t('agent.multiAgent.traceChain.untracedRuns', { defaultValue: 'Untraced runs' });
     }
-    return `Trace: ${data.trace_id.slice(0, 12)}`;
+    return t('agent.multiAgent.traceChain.traceLabel', {
+      id: data.trace_id.slice(0, 12),
+      defaultValue: 'Trace: {{id}}',
+    });
   }
   if ('parent_run_id' in data) {
-    return `Descendants of: ${data.parent_run_id.slice(0, 12)}`;
+    return t('agent.multiAgent.traceChain.descendantsOf', {
+      id: data.parent_run_id.slice(0, 12),
+      defaultValue: 'Descendants of: {{id}}',
+    });
   }
-  return 'Execution Chain';
+  return t('agent.multiAgent.traceChain.executionChain', { defaultValue: 'Execution Chain' });
 }
 
 export const TraceChainView: FC<TraceChainViewProps> = memo(
   ({ data, isLoading = false, onSelectRun }) => {
+    const { t } = useTranslation();
+
     if (isLoading) {
       return <LoadingState />;
     }
@@ -228,7 +260,7 @@ export const TraceChainView: FC<TraceChainViewProps> = memo(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
-    const label = getChainLabel(data);
+    const label = getChainLabel(data, t);
     const totalDuration = sortedRuns.reduce((sum, r) => sum + (r.execution_time_ms ?? 0), 0);
     const totalTokens = sortedRuns.reduce((sum, r) => sum + (r.tokens_used ?? 0), 0);
 
@@ -241,7 +273,10 @@ export const TraceChainView: FC<TraceChainViewProps> = memo(
               {label}
             </span>
             <span className="text-xs text-slate-400">
-              {sortedRuns.length} {sortedRuns.length === 1 ? 'run' : 'runs'}
+              {t('agent.multiAgent.traceChain.runCount', {
+                count: sortedRuns.length,
+                defaultValue: '{{count}} runs',
+              })}
             </span>
           </div>
           <div className="flex items-center gap-3 text-2xs text-slate-400">
@@ -252,7 +287,10 @@ export const TraceChainView: FC<TraceChainViewProps> = memo(
             {totalTokens > 0 && (
               <span className="flex items-center gap-1">
                 <Hash size={10} />
-                {totalTokens.toLocaleString()} tokens
+                {t('agent.multiAgent.traceChain.tokens', {
+                  count: totalTokens,
+                  defaultValue: '{{count}} tokens',
+                })}
               </span>
             )}
           </div>

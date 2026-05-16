@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 
-import { Activity, ArrowUpRight, MessageSquare, Target, Users } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -18,12 +17,12 @@ import {
 } from '@/pages/project/blackboardRouteUtils';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 
+import { BlackboardDashboardHeader } from '@/components/blackboard/BlackboardDashboardHeader';
 import { BlackboardErrorBoundary } from '@/components/blackboard/BlackboardErrorBoundary';
 import { NON_AUTHORITATIVE } from '@/components/blackboard/blackboardSurfaceContract';
 import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 import { buildBlackboardStats } from '@/components/blackboard/blackboardUtils';
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
-import { SensingSurfaceBadge } from '@/components/blackboard/SensingSurfaceBadge';
 
 import type { Workspace, WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
 
@@ -94,66 +93,6 @@ function LoadingShell() {
         {t('common.loading', 'Loading…')}
       </div>
     </div>
-  );
-}
-
-interface BlackboardShellSummaryProps {
-  stats: ReturnType<typeof buildBlackboardStats>;
-}
-
-function BlackboardShellSummary({ stats }: BlackboardShellSummaryProps) {
-  const { t } = useTranslation();
-  const items = [
-    {
-      key: 'completion',
-      icon: Activity,
-      label: t('blackboard.summary.completion', 'Completion'),
-      value: `${String(stats.completionRatio)}%`,
-    },
-    {
-      key: 'tasks',
-      icon: Target,
-      label: t('blackboard.summary.tasks', 'Tasks'),
-      value: String(stats.totalTasks),
-    },
-    {
-      key: 'agents',
-      icon: Users,
-      label: t('blackboard.summary.activeAgents', 'Active agents'),
-      value: String(stats.activeAgents),
-    },
-    {
-      key: 'threads',
-      icon: MessageSquare,
-      label: t('blackboard.summary.openThreads', 'Open threads'),
-      value: String(stats.openPosts),
-    },
-  ];
-
-  return (
-    <dl className="hidden grid-cols-4 gap-px overflow-hidden rounded-md border border-border-light bg-border-light dark:border-border-dark dark:bg-border-dark lg:grid">
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <div
-            key={item.key}
-            className="flex min-w-0 items-center gap-3 bg-surface-light px-3 py-2.5 dark:bg-surface-dark-alt"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-surface-elevated dark:text-text-muted">
-              <Icon size={15} aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <dt className="truncate text-[11px] font-medium uppercase tracking-wide text-text-muted dark:text-text-muted">
-                {item.label}
-              </dt>
-              <dd className="mt-0.5 text-sm font-semibold tabular-nums text-text-primary dark:text-text-inverse">
-                {item.value}
-              </dd>
-            </div>
-          </div>
-        );
-      })}
-    </dl>
   );
 }
 
@@ -328,88 +267,17 @@ export function Blackboard() {
       fallbackLabel={t('blackboard.errorBoundary.title', 'Something went wrong')}
       retryLabel={t('blackboard.errorBoundary.retry', 'Try again')}
     >
-      <div className="flex h-full min-h-0 flex-col bg-background-light dark:bg-background-dark">
-        <div className="flex flex-col gap-3 border-b border-border-light px-3 py-3 dark:border-border-dark sm:px-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,476px)_auto] lg:items-start">
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold text-text-primary dark:text-text-inverse sm:text-xl">
-                {t('blackboard.title', 'Blackboard')}
-              </h1>
-              <div className="mt-1 truncate text-sm text-text-secondary dark:text-text-muted">
-                {selectedWorkspace?.name ??
-                  t(
-                    'blackboard.modalSubtitle',
-                    'Shared goals, tasks, discussions, and topology for the active workspace.'
-                  )}
-              </div>
-              {selectedWorkspace && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="inline-flex min-h-7 items-center rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
-                    {workspaceUseCaseLabels[workspaceUseCase]}
-                  </span>
-                  <span className="inline-flex min-h-7 items-center rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
-                    {collaborationModeLabels[collaborationMode]}
-                  </span>
-                </div>
-              )}
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted dark:text-text-muted">
-                <SensingSurfaceBadge
-                  labelKey="blackboard.shellSensingHint"
-                  fallbackLabel="workspace shell sync"
-                />
-                <span className="min-w-0">
-                  {t(
-                    'blackboard.shellHint',
-                    'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
-                  )}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex w-full items-center lg:min-w-0">
-              <label htmlFor="workspace-select" className="sr-only">
-                {t('blackboard.workspaceLabel', 'Workspace')}
-              </label>
-              <select
-                id="workspace-select"
-                value={selectedWorkspaceId ?? ''}
-                onChange={(event) => {
-                  setSelectedWorkspaceId(event.target.value || null);
-                }}
-                className="min-h-10 w-full rounded-md border border-border-light bg-surface-light px-3 text-sm normal-case tracking-normal text-text-primary transition-colors duration-150 focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
-              >
-                {workspaces.map((workspace) => (
-                  <option
-                    key={workspace.id}
-                    value={workspace.id}
-                    className="bg-surface-light text-text-primary dark:bg-surface-dark dark:text-text-inverse"
-                  >
-                    {workspace.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:flex-nowrap">
-              {selectedWorkspaceId ? (
-                <Link
-                  to={agentWorkspacePath}
-                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse lg:flex-none"
-                >
-                  {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
-                  <ArrowUpRight size={15} aria-hidden="true" />
-                </Link>
-              ) : (
-                <span className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border-light px-4 text-sm font-medium text-text-muted dark:border-border-dark dark:text-text-muted lg:flex-none">
-                  {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
-                  <ArrowUpRight size={15} aria-hidden="true" />
-                </span>
-              )}
-            </div>
-          </div>
-
-          <BlackboardShellSummary stats={shellStats} />
-        </div>
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background-light dark:bg-background-dark md:overflow-hidden">
+        <BlackboardDashboardHeader
+          selectedWorkspace={selectedWorkspace}
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          workspaceUseCaseLabel={workspaceUseCaseLabels[workspaceUseCase]}
+          collaborationModeLabel={collaborationModeLabels[collaborationMode]}
+          stats={shellStats}
+          agentWorkspacePath={agentWorkspacePath}
+          onWorkspaceChange={setSelectedWorkspaceId}
+        />
 
         {error && (
           <div
@@ -431,7 +299,7 @@ export function Blackboard() {
         )}
 
         <div
-          className="flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-4"
+          className="flex flex-col px-3 py-3 sm:px-4 md:min-h-0 md:flex-1"
           data-blackboard-surface="shell"
           data-blackboard-authority={NON_AUTHORITATIVE}
         >

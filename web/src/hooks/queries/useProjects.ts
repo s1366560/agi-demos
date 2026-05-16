@@ -21,7 +21,12 @@ export const projectKeys = {
 export function useProjects(tenantId: string | undefined) {
   return useQuery<ProjectListResponse>({
     queryKey: tenantId ? projectKeys.list(tenantId) : projectKeys.all,
-    queryFn: () => projectAPI.list(tenantId!),
+    queryFn: () => {
+      if (!tenantId) {
+        throw new Error('tenantId is required');
+      }
+      return projectAPI.list(tenantId);
+    },
     enabled: !!tenantId,
   });
 }

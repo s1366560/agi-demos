@@ -53,6 +53,7 @@ import {
   downloadConversationPdf,
 } from '../../utils/exportConversation';
 import { WorkspaceGroupChatPanel } from '../workspace/chat/WorkspaceGroupChatPanel';
+import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
 import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
@@ -62,6 +63,7 @@ import { ConversationCompareView } from './comparison/ConversationCompareView';
 import { ConversationPickerModal } from './comparison/ConversationPickerModal';
 import { ConversationAgentBadge } from './ConversationAgentBadge';
 import { EmptyState } from './EmptyState';
+import { EvidenceBundleDrawer } from './evidence/EvidenceBundleDrawer';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { groupTimelineEvents, getSubAgentSummaries } from './message/groupTimelineEvents';
 import { Resizer } from './Resizer';
@@ -73,9 +75,6 @@ import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
-
-import { EvidenceBundleDrawer } from './evidence/EvidenceBundleDrawer';
-import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
 import type {
   AgentTask,
@@ -210,32 +209,27 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const {
       activeSandboxId,
       setProjectId,
+      setConnectionStatus,
       subscribeSSE,
       unsubscribeSSE,
-      ensureSandbox,
       setSandboxId,
     } = useSandboxStore();
     const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
     const [activeAgentId, setActiveAgentId] = useState<string | undefined>(undefined);
 
-    // Set projectId to sandbox store and subscribe to SSE events
+    // Bind project-scoped sandbox state without creating containers on page load.
     useEffect(() => {
       if (projectId) {
+        setSandboxId(null);
+        setConnectionStatus('idle');
         setProjectId(projectId);
         subscribeSSE(projectId);
-        // Try to ensure sandbox exists and get sandboxId
-        // Pass projectId directly to avoid race condition with setProjectId
-        void ensureSandbox(projectId).then((sandboxId) => {
-          if (sandboxId) {
-            setSandboxId(sandboxId);
-          }
-        });
       }
       return () => {
         unsubscribeSSE();
       };
-    }, [projectId, setProjectId, subscribeSSE, unsubscribeSSE, ensureSandbox, setSandboxId]);
+    }, [projectId, setProjectId, setConnectionStatus, subscribeSSE, unsubscribeSSE, setSandboxId]);
 
     // Get tenant ID from current project
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -612,20 +606,23 @@ ${content}`;
     }, []);
 
     const handleTogglePlanMode = useCallback(async () => {
-      if (!activeConversationId) return;
+      const targetConversationId = activeConversationId || conversationId;
+      if (!targetConversationId) return;
       const newMode = isPlanMode ? 'build' : 'plan';
       try {
         const { planService } = await import('@/services/planService');
-        await planService.switchMode(activeConversationId, newMode);
-        useAgentV3Store.getState().updateConversationState(activeConversationId, {
+        await planService.switchMode(targetConversationId, newMode);
+        useAgentV3Store.getState().updateConversationState(targetConversationId, {
           isPlanMode: newMode === 'plan',
         });
         useExecutionStore.getState().setAgentIsPlanMode(newMode === 'plan');
       } catch (err) {
-        void message.error(err instanceof Error ? err.message : 'Failed to switch plan mode');
+        void message.error(
+          err instanceof Error ? err.message : t('agent.chat.errors.switchPlanModeFailed')
+        );
         console.error('Failed to switch plan mode:', err);
       }
-    }, [activeConversationId, isPlanMode]);
+    }, [activeConversationId, conversationId, isPlanMode, t]);
 
     const chatColumn = (
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
@@ -752,7 +749,7 @@ ${content}`;
             : 0;
         slots.task = {
           label: 'Task',
-          value: `${taskProgress.current}/${taskProgress.total} · ${taskPercent}%`,
+          value: `${String(taskProgress.current)}/${String(taskProgress.total)} · ${String(taskPercent)}%`,
           tone:
             taskProgress.status === 'failed'
               ? 'error'
@@ -766,7 +763,7 @@ ${content}`;
       if (isStreaming) {
         slots.llm = { label: 'LLM', value: 'streaming', tone: 'running' };
       }
-      if (sandboxConnectionStatus && sandboxConnectionStatus !== 'idle') {
+      if (sandboxConnectionStatus !== 'idle') {
         const tone: 'ok' | 'error' | 'running' =
           sandboxConnectionStatus === 'connected'
             ? 'ok'
@@ -776,7 +773,7 @@ ${content}`;
         slots.sandbox = {
           label: 'Sandbox',
           value: currentTool
-            ? `${sandboxConnectionStatus} · ${currentTool}`
+            ? `${sandboxConnectionStatus} · ${currentTool.name}`
             : sandboxConnectionStatus,
           tone,
         };
@@ -786,14 +783,14 @@ ${content}`;
           label: 'HITL',
           value: doomLoopDetected
             ? 'doom-loop'
-            : `${suggestionsCount} suggestion${suggestionsCount === 1 ? '' : 's'}`,
+            : `${String(suggestionsCount)} suggestion${suggestionsCount === 1 ? '' : 's'}`,
           tone: doomLoopDetected ? 'error' : 'warning',
         };
       }
       if (conversationArtifacts.length > 0) {
         slots.friction = {
           label: 'Evidence',
-          value: `${conversationArtifacts.length} artifact${
+          value: `${String(conversationArtifacts.length)} artifact${
             conversationArtifacts.length === 1 ? '' : 's'
           }`,
           tone: 'idle',
@@ -823,7 +820,9 @@ ${content}`;
             {conversationArtifacts.length > 0 && (
               <button
                 type="button"
-                onClick={() => setEvidenceOpen(true)}
+                onClick={() => {
+                  setEvidenceOpen(true);
+                }}
                 className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 title={t('evidence.open', 'Evidence')}
                 aria-label={t('evidence.open', 'Evidence')}
@@ -1051,7 +1050,9 @@ ${content}`;
         {/* Evidence bundle drawer */}
         <EvidenceBundleDrawer
           open={evidenceOpen}
-          onClose={() => setEvidenceOpen(false)}
+          onClose={() => {
+            setEvidenceOpen(false);
+          }}
           artifacts={conversationArtifacts}
         />
 
@@ -1063,7 +1064,7 @@ ${content}`;
         {/* Main Content Area */}
         <main
           className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative"
-          aria-label="Chat"
+          aria-label={t('agent.focusDesktop.chat', { defaultValue: 'Chat' })}
         >
           {chatColumn}
           {statusBarWithLayout}

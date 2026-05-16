@@ -22,14 +22,17 @@ export const GeneConfigJsonEditor: React.FC<GeneConfigJsonEditorProps> = ({ valu
         onChange={(e) => {
           onChange(e.target.value);
         }}
-        style={{ fontFamily: 'ui-monospace, Menlo, Monaco, "Courier New", monospace', fontSize: 12 }}
+        style={{
+          fontFamily: 'ui-monospace, Menlo, Monaco, "Courier New", monospace',
+          fontSize: 12,
+        }}
         spellCheck={false}
       />
       {!parsed.ok && (
         <Alert
           type="error"
           showIcon
-          message={t('workspaceDetail.genes.config.invalidJson', 'Invalid JSON')}
+          title={t('workspaceDetail.genes.config.invalidJson', 'Invalid JSON')}
           description={parsed.error}
         />
       )}

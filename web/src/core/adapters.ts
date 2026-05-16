@@ -15,8 +15,5 @@ export interface ProjectAdapter {
 
 export interface SessionAdapter {
   send(conversationId: ConversationId, message: string): Promise<void>;
-  subscribe(
-    conversationId: ConversationId,
-    onEvent: (event: unknown) => void
-  ): () => void;
+  subscribe(conversationId: ConversationId, onEvent: (event: unknown) => void): () => void;
 }

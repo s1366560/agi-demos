@@ -36,20 +36,22 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
 
   // Load data if missing
   useEffect(() => {
-    if (tenants.length === 0) listTenants();
+    if (tenants.length === 0) {
+      void listTenants();
+    }
   }, [tenants.length, listTenants]);
 
   const handleTenantSelect = (tenant: Tenant) => {
     setCurrentTenant(tenant);
     onTenantSelect?.(tenant);
-    navigate(`/tenant/${tenant.id}`);
+    void navigate(`/tenant/${tenant.id}`);
   };
 
   const handleCreateTenant = () => {
     if (onCreateTenant) {
       onCreateTenant();
     } else {
-      navigate('/tenants/new');
+      void navigate('/tenants/new');
     }
   };
 

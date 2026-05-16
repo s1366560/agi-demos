@@ -99,7 +99,7 @@ export const tenantService = {
    */
   listMembers: async (tenantId: string): Promise<{ users: User[] }> => {
     const response = await apiFetch.get(`/tenants/${tenantId}/members`);
-    return response.json();
+    return (await response.json()) as { users: User[] };
   },
 
   /**
@@ -181,7 +181,7 @@ export const tenantService = {
    */
   getTenant: async (tenantId: string): Promise<Tenant> => {
     const response = await apiFetch.get(`/tenants/${tenantId}`);
-    return response.json();
+    return (await response.json()) as Tenant;
   },
 
   /**
@@ -205,7 +205,7 @@ export const tenantService = {
    */
   createTenant: async (name: string, description?: string): Promise<Tenant> => {
     const response = await apiFetch.post('/tenants', { name, description });
-    return response.json();
+    return (await response.json()) as Tenant;
   },
 
   /**
@@ -228,6 +228,6 @@ export const tenantService = {
    */
   updateTenant: async (tenantId: string, updates: Partial<Tenant>): Promise<Tenant> => {
     const response = await apiFetch.patch(`/tenants/${tenantId}`, updates);
-    return response.json();
+    return (await response.json()) as Tenant;
   },
 };

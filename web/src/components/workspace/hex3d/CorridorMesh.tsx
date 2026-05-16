@@ -28,7 +28,14 @@ export function CorridorMesh({ edge, hexSize }: CorridorMeshProps) {
   return (
     <group>
       <Line points={[start, end]} color="#94a3b8" lineWidth={2} dashed={false} />
-      <Line points={[start, end]} color="#94a3b8" lineWidth={6} dashed={false} transparent opacity={0.2} />
+      <Line
+        points={[start, end]}
+        color="#94a3b8"
+        lineWidth={6}
+        dashed={false}
+        transparent
+        opacity={0.2}
+      />
     </group>
   );
 }

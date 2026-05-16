@@ -4,6 +4,8 @@
 
 import React, { useRef, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Spin, Alert } from 'antd';
 
 export interface VideoPlayerProps {
@@ -32,6 +34,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onLoad,
   onError,
 }) => {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -51,8 +54,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return (
       <Alert
         type="error"
-        message="Video playback error"
-        description="Failed to load or play video. Try downloading it instead."
+        title={t('components.videoPlayer.errorTitle', {
+          defaultValue: 'Video playback error',
+        })}
+        description={t('components.videoPlayer.errorDescription', {
+          defaultValue: 'Failed to load or play video. Try downloading it instead.',
+        })}
         showIcon
       />
     );
@@ -88,7 +95,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onError={handleError}
       >
         {mimeType && <source src={src} type={mimeType} />}
-        Your browser does not support the video tag.
+        {t('components.videoPlayer.unsupported', {
+          defaultValue: 'Your browser does not support the video tag.',
+        })}
       </video>
     </div>
   );

@@ -7,6 +7,8 @@
 
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Tooltip } from 'antd';
 import { ArrowRight, Bot, MessageSquare, Inbox } from 'lucide-react';
 
@@ -26,6 +28,7 @@ export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
   toAgentName,
   messagePreview,
 }) => {
+  const { t } = useTranslation();
   const isSent = direction === 'sent';
   const color = isSent ? SENT_COLOR : RECEIVED_COLOR;
   const backgroundColor = `${color}20`;
@@ -52,15 +55,15 @@ export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
         title={
           <div className="space-y-1">
             <div>
-              <strong>From:</strong> {fromAgentName}
+              <strong>{t('agent.agentMessageIndicator.from')}:</strong> {fromAgentName}
             </div>
             {toAgentName && (
               <div>
-                <strong>To:</strong> {toAgentName}
+                <strong>{t('agent.agentMessageIndicator.to')}:</strong> {toAgentName}
               </div>
             )}
             <div>
-              <strong>Message:</strong> {messagePreview}
+              <strong>{t('agent.agentMessageIndicator.message')}:</strong> {messagePreview}
             </div>
           </div>
         }

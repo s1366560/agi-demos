@@ -203,7 +203,12 @@ export const GeneDetail: FC = () => {
     return (
       <div className="text-center mt-12">
         <Title level={4}>{t('tenant.genes.notFound')}</Title>
-        <Button onClick={() => navigate(-1)} icon={<ArrowLeft className="w-4 h-4" />}>
+        <Button
+          onClick={() => {
+            void navigate(-1);
+          }}
+          icon={<ArrowLeft className="w-4 h-4" />}
+        >
           {t('tenant.genes.back')}
         </Button>
       </div>
@@ -213,11 +218,13 @@ export const GeneDetail: FC = () => {
   return (
     <div className="max-w-full mx-auto w-full flex flex-col gap-8">
       <div className="flex justify-between items-start">
-        <Space direction="vertical" size="small">
+        <Space orientation="vertical" size="small">
           <Button
             type="text"
             icon={<ArrowLeft className="w-4 h-4" />}
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              void navigate(-1);
+            }}
             className="pl-0"
           >
             {t('tenant.genes.back')}
@@ -260,7 +267,7 @@ export const GeneDetail: FC = () => {
           size="small"
           className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
         >
-          <Space direction="vertical" className="w-full text-center">
+          <Space orientation="vertical" className="w-full text-center">
             <Text type="secondary">{t('tenant.genes.downloads')}</Text>
             <div className="flex items-center justify-center gap-2">
               <Download className="w-5 h-5 text-blue-500" />
@@ -275,7 +282,7 @@ export const GeneDetail: FC = () => {
           size="small"
           className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
         >
-          <Space direction="vertical" className="w-full text-center">
+          <Space orientation="vertical" className="w-full text-center">
             <Text type="secondary">{t('tenant.genes.averageRating')}</Text>
             <div className="flex flex-col items-center justify-center">
               <Space>
@@ -292,7 +299,7 @@ export const GeneDetail: FC = () => {
           size="small"
           className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
         >
-          <Space direction="vertical" className="w-full text-center">
+          <Space orientation="vertical" className="w-full text-center">
             <Text type="secondary">{t('tenant.genes.tags')}</Text>
             <div className="flex flex-wrap items-center justify-center gap-1 mt-2">
               {currentGene.tags.length > 0 ? (
@@ -443,7 +450,9 @@ export const GeneDetail: FC = () => {
       <Modal
         title={t('gene.writeReview')}
         open={isReviewModalVisible}
-        onOk={handleReviewSubmit}
+        onOk={() => {
+          void handleReviewSubmit();
+        }}
         onCancel={() => {
           setIsReviewModalVisible(false);
           reviewForm.resetFields();
@@ -472,7 +481,9 @@ export const GeneDetail: FC = () => {
       <Modal
         title={t('tenant.genes.installGene')}
         open={isInstallModalVisible}
-        onOk={handleInstallSubmit}
+        onOk={() => {
+          void handleInstallSubmit();
+        }}
         onCancel={() => {
           setIsInstallModalVisible(false);
           installForm.resetFields();
@@ -501,7 +512,9 @@ export const GeneDetail: FC = () => {
       <Modal
         title={t('tenant.genes.rateGene')}
         open={isRateModalVisible}
-        onOk={handleRateSubmit}
+        onOk={() => {
+          void handleRateSubmit();
+        }}
         onCancel={() => {
           setIsRateModalVisible(false);
           rateForm.resetFields();

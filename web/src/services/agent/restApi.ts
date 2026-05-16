@@ -16,6 +16,22 @@ import type {
 
 const api = httpClient;
 
+export interface ExecutionRecoveryInfo {
+  can_recover: boolean;
+  stream_exists: boolean;
+  recovery_source: string;
+  missed_events_count: number;
+}
+
+export interface ExecutionStatusApiResponse {
+  is_running: boolean;
+  last_event_time_us: number;
+  last_event_counter: number;
+  current_message_id: string | null;
+  conversation_id: string;
+  recovery?: ExecutionRecoveryInfo | null;
+}
+
 export const restApi = {
   async createConversation(
     request: CreateConversationRequest
@@ -175,7 +191,7 @@ export const restApi = {
 
     return {
       ...response,
-      has_more: response.has_more ?? false,
+      has_more: response.has_more,
       first_time_us: response.first_time_us ?? null,
       first_counter: response.first_counter ?? null,
       last_time_us: response.last_time_us ?? null,
@@ -274,42 +290,19 @@ export const restApi = {
     checkRecovery = false,
     sinceTimeUs?: number,
     sinceCounter?: number
-  ): Promise<{
-    status: 'running' | 'completed' | 'failed' | 'paused' | 'unknown';
-    is_active: boolean;
-    last_event_time_us?: number;
-    last_event_counter?: number;
-    conversation_id: string;
-    can_recover?: boolean;
-    recovery_events_count?: number;
-    latest_event?: {
-      type: string;
-      time_us: number;
-      counter: number;
-    };
-  }> {
+  ): Promise<ExecutionStatusApiResponse> {
     const params: Record<string, string | number | boolean> = {
-      check_recovery: checkRecovery,
+      include_recovery: checkRecovery,
     };
-    if (sinceTimeUs !== undefined) params.since_time_us = sinceTimeUs;
-    if (sinceCounter !== undefined) params.since_counter = sinceCounter;
+    if (sinceTimeUs !== undefined) params.from_time_us = sinceTimeUs;
+    if (sinceCounter !== undefined) params.from_counter = sinceCounter;
 
-    return await api.get<{
-      status: 'running' | 'completed' | 'failed' | 'paused' | 'unknown';
-      is_active: boolean;
-      last_event_time_us?: number;
-      last_event_counter?: number;
-      conversation_id: string;
-      can_recover?: boolean;
-      recovery_events_count?: number;
-      latest_event?: {
-        type: string;
-        time_us: number;
-        counter: number;
-      };
-    }>(`/agent/conversations/${conversationId}/execution-status`, {
-      params,
-    });
+    return await api.get<ExecutionStatusApiResponse>(
+      `/agent/conversations/${conversationId}/execution-status`,
+      {
+        params,
+      }
+    );
   },
 
   async respondToEnvVarHttp(requestId: string, values: Record<string, string>): Promise<void> {

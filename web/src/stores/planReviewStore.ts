@@ -69,12 +69,13 @@ export const usePlanReviewStore = create<PlanReviewState>((set) => ({
       if (!convPrev || !(planId in convPrev)) return prev;
       const { [planId]: _omit, ...restConv } = convPrev;
       void _omit;
-      const restConvKeys = Object.keys(restConv);
-      const nextConv: Record<string, Record<string, PlanReviewVerdict>> = { ...prev.verdicts };
-      if (restConvKeys.length === 0) {
-        delete nextConv[conversationId];
+      let nextConv: Record<string, Record<string, PlanReviewVerdict>>;
+      if (Object.keys(restConv).length === 0) {
+        const { [conversationId]: _removed, ...remaining } = prev.verdicts;
+        void _removed;
+        nextConv = remaining;
       } else {
-        nextConv[conversationId] = restConv;
+        nextConv = { ...prev.verdicts, [conversationId]: restConv };
       }
       saveToStorage({ verdicts: nextConv });
       return { verdicts: nextConv };

@@ -16,6 +16,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   AlertCircle,
   AlertTriangle,
@@ -29,8 +31,6 @@ import {
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
-
-import { useTranslation } from 'react-i18next';
 
 import { useThemeColors } from '@/hooks/useThemeColor';
 
@@ -73,9 +73,20 @@ import type {
   DecisionOption,
   EnvVarField,
 } from '../../types/hitl.unified';
+import type { RadioChangeEvent } from 'antd';
 
 const { Text, Paragraph, Title } = Typography;
 const { TextArea } = Input;
+
+const formatDisplayValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') return value.toString();
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'symbol') return value.description ?? '';
+  return '';
+};
 
 // =============================================================================
 // Type-specific configurations
@@ -206,6 +217,15 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
     },
     [submitResponse, request, onClose]
   );
+  const handleSubmitSync = useCallback(
+    (responseData: HITLResponseData) => {
+      void handleSubmit(responseData);
+    },
+    [handleSubmit]
+  );
+  const handleCancelSync = useCallback(() => {
+    void handleCancel();
+  }, [handleCancel]);
 
   // Calculate progress percentage
   const progressPercent = useMemo(() => {
@@ -229,7 +249,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
           {remainingTime !== null && (
             <Tooltip title={t('hitl.remainingTime')}>
               <Badge
-                count={`${Math.floor(remainingTime)}s`}
+                count={`${Math.floor(remainingTime).toString()}s`}
                 style={{
                   backgroundColor: progressPercent <= 20 ? tc.error : tc.success,
                   marginRight: 8,
@@ -241,7 +261,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
           )}
         </div>
       }
-      onCancel={handleCancel}
+      onCancel={handleCancelSync}
       footer={null}
       width={700}
       destroyOnHidden
@@ -264,8 +284,8 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
         {/* Type-specific Content */}
         <HITLContent
           request={request}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
+          onSubmit={handleSubmitSync}
+          onCancel={handleCancelSync}
           isSubmitting={isSubmitting}
           submitText={t(config.submitText)}
         />
@@ -329,14 +349,14 @@ const ContextAlert: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) =>
 
   return (
     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-      <Text className="text-sm text-blue-700 dark:text-blue-300 font-semibold">{t('hitl.contextHeading')}</Text>
+      <Text className="text-sm text-blue-700 dark:text-blue-300 font-semibold">
+        {t('hitl.contextHeading')}
+      </Text>
       <div className="mt-2 space-y-1">
         {Object.entries(context).map(([key, value]) => (
           <div key={key} className="text-sm">
             <Text className="text-blue-600 dark:text-blue-400">{key}:</Text>{' '}
-            <Text className="text-blue-800 dark:text-blue-200">
-              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-            </Text>
+            <Text className="text-blue-800 dark:text-blue-200">{formatDisplayValue(value)}</Text>
           </div>
         ))}
       </div>
@@ -357,6 +377,8 @@ interface HITLContentProps {
 }
 
 const HITLContent: React.FC<HITLContentProps> = (props) => {
+  const { t } = useTranslation();
+
   switch (props.request.hitlType) {
     case 'clarification':
       return <ClarificationContent {...props} />;
@@ -367,7 +389,7 @@ const HITLContent: React.FC<HITLContentProps> = (props) => {
     case 'permission':
       return <PermissionContent {...props} />;
     default:
-      return <div>Unknown HITL type</div>;
+      return <div>{t('hitl.unknownType', { defaultValue: 'Unknown HITL type' })}</div>;
   }
 };
 
@@ -384,9 +406,11 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
 }) => {
   const { t } = useTranslation();
   const data = request.clarificationData;
-  const hasOptions = data?.options && data.options.length > 0;
+  const options = data?.options ?? [];
+  const allowCustom = data?.allowCustom ?? false;
+  const hasOptions = options.length > 0;
   const [selectedOption, setSelectedOption] = useState<string | null>(
-    data?.options.find((opt) => opt.recommended)?.id || null
+    options.find((opt) => opt.recommended)?.id || null
   );
   const [customInput, setCustomInput] = useState('');
 
@@ -395,7 +419,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
       onSubmit({ answer: customInput.trim() });
       return;
     }
-    if (selectedOption === 'custom' && data?.allowCustom) {
+    if (selectedOption === 'custom' && allowCustom) {
       if (customInput.trim()) {
         onSubmit({ answer: customInput.trim() });
       }
@@ -421,18 +445,22 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
       {hasOptions ? (
         <Radio.Group
           value={selectedOption}
-          onChange={(e) => {
-            setSelectedOption(e.target.value);
+          onChange={(e: RadioChangeEvent) => {
+            setSelectedOption(formatDisplayValue(e.target.value));
           }}
           className="w-full"
         >
-          <Space direction="vertical" className="w-full" size="middle">
-            {data?.options.map((option, idx) => {
+          <Space orientation="vertical" className="w-full" size="middle">
+            {options.map((option, idx) => {
               const optionLabel = getOptionLabelText(option.label) ?? option.id;
               const optionDescription = getOptionDescriptionText(option.description);
 
               return (
-                <Radio key={option.id || `option-${idx}`} value={option.id} className="w-full">
+                <Radio
+                  key={option.id || `option-${idx.toString()}`}
+                  value={option.id}
+                  className="w-full"
+                >
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <Text strong>{optionLabel}</Text>
@@ -452,7 +480,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
               );
             })}
 
-            {data?.allowCustom && (
+            {allowCustom && (
               <Radio value="custom" className="w-full">
                 <div className="flex flex-col w-full">
                   <Text strong>{t('hitl.customAnswer')}</Text>
@@ -487,7 +515,12 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
           />
         </div>
       ) : (
-        <Alert message={t('hitl.emptyOptionsMessage')} description={t('hitl.emptyOptionsDescription')} type="info" showIcon />
+        <Alert
+          title={t('hitl.emptyOptionsMessage')}
+          description={t('hitl.emptyOptionsDescription')}
+          type="info"
+          showIcon
+        />
       )}
 
       <Divider />
@@ -522,10 +555,13 @@ const DecisionContent: React.FC<HITLContentProps> = ({
 }) => {
   const { t } = useTranslation();
   const data = request.decisionData;
-  const hasOptions = data?.options && data.options.length > 0;
+  const options = data?.options ?? [];
+  const allowCustom = data?.allowCustom ?? false;
+  const defaultOption = data?.defaultOption;
+  const hasOptions = options.length > 0;
   const isMultiSelect = data?.selectionMode === 'multiple';
   const [selectedOption, setSelectedOption] = useState<string | null>(
-    data?.options.find((opt) => opt.recommended)?.id || data?.defaultOption || null
+    options.find((opt) => opt.recommended)?.id || defaultOption || null
   );
   const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
   const [customInput, setCustomInput] = useState('');
@@ -541,7 +577,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
       onSubmit({ decision: customInput.trim() });
       return;
     }
-    if (selectedOption === 'custom' && data?.allowCustom) {
+    if (selectedOption === 'custom' && allowCustom) {
       if (customInput.trim()) {
         onSubmit({ decision: customInput.trim() });
       }
@@ -561,11 +597,10 @@ const DecisionContent: React.FC<HITLContentProps> = ({
     return !selectedOption;
   })();
 
-  const selectedOptionData = data?.options.find((opt) => opt.id === selectedOption);
+  const selectedOptionData = options.find((opt) => opt.id === selectedOption);
   const hasHighRisk = getOptionRiskList(selectedOptionData?.risks).length > 0;
   const defaultOptionLabel =
-    getOptionLabelText(data?.options.find((opt) => opt.id === data.defaultOption)?.label) ??
-    data?.defaultOption;
+    getOptionLabelText(options.find((opt) => opt.id === defaultOption)?.label) ?? defaultOption;
 
   return (
     <div className="space-y-4">
@@ -575,9 +610,9 @@ const DecisionContent: React.FC<HITLContentProps> = ({
       </Title>
 
       {/* Default option warning */}
-      {data?.defaultOption && (
+      {defaultOption && (
         <Alert
-          message={t('hitl.timeoutDefaultMessage')}
+          title={t('hitl.timeoutDefaultMessage')}
           description={t('hitl.timeoutDefaultDescription', { label: defaultOptionLabel ?? '' })}
           type="info"
           showIcon
@@ -589,9 +624,9 @@ const DecisionContent: React.FC<HITLContentProps> = ({
       {/* Options */}
       {hasOptions ? (
         <div className="space-y-3">
-          {data?.options.map((option, idx) => (
+          {options.map((option, idx) => (
             <DecisionOptionCard
-              key={option.id || `option-${idx}`}
+              key={option.id || `option-${idx.toString()}`}
               option={option}
               selected={
                 isMultiSelect ? selectedMultiple.includes(option.id) : selectedOption === option.id
@@ -607,7 +642,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
             />
           ))}
 
-          {data?.allowCustom && !isMultiSelect && (
+          {allowCustom && !isMultiSelect && (
             <div
               onClick={() => {
                 setSelectedOption('custom');
@@ -643,7 +678,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
             </div>
           )}
         </div>
-      ) : data?.allowCustom ? (
+      ) : allowCustom ? (
         <div className="space-y-2">
           <Text type="secondary">{t('hitl.noPresetOptions')}</Text>
           <TextArea
@@ -658,7 +693,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
         </div>
       ) : (
         <Alert
-          message={t('hitl.emptyOptionsMessage')}
+          title={t('hitl.emptyOptionsMessage')}
           description={t('hitl.emptyDecisionDescription')}
           type="info"
           showIcon
@@ -672,7 +707,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
         <Button onClick={onCancel}>{t('hitl.cancel')}</Button>
         <Button
           type={hasHighRisk ? 'default' : 'primary'}
-          danger={hasHighRisk ?? false}
+          danger={hasHighRisk}
           icon={<CheckCircle2 size={16} />}
           onClick={handleSubmit}
           disabled={isSubmitDisabled}
@@ -782,17 +817,18 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
     () => decodeUnifiedEnvVarRequestData(request.envVarData),
     [request.envVarData]
   );
-  const [form] = Form.useForm();
+  const fields = useMemo(() => data?.fields ?? [], [data?.fields]);
+  const [form] = Form.useForm<Record<string, unknown>>();
 
   useEffect(() => {
     const initialValues: Record<string, string> = {};
-    data?.fields.forEach((field) => {
+    fields.forEach((field) => {
       if (field.defaultValue) {
         initialValues[field.name] = field.defaultValue;
       }
     });
     form.setFieldsValue(initialValues);
-  }, [data?.fields, form]);
+  }, [fields, form]);
 
   const handleSubmit = async () => {
     try {
@@ -802,7 +838,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
       const filteredValues: Record<string, string> = {};
       Object.entries(values).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          filteredValues[key] = String(value);
+          filteredValues[key] = formatDisplayValue(value);
         }
       });
 
@@ -841,7 +877,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
 
       {/* Form Fields */}
       <Form form={form} layout="vertical">
-        {data?.fields.map((field) => (
+        {fields.map((field) => (
           <Form.Item
             key={field.name}
             name={field.name}
@@ -876,9 +912,9 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
       </Form>
 
       {/* Security Notice */}
-      {data?.fields.some((f) => f.inputType === 'password') && (
+      {fields.some((f) => f.inputType === 'password') && (
         <Alert
-          message={t('hitl.envSecurityTitle')}
+          title={t('hitl.envSecurityTitle')}
           description={t('hitl.envSecurityDescription')}
           type="warning"
           showIcon
@@ -893,7 +929,9 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
         <Button
           type="primary"
           icon={<CheckCircle2 size={16} />}
-          onClick={handleSubmit}
+          onClick={() => {
+            void handleSubmit();
+          }}
           loading={isSubmitting}
         >
           {submitText}
@@ -936,7 +974,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
       {riskLevel === 'high' && (
         <Alert
           type="warning"
-          message={t('hitl.highRiskTitle')}
+          title={t('hitl.highRiskTitle')}
           description={t('hitl.highRiskDescription')}
           showIcon
         />

@@ -13,7 +13,9 @@ const BASE = {
   createdAt: '2025-01-01T00:00:00Z',
 };
 
-function make(partial: Partial<Artifact> & Pick<Artifact, 'id' | 'filename' | 'mimeType'>): Artifact {
+function make(
+  partial: Partial<Artifact> & Pick<Artifact, 'id' | 'filename' | 'mimeType'>
+): Artifact {
   return {
     ...BASE,
     sizeBytes: 1024,

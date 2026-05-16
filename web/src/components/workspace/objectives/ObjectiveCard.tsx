@@ -77,20 +77,17 @@ export const ObjectiveCard: React.FC<ObjectiveCardProps> = ({
   ];
 
   return (
-    <article className="group rounded-xl border border-border-light bg-surface-light px-4 py-3 transition-colors hover:border-border-separator dark:border-border-dark dark:bg-surface-dark">
+    <article className="group min-w-0 overflow-hidden rounded-xl border border-border-light bg-surface-light px-4 py-3 transition-colors hover:border-border-separator dark:border-border-dark dark:bg-surface-dark">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <Circle
-            size={16}
-            className="mt-0.5 flex-none text-primary dark:text-primary-200"
-          />
+          <Circle size={16} className="mt-0.5 flex-none text-primary dark:text-primary-200" />
           <div className="min-w-0 flex-1">
-            <h4 className="text-sm font-semibold text-text-primary dark:text-text-inverse">
+            <h4 className="break-words text-sm font-semibold text-text-primary dark:text-text-inverse">
               {objective.title}
             </h4>
             {objective.description && (
               <p
-                className="mt-1 line-clamp-2 text-xs leading-5 text-text-secondary dark:text-text-muted"
+                className="mt-1 line-clamp-2 break-words text-xs leading-5 text-text-secondary dark:text-text-muted"
                 title={objective.description}
               >
                 {objective.description}

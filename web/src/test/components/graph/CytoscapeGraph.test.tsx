@@ -12,7 +12,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Import mocks FIRST before component imports
-import '../../mocks/cytoscape';
+import { mockCytoscapeInstance } from '../../mocks/cytoscape';
 
 const { graphService } = vi.hoisted(() => {
   const graphService = {
@@ -75,9 +75,60 @@ import type { GraphConfig, NodeData } from '@/components/graph/CytoscapeGraph/ty
 import { useThemeStore } from '../../mocks/themeStore';
 import { render, screen, fireEvent, waitFor } from '../../utils';
 
+function createDefaultGraphData() {
+  return {
+    elements: {
+      nodes: [
+        {
+          data: {
+            id: 'n1',
+            label: 'Entity',
+            name: 'Test Entity',
+            uuid: 'u1',
+            entity_type: 'Person',
+          },
+        },
+        {
+          data: {
+            id: 'n2',
+            label: 'Community',
+            name: 'Test Community',
+            uuid: 'u2',
+            member_count: 5,
+          },
+        },
+      ],
+      edges: [{ data: { id: 'e1', source: 'n1', target: 'n2', label: 'MEMBER_OF' } }],
+    },
+  };
+}
+
+function createDefaultSubgraphData() {
+  return {
+    elements: {
+      nodes: [
+        {
+          data: {
+            id: 'n1',
+            label: 'Entity',
+            name: 'Test Entity',
+            uuid: 'u1',
+            entity_type: 'Person',
+          },
+        },
+      ],
+      edges: [],
+    },
+  };
+}
+
 describe('CytoscapeGraph - TDD Refactoring', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    graphService.getGraphData.mockReset();
+    graphService.getSubgraph.mockReset();
+    graphService.getGraphData.mockResolvedValue(createDefaultGraphData());
+    graphService.getSubgraph.mockResolvedValue(createDefaultSubgraphData());
   });
 
   // ========================================
@@ -165,7 +216,7 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
       render(<CytoscapeGraph config={config} />);
 
       await waitFor(() => {
-        expect(screen.getByText(/Nodes:/)).toBeInTheDocument();
+        expect(mockCytoscapeInstance.on).toHaveBeenCalledWith('tap', 'node', expect.any(Function));
       });
     });
 
@@ -185,16 +236,46 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
     it('should handle error state', async () => {
       // graphService is imported from mocks
       graphService.getGraphData.mockRejectedValueOnce(new Error('Network error'));
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       const config: GraphConfig = {
         data: { projectId: 'p1' },
       };
 
-      render(<CytoscapeGraph config={config} />);
+      try {
+        render(<CytoscapeGraph config={config} />);
 
-      await waitFor(() => {
-        expect(screen.getByText(/Failed to load graph data/)).toBeInTheDocument();
-      });
+        await waitFor(() => {
+          expect(screen.getByText(/Network error/)).toBeInTheDocument();
+        });
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
+    it('does not refetch after a failed load only because state is reported to the parent', async () => {
+      graphService.getGraphData.mockRejectedValueOnce(new Error('Network error'));
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      try {
+        render(
+          <CytoscapeGraph>
+            <CytoscapeGraph.Viewport projectId="p1" />
+          </CytoscapeGraph>
+        );
+
+        await waitFor(() => {
+          expect(screen.getByText(/Network error/)).toBeInTheDocument();
+        });
+
+        await new Promise((resolve) => {
+          setTimeout(resolve, 50);
+        });
+
+        expect(graphService.getGraphData).toHaveBeenCalledTimes(1);
+      } finally {
+        consoleError.mockRestore();
+      }
     });
   });
 
@@ -226,6 +307,8 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
         expect(screen.getByTitle('Relayout')).toBeInTheDocument();
         expect(screen.getByTitle('Fit to View')).toBeInTheDocument();
       });
+
+      expect(screen.getByTitle('Relayout').closest('.border-b')).toHaveClass('flex-col');
     });
 
     it('should render with NodeInfoPanel subcomponent', async () => {
@@ -286,6 +369,42 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
       await waitFor(() => {
         expect(screen.getByText(/Nodes:/)).toBeInTheDocument();
       });
+    });
+
+    it('does not clear node selection when node tap bubbles to the core handler', async () => {
+      const onNodeClick = vi.fn();
+      const nodeData: NodeData = {
+        id: 'n1',
+        uuid: 'u1',
+        name: 'Test Entity',
+        type: 'Entity',
+        entity_type: 'Person',
+      };
+      const nodeTarget = { data: () => nodeData };
+
+      render(
+        <CytoscapeGraph>
+          <CytoscapeGraph.Viewport projectId="p1" onNodeClick={onNodeClick} />
+          <CytoscapeGraph.NodeInfoPanel />
+        </CytoscapeGraph>
+      );
+
+      await waitFor(() => {
+        expect(mockCytoscapeInstance.on).toHaveBeenCalledWith('tap', 'node', expect.any(Function));
+      });
+
+      const nodeTapHandler = mockCytoscapeInstance.on.mock.calls.find(
+        (call) => call[0] === 'tap' && call[1] === 'node'
+      )?.[2] as ((event: { target: typeof nodeTarget }) => void) | undefined;
+      const coreTapHandler = mockCytoscapeInstance.on.mock.calls.find(
+        (call) => call[0] === 'tap' && typeof call[1] === 'function'
+      )?.[1] as ((event: { target: typeof nodeTarget }) => void) | undefined;
+
+      nodeTapHandler?.({ target: nodeTarget });
+      coreTapHandler?.({ target: nodeTarget });
+
+      expect(onNodeClick).toHaveBeenCalledTimes(1);
+      expect(onNodeClick).toHaveBeenCalledWith(nodeData);
     });
   });
 
@@ -489,12 +608,21 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
       await waitFor(() => {
         expect(screen.getByText('Test Entity')).toBeInTheDocument();
       });
+      await waitFor(() => {
+        expect(screen.getByText(/Nodes:/)).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(mockCytoscapeInstance.add).toHaveBeenCalled();
+        expect(screen.queryByText(/Loading graph/)).not.toBeInTheDocument();
+      });
 
       const closeButton = document.querySelector('.lucide-x')?.closest('button');
       expect(closeButton).toBeInTheDocument();
       fireEvent.click(closeButton!);
 
-      expect(onClose).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(onClose).toHaveBeenCalled();
+      });
     });
 
     it('should display community specific fields', async () => {

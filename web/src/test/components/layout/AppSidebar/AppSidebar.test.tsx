@@ -75,9 +75,7 @@ vi.mock('@/config/navigation', () => {
       groups: baseProjectConfig.groups.map((group) => ({
         ...group,
         items: group.items.map((item) =>
-          item.id === 'blackboard'
-            ? { ...item, path: `/blackboard?workspaceId=${wsId}` }
-            : item
+          item.id === 'blackboard' ? { ...item, path: `/blackboard?workspaceId=${wsId}` } : item
         ),
       })),
     };

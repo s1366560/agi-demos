@@ -15,10 +15,16 @@
 
 import { memo, useCallback, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Check, MessageSquarePlus, OctagonX, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { usePendingPromptStore } from '@/stores/pendingPromptStore';
-import { usePlanReviewStore, usePlanVerdict, type PlanReviewVerdict } from '@/stores/planReviewStore';
+import {
+  usePlanReviewStore,
+  usePlanVerdict,
+  type PlanReviewVerdict,
+} from '@/stores/planReviewStore';
 
 import { useAgentV3Store } from '../../../stores/agentV3';
 
@@ -29,17 +35,23 @@ interface PlanReviewGateProps {
   event: WorkPlanTimelineEvent;
 }
 
-const VERDICT_BADGE: Record<PlanReviewVerdict, { label: string; cls: string }> = {
+const VERDICT_BADGE: Record<
+  PlanReviewVerdict,
+  { labelKey: string; labelFallback: string; cls: string }
+> = {
   approved: {
-    label: 'Approved',
+    labelKey: 'agent.planReviewGate.verdict.approved',
+    labelFallback: 'Approved',
     cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   },
   changes_requested: {
-    label: 'Changes requested',
+    labelKey: 'agent.planReviewGate.verdict.changesRequested',
+    labelFallback: 'Changes requested',
     cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   },
   aborted: {
-    label: 'Aborted',
+    labelKey: 'agent.planReviewGate.verdict.aborted',
+    labelFallback: 'Aborted',
     cls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
   },
 };
@@ -48,6 +60,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
   conversationId,
   event,
 }: PlanReviewGateProps) {
+  const { t } = useTranslation();
   const planId = event.id;
   const verdict = usePlanVerdict(conversationId, planId);
   const setVerdict = usePlanReviewStore((s) => s.setVerdict);
@@ -101,7 +114,9 @@ export const PlanReviewGate = memo(function PlanReviewGate({
         data-testid="plan-review-gate-resolved"
         className="mt-2 flex items-center justify-between gap-2 rounded-md border border-slate-200/70 bg-slate-50/60 px-3 py-1.5 text-xs dark:border-slate-700/60 dark:bg-slate-800/40"
       >
-        <span className={`rounded-full px-2 py-0.5 font-medium ${badge.cls}`}>{badge.label}</span>
+        <span className={`rounded-full px-2 py-0.5 font-medium ${badge.cls}`}>
+          {t(badge.labelKey, badge.labelFallback)}
+        </span>
         <button
           type="button"
           onClick={handleReopen}
@@ -128,13 +143,13 @@ export const PlanReviewGate = memo(function PlanReviewGate({
           aria-expanded={stepsExpanded}
         >
           <Chevron size={12} />
-          <span>Review gate</span>
+          <span>{t('agent.planReviewGate.title')}</span>
           <span className="text-[10px] text-amber-600 dark:text-amber-300/70">
-            {stepCount} {stepCount === 1 ? 'step' : 'steps'}
+            {t('agent.planReviewGate.stepCount', { count: stepCount })}
           </span>
         </button>
         <span className="text-[10px] text-amber-700/70 dark:text-amber-300/60">
-          Approve to continue, or request changes
+          {t('agent.planReviewGate.description')}
         </span>
       </div>
 
@@ -165,7 +180,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
             onChange={(e) => {
               setChangesText(e.target.value);
             }}
-            placeholder="What should change about the plan?"
+            placeholder={t('agent.planReviewGate.changePlaceholder')}
             rows={3}
             className="w-full resize-y rounded border border-amber-200 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:border-amber-400 dark:border-amber-700/50 dark:bg-slate-900 dark:text-slate-100"
           />
@@ -178,7 +193,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
               }}
               className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -186,7 +201,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
               disabled={changesText.trim().length === 0}
               className="rounded bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Queue revision request
+              {t('agent.planReviewGate.queueRevision')}
             </button>
           </div>
         </div>
@@ -198,7 +213,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-rose-700 hover:bg-rose-100 dark:text-rose-300 dark:hover:bg-rose-900/30"
           >
             <OctagonX size={12} />
-            Abort
+            {t('agent.planReviewGate.abort')}
           </button>
           <button
             type="button"
@@ -208,7 +223,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/30"
           >
             <MessageSquarePlus size={12} />
-            Request changes
+            {t('agent.planReviewGate.requestChanges')}
           </button>
           <button
             type="button"
@@ -216,7 +231,7 @@ export const PlanReviewGate = memo(function PlanReviewGate({
             className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700"
           >
             <Check size={12} />
-            Approve
+            {t('agent.planReviewGate.approve')}
           </button>
         </div>
       )}

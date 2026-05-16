@@ -48,7 +48,10 @@ function formatBreadcrumbLabel(segment: string): string {
     .join(' ');
 }
 
-function getSegmentLabel(segment: string | undefined, customLabels: Record<string, string>): string {
+function getSegmentLabel(
+  segment: string | undefined,
+  customLabels: Record<string, string>
+): string {
   const safeSegment = segment ?? '';
   return getCustomLabel(safeSegment, customLabels) || formatBreadcrumbLabel(safeSegment);
 }

@@ -5,6 +5,28 @@ import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 
+const getPackageName = (id: string): string | null => {
+  const normalized = id.split("\\").join("/");
+  const marker = "/node_modules/";
+  const markerIndex = normalized.lastIndexOf(marker);
+
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const packagePath = normalized.slice(markerIndex + marker.length);
+  const [scopeOrName, scopedName] = packagePath.split("/");
+
+  if (!scopeOrName) {
+    return null;
+  }
+
+  return scopeOrName.startsWith("@") && scopedName ? `${scopeOrName}/${scopedName}` : scopeOrName;
+};
+
+const packageIs = (packageName: string, packages: readonly string[]): boolean =>
+  packages.includes(packageName);
+
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -51,56 +73,175 @@ export default defineConfig({
         manualChunks: (id) => {
           // Vendor chunks for better caching
           if (id.includes("node_modules")) {
+            const packageName = getPackageName(id);
+
+            if (!packageName) {
+              return "vendor";
+            }
+
             // KaTeX & math plugins - separate async chunk for lazy loading
-            if (id.includes("katex") || id.includes("remark-math") || id.includes("rehype-katex")) {
+            if (packageIs(packageName, ["katex", "remark-math", "rehype-katex"])) {
               return "vendor-math";
             }
             // Ant Design - large UI library
-            if (id.includes("antd") || id.includes("@ant-design")) {
+            if (
+              packageName === "antd" ||
+              packageIs(packageName, ["@ant-design/colors", "@ant-design/cssinjs"])
+            ) {
               return "vendor-antd";
             }
+            if (packageName.startsWith("@rc-component/") || packageName.startsWith("@ant-design/")) {
+              return "vendor-antd-addons";
+            }
             // Icons
-            if (id.includes("lucide-react")) {
+            if (packageName === "lucide-react") {
               return "vendor-icons";
             }
             // React ecosystem
-            if (id.includes("react") || id.includes("react-dom") || id.includes("react-router")) {
+            if (
+              packageIs(packageName, [
+                "react",
+                "react-dom",
+                "react-is",
+                "react-router",
+                "react-router-dom",
+                "scheduler",
+              ])
+            ) {
               return "vendor-react";
             }
             // State management
-            if (id.includes("zustand")) {
+            if (packageIs(packageName, ["zustand", "@tanstack/react-query", "swr"])) {
               return "vendor-state";
             }
+            if (packageName === "@tanstack/query-core") {
+              return "vendor-state-core";
+            }
             // Markdown and syntax highlighting
-            if (id.includes("react-markdown") || id.includes("remark-gfm") || id.includes("react-syntax-highlighter")) {
+            if (
+              packageIs(packageName, [
+                "react-markdown",
+                "remark-gfm",
+                "rehype-raw",
+                "unified",
+                "remark-parse",
+                "remark-rehype",
+                "markdown-it",
+                "parse5",
+                "dompurify",
+                "js-yaml",
+              ])
+            ) {
               return "vendor-markdown";
             }
+            if (
+              packageIs(packageName, [
+                "react-syntax-highlighter",
+                "highlight.js",
+                "refractor",
+                "lowlight",
+                "prismjs",
+              ])
+            ) {
+              return "vendor-code";
+            }
             // Terminal
-            if (id.includes("@xterm") || id.includes("xterm")) {
+            if (packageName.startsWith("@xterm/")) {
               return "vendor-terminal";
             }
             // Charts
-            if (id.includes("chart.js") || id.includes("react-chartjs")) {
+            if (packageIs(packageName, ["chart.js", "react-chartjs-2"])) {
               return "vendor-charts";
             }
             // 3D visualization (R3F)
-            if (id.includes("three") || id.includes("@react-three")) {
+            if (
+              packageName.startsWith("@react-three/") ||
+              packageIs(packageName, [
+                "three-stdlib",
+                "three-mesh-bvh",
+                "troika-three-text",
+                "troika-three-utils",
+                "meshline",
+                "maath",
+                "camera-controls",
+              ])
+            ) {
               return "vendor-3d";
             }
+            if (packageName === "three") {
+              return "vendor-three";
+            }
             // Graph visualization
-            if (id.includes("cytoscape")) {
+            if (
+              packageIs(packageName, [
+                "cytoscape",
+                "cytoscape-fcose",
+                "cytoscape-cose-bilkent",
+                "cose-base",
+              ])
+            ) {
               return "vendor-graph";
             }
             // i18n
-            if (id.includes("i18next")) {
+            if (packageIs(packageName, ["i18next", "i18next-browser-languagedetector"])) {
               return "vendor-i18n";
             }
             // PDF generation
-            if (id.includes("html2pdf")) {
+            if (packageName === "html2pdf.js") {
               return "vendor-pdf";
             }
+            if (packageIs(packageName, ["html2canvas", "jspdf", "jszip"])) {
+              return "vendor-document-render";
+            }
+            if (packageName === "docx-preview") {
+              return "vendor-docx";
+            }
+            if (packageName === "xlsx") {
+              return "vendor-spreadsheet";
+            }
+            if (
+              packageIs(packageName, [
+                "@mcp-ui/client",
+                "@modelcontextprotocol/sdk",
+                "@a2ui/lit",
+                "@a2ui/web_core",
+                "@copilotkit/a2ui-renderer",
+                "@copilotkit/react-core",
+                "vscode-languageserver-types",
+              ])
+            ) {
+              return "vendor-agent-ui";
+            }
+            if (packageName === "mermaid") {
+              if (!id.includes("/chunks/mermaid.core/")) {
+                return "vendor-mermaid-core";
+              }
+
+              return id.includes("/chunks/mermaid.core/chunk-")
+                ? "vendor-mermaid-shared"
+                : "vendor-mermaid-diagrams";
+            }
+            if (
+              packageIs(packageName, [
+                "@mermaid-js/parser",
+                "langium",
+                "chevrotain",
+                "layout-base",
+                "dagre-d3-es",
+                "elkjs",
+                "khroma",
+              ])
+            ) {
+              return "vendor-diagrams";
+            }
+            if (packageIs(packageName, ["zod", "zod-to-json-schema", "ajv", "ajv-formats"])) {
+              return "vendor-schema";
+            }
+            if (packageIs(packageName, ["axios", "cookie", "set-cookie-parser"])) {
+              return "vendor-network";
+            }
             // Date utilities
-            if (id.includes("date-fns")) {
+            if (packageIs(packageName, ["date-fns", "dayjs"])) {
               return "vendor-date";
             }
             // Other vendor

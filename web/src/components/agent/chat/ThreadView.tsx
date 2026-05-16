@@ -16,6 +16,21 @@ interface ThreadReply {
   created_at: string;
 }
 
+function isThreadReplyArray(value: unknown): value is ThreadReply[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        item !== null &&
+        typeof item === 'object' &&
+        typeof (item as ThreadReply).id === 'string' &&
+        typeof (item as ThreadReply).role === 'string' &&
+        typeof (item as ThreadReply).content === 'string' &&
+        typeof (item as ThreadReply).created_at === 'string'
+    )
+  );
+}
+
 interface ThreadViewProps {
   messageId: string;
   conversationId: string;
@@ -35,19 +50,22 @@ export const ThreadView = memo<ThreadViewProps>(
     useEffect(() => {
       if (!expanded || !conversationId || !messageId) return;
       const abortController = new AbortController();
+      const token = getAuthToken();
+      const requestInit: RequestInit = { signal: abortController.signal };
+      if (token) {
+        requestInit.headers = { Authorization: `Bearer ${token}` };
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
       setFetchError(null);
-      fetch(`/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`, {
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-        },
-        signal: abortController.signal,
-      })
-        .then((res) => res.json())
+      fetch(
+        `/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`,
+        requestInit
+      )
+        .then((res) => res.json() as Promise<unknown>)
         .then((data) => {
           if (!abortController.signal.aborted) {
-            setReplies(data);
+            setReplies(isThreadReplyArray(data) ? data : []);
             setLoading(false);
           }
         })

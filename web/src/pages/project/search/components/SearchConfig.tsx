@@ -150,7 +150,7 @@ export const SearchConfig = memo<SearchConfigProps>(
           className={`
                 fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-[#121520] lg:bg-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out lg:relative lg:transform-none lg:z-0 flex flex-col gap-6 shrink-0 h-full
                 ${showMobileConfig ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
-                ${!isConfigOpen && 'lg:w-0 lg:overflow-hidden lg:opacity-0 lg:p-0'}
+                ${!isConfigOpen ? 'lg:w-0 lg:overflow-hidden lg:opacity-0 lg:p-0' : ''}
             `}
         >
           <div className="flex-1 flex flex-col gap-5 p-5 bg-white dark:bg-[#1e212b] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-y-auto custom-scrollbar h-full">
@@ -161,10 +161,12 @@ export const SearchConfig = memo<SearchConfigProps>(
               </h2>
               <div className="flex items-center gap-2">
                 <span className="text-2xs px-1.5 py-0.5 bg-blue-600/10 text-blue-600 rounded font-medium">
-                  Advanced
+                  {t('project.search.config.advanced')}
                 </span>
                 <button
+                  type="button"
                   onClick={onMobileConfigClose}
+                  aria-label={t('common.close')}
                   className="lg:hidden p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -241,28 +243,34 @@ interface ConfigTabSelectorProps {
   onTabChange: (tab: ConfigTab) => void;
 }
 
-const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChange }) => (
-  <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
-    <button
-      onClick={() => {
-        onTabChange('params');
-      }}
-      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'params' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-    >
-      <Sliders className="w-3.5 h-3.5" />
-      Parameters
-    </button>
-    <button
-      onClick={() => {
-        onTabChange('filters');
-      }}
-      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'filters' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-    >
-      <Filter className="w-3.5 h-3.5" />
-      Filters
-    </button>
-  </div>
-));
+const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChange }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
+      <button
+        type="button"
+        onClick={() => {
+          onTabChange('params');
+        }}
+        className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'params' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+      >
+        <Sliders className="w-3.5 h-3.5" />
+        {t('project.search.config.params')}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onTabChange('filters');
+        }}
+        className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'filters' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+      >
+        <Filter className="w-3.5 h-3.5" />
+        {t('project.search.config.filters')}
+      </button>
+    </div>
+  );
+});
 ConfigTabSelector.displayName = 'ConfigTabSelector';
 
 interface SemanticSearchParamsProps {
@@ -315,58 +323,74 @@ SemanticSearchParams.displayName = 'SemanticSearchParams';
 const RetrievalModeSelector = memo<{
   value: RetrievalMode;
   onChange: (mode: RetrievalMode) => void;
-}>(({ value, onChange }) => (
-  <div className="flex flex-col gap-2">
-    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-      Retrieval Mode
-    </label>
-    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex">
-      <button
-        onClick={() => {
-          onChange('hybrid');
-        }}
-        className={`flex-1 py-2 px-2 rounded-md shadow-sm text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'hybrid' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-      >
-        Hybrid
-      </button>
-      <button
-        onClick={() => {
-          onChange('nodeDistance');
-        }}
-        className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'nodeDistance' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
-      >
-        Node Distance
-      </button>
+}>(({ value, onChange }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        {t('project.search.params.retrieval_mode')}
+      </label>
+      <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex">
+        <button
+          type="button"
+          onClick={() => {
+            onChange('hybrid');
+          }}
+          className={`flex-1 py-2 px-2 rounded-md shadow-sm text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'hybrid' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        >
+          {t('project.search.params.hybrid')}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onChange('nodeDistance');
+          }}
+          className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'nodeDistance' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+        >
+          {t('project.search.params.node_distance')}
+        </button>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 RetrievalModeSelector.displayName = 'RetrievalModeSelector';
 
 const StrategySelector = memo<{ value: string; onChange: (value: string) => void }>(
-  ({ value, onChange }) => (
-    <div className="flex flex-col gap-2">
-      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-        Strategy Recipe
-      </label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-          }}
-          className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
-        >
-          <option value="COMBINED_HYBRID_SEARCH_RRF">Combined Hybrid (RRF)</option>
-          <option value="EDGE_HYBRID_SEARCH_CROSS_ENCODER">Edge Hybrid (Cross-Encoder)</option>
-          <option value="HYBRID_MMR">Hybrid Search (MMR)</option>
-          <option value="STANDARD_DENSE">Standard Dense Only</option>
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-          <ChevronDown className="w-4 h-4" />
+  ({ value, onChange }) => {
+    const { t } = useTranslation();
+
+    return (
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          {t('project.search.params.strategy')}
+        </label>
+        <div className="relative">
+          <select
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+            }}
+            className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+          >
+            <option value="COMBINED_HYBRID_SEARCH_RRF">
+              {t('project.search.options.strategies.COMBINED_HYBRID_SEARCH_RRF')}
+            </option>
+            <option value="EDGE_HYBRID_SEARCH_CROSS_ENCODER">
+              {t('project.search.options.strategies.EDGE_HYBRID_SEARCH_CROSS_ENCODER')}
+            </option>
+            <option value="HYBRID_MMR">{t('project.search.options.strategies.HYBRID_MMR')}</option>
+            <option value="STANDARD_DENSE">
+              {t('project.search.options.strategies.STANDARD_DENSE')}
+            </option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+            <ChevronDown className="w-4 h-4" />
+          </div>
         </div>
       </div>
-    </div>
-  )
+    );
+  }
 );
 StrategySelector.displayName = 'StrategySelector';
 
@@ -377,67 +401,75 @@ const FocalNodeInput = memo<{
   showTooltip: boolean;
   onShowTooltip: () => void;
   onHideTooltip: () => void;
-}>(({ value, onChange, disabled, showTooltip, onShowTooltip, onHideTooltip }) => (
-  <div className="flex flex-col gap-2">
-    <div className="flex items-center justify-between">
-      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-        Focal Node UUID
-      </label>
-      <div className="relative">
-        <HelpCircle
-          className="w-4 h-4 text-slate-400 cursor-help hover:text-blue-600"
-          onMouseEnter={onShowTooltip}
-          onMouseLeave={onHideTooltip}
-        />
-        {showTooltip && (
-          <div className="absolute right-0 top-6 w-64 p-2 bg-slate-900 dark:bg-slate-700 text-white text-xs rounded-lg shadow-lg z-50">
-            <p className="font-semibold mb-1">Focal Node</p>
-            <p>Use a specific node as the focal point for proximity-based retrieval.</p>
-          </div>
-        )}
-      </div>
-    </div>
-    <div className="relative group">
-      <input
-        className="w-full text-xs py-2.5 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-shadow disabled:opacity-50"
-        placeholder="e.g. node-1234-uuid..."
-        type="text"
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-        }}
-        disabled={disabled}
-      />
-      <Network className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-    </div>
-  </div>
-));
-FocalNodeInput.displayName = 'FocalNodeInput';
+}>(({ value, onChange, disabled, showTooltip, onShowTooltip, onHideTooltip }) => {
+  const { t } = useTranslation();
 
-const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => void }>(
-  ({ value, onChange }) => (
+  return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-        Cross-Encoder Client
-      </label>
-      <div className="relative">
-        <select
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          {t('project.search.params.focal_node')}
+        </label>
+        <div className="relative">
+          <HelpCircle
+            className="w-4 h-4 text-slate-400 cursor-help hover:text-blue-600"
+            onMouseEnter={onShowTooltip}
+            onMouseLeave={onHideTooltip}
+          />
+          {showTooltip && (
+            <div className="absolute right-0 top-6 w-64 p-2 bg-slate-900 dark:bg-slate-700 text-white text-xs rounded-lg shadow-lg z-50">
+              <p className="font-semibold mb-1">{t('project.search.params.focal_tooltip.title')}</p>
+              <p>{t('project.search.params.focal_tooltip.desc')}</p>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="relative group">
+        <input
+          className="w-full text-xs py-2.5 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-shadow disabled:opacity-50"
+          placeholder={t('project.search.params.focalPlaceholder', 'e.g. node-1234-uuid...')}
+          type="text"
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
           }}
-          className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
-        >
-          <option value="openai">OpenAI</option>
-          <option value="gemini">Gemini</option>
-          <option value="bge">BGE</option>
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-          <ChevronDown className="w-4 h-4" />
-        </div>
+          disabled={disabled}
+        />
+        <Network className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
       </div>
     </div>
-  )
+  );
+});
+FocalNodeInput.displayName = 'FocalNodeInput';
+
+const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => void }>(
+  ({ value, onChange }) => {
+    const { t } = useTranslation();
+
+    return (
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          {t('project.search.params.cross_encoder')}
+        </label>
+        <div className="relative">
+          <select
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+            }}
+            className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+          >
+            <option value="openai">{t('project.search.options.cross_encoders.openai')}</option>
+            <option value="gemini">{t('project.search.options.cross_encoders.gemini')}</option>
+            <option value="bge">{t('project.search.options.cross_encoders.bge')}</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+            <ChevronDown className="w-4 h-4" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 );
 CrossEncoderSelector.displayName = 'CrossEncoderSelector';
 
@@ -449,59 +481,66 @@ interface GraphTraversalParamsProps {
 }
 
 const GraphTraversalParams = memo<GraphTraversalParamsProps>(
-  ({ maxDepth, relationshipTypes, onMaxDepthChange, onToggleRelationshipType }) => (
-    <>
-      <div className="flex flex-col gap-2">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          Max Depth
-        </label>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              onMaxDepthChange(Math.max(1, maxDepth - 1));
-            }}
-            className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            <Minus className="w-4 h-4" />
-          </button>
-          <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">
-            {maxDepth}
-          </span>
-          <button
-            onClick={() => {
-              onMaxDepthChange(Math.min(5, maxDepth + 1));
-            }}
-            className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+  ({ maxDepth, relationshipTypes, onMaxDepthChange, onToggleRelationshipType }) => {
+    const { t } = useTranslation();
 
-      <div className="flex flex-col gap-2">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-          Relationship Types
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {['RELATES_TO', 'MENTIONS', 'PART_OF', 'CONTAINS', 'BELONGS_TO'].map((rel) => (
+    return (
+      <>
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            {t('project.search.params.max_depth')}
+          </label>
+          <div className="flex items-center gap-2">
             <button
-              key={rel}
+              type="button"
               onClick={() => {
-                onToggleRelationshipType(rel);
+                onMaxDepthChange(Math.max(1, maxDepth - 1));
               }}
-              className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
-                relationshipTypes.includes(rel)
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+              className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
-              {rel}
+              <Minus className="w-4 h-4" />
             </button>
-          ))}
+            <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">
+              {maxDepth}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onMaxDepthChange(Math.min(5, maxDepth + 1));
+              }}
+              className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
-    </>
-  )
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            {t('project.search.params.relationship_types')}
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {['RELATES_TO', 'MENTIONS', 'PART_OF', 'CONTAINS', 'BELONGS_TO'].map((rel) => (
+              <button
+                key={rel}
+                type="button"
+                onClick={() => {
+                  onToggleRelationshipType(rel);
+                }}
+                className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
+                  relationshipTypes.includes(rel)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {rel}
+              </button>
+            ))}
+          </div>
+        </div>
+      </>
+    );
+  }
 );
 GraphTraversalParams.displayName = 'GraphTraversalParams';
 
@@ -516,103 +555,114 @@ interface TemporalFiltersProps {
 }
 
 const TemporalFilters = memo<TemporalFiltersProps>(
-  ({ timeRange, customTimeRange, onTimeRangeChange, onCustomTimeRangeChange }) => (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Time Range</h3>
-        <button
-          onClick={() => {
-            onTimeRangeChange('all');
-            onCustomTimeRangeChange({});
-          }}
-          className="text-xs text-blue-600 hover:underline font-medium"
-        >
-          Reset
-        </button>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
-          <input
-            className="text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 w-3.5 h-3.5"
-            name="time"
-            type="radio"
-            checked={timeRange === 'all'}
-            onChange={() => {
-              onTimeRangeChange('all');
-            }}
-          />
-          <span className="text-xs text-slate-700 dark:text-slate-300">All Time</span>
-        </label>
-        <label
-          className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${timeRange === 'last30' ? 'bg-blue-600/5 border border-blue-600/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-        >
-          <input
-            className="text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 w-3.5 h-3.5"
-            name="time"
-            type="radio"
-            checked={timeRange === 'last30'}
-            onChange={() => {
-              onTimeRangeChange('last30');
-            }}
-          />
-          <span
-            className={`text-xs font-medium ${timeRange === 'last30' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}
-          >
-            Last 30 Days
-          </span>
-        </label>
-        <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
-          <input
-            className="text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 w-3.5 h-3.5"
-            name="time"
-            type="radio"
-            checked={timeRange === 'custom'}
-            onChange={() => {
-              onTimeRangeChange('custom');
-            }}
-          />
-          <span className="text-xs text-slate-700 dark:text-slate-300">Custom Range</span>
-        </label>
-      </div>
+  ({ timeRange, customTimeRange, onTimeRangeChange, onCustomTimeRangeChange }) => {
+    const { t } = useTranslation();
 
-      {timeRange === 'custom' && (
-        <div className="flex flex-col gap-3">
-          <div>
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-              From
-            </label>
-            <input
-              type="datetime-local"
-              value={customTimeRange.since || ''}
-              onChange={(e) => {
-                onCustomTimeRangeChange({
-                  ...customTimeRange,
-                  since: e.target.value ? new Date(e.target.value).toISOString() : undefined,
-                });
-              }}
-              className="w-full text-xs py-2.5 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 text-slate-700 dark:text-slate-200"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-              To
-            </label>
-            <input
-              type="datetime-local"
-              value={customTimeRange.until || ''}
-              onChange={(e) => {
-                onCustomTimeRangeChange({
-                  ...customTimeRange,
-                  until: e.target.value ? new Date(e.target.value).toISOString() : undefined,
-                });
-              }}
-              className="w-full text-xs py-2.5 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 text-slate-700 dark:text-slate-200"
-            />
-          </div>
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            {t('project.search.filters.time_range')}
+          </h3>
+          <button
+            type="button"
+            onClick={() => {
+              onTimeRangeChange('all');
+              onCustomTimeRangeChange({});
+            }}
+            className="text-xs text-blue-600 hover:underline font-medium"
+          >
+            {t('project.search.filters.reset')}
+          </button>
         </div>
-      )}
-    </div>
-  )
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
+            <input
+              className="text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 w-3.5 h-3.5"
+              name="time"
+              type="radio"
+              checked={timeRange === 'all'}
+              onChange={() => {
+                onTimeRangeChange('all');
+              }}
+            />
+            <span className="text-xs text-slate-700 dark:text-slate-300">
+              {t('project.search.filters.all_time')}
+            </span>
+          </label>
+          <label
+            className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${timeRange === 'last30' ? 'bg-blue-600/5 border border-blue-600/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+          >
+            <input
+              className="text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 w-3.5 h-3.5"
+              name="time"
+              type="radio"
+              checked={timeRange === 'last30'}
+              onChange={() => {
+                onTimeRangeChange('last30');
+              }}
+            />
+            <span
+              className={`text-xs font-medium ${timeRange === 'last30' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}
+            >
+              {t('project.search.filters.last_30')}
+            </span>
+          </label>
+          <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
+            <input
+              className="text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 w-3.5 h-3.5"
+              name="time"
+              type="radio"
+              checked={timeRange === 'custom'}
+              onChange={() => {
+                onTimeRangeChange('custom');
+              }}
+            />
+            <span className="text-xs text-slate-700 dark:text-slate-300">
+              {t('project.search.filters.custom')}
+            </span>
+          </label>
+        </div>
+
+        {timeRange === 'custom' && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                {t('project.search.filters.from')}
+              </label>
+              <input
+                type="datetime-local"
+                value={customTimeRange.since || ''}
+                onChange={(e) => {
+                  onCustomTimeRangeChange({
+                    ...customTimeRange,
+                    since: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                  });
+                }}
+                className="w-full text-xs py-2.5 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 text-slate-700 dark:text-slate-200"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">
+                {t('project.search.filters.to')}
+              </label>
+              <input
+                type="datetime-local"
+                value={customTimeRange.until || ''}
+                onChange={(e) => {
+                  onCustomTimeRangeChange({
+                    ...customTimeRange,
+                    until: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                  });
+                }}
+                className="w-full text-xs py-2.5 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 text-slate-700 dark:text-slate-200"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 );
 TemporalFilters.displayName = 'TemporalFilters';
 
@@ -625,56 +675,67 @@ interface FacetedFiltersProps {
 }
 
 const FacetedFilters = memo<FacetedFiltersProps>(
-  ({ selectedEntityTypes, selectedTags, availableTags, onToggleEntityType, onToggleTag }) => (
-    <>
-      <div className="flex flex-col gap-3">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Entity Types</h3>
-        <div className="flex flex-wrap gap-1.5">
-          {['Person', 'Organization', 'Location', 'Event', 'Concept', 'Product'].map((type) => (
-            <button
-              key={type}
-              onClick={() => {
-                onToggleEntityType(type);
-              }}
-              className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
-                selectedEntityTypes.includes(type)
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-      </div>
+  ({ selectedEntityTypes, selectedTags, availableTags, onToggleEntityType, onToggleTag }) => {
+    const { t } = useTranslation();
 
-      <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
-
-      <div className="flex flex-col gap-3">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tags</h3>
-        <div className="flex flex-wrap gap-1.5">
-          {availableTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => {
-                onToggleTag(tag);
-              }}
-              className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
-                selectedTags.includes(tag)
-                  ? 'bg-blue-600/10 text-blue-600 border border-blue-600/10'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent'
-              }`}
-            >
-              #{tag}
-            </button>
-          ))}
-          <button className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-2xs font-medium transition-colors flex items-center gap-1">
-            <Plus className="w-3 h-3" /> Add
-          </button>
+    return (
+      <>
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            {t('project.search.filters.entity_types')}
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {['Person', 'Organization', 'Location', 'Event', 'Concept', 'Product'].map((type) => (
+              <button
+                key={type}
+                onClick={() => {
+                  onToggleEntityType(type);
+                }}
+                className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
+                  selectedEntityTypes.includes(type)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-    </>
-  )
+
+        <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            {t('project.search.filters.tags')}
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {availableTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => {
+                  onToggleTag(tag);
+                }}
+                className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
+                  selectedTags.includes(tag)
+                    ? 'bg-blue-600/10 text-blue-600 border border-blue-600/10'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent'
+                }`}
+              >
+                #{tag}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-2xs font-medium transition-colors flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> {t('project.search.filters.add_tag')}
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 );
 FacetedFilters.displayName = 'FacetedFilters';
 
@@ -684,29 +745,37 @@ interface CommunityFiltersProps {
 }
 
 const CommunityFilters = memo<CommunityFiltersProps>(
-  ({ includeEpisodes, onIncludeEpisodesChange }) => (
-    <>
-      <div className="flex flex-col gap-2">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Results</label>
-        <label className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
-          <input
-            type="checkbox"
-            checked={includeEpisodes}
-            onChange={(e) => {
-              onIncludeEpisodesChange(e.target.checked);
-            }}
-            className="w-4 h-4 text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 rounded"
-          />
-          <span className="text-xs text-slate-700 dark:text-slate-300">Include Episodes</span>
-        </label>
-      </div>
+  ({ includeEpisodes, onIncludeEpisodesChange }) => {
+    const { t } = useTranslation();
 
-      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-        <p className="text-xs text-blue-800 dark:text-blue-300">
-          Community search finds all entities and episodes within a specific community.
-        </p>
-      </div>
-    </>
-  )
+    return (
+      <>
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            {t('project.search.filters.results')}
+          </label>
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              checked={includeEpisodes}
+              onChange={(e) => {
+                onIncludeEpisodesChange(e.target.checked);
+              }}
+              className="w-4 h-4 text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 rounded"
+            />
+            <span className="text-xs text-slate-700 dark:text-slate-300">
+              {t('project.search.filters.include_episodes')}
+            </span>
+          </label>
+        </div>
+
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <p className="text-xs text-blue-800 dark:text-blue-300">
+            {t('project.search.filters.community_info')}
+          </p>
+        </div>
+      </>
+    );
+  }
 );
 CommunityFilters.displayName = 'CommunityFilters';

@@ -515,7 +515,7 @@ export function routeToHandler(
         data: {
           subagent_id: data.run_id,
           subagent_name: data.subagent_name,
-          task: `Retry ${data.attempt}: ${data.error}`,
+          task: `Retry ${String(data.attempt)}: ${data.error}`,
         },
       } as AgentEvent<SubAgentStartedEventData>);
       break;
@@ -528,7 +528,7 @@ export function routeToHandler(
         data: {
           subagent_id: data.run_id,
           subagent_name: data.subagent_name,
-          error: `Give up after ${data.attempts} attempts: ${data.error}`,
+          error: `Give up after ${String(data.attempts)} attempts: ${data.error}`,
         },
       } as AgentEvent<SubAgentFailedEventData>);
       break;
@@ -583,14 +583,14 @@ export function routeToHandler(
       break;
     // Task list events
     case 'task_list_updated':
-      console.log(
+      logger.debug(
         '[TaskSync] routeToHandler: task_list_updated, hasHandler:',
         !!handler.onTaskListUpdated
       );
       handler.onTaskListUpdated?.(event as AgentEvent<TaskListUpdatedEventData>);
       break;
     case 'task_updated':
-      console.log('[TaskSync] routeToHandler: task_updated, hasHandler:', !!handler.onTaskUpdated);
+      logger.debug('[TaskSync] routeToHandler: task_updated, hasHandler:', !!handler.onTaskUpdated);
       handler.onTaskUpdated?.(event as AgentEvent<TaskUpdatedEventData>);
       break;
     // Task timeline events

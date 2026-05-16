@@ -7,6 +7,9 @@
 
 import { isEventEnvelope } from '../types/generated/eventEnvelope';
 
+import { attachWatchdog } from './client/wsWatchdog';
+
+import type { Watchdog } from './client/wsWatchdog';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
 // =============================================================================
@@ -97,6 +100,17 @@ const DEFAULT_OPTIONS: {
   connectionTimeout: 10000,
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const getStringField = (record: Record<string, unknown>, key: string): string | undefined => {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const toError = (value: unknown): Error =>
+  value instanceof Error ? value : new Error(String(value));
+
 // =============================================================================
 // Event Bus Client
 // =============================================================================
@@ -111,6 +125,7 @@ export class EventBusClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private connectionTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchdog: Watchdog | null = null;
   private messageQueue: string[] = [];
 
   // State change listeners
@@ -160,6 +175,11 @@ export class EventBusClient {
 
       try {
         this.ws = new WebSocket(this.options.url);
+        this.stopWatchdog();
+        this.watchdog = attachWatchdog(this.ws, {
+          staleAfterMs: this.options.heartbeatInterval * 3,
+          label: 'EventBusWS',
+        });
 
         // Set connection timeout
         this.connectionTimer = setTimeout(() => {
@@ -182,10 +202,11 @@ export class EventBusClient {
         this.ws.onclose = (event) => {
           this.clearHeartbeat();
           this.clearConnectionTimer();
+          this.stopWatchdog();
 
           if (this.state === 'connecting') {
             this.setState('disconnected');
-            reject(new Error(`Connection closed: ${event.code}`));
+            reject(new Error(`Connection closed: ${String(event.code)}`));
             return;
           }
 
@@ -202,11 +223,16 @@ export class EventBusClient {
         };
 
         this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
+          this.watchdog?.notifyMessage();
+          if (typeof event.data === 'string') {
+            this.handleMessage(event.data);
+          } else {
+            this.notifyError(new Error('Unsupported event bus message payload'));
+          }
         };
       } catch (_err) {
         this.setState('disconnected');
-        reject(_err);
+        reject(toError(_err));
       }
     });
   }
@@ -218,6 +244,7 @@ export class EventBusClient {
     this.clearReconnectTimer();
     this.clearHeartbeat();
     this.clearConnectionTimer();
+    this.stopWatchdog();
 
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect');
@@ -320,7 +347,10 @@ export class EventBusClient {
 
   private handleMessage(data: string): void {
     try {
-      const message = JSON.parse(data);
+      const message: unknown = JSON.parse(data);
+      if (!isRecord(message)) {
+        return;
+      }
 
       // Handle heartbeat response
       if (message.type === 'pong') {
@@ -331,13 +361,16 @@ export class EventBusClient {
       if (message.type === 'event' && message.envelope) {
         const envelope = message.envelope;
         if (isEventEnvelope(envelope)) {
-          this.dispatchEvent(message.pattern, envelope);
+          const pattern = getStringField(message, 'pattern');
+          if (pattern) {
+            this.dispatchEvent(pattern, envelope);
+          }
         }
       }
 
       // Handle error from server
       if (message.type === 'error') {
-        this.notifyError(new Error(message.message || 'Server error'));
+        this.notifyError(new Error(getStringField(message, 'message') ?? 'Server error'));
       }
     } catch (err) {
       console.error('Failed to parse event bus message:', err);
@@ -386,9 +419,10 @@ export class EventBusClient {
 
   private sendMessage(message: Record<string, unknown>): void {
     const data = JSON.stringify(message);
+    const socket = this.ws;
 
-    if (this.isConnected()) {
-      this.ws!.send(data);
+    if (this.isConnected() && socket) {
+      socket.send(data);
     } else {
       // Queue message for later
       this.messageQueue.push(data);
@@ -397,8 +431,12 @@ export class EventBusClient {
 
   private flushMessageQueue(): void {
     while (this.messageQueue.length > 0 && this.isConnected()) {
-      const message = this.messageQueue.shift()!;
-      this.ws!.send(message);
+      const message = this.messageQueue.shift();
+      const socket = this.ws;
+      if (!message || !socket) {
+        return;
+      }
+      socket.send(message);
     }
   }
 
@@ -431,16 +469,18 @@ export class EventBusClient {
       this.options.maxReconnectDelay
     );
 
-    this.reconnectTimer = setTimeout(async () => {
-      try {
-        await this.connect();
-        // Re-subscribe to all patterns
-        for (const pattern of this.subscriptions.keys()) {
-          this.sendMessage({ type: 'subscribe', pattern });
+    this.reconnectTimer = setTimeout(() => {
+      void (async () => {
+        try {
+          await this.connect();
+          // Re-subscribe to all patterns
+          for (const pattern of this.subscriptions.keys()) {
+            this.sendMessage({ type: 'subscribe', pattern });
+          }
+        } catch (_err) {
+          // Will trigger another reconnect via onclose
         }
-      } catch (_err) {
-        // Will trigger another reconnect via onclose
-      }
+      })();
     }, delay);
   }
 
@@ -475,6 +515,11 @@ export class EventBusClient {
       clearTimeout(this.connectionTimer);
       this.connectionTimer = null;
     }
+  }
+
+  private stopWatchdog(): void {
+    this.watchdog?.stop();
+    this.watchdog = null;
   }
 }
 

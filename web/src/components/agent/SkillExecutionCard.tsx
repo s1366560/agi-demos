@@ -9,13 +9,15 @@
 
 import React, { memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Card, Typography, Space, Tag, Progress, Steps, Tooltip } from 'antd';
 import { AlertTriangle, CheckCircle2, Edit, Loader2, Rocket, XCircle, Zap } from 'lucide-react';
-
 
 import { formatTimeOnly } from '@/utils/date';
 
 import type { SkillExecutionState, SkillToolExecution } from '../../types/agent';
+import type { TFunction } from 'i18next';
 
 const { Text } = Typography;
 
@@ -24,49 +26,52 @@ interface SkillExecutionCardProps {
 }
 
 const formatDuration = (ms: number): string => {
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) return `${ms.toString()}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 };
 
-const getStatusConfig = (status: SkillExecutionState['status']) => {
+const formatPreview = (value: string, maxLength: number): string =>
+  value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+
+const getStatusConfig = (status: SkillExecutionState['status'], t: TFunction) => {
   const configs = {
     matched: {
       icon: <Zap size={16} />,
-      label: 'Matched',
+      label: t('components.skillExecution.status.matched', { defaultValue: 'Matched' }),
       color: 'blue',
       bgClass: 'bg-blue-50',
       borderClass: 'border-blue-300',
     },
     executing: {
       icon: <Loader2 className="animate-spin" size={16} />,
-      label: 'Executing',
+      label: t('components.skillExecution.status.executing', { defaultValue: 'Executing' }),
       color: 'processing',
       bgClass: 'bg-blue-50',
       borderClass: 'border-blue-300',
     },
     completed: {
       icon: <CheckCircle2 size={16} />,
-      label: 'Completed',
+      label: t('components.skillExecution.status.completed', { defaultValue: 'Completed' }),
       color: 'success',
       bgClass: 'bg-green-50',
       borderClass: 'border-green-300',
     },
     failed: {
       icon: <XCircle size={16} />,
-      label: 'Failed',
+      label: t('components.skillExecution.status.failed', { defaultValue: 'Failed' }),
       color: 'error',
       bgClass: 'bg-red-50',
       borderClass: 'border-red-200',
     },
     fallback: {
       icon: <AlertTriangle size={16} />,
-      label: 'Fallback to LLM',
+      label: t('components.skillExecution.status.fallback', { defaultValue: 'Fallback to LLM' }),
       color: 'warning',
       bgClass: 'bg-yellow-50',
       borderClass: 'border-yellow-300',
     },
   };
-  return configs[status] || configs.executing;
+  return configs[status];
 };
 
 const getToolStepStatus = (
@@ -84,23 +89,32 @@ const getToolStepStatus = (
   }
 };
 
-const getModeIcon = (mode: 'direct' | 'prompt') => {
+const getModeIcon = (mode: 'direct' | 'prompt', t: TFunction) => {
   if (mode === 'direct') {
     return (
-      <Tooltip title="Direct execution - bypassing LLM">
+      <Tooltip
+        title={t('components.skillExecution.mode.directTooltip', {
+          defaultValue: 'Direct execution - bypassing LLM',
+        })}
+      >
         <Rocket className="text-blue-500" size={16} />
       </Tooltip>
     );
   }
   return (
-    <Tooltip title="Prompt injection - guided by LLM">
+    <Tooltip
+      title={t('components.skillExecution.mode.promptTooltip', {
+        defaultValue: 'Prompt injection - guided by LLM',
+      })}
+    >
       <Edit className="text-green-500" size={16} />
     </Tooltip>
   );
 };
 
 export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExecution }) => {
-  const statusConfig = getStatusConfig(skillExecution.status);
+  const { t } = useTranslation();
+  const statusConfig = getStatusConfig(skillExecution.status, t);
   const progressPercent =
     skillExecution.total_steps > 0
       ? Math.round((skillExecution.current_step / skillExecution.total_steps) * 100)
@@ -125,7 +139,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
       if (toolExec.error) {
         description = (
           <Text type="danger" style={{ fontSize: 10 }}>
-            {toolExec.error.substring(0, 50)}...
+            {formatPreview(toolExec.error, 50)}
           </Text>
         );
       }
@@ -146,15 +160,18 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
       style={{
         marginBottom: 8,
       }}
-      aria-label={`Skill execution: ${skillExecution.skill_name}`}
+      aria-label={t('components.skillExecution.ariaLabel', {
+        defaultValue: 'Skill execution: {{skillName}}',
+        skillName: skillExecution.skill_name,
+      })}
     >
-      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="small" style={{ width: '100%' }}>
         {/* Header */}
         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
             <Zap className="text-yellow-500" size={16} />
             <Text strong>{skillExecution.skill_name}</Text>
-            {getModeIcon(skillExecution.execution_mode)}
+            {getModeIcon(skillExecution.execution_mode, t)}
             <Tag
               icon={statusConfig.icon}
               color={statusConfig.color}
@@ -164,7 +181,11 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
             </Tag>
           </Space>
           <Space>
-            <Tooltip title="Match confidence">
+            <Tooltip
+              title={t('components.skillExecution.matchConfidence', {
+                defaultValue: 'Match confidence',
+              })}
+            >
               <Tag color="purple">{(skillExecution.match_score * 100).toFixed(0)}%</Tag>
             </Tooltip>
           </Space>
@@ -176,7 +197,9 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
             percent={progressPercent}
             size="small"
             status="active"
-            format={() => `${skillExecution.current_step}/${skillExecution.total_steps}`}
+            format={() =>
+              `${skillExecution.current_step.toString()}/${skillExecution.total_steps.toString()}`
+            }
           />
         )}
 
@@ -184,7 +207,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
         {skillExecution.tool_executions.length > 0 && (
           <div style={{ marginTop: 8 }}>
             <Text type="secondary" style={{ fontSize: 11, marginBottom: 4 }}>
-              Tool Chain:
+              {t('components.skillExecution.toolChain', { defaultValue: 'Tool Chain:' })}
             </Text>
             <Steps
               size="small"
@@ -199,7 +222,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
         {skillExecution.tool_executions.length === 0 && skillExecution.tools.length > 0 && (
           <div>
             <Text type="secondary" style={{ fontSize: 11 }}>
-              Tools:{' '}
+              {t('components.skillExecution.tools', { defaultValue: 'Tools:' })}
             </Text>
             <Space wrap size={4}>
               {skillExecution.tools.map((tool) => (
@@ -222,7 +245,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
             }}
           >
             <Text type="secondary" style={{ fontSize: 11 }}>
-              Summary:
+              {t('components.skillExecution.summary', { defaultValue: 'Summary:' })}
             </Text>
             <div style={{ marginTop: 2 }}>
               <Text style={{ fontSize: 12 }}>{skillExecution.summary}</Text>
@@ -250,12 +273,18 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
         <Space wrap style={{ marginTop: 4 }}>
           {skillExecution.execution_time_ms && (
             <Text type="secondary" style={{ fontSize: 10 }}>
-              Duration: {formatDuration(skillExecution.execution_time_ms)}
+              {t('components.skillExecution.duration', {
+                defaultValue: 'Duration: {{duration}}',
+                duration: formatDuration(skillExecution.execution_time_ms),
+              })}
             </Text>
           )}
           {skillExecution.started_at && (
             <Text type="secondary" style={{ fontSize: 10 }}>
-              Started: {formatTimeOnly(skillExecution.started_at)}
+              {t('components.skillExecution.started', {
+                defaultValue: 'Started: {{time}}',
+                time: formatTimeOnly(skillExecution.started_at),
+              })}
             </Text>
           )}
         </Space>

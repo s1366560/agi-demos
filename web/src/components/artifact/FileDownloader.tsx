@@ -4,14 +4,10 @@
 
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Button, Space, Typography, Card } from 'antd';
-import {
-  Download,
-  File,
-  FileArchive,
-  FileText,
-  FileSpreadsheet,
-} from 'lucide-react';
+import { Download, File, FileArchive, FileText, FileSpreadsheet } from 'lucide-react';
 
 const { Text } = Typography;
 
@@ -31,7 +27,7 @@ export interface FileDownloaderProps {
 // Format file size
 function formatFileSize(bytes?: number): string {
   if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
@@ -85,6 +81,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
   sizeBytes,
   compact = false,
 }) => {
+  const { t } = useTranslation();
   const icon = getFileIcon(mimeType, filename);
   const size = formatFileSize(sizeBytes);
 
@@ -105,7 +102,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
 
   return (
     <Card className="file-downloader" size="small">
-      <Space direction="vertical" align="center" className="w-full py-4">
+      <Space orientation="vertical" align="center" className="w-full py-4">
         <div className="text-gray-400">{icon}</div>
         <Text ellipsis style={{ maxWidth: 200 }}>
           {filename}
@@ -122,7 +119,7 @@ export const FileDownloader: React.FC<FileDownloaderProps> = ({
           target="_blank"
           rel="noopener noreferrer"
         >
-          Download
+          {t('common.download', { defaultValue: 'Download' })}
         </Button>
       </Space>
     </Card>

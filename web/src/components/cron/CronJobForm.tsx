@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Form, Input, Switch, Select, InputNumber, Drawer, Button, Space, Divider } from 'antd';
 
 import type {
@@ -137,6 +139,7 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
   initialData,
   isSubmitting = false,
 }) => {
+  const { t } = useTranslation();
   const [form] = Form.useForm();
   const scheduleKind = Form.useWatch(['schedule', 'kind'], form) as string | undefined;
   const payloadKind = Form.useWatch(['payload', 'kind'], form) as string | undefined;
@@ -194,13 +197,15 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
 
   return (
     <Drawer
-      title={initialData ? 'Edit Scheduled Task' : 'Create Scheduled Task'}
+      title={
+        initialData ? t('project.cronJobs.formEditTitle') : t('project.cronJobs.formCreateTitle')
+      }
       size="large"
       onClose={onClose}
       open={open}
       extra={
         <Space>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button
             type="primary"
             onClick={() => {
@@ -208,41 +213,47 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
             }}
             loading={isSubmitting}
           >
-            {initialData ? 'Save Changes' : 'Create Task'}
+            {initialData
+              ? t('project.cronJobs.formSaveChanges')
+              : t('project.cronJobs.formCreateTask')}
           </Button>
         </Space>
       }
     >
       <Form form={form} layout="vertical" disabled={isSubmitting}>
         <Divider titlePlacement="left" plain>
-          Basic Info
+          {t('project.cronJobs.formBasicInfo')}
         </Divider>
         <Form.Item
           name="name"
-          label="Name"
-          rules={[{ required: true, message: 'Name is required' }]}
+          label={t('project.cronJobs.formName')}
+          rules={[{ required: true, message: t('project.cronJobs.formNameRequired') }]}
         >
-          <Input placeholder="E.g., Daily Summary Report" />
+          <Input placeholder={t('project.cronJobs.formNamePlaceholder')} />
         </Form.Item>
-        <Form.Item name="description" label="Description">
-          <Input.TextArea rows={2} placeholder="Optional description..." />
+        <Form.Item name="description" label={t('project.cronJobs.formDescription')}>
+          <Input.TextArea rows={2} placeholder={t('project.cronJobs.formDescriptionPlaceholder')} />
         </Form.Item>
-        <Form.Item name="enabled" label="Enabled" valuePropName="checked">
+        <Form.Item name="enabled" label={t('project.cronJobs.formEnabled')} valuePropName="checked">
           <Switch />
         </Form.Item>
 
         <Divider titlePlacement="left" plain>
-          Schedule Configuration
+          {t('project.cronJobs.formScheduleConfiguration')}
         </Divider>
-        <Form.Item name={['schedule', 'kind']} label="Schedule Type" rules={[{ required: true }]}>
+        <Form.Item
+          name={['schedule', 'kind']}
+          label={t('project.cronJobs.formScheduleType')}
+          rules={[{ required: true }]}
+        >
           <Select
             onChange={(kind: ScheduleType) => {
               form.setFieldValue(['schedule', 'config'], getDefaultScheduleConfig(kind));
             }}
             options={[
-              { value: 'cron', label: 'Cron Expression' },
-              { value: 'every', label: 'Interval (Every X)' },
-              { value: 'at', label: 'Specific Time (One-off)' },
+              { value: 'cron', label: t('project.cronJobs.formScheduleCron') },
+              { value: 'every', label: t('project.cronJobs.formScheduleEvery') },
+              { value: 'at', label: t('project.cronJobs.formScheduleAt') },
             ]}
           />
         </Form.Item>
@@ -250,9 +261,9 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
         {scheduleKind === 'cron' && (
           <Form.Item
             name={['schedule', 'config', 'expr']}
-            label="Cron Expression"
-            rules={[{ required: true, message: 'Please enter a valid cron expression' }]}
-            help="E.g., '0 * * * *' for every hour, '0 0 * * *' for daily at midnight"
+            label={t('project.cronJobs.formCronExpression')}
+            rules={[{ required: true, message: t('project.cronJobs.formCronRequired') }]}
+            help={t('project.cronJobs.formCronHelp')}
           >
             <Input placeholder="* * * * *" />
           </Form.Item>
@@ -260,13 +271,22 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
 
         {scheduleKind === 'every' && (
           <Space align="start">
-            <Form.Item name={['schedule', 'config', 'hours']} label="Hours">
+            <Form.Item
+              name={['schedule', 'config', 'hours']}
+              label={t('project.cronJobs.formHours')}
+            >
               <InputNumber min={0} />
             </Form.Item>
-            <Form.Item name={['schedule', 'config', 'minutes']} label="Minutes">
+            <Form.Item
+              name={['schedule', 'config', 'minutes']}
+              label={t('project.cronJobs.formMinutes')}
+            >
               <InputNumber min={0} max={59} />
             </Form.Item>
-            <Form.Item name={['schedule', 'config', 'seconds']} label="Seconds">
+            <Form.Item
+              name={['schedule', 'config', 'seconds']}
+              label={t('project.cronJobs.formSeconds')}
+            >
               <InputNumber min={0} max={59} />
             </Form.Item>
           </Space>
@@ -275,21 +295,25 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
         {scheduleKind === 'at' && (
           <Form.Item
             name={['schedule', 'config', 'run_at']}
-            label="Target Time (ISO-8601)"
-            rules={[{ required: true, message: 'Required for one-off tasks' }]}
+            label={t('project.cronJobs.formTargetTime')}
+            rules={[{ required: true, message: t('project.cronJobs.formTargetTimeRequired') }]}
           >
             <Input placeholder="2026-03-06T12:00:00Z" />
           </Form.Item>
         )}
 
         <Divider titlePlacement="left" plain>
-          Payload Configuration
+          {t('project.cronJobs.formPayloadConfiguration')}
         </Divider>
-        <Form.Item name={['payload', 'kind']} label="Payload Type" rules={[{ required: true }]}>
+        <Form.Item
+          name={['payload', 'kind']}
+          label={t('project.cronJobs.formPayloadType')}
+          rules={[{ required: true }]}
+        >
           <Select
             options={[
-              { value: 'system_event', label: 'System Event' },
-              { value: 'agent_turn', label: 'Agent Turn (Send Message)' },
+              { value: 'system_event', label: t('project.cronJobs.formSystemEvent') },
+              { value: 'agent_turn', label: t('project.cronJobs.formAgentTurn') },
             ]}
           />
         </Form.Item>
@@ -297,54 +321,58 @@ export const CronJobForm: React.FC<CronJobFormProps> = ({
         {payloadKind === 'system_event' && (
           <Form.Item
             name={['payload', 'config', 'content']}
-            label="Event Content"
-            rules={[{ required: true, message: 'Content is required' }]}
+            label={t('project.cronJobs.formEventContent')}
+            rules={[{ required: true, message: t('project.cronJobs.formContentRequired') }]}
           >
-            <Input.TextArea rows={3} placeholder="Event payload content..." />
+            <Input.TextArea rows={3} placeholder={t('project.cronJobs.formContentPlaceholder')} />
           </Form.Item>
         )}
 
         {payloadKind === 'agent_turn' && (
           <Form.Item
             name={['payload', 'config', 'message']}
-            label="Agent Message"
-            rules={[{ required: true, message: 'Message is required' }]}
+            label={t('project.cronJobs.formAgentMessage')}
+            rules={[{ required: true, message: t('project.cronJobs.formMessageRequired') }]}
           >
-            <Input.TextArea rows={3} placeholder="Message to send to agent..." />
+            <Input.TextArea rows={3} placeholder={t('project.cronJobs.formMessagePlaceholder')} />
           </Form.Item>
         )}
 
         <Divider titlePlacement="left" plain>
-          Advanced Settings
+          {t('project.cronJobs.formAdvancedSettings')}
         </Divider>
 
-        <Form.Item name="conversation_mode" label="Conversation Mode">
+        <Form.Item name="conversation_mode" label={t('project.cronJobs.formConversationMode')}>
           <Select
             options={[
-              { value: 'reuse', label: 'Reuse single conversation' },
-              { value: 'fresh', label: 'Create new conversation per run' },
+              { value: 'reuse', label: t('project.cronJobs.formReuseConversation') },
+              { value: 'fresh', label: t('project.cronJobs.formFreshConversation') },
             ]}
           />
         </Form.Item>
 
-        <Form.Item name={['delivery', 'kind']} label="Delivery Method">
+        <Form.Item name={['delivery', 'kind']} label={t('project.cronJobs.formDeliveryMethod')}>
           <Select
             options={[
-              { value: 'none', label: 'None' },
-              { value: 'announce', label: 'Announce Channel' },
-              { value: 'webhook', label: 'Webhook' },
+              { value: 'none', label: t('project.cronJobs.formDeliveryNone') },
+              { value: 'announce', label: t('project.cronJobs.formDeliveryAnnounce') },
+              { value: 'webhook', label: t('project.cronJobs.formDeliveryWebhook') },
             ]}
           />
         </Form.Item>
 
         <Space align="start" size="large">
-          <Form.Item name="timeout_seconds" label="Timeout (s)">
+          <Form.Item name="timeout_seconds" label={t('project.cronJobs.formTimeoutSeconds')}>
             <InputNumber min={1} />
           </Form.Item>
-          <Form.Item name="max_retries" label="Max Retries">
+          <Form.Item name="max_retries" label={t('project.cronJobs.formMaxRetries')}>
             <InputNumber min={0} max={10} />
           </Form.Item>
-          <Form.Item name="delete_after_run" label="Delete After Run" valuePropName="checked">
+          <Form.Item
+            name="delete_after_run"
+            label={t('project.cronJobs.formDeleteAfterRun')}
+            valuePropName="checked"
+          >
             <Switch />
           </Form.Item>
         </Space>

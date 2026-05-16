@@ -197,15 +197,15 @@ export const SlashCommandDropdown = memo(
                     key={`${item.kind}-${item.kind === 'command' ? item.data.name : item.data.id}`}
                   >
                     {isFirstCommand && (
-                       <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
-                         {t('agent.slashCommand.groupCommands', 'Commands')}
-                       </div>
-                     )}
-                     {isFirstSkill && (
-                       <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
-                         {t('agent.slashCommand.groupSkills', 'Skills')}
-                       </div>
-                     )}
+                      <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
+                        {t('agent.slashCommand.groupCommands', 'Commands')}
+                      </div>
+                    )}
+                    {isFirstSkill && (
+                      <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-800/50">
+                        {t('agent.slashCommand.groupSkills', 'Skills')}
+                      </div>
+                    )}
                     <div
                       ref={(el) => {
                         if (el) itemRefs.current.set(index, el);
@@ -239,7 +239,7 @@ export const SlashCommandDropdown = memo(
                               </span>
                               <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
                                 {item.data.category}
-                               </span>
+                              </span>
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                               {item.data.description}
@@ -258,11 +258,11 @@ export const SlashCommandDropdown = memo(
                               <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
                                 /{item.data.name}
                               </span>
-                               {item.data.scope !== 'project' && (
-                                 <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                                   {item.data.scope}
-                                 </span>
-                               )}
+                              {item.data.scope !== 'project' && (
+                                <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                                  {item.data.scope}
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
                               {item.data.description}
@@ -277,8 +277,8 @@ export const SlashCommandDropdown = memo(
             </div>
           )}
 
-           {/* Footer hint */}
-           <div className="px-3 py-1.5 border-t border-slate-100 dark:border-slate-700/50 flex items-center gap-3 text-2xs text-slate-400">
+          {/* Footer hint */}
+          <div className="px-3 py-1.5 border-t border-slate-100 dark:border-slate-700/50 flex items-center gap-3 text-2xs text-slate-400">
             <span>
               <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono">
                 &uarr;&darr;

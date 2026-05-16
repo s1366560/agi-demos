@@ -399,9 +399,7 @@ function ThreadDetailView({
                     void savePostEdit();
                   }}
                   disabled={
-                    updatingPostId === post.id ||
-                    !postTitleDraft.trim() ||
-                    !postContentDraft.trim()
+                    updatingPostId === post.id || !postTitleDraft.trim() || !postContentDraft.trim()
                   }
                   className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >

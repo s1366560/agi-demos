@@ -21,32 +21,32 @@ export interface WorkspaceActionDeps {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    data: { title: string; description?: string; obj_type?: CyberObjectiveType; parent_id?: string },
+    data: { title: string; description?: string; obj_type?: CyberObjectiveType; parent_id?: string }
   ) => Promise<void>;
   deleteObjective: (
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    objectiveId: string,
+    objectiveId: string
   ) => Promise<void>;
   projectObjectiveToTask: (
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    objectiveId: string,
+    objectiveId: string
   ) => Promise<void>;
   deleteGene: (
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    geneId: string,
+    geneId: string
   ) => Promise<void>;
   updateGene: (
     tenantId: string,
     projectId: string,
     workspaceId: string,
     geneId: string,
-    data: Partial<{ name: string; is_active: boolean }>,
+    data: Partial<{ name: string; is_active: boolean }>
   ) => Promise<void>;
 }
 
@@ -155,7 +155,7 @@ export function useBlackboardActions({
         setLoadingRepliesPostId((current) => (current === postId ? null : current));
       }
     },
-    [onLoadReplies],
+    [onLoadReplies]
   );
 
   useEffect(() => {
@@ -373,7 +373,7 @@ export function useBlackboardActions({
 
     handleLoadReplies: handleLoadReplies as (
       postId: string,
-      options?: { manual?: boolean },
+      options?: { manual?: boolean }
     ) => Promise<void>,
     handleCreatePost,
     handleCreateReply,

@@ -1,14 +1,22 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
-import { useNavigate } from 'react-router-dom';
-
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
 
 import { useNotificationStore } from '@/stores/notification';
 
 import { formatDateTime } from '@/utils/date';
+
+interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  action_url?: string | undefined;
+  created_at: string;
+}
 
 export const NotificationPanel: React.FC = () => {
   const { t } = useTranslation();
@@ -26,10 +34,12 @@ export const NotificationPanel: React.FC = () => {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchNotifications(true);
+    void fetchNotifications(true);
 
     // Poll for new notifications every 30 seconds
-    const interval = setInterval(() => fetchNotifications(true), 30000);
+    const interval = setInterval(() => {
+      void fetchNotifications(true);
+    }, 30000);
     return () => {
       clearInterval(interval);
     };
@@ -54,12 +64,12 @@ export const NotificationPanel: React.FC = () => {
 
   // Stable callback for notification clicks
   const handleNotificationClick = useCallback(
-    async (notification: any) => {
+    async (notification: NotificationItem) => {
       if (!notification.is_read) {
         await markAsRead(notification.id);
       }
       if (notification.action_url) {
-        navigate(notification.action_url);
+        void navigate(notification.action_url);
         setIsOpen(false);
       }
     },
@@ -80,7 +90,7 @@ export const NotificationPanel: React.FC = () => {
   const handleInlineMarkAsRead = useCallback(
     (e: React.MouseEvent, notificationId: string) => {
       e.stopPropagation();
-      markAsRead(notificationId);
+      void markAsRead(notificationId);
     },
     [markAsRead]
   );
@@ -89,7 +99,7 @@ export const NotificationPanel: React.FC = () => {
   const handleInlineDelete = useCallback(
     (e: React.MouseEvent, notificationId: string) => {
       e.stopPropagation();
-      deleteNotification(notificationId);
+      void deleteNotification(notificationId);
     },
     [deleteNotification]
   );
@@ -113,17 +123,24 @@ export const NotificationPanel: React.FC = () => {
       {isOpen && (
         <div className="absolute right-0 top-12 w-96 bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 z-50">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900 dark:text-white">{t('common.notifications.title')}</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              {t('common.notifications.title')}
+            </h3>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
-                  onClick={markAllAsRead}
+                  onClick={() => {
+                    void markAllAsRead();
+                  }}
                   className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   {t('common.notifications.markAllRead')}
                 </button>
               )}
-              <button onClick={closePanel} aria-label="Close">
+              <button
+                onClick={closePanel}
+                aria-label={t('common.notifications.close', { defaultValue: 'Close' })}
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -148,8 +165,15 @@ export const NotificationPanel: React.FC = () => {
                   }`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => handleNotificationClick(notification)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(notification); } }}
+                  onClick={() => {
+                    void handleNotificationClick(notification);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      void handleNotificationClick(notification);
+                    }
+                  }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

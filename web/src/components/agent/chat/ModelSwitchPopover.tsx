@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message, Popover, Select } from 'antd';
 import { Bot } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
@@ -15,10 +17,17 @@ import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import type { ProviderConfig } from '@/types/memory';
 
+import type { TFunction } from 'i18next';
+
 interface ModelSwitchPopoverProps {
   conversationId: string | null;
   projectId?: string | undefined;
   disabled?: boolean;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 const getDefaultProvider = (providers: ProviderConfig[]): ProviderConfig | undefined =>
@@ -26,6 +35,7 @@ const getDefaultProvider = (providers: ProviderConfig[]): ProviderConfig | undef
 
 export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
   ({ conversationId, projectId, disabled }) => {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -90,10 +100,10 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
       isAutoOverride ||
       Boolean(
         modelOverride &&
-          (!catalogLoaded ||
-            (overrideModelMeta &&
-              (activeProviderHints.size === 0 ||
-                activeProviderHints.has((overrideModelMeta.provider || '').toLowerCase()))))
+        (!catalogLoaded ||
+          (overrideModelMeta &&
+            (activeProviderHints.size === 0 ||
+              activeProviderHints.has((overrideModelMeta.provider || '').toLowerCase()))))
       );
     const activeModelOverride = isOverrideValid ? modelOverride : null;
     const effectiveModel = activeModelOverride || defaultModel;
@@ -156,13 +166,19 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
             })
             .catch((err: unknown) => {
               void message.error(
-                err instanceof Error ? err.message : 'Failed to update model override'
+                err instanceof Error
+                  ? err.message
+                  : tFallback(
+                      t,
+                      'agent.modelSwitch.updateFailed',
+                      'Failed to update model override'
+                    )
               );
               console.error('ModelSwitchPopover: update config failed', err);
             });
         }
       },
-      [conversationId, projectId]
+      [conversationId, projectId, t]
     );
 
     const handleReset = useCallback(() => {
@@ -175,12 +191,14 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
           })
           .catch((err: unknown) => {
             void message.error(
-              err instanceof Error ? err.message : 'Failed to reset model override'
+              err instanceof Error
+                ? err.message
+                : tFallback(t, 'agent.modelSwitch.resetFailed', 'Failed to reset model override')
             );
             console.error('ModelSwitchPopover: reset config failed', err);
           });
       }
-    }, [conversationId, projectId]);
+    }, [conversationId, projectId, t]);
 
     const isOverrideActive = Boolean(activeModelOverride);
 
@@ -188,11 +206,13 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
       <div className="w-80 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="font-bold text-slate-800 dark:text-slate-100">Model</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100">
+              {tFallback(t, 'agent.modelSwitch.title', 'Model')}
+            </span>
             {effectiveModel && (
-             <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
-                 {effectiveModel}
-               </span>
+              <span className="text-2xs text-slate-400 dark:text-slate-500 truncate max-w-[220px]">
+                {effectiveModel}
+              </span>
             )}
           </div>
           {isOverrideActive && (
@@ -201,7 +221,7 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
               onClick={handleReset}
               className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
             >
-              Reset
+              {tFallback(t, 'agent.modelSwitch.reset', 'Reset')}
             </button>
           )}
         </div>
@@ -211,19 +231,34 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
           allowClear
           loading={loading}
           value={activeModelOverride || undefined}
-          placeholder={defaultModel ? `Default: ${defaultModel}` : 'Select a model'}
+          placeholder={
+            defaultModel
+              ? t('agent.modelSwitch.defaultModel', {
+                  defaultValue: 'Default: {{model}}',
+                  model: defaultModel,
+                })
+              : tFallback(t, 'agent.modelSwitch.selectModel', 'Select a model')
+          }
           options={[
             {
               value: 'auto',
-              label: 'Auto (Router)',
-              title: 'Let the platform pick the best model per turn',
+              label: tFallback(t, 'agent.modelSwitch.autoRouter', 'Auto (Router)'),
+              title: tFallback(
+                t,
+                'agent.modelSwitch.autoRouterDescription',
+                'Let the platform pick the best model per turn'
+              ),
             },
             ...visibleModels.map((name) => ({ value: name, label: name })),
           ]}
           onChange={(value) => {
             handleSelect(value);
           }}
-          notFoundContent={loading ? 'Loading models...' : 'No models available'}
+          notFoundContent={
+            loading
+              ? tFallback(t, 'agent.modelSwitch.loadingModels', 'Loading models...')
+              : tFallback(t, 'agent.modelSwitch.noModels', 'No models available')
+          }
         />
       </div>
     );
@@ -240,7 +275,7 @@ export const ModelSwitchPopover = memo<ModelSwitchPopoverProps>(
         destroyOnHidden
       >
         <div>
-          <LazyTooltip title="Switch Model">
+          <LazyTooltip title={tFallback(t, 'agent.modelSwitch.switchModel', 'Switch Model')}>
             <LazyButton
               type="text"
               size="small"

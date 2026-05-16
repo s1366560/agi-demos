@@ -43,13 +43,13 @@ export interface HITLActionDeps {
     timeline: TimelineEvent[],
     requestId: string,
     eventType: 'clarification_asked' | 'decision_asked' | 'env_var_requested' | 'permission_asked',
-  updates: {
-    answered: boolean;
-    answer?: string | undefined;
-    decision?: string | string[] | undefined;
-    values?: Record<string, string> | undefined;
-    granted?: boolean | undefined;
-  }
+    updates: {
+      answered: boolean;
+      answer?: string | undefined;
+      decision?: string | string[] | undefined;
+      values?: Record<string, string> | undefined;
+      granted?: boolean | undefined;
+    }
   ) => TimelineEvent[];
 }
 
@@ -113,10 +113,15 @@ export function createHITLActions(deps: HITLActionDeps) {
 
         // Update conversation state (timeline + HITL field)
         const convState = get().getConversationState(activeConversationId);
-        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'clarification_asked', {
-          answered: true,
-          answer,
-        });
+        const updatedTimeline = updateHITLEventInTimeline(
+          convState.timeline,
+          requestId,
+          'clarification_asked',
+          {
+            answered: true,
+            answer,
+          }
+        );
         get().updateConversationState(activeConversationId, {
           timeline: updatedTimeline,
           pendingClarification: null,
@@ -155,10 +160,15 @@ export function createHITLActions(deps: HITLActionDeps) {
         clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
-        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'decision_asked', {
-          answered: true,
-          decision: Array.isArray(decision) ? decision.join(', ') : decision,
-        });
+        const updatedTimeline = updateHITLEventInTimeline(
+          convState.timeline,
+          requestId,
+          'decision_asked',
+          {
+            answered: true,
+            decision: Array.isArray(decision) ? decision.join(', ') : decision,
+          }
+        );
         get().updateConversationState(activeConversationId, {
           timeline: updatedTimeline,
           pendingDecision: null,
@@ -196,10 +206,15 @@ export function createHITLActions(deps: HITLActionDeps) {
         clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
-        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'env_var_requested', {
-          answered: true,
-          values,
-        });
+        const updatedTimeline = updateHITLEventInTimeline(
+          convState.timeline,
+          requestId,
+          'env_var_requested',
+          {
+            answered: true,
+            values,
+          }
+        );
         get().updateConversationState(activeConversationId, {
           timeline: updatedTimeline,
           pendingEnvVarRequest: null,
@@ -237,10 +252,15 @@ export function createHITLActions(deps: HITLActionDeps) {
         clearAllDeltaBuffers();
 
         const convState = get().getConversationState(activeConversationId);
-        const updatedTimeline = updateHITLEventInTimeline(convState.timeline, requestId, 'permission_asked', {
-          answered: true,
-          granted,
-        });
+        const updatedTimeline = updateHITLEventInTimeline(
+          convState.timeline,
+          requestId,
+          'permission_asked',
+          {
+            answered: true,
+            granted,
+          }
+        );
         get().updateConversationState(activeConversationId, {
           timeline: updatedTimeline,
           pendingPermission: null,

@@ -10,6 +10,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Badge, Empty, Input, Popover, Spin } from 'antd';
 import { AppWindow, ExternalLink, Pin, RefreshCw, Search } from 'lucide-react';
 
@@ -23,6 +25,7 @@ import { LazyTooltip } from '@/components/ui/lazyAntd';
 import type { MCPApp } from '@/types/mcpApp';
 
 export const AppLauncher: FC = () => {
+  const { t } = useTranslation();
   const apps = useMCPAppStore((s) => s.apps);
   const loading = useMCPAppStore((s) => s.loading);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
@@ -35,7 +38,7 @@ export const AppLauncher: FC = () => {
   // Fetch apps when popover opens (if not already loaded)
   useEffect(() => {
     if (open && currentProject?.id) {
-      fetchApps(currentProject.id);
+      void fetchApps(currentProject.id);
     }
   }, [open, currentProject?.id, fetchApps]);
 
@@ -47,7 +50,7 @@ export const AppLauncher: FC = () => {
       (app) =>
         app.tool_name.toLowerCase().includes(q) ||
         app.server_name.toLowerCase().includes(q) ||
-        (app.ui_metadata?.title || '').toLowerCase().includes(q)
+        (app.ui_metadata.title || '').toLowerCase().includes(q)
     );
   }, [apps, search]);
 
@@ -75,11 +78,11 @@ export const AppLauncher: FC = () => {
       const tabId = `mcp-app-${app.id}`;
       useCanvasStore.getState().openTab({
         id: tabId,
-        title: app.ui_metadata?.title || app.tool_name,
+        title: app.ui_metadata.title || app.tool_name,
         type: 'mcp-app' as const,
         content: '',
         mcpAppId: app.id,
-        mcpResourceUri: app.ui_metadata?.resourceUri,
+        mcpResourceUri: app.ui_metadata.resourceUri,
         mcpServerName: app.server_name,
         mcpProjectId: currentProject?.id,
         mcpToolName: app.tool_name,
@@ -102,11 +105,11 @@ export const AppLauncher: FC = () => {
         // Create the tab first (not activated), then pin it
         store.openTab({
           id: tabId,
-          title: app.ui_metadata?.title || app.tool_name,
+          title: app.ui_metadata.title || app.tool_name,
           type: 'mcp-app' as const,
           content: '',
           mcpAppId: app.id,
-          mcpResourceUri: app.ui_metadata?.resourceUri,
+          mcpResourceUri: app.ui_metadata.resourceUri,
           mcpServerName: app.server_name,
           mcpProjectId: currentProject?.id,
           mcpToolName: app.tool_name,
@@ -131,13 +134,13 @@ export const AppLauncher: FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-3 pt-2 pb-1">
         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-          MCP Apps
+          {t('components.mcpApp.launcher.title', 'MCP Apps')}
         </span>
         <button
           type="button"
           onClick={handleRefresh}
           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-          title="Refresh apps"
+          title={t('components.mcpApp.launcher.refreshApps', 'Refresh apps')}
         >
           <RefreshCw
             size={12}
@@ -150,7 +153,7 @@ export const AppLauncher: FC = () => {
       {totalReady > 5 && (
         <div className="px-3 pb-2">
           <Input
-            placeholder="Search apps..."
+            placeholder={t('components.mcpApp.launcher.searchPlaceholder', 'Search apps...')}
             prefix={<Search size={12} className="text-slate-400" />}
             value={search}
             onChange={(e) => {
@@ -173,7 +176,9 @@ export const AppLauncher: FC = () => {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               <span className="text-xs text-slate-400">
-                {search ? 'No apps match your search' : 'No MCP apps available'}
+                {search
+                  ? t('components.mcpApp.launcher.noSearchResults', 'No apps match your search')
+                  : t('components.mcpApp.launcher.empty', 'No MCP apps available')}
               </span>
             }
           />
@@ -184,7 +189,7 @@ export const AppLauncher: FC = () => {
               <>
                 <div className="px-2 py-1">
                   <span className="text-2xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                    Pinned
+                    {t('components.mcpApp.launcher.pinned', 'Pinned')}
                   </span>
                 </div>
                 {pinnedApps.map((app) => (
@@ -194,6 +199,9 @@ export const AppLauncher: FC = () => {
                     pinned
                     onOpen={handleOpenApp}
                     onTogglePin={handleTogglePin}
+                    pinLabel={t('components.mcpApp.launcher.pinApp', 'Pin app')}
+                    unpinLabel={t('components.mcpApp.launcher.unpinApp', 'Unpin app')}
+                    openLabel={t('components.mcpApp.launcher.openInCanvas', 'Open in canvas')}
                   />
                 ))}
                 {unpinnedApps.length > 0 && (
@@ -210,6 +218,9 @@ export const AppLauncher: FC = () => {
                 pinned={false}
                 onOpen={handleOpenApp}
                 onTogglePin={handleTogglePin}
+                pinLabel={t('components.mcpApp.launcher.pinApp', 'Pin app')}
+                unpinLabel={t('components.mcpApp.launcher.unpinApp', 'Unpin app')}
+                openLabel={t('components.mcpApp.launcher.openInCanvas', 'Open in canvas')}
               />
             ))}
           </>
@@ -225,9 +236,9 @@ export const AppLauncher: FC = () => {
       placement="bottomRight"
       open={open}
       onOpenChange={setOpen}
-      overlayClassName="app-launcher-popover"
+      classNames={{ root: 'app-launcher-popover' }}
     >
-      <LazyTooltip title="Open MCP Apps">
+      <LazyTooltip title={t('components.mcpApp.launcher.openApps', 'Open MCP Apps')}>
         <button
           type="button"
           className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-600 dark:text-slate-400 relative"
@@ -253,8 +264,11 @@ const AppLauncherItem: FC<{
   pinned: boolean;
   onOpen: (app: MCPApp) => void;
   onTogglePin: (app: MCPApp) => void;
-}> = ({ app, pinned, onOpen, onTogglePin }) => {
-  const title = app.ui_metadata?.title || app.tool_name;
+  pinLabel: string;
+  unpinLabel: string;
+  openLabel: string;
+}> = ({ app, pinned, onOpen, onTogglePin, pinLabel, unpinLabel, openLabel }) => {
+  const title = app.ui_metadata.title || app.tool_name;
 
   return (
     <div className="group flex items-center gap-2 px-2 py-1.5 mx-1 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -292,7 +306,7 @@ const AppLauncherItem: FC<{
               ? 'text-primary bg-primary/10'
               : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
           }`}
-          title={pinned ? 'Unpin app' : 'Pin app'}
+          title={pinned ? unpinLabel : pinLabel}
         >
           <Pin size={12} className={pinned ? 'fill-current' : ''} />
         </button>
@@ -303,7 +317,7 @@ const AppLauncherItem: FC<{
             onOpen(app);
           }}
           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-          title="Open in canvas"
+          title={openLabel}
         >
           <ExternalLink size={12} />
         </button>

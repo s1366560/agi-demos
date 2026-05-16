@@ -14,6 +14,37 @@ import type { TokenData, CostData } from '../components/agent/execution/TokenUsa
 import type { ToolExecutionItem } from '../components/agent/execution/ToolCallVisualization';
 import type { Message, ToolCall, ToolResult } from '../types/agent';
 
+type NumberRecord = Record<string, number | undefined>;
+type CostMetadata = {
+  total?: number | undefined;
+  breakdown?:
+    | {
+        input_cost?: number | undefined;
+        output_cost?: number | undefined;
+        reasoning_cost?: number | undefined;
+      }
+    | undefined;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getArrayField = <T>(metadata: Message['metadata'], key: string): T[] => {
+  const value = metadata?.[key];
+  return Array.isArray(value) ? (value as T[]) : [];
+};
+
+const getToolExecutions = (metadata: Message['metadata']): Record<string, ToolExecutionInfo> => {
+  const value = metadata?.tool_executions;
+  return isRecord(value) ? (value as Record<string, ToolExecutionInfo>) : {};
+};
+
+const getNumberRecord = (value: unknown): NumberRecord | undefined =>
+  isRecord(value) ? (value as NumberRecord) : undefined;
+
+const getCostMetadata = (value: unknown): CostMetadata | undefined =>
+  isRecord(value) ? (value as CostMetadata) : undefined;
+
 /**
  * Adapt message data for ActivityTimeline component
  */
@@ -24,10 +55,10 @@ export function adaptTimelineData(message: Message): {
   toolResults: ToolResult[];
 } {
   return {
-    timeline: (message.metadata?.timeline as TimelineItem[]) || [],
-    toolExecutions: (message.metadata?.tool_executions as Record<string, ToolExecutionInfo>) || {},
-    toolCalls: message.tool_calls || [],
-    toolResults: message.tool_results || [],
+    timeline: getArrayField<TimelineItem>(message.metadata, 'timeline'),
+    toolExecutions: getToolExecutions(message.metadata),
+    toolCalls: message.tool_calls ?? [],
+    toolResults: message.tool_results ?? [],
   };
 }
 
@@ -35,9 +66,9 @@ export function adaptTimelineData(message: Message): {
  * Adapt message data for ToolCallVisualization component
  */
 export function adaptToolVisualizationData(message: Message): ToolExecutionItem[] {
-  const timeline = (message.metadata?.timeline as TimelineItem[]) || [];
-  const executions = (message.metadata?.tool_executions as Record<string, ToolExecutionInfo>) || {};
-  const results = message.tool_results || [];
+  const timeline = getArrayField<TimelineItem>(message.metadata, 'timeline');
+  const executions = getToolExecutions(message.metadata);
+  const results = message.tool_results ?? [];
 
   // Filter timeline items to get only tool calls
   const toolCallItems = timeline.filter((item) => item.type === 'tool_call');
@@ -49,9 +80,9 @@ export function adaptToolVisualizationData(message: Message): ToolExecutionItem[
       const execution = executions[call.name];
 
       return {
-        id: `tool-${call.name}-${index}`,
+        id: `tool-${call.name}-${String(index)}`,
         toolName: call.name,
-        input: call.arguments || {},
+        input: call.arguments,
         output: result?.result,
         status: result
           ? result.error
@@ -109,18 +140,18 @@ export function extractTokenData(message: Message): {
 
   // Check multiple possible field names
   const tokenUsage =
-    (metadata.token_usage as Record<string, number | undefined>) ||
-    (metadata.usage as Record<string, number | undefined>) ||
-    (metadata.llm_usage as Record<string, number | undefined>);
+    getNumberRecord(metadata.token_usage) ??
+    getNumberRecord(metadata.usage) ??
+    getNumberRecord(metadata.llm_usage);
 
   if (!tokenUsage) return {};
 
   // Extract token counts (support both naming conventions)
-  const inputTokens = tokenUsage.input_tokens || tokenUsage.prompt_tokens || 0;
-  const outputTokens = tokenUsage.output_tokens || tokenUsage.completion_tokens || 0;
+  const inputTokens = tokenUsage.input_tokens ?? tokenUsage.prompt_tokens ?? 0;
+  const outputTokens = tokenUsage.output_tokens ?? tokenUsage.completion_tokens ?? 0;
   const reasoningTokens = tokenUsage.reasoning_tokens;
   const totalTokens =
-    tokenUsage.total_tokens || inputTokens + outputTokens + (reasoningTokens || 0);
+    tokenUsage.total_tokens ?? inputTokens + outputTokens + (reasoningTokens ?? 0);
 
   // Skip if no meaningful data
   if (totalTokens === 0) return {};
@@ -133,18 +164,7 @@ export function extractTokenData(message: Message): {
   };
 
   // Extract cost data if available
-  const costMetadata = metadata.cost as
-    | {
-        total?: number | undefined;
-        breakdown?:
-          | {
-              input_cost?: number | undefined;
-              output_cost?: number | undefined;
-              reasoning_cost?: number | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
+  const costMetadata = getCostMetadata(metadata.cost);
 
   // Build costData only if we have valid breakdown data
   let costData: CostData | undefined;
@@ -173,9 +193,9 @@ export function extractTokenData(message: Message): {
  * Check if message has any execution data worth displaying
  */
 export function hasExecutionData(message: Message): boolean {
-  const timeline = (message.metadata?.timeline as TimelineItem[]) || [];
-  const thoughts = (message.metadata?.thoughts as string[]) || [];
-  const toolCalls = message.tool_calls || [];
+  const timeline = getArrayField<TimelineItem>(message.metadata, 'timeline');
+  const thoughts = getArrayField<string>(message.metadata, 'thoughts');
+  const toolCalls = message.tool_calls ?? [];
 
   return timeline.length > 0 || thoughts.length > 0 || toolCalls.length > 0;
 }

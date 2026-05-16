@@ -522,7 +522,9 @@ describe('workspace store', () => {
       loadedReplyPostIds: {},
       replyLoadingPostIds: {},
     });
-    vi.mocked(workspaceBlackboardService.listReplies).mockReturnValueOnce(repliesPromise as Promise<any>);
+    vi.mocked(workspaceBlackboardService.listReplies).mockReturnValueOnce(
+      repliesPromise as Promise<any>
+    );
 
     const loadPromise = useWorkspaceStore.getState().loadReplies('t-1', 'p-1', 'ws-1', 'post-1');
 
@@ -581,7 +583,9 @@ describe('workspace store', () => {
       loadedReplyPostIds: {},
       replyLoadingPostIds: {},
     });
-    vi.mocked(workspaceBlackboardService.listReplies).mockReturnValue(repliesPromise as Promise<any>);
+    vi.mocked(workspaceBlackboardService.listReplies).mockReturnValue(
+      repliesPromise as Promise<any>
+    );
 
     const firstLoad = useWorkspaceStore.getState().loadReplies('t-1', 'p-1', 'ws-1', 'post-1');
     const secondLoad = useWorkspaceStore.getState().loadReplies('t-1', 'p-1', 'ws-1', 'post-1');
@@ -615,7 +619,9 @@ describe('workspace store', () => {
       loadedReplyPostIds: {},
       replyLoadingPostIds: {},
     });
-    vi.mocked(workspaceBlackboardService.listReplies).mockReturnValueOnce(repliesPromise as Promise<any>);
+    vi.mocked(workspaceBlackboardService.listReplies).mockReturnValueOnce(
+      repliesPromise as Promise<any>
+    );
 
     const loadPromise = useWorkspaceStore.getState().loadReplies('t-1', 'p-1', 'ws-1', 'post-1');
 
@@ -663,8 +669,12 @@ describe('workspace store', () => {
     vi.mocked(workspaceService.listMembers).mockResolvedValue([]);
     vi.mocked(workspaceService.listAgents).mockResolvedValue([]);
     vi.mocked(workspaceBlackboardService.listPosts)
-      .mockResolvedValueOnce([{ id: 'post-1', title: 'Alpha', content: 'A', status: 'open' }] as any)
-      .mockResolvedValueOnce([{ id: 'post-2', title: 'Beta', content: 'B', status: 'open' }] as any);
+      .mockResolvedValueOnce([
+        { id: 'post-1', title: 'Alpha', content: 'A', status: 'open' },
+      ] as any)
+      .mockResolvedValueOnce([
+        { id: 'post-2', title: 'Beta', content: 'B', status: 'open' },
+      ] as any);
     vi.mocked(workspaceTaskService.list)
       .mockResolvedValueOnce([{ id: 'task-1', title: 'Alpha task', status: 'todo' }] as any)
       .mockResolvedValueOnce([{ id: 'task-2', title: 'Beta task', status: 'done' }] as any);
@@ -724,14 +734,9 @@ describe('workspace store', () => {
       is_active: true,
     } as any);
 
-    await useWorkspaceStore.getState().moveAgent(
-      'tenant-1',
-      'project-1',
-      'ws-1',
-      'binding-1',
-      2,
-      -1
-    );
+    await useWorkspaceStore
+      .getState()
+      .moveAgent('tenant-1', 'project-1', 'ws-1', 'binding-1', 2, -1);
 
     expect(workspaceService.updateAgentBinding).toHaveBeenCalledWith(
       'tenant-1',
@@ -748,7 +753,15 @@ describe('workspace store', () => {
   it('updateTopologyNode keeps connected edge coordinates in sync locally', async () => {
     useWorkspaceStore.setState({
       topologyNodes: [
-        { id: 'node-1', node_type: 'corridor', title: 'Lane', hex_q: 1, hex_r: 0, position_x: 0, position_y: 0 },
+        {
+          id: 'node-1',
+          node_type: 'corridor',
+          title: 'Lane',
+          hex_q: 1,
+          hex_r: 0,
+          position_x: 0,
+          position_y: 0,
+        },
       ] as any,
       topologyEdges: [
         {
@@ -772,7 +785,9 @@ describe('workspace store', () => {
       position_y: 0,
     } as any);
 
-    await useWorkspaceStore.getState().updateTopologyNode('ws-1', 'node-1', { hex_q: 3, hex_r: -1 });
+    await useWorkspaceStore
+      .getState()
+      .updateTopologyNode('ws-1', 'node-1', { hex_q: 3, hex_r: -1 });
 
     expect(useWorkspaceStore.getState().topologyEdges).toEqual([
       expect.objectContaining({
@@ -936,7 +951,14 @@ describe('workspace store', () => {
       data: {
         operation: 'node_updated',
         node_id: 'node-1',
-        node: { id: 'node-1', node_type: 'corridor', hex_q: 4, hex_r: -2, position_x: 0, position_y: 0 },
+        node: {
+          id: 'node-1',
+          node_type: 'corridor',
+          hex_q: 4,
+          hex_r: -2,
+          position_x: 0,
+          position_y: 0,
+        },
         updated_edges: [
           {
             id: 'edge-1',

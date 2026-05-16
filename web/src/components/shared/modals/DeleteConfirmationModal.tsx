@@ -23,11 +23,18 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div role="dialog" aria-modal="true" aria-labelledby="delete-confirmation-title" className="bg-white dark:bg-surface-dark rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-confirmation-title"
+        className="bg-white dark:bg-surface-dark rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200"
+      >
         <div className="p-6">
           <div className="flex items-center gap-3 text-red-600 dark:text-red-400 mb-4">
             <AlertTriangle size={30} />
-            <h3 id="delete-confirmation-title" className="text-xl font-bold">{title}</h3>
+            <h3 id="delete-confirmation-title" className="text-xl font-bold">
+              {title}
+            </h3>
           </div>
           <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{message}</p>
         </div>

@@ -4,6 +4,8 @@
 
 import React, { useRef, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Space, Typography, Spin, Alert } from 'antd';
 import { Volume2 } from 'lucide-react';
 
@@ -29,6 +31,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   onLoad,
   onError,
 }) => {
+  const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -40,7 +43,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       const secs = audioRef.current.duration;
       const mins = Math.floor(secs / 60);
       const remainingSecs = Math.floor(secs % 60);
-      setDuration(`${mins}:${remainingSecs.toString().padStart(2, '0')}`);
+      setDuration(`${String(mins)}:${remainingSecs.toString().padStart(2, '0')}`);
     }
     onLoad?.();
   };
@@ -55,8 +58,10 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     return (
       <Alert
         type="error"
-        message="Audio playback error"
-        description="Failed to load audio file."
+        title={t('components.audioPlayer.errorTitle', { defaultValue: 'Audio playback error' })}
+        description={t('components.audioPlayer.errorDescription', {
+          defaultValue: 'Failed to load audio file.',
+        })}
         showIcon
       />
     );
@@ -70,7 +75,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         </div>
       )}
       <div className={loading ? 'hidden' : ''}>
-        <Space direction="vertical" className="w-full">
+        <Space orientation="vertical" className="w-full">
           {!compact && filename && (
             <Space>
               <Volume2 className="text-blue-500" size={16} />
@@ -93,7 +98,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             onLoadedMetadata={handleLoadedMetadata}
             onError={handleError}
           >
-            Your browser does not support the audio element.
+            {t('components.audioPlayer.unsupported', {
+              defaultValue: 'Your browser does not support the audio element.',
+            })}
           </audio>
         </Space>
       </div>

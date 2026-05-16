@@ -99,6 +99,54 @@ const DEFAULT_MESSAGES: Record<ApiErrorType, string> = {
   [ApiErrorType.UNKNOWN]: 'An unexpected error occurred. Please try again.',
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const getStringField = (record: Record<string, unknown>, key: string): string | undefined => {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const stringifyErrorPayload = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const messages = value
+      .map((item) => stringifyErrorPayload(item))
+      .filter((message): message is string => Boolean(message));
+    return messages.length > 0 ? messages.join('; ') : undefined;
+  }
+
+  if (isRecord(value)) {
+    const detailMessage =
+      getStringField(value, 'msg') ??
+      getStringField(value, 'message') ??
+      getStringField(value, 'error') ??
+      getStringField(value, 'detail');
+    const location = Array.isArray(value.loc) ? value.loc.map(String).join('.') : undefined;
+
+    if (location && detailMessage) {
+      return `${location}: ${detailMessage}`;
+    }
+    if (detailMessage) {
+      return detailMessage;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+};
+
+const getMessageField = (record: Record<string, unknown>, key: string): string | undefined =>
+  stringifyErrorPayload(record[key]);
+
 /**
  * Unified API Error Class
  *
@@ -137,9 +185,7 @@ export class ApiError extends Error {
     this.name = 'ApiError';
 
     // Maintains proper stack trace for where our error was thrown (only available on V8)
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, ApiError);
-    }
+    Error.captureStackTrace(this, ApiError);
   }
 
   /**
@@ -209,7 +255,7 @@ export class ApiError extends Error {
     code: string;
     message: string;
     statusCode?: number | undefined;
-    details?: unknown | undefined;
+    details?: unknown;
     userMessage: string;
   } {
     return {
@@ -230,7 +276,7 @@ export class ApiError extends Error {
     code: string;
     message: string;
     statusCode?: number | undefined;
-    details?: unknown | undefined;
+    details?: unknown;
   }): ApiError {
     return new ApiError(data.type, data.code, data.message, data.statusCode, data.details);
   }
@@ -251,17 +297,17 @@ export async function parseResponseError(response: Response): Promise<ApiError> 
 
   // Try to extract error details from response body
   try {
-    const data = await response.json();
-    if (data) {
-      if (data.code) code = data.code;
-      if (data.detail) message = data.detail;
-      if (data.message) message = data.message;
-      if (data.error) message = data.error;
+    const data: unknown = await response.json();
+    if (isRecord(data)) {
+      code = getStringField(data, 'code') ?? code;
+      message = getMessageField(data, 'detail') ?? message;
+      message = getMessageField(data, 'message') ?? message;
+      message = getMessageField(data, 'error') ?? message;
       details = data;
     }
   } catch {
     // Response body is not JSON or empty, use status text
-    message = response.statusText || `HTTP ${response.status}`;
+    message = response.statusText || `HTTP ${String(response.status)}`;
   }
 
   // Determine error type and code from status code
@@ -302,10 +348,10 @@ export function parseAxiosError(error: unknown): ApiError {
           status?: number | undefined;
           data?:
             | {
-                detail?: string | undefined;
+                detail?: unknown;
                 code?: string | undefined;
-                message?: string | undefined;
-                error?: string | undefined;
+                message?: unknown;
+                error?: unknown;
               }
             | undefined;
         }
@@ -324,12 +370,12 @@ export function parseAxiosError(error: unknown): ApiError {
 
     if (err.response.data) {
       if (err.response.data.code) code = err.response.data.code;
-      if (err.response.data.detail) message = err.response.data.detail;
-      if (err.response.data.message) message = err.response.data.message;
-      if (err.response.data.error) message = err.response.data.error;
+      message = stringifyErrorPayload(err.response.data.detail) ?? message;
+      message = stringifyErrorPayload(err.response.data.message) ?? message;
+      message = stringifyErrorPayload(err.response.data.error) ?? message;
       details = err.response.data;
     } else {
-      message = err.response.status ? `HTTP ${err.response.status}` : 'Request failed';
+      message = err.response.status ? `HTTP ${String(err.response.status)}` : 'Request failed';
     }
   }
   // Handle network/timeout errors
@@ -400,7 +446,7 @@ function getErrorTypeFromStatus(status: number): {
   if (status === 404) {
     return { type: ApiErrorType.NOT_FOUND, statusCode: status };
   }
-  if (status === 409 || status === 409) {
+  if (status === 409) {
     return { type: ApiErrorType.CONFLICT, statusCode: status };
   }
   if (status === 422 || status === 400) {

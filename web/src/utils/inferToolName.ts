@@ -31,7 +31,7 @@ const RULES: readonly Rule[] = [
   [(i) => 'command' in i, 'run_command'],
   [(i) => 'url' in i && 'query' in i, 'fetch_webpage'],
   [(i) => 'urls' in i, 'fetch_webpage'],
-  [(i) => 'sql' in i || 'query' in i && 'database' in i, 'sql_query'],
+  [(i) => 'sql' in i || ('query' in i && 'database' in i), 'sql_query'],
 ];
 
 /**

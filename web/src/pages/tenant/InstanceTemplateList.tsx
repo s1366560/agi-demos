@@ -4,14 +4,7 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import {
-  Card,
-  Tag,
-  Form,
-  Input,
-  Typography,
-  Space,
-} from 'antd';
+import { Card, Tag, Form, Input, Typography, Space } from 'antd';
 import { Copy, Upload, Trash2, Eye, Plus, Search } from 'lucide-react';
 
 import {
@@ -156,13 +149,13 @@ export const InstanceTemplateList: FC = () => {
   };
 
   const handleViewDetail = (id: string) => {
-    navigate(`./templates/${id}`);
+    void navigate(`./templates/${id}`);
   };
 
   return (
     <div className="max-w-full mx-auto w-full flex flex-col gap-8">
       <div className="flex justify-between items-center">
-        <Space direction="vertical" size="small">
+        <Space orientation="vertical" size="small">
           <Title level={2} className="!mb-0">
             {t('tenant.templates.title')}
           </Title>
@@ -244,7 +237,12 @@ export const InstanceTemplateList: FC = () => {
                     title={t('tenant.templates.publishConfirm')}
                     onConfirm={() => handlePublish(template.id)}
                   >
-                    <LazyButton type="text" icon={<Upload className="w-4 h-4" />} aria-label={t('common.publish', 'Publish')} disabled={isSubmitting} />
+                    <LazyButton
+                      type="text"
+                      icon={<Upload className="w-4 h-4" />}
+                      aria-label={t('common.publish', 'Publish')}
+                      disabled={isSubmitting}
+                    />
                   </LazyPopconfirm>
                 ) : (
                   <span key="empty"></span>
@@ -254,7 +252,13 @@ export const InstanceTemplateList: FC = () => {
                   title={t('tenant.templates.deleteConfirm')}
                   onConfirm={() => handleDelete(template.id)}
                 >
-                  <LazyButton type="text" danger icon={<Trash2 className="w-4 h-4" />} aria-label={t('common.delete', 'Delete')} disabled={isSubmitting} />
+                  <LazyButton
+                    type="text"
+                    danger
+                    icon={<Trash2 className="w-4 h-4" />}
+                    aria-label={t('common.delete', 'Delete')}
+                    disabled={isSubmitting}
+                  />
                 </LazyPopconfirm>,
               ]}
             >
@@ -277,7 +281,7 @@ export const InstanceTemplateList: FC = () => {
               </Paragraph>
 
               <div className="mt-auto pt-4 flex flex-col gap-3">
-                {template.tags && template.tags.length > 0 && (
+                {template.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {template.tags.map((tag) => (
                       <Tag key={tag} className="text-xs">

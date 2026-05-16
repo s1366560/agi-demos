@@ -93,7 +93,7 @@ export const Resizer: React.FC<ResizerProps> = ({
       setIsDragging(false);
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
-      
+
       if (onResizeEnd) {
         const currentPos = direction === 'horizontal' ? e.clientX : e.clientY;
         const delta = currentPos - startPosRef.current;
@@ -135,6 +135,7 @@ export const Resizer: React.FC<ResizerProps> = ({
 
   const cursorClass = direction === 'horizontal' ? 'cursor-ew-resize' : 'cursor-ns-resize';
   const sizeClass = direction === 'horizontal' ? 'w-1.5 hover:w-2' : 'h-1.5 hover:h-2';
+  const positionClass = positionStyles[direction][position] ?? '';
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -167,7 +168,7 @@ export const Resizer: React.FC<ResizerProps> = ({
       onMouseDown={handleMouseDown}
       className={`
         absolute z-10 flex items-center justify-center
-        ${positionStyles[direction][position]}
+        ${positionClass}
         ${cursorClass}
         ${sizeClass}
         bg-transparent
@@ -175,7 +176,7 @@ export const Resizer: React.FC<ResizerProps> = ({
         ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
         transition-colors duration-150
         group
-        ${className ?? ''}
+        ${className}
       `}
       style={{
         [direction === 'horizontal' ? 'top' : 'left']: 0,

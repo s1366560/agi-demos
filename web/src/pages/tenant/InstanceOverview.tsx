@@ -29,7 +29,19 @@ import {
 import type { InstanceMemberResponse } from '../../services/instanceService';
 import type { ColumnsType } from 'antd/es/table';
 
-const HEALTH_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgColor: string }> = {
+interface HealthConfig {
+  icon: React.ReactNode;
+  color: string;
+  bgColor: string;
+}
+
+const UNKNOWN_HEALTH_CONFIG: HealthConfig = {
+  icon: <Minus className="h-4 w-4" />,
+  color: 'text-gray-500 dark:text-gray-400',
+  bgColor: 'bg-gray-50 dark:bg-gray-800/30',
+};
+
+const HEALTH_CONFIG: Record<string, HealthConfig> = {
   healthy: {
     icon: <CheckCircle2 className="h-4 w-4" />,
     color: 'text-emerald-600 dark:text-emerald-400',
@@ -45,11 +57,7 @@ const HEALTH_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgCo
     color: 'text-red-600 dark:text-red-400',
     bgColor: 'bg-red-50 dark:bg-red-900/20',
   },
-  unknown: {
-    icon: <Minus className="h-4 w-4" />,
-    color: 'text-gray-500 dark:text-gray-400',
-    bgColor: 'bg-gray-50 dark:bg-gray-800/30',
-  },
+  unknown: UNKNOWN_HEALTH_CONFIG,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -65,9 +73,9 @@ function formatUptime(createdAt: string): string {
   const diff = Date.now() - new Date(createdAt).getTime();
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
-  if (days > 0) return `${days}d ${hours}h`;
+  if (days > 0) return `${String(days)}d ${String(hours)}h`;
   const minutes = Math.floor((diff % 3600000) / 60000);
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  return hours > 0 ? `${String(hours)}h ${String(minutes)}m` : `${String(minutes)}m`;
 }
 
 export const InstanceOverview: React.FC = () => {
@@ -90,7 +98,7 @@ export const InstanceOverview: React.FC = () => {
 
   useEffect(() => {
     if (instanceId) {
-      listMembers(instanceId);
+      void listMembers(instanceId);
     }
   }, [instanceId, listMembers]);
 
@@ -111,7 +119,9 @@ export const InstanceOverview: React.FC = () => {
     fetchInstance(instanceId)
       .then(() => messageApi?.success(t('common.refreshed', 'Refreshed')))
       .catch(() => messageApi?.error(t('common.error', 'Error')))
-      .finally(() => { setActionLoading(null); });
+      .finally(() => {
+        setActionLoading(null);
+      });
   }, [fetchInstance, instanceId, messageApi, t]);
 
   const handleScale = useCallback(() => {
@@ -123,7 +133,9 @@ export const InstanceOverview: React.FC = () => {
         setScaleTarget(null);
       })
       .catch(() => messageApi?.error(t('tenant.instances.actions.scaleFailed', 'Scale failed')))
-      .finally(() => { setActionLoading(null); });
+      .finally(() => {
+        setActionLoading(null);
+      });
   }, [instanceId, messageApi, scaleInstance, scaleTarget, t]);
 
   const handleRestart = useCallback(() => {
@@ -131,17 +143,17 @@ export const InstanceOverview: React.FC = () => {
     setActionLoading('restart');
     restartInstance(instanceId)
       .then(() =>
-        messageApi?.success(t('tenant.instances.actions.restartSuccess', 'Restart initiated')),
+        messageApi?.success(t('tenant.instances.actions.restartSuccess', 'Restart initiated'))
       )
-      .catch(() =>
-        messageApi?.error(t('tenant.instances.actions.restartFailed', 'Restart failed')),
-      )
-      .finally(() => { setActionLoading(null); });
+      .catch(() => messageApi?.error(t('tenant.instances.actions.restartFailed', 'Restart failed')))
+      .finally(() => {
+        setActionLoading(null);
+      });
   }, [instanceId, messageApi, restartInstance, t]);
 
   const handleCopyToken = () => {
     if (instance?.proxy_token) {
-      navigator.clipboard.writeText(instance.proxy_token);
+      void navigator.clipboard.writeText(instance.proxy_token);
       messageApi?.success(t('tenant.instances.tokenCopied'));
     }
   };
@@ -180,13 +192,13 @@ export const InstanceOverview: React.FC = () => {
   }
 
   const healthKey = instance.health_status || 'unknown';
-  const healthCfg = HEALTH_CONFIG[healthKey] ?? HEALTH_CONFIG['unknown']!;
+  const healthCfg = HEALTH_CONFIG[healthKey] ?? UNKNOWN_HEALTH_CONFIG;
 
   return (
     <div className="flex flex-col gap-6">
       {/* Health banner + actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <div
             className={`flex items-center gap-2 rounded-full px-4 py-2 ${healthCfg.bgColor} ${healthCfg.color}`}
           >
@@ -203,9 +215,11 @@ export const InstanceOverview: React.FC = () => {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LazyButton
-            icon={<RefreshCw size={14} className={actionLoading === 'refresh' ? 'animate-spin' : ''} />}
+            icon={
+              <RefreshCw size={14} className={actionLoading === 'refresh' ? 'animate-spin' : ''} />
+            }
             onClick={handleRefresh}
             loading={actionLoading === 'refresh'}
             size="small"
@@ -221,7 +235,9 @@ export const InstanceOverview: React.FC = () => {
                   min={0}
                   max={10}
                   value={scaleTarget ?? instance.replicas}
-                  onChange={(v) => { setScaleTarget(v); }}
+                  onChange={(v) => {
+                    setScaleTarget(v);
+                  }}
                   size="small"
                 />
               </div>
@@ -370,7 +386,8 @@ export const InstanceOverview: React.FC = () => {
           dataSource={members}
           rowKey="id"
           pagination={false}
-          className="w-full"
+          scroll={{ x: 'max-content' }}
+          className="max-w-full"
         />
       </Card>
 

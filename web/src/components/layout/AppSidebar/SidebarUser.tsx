@@ -4,6 +4,8 @@
  * User profile section with avatar, name, email, and logout button.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import { useSidebarContext } from './SidebarContext';
 
 import type { NavUser } from '@/config/navigation';
@@ -19,6 +21,7 @@ export interface SidebarUserProps {
  * SidebarUser component - displays user profile section
  */
 export function SidebarUser({ user, onLogout }: SidebarUserProps) {
+  const { t } = useTranslation();
   const { isCollapsed } = useSidebarContext();
 
   return (
@@ -30,7 +33,7 @@ export function SidebarUser({ user, onLogout }: SidebarUserProps) {
       >
         {/* Avatar */}
         <div className="size-8 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
-          {user.name?.[0]?.toUpperCase() || 'U'}
+          {user.name[0]?.toUpperCase() || 'U'}
         </div>
 
         {/* User info */}
@@ -48,9 +51,10 @@ export function SidebarUser({ user, onLogout }: SidebarUserProps) {
         {/* Logout button */}
         {onLogout && !isCollapsed && (
           <button
+            type="button"
             onClick={onLogout}
             className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-            title="Sign out"
+            title={t('common.logout', 'Sign out')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

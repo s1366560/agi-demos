@@ -14,25 +14,19 @@ import type { Artifact } from '../../../types/agent';
 // Mock the viewer components
 vi.mock('../../../components/artifact/ImageViewer', () => ({
   ImageViewer: ({ src, onLoad }: { src: string; onLoad: () => void }) => (
-    <div data-testid="image-viewer" data-src={src} onLoad={onLoad}>
-      <img src={src} alt="Test Image" />
-    </div>
+    <div data-testid="image-viewer" data-src={src} onLoad={onLoad} />
   ),
 }));
 
 vi.mock('../../../components/artifact/VideoPlayer', () => ({
   VideoPlayer: ({ src, onLoad }: { src: string; onLoad: () => void }) => (
-    <div data-testid="video-player" data-src={src} onLoad={onLoad}>
-      <video src={src} />
-    </div>
+    <div data-testid="video-player" data-src={src} onLoad={onLoad} />
   ),
 }));
 
 vi.mock('../../../components/artifact/AudioPlayer', () => ({
   AudioPlayer: ({ src, onLoad }: { src: string; onLoad: () => void }) => (
-    <div data-testid="audio-player" data-src={src} onLoad={onLoad}>
-      <audio src={src} />
-    </div>
+    <div data-testid="audio-player" data-src={src} onLoad={onLoad} />
   ),
 }));
 
@@ -84,6 +78,7 @@ const mockDocumentArtifact: Artifact = {
   ...createMockArtifact('document'),
   filename: 'test.pdf',
   mimeType: 'application/pdf',
+  url: 'about:blank',
 };
 const mockArchiveArtifact: Artifact = {
   ...createMockArtifact('archive'),

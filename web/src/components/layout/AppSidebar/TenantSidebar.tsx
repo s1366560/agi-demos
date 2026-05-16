@@ -68,7 +68,7 @@ export function TenantSidebar({
     externalLogout ??
     (() => {
       authLogout();
-      navigate('/login');
+      void navigate('/login');
     });
 
   const navUser: NavUser = externalUser ?? {

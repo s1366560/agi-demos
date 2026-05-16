@@ -32,16 +32,22 @@ import { useTimelineStore, initialState } from '../../../stores/agent/timelineSt
 const createMockResponse = (
   timeline: any[],
   total: number,
-  overrides?: { has_more?: boolean; first_time_us?: number | null; first_counter?: number | null; last_time_us?: number | null; last_counter?: number | null }
+  overrides?: {
+    has_more?: boolean;
+    first_time_us?: number | null;
+    first_counter?: number | null;
+    last_time_us?: number | null;
+    last_counter?: number | null;
+  }
 ) => ({
   conversationId: 'mock-conv-id',
   timeline,
   total,
   has_more: overrides?.has_more ?? false,
-  first_time_us: overrides?.first_time_us ?? (timeline[0]?.time_us ?? null),
-  first_counter: overrides?.first_counter ?? (timeline[0]?.counter ?? null),
-  last_time_us: overrides?.last_time_us ?? (timeline[timeline.length - 1]?.time_us ?? null),
-  last_counter: overrides?.last_counter ?? (timeline[timeline.length - 1]?.counter ?? null),
+  first_time_us: overrides?.first_time_us ?? timeline[0]?.time_us ?? null,
+  first_counter: overrides?.first_counter ?? timeline[0]?.counter ?? null,
+  last_time_us: overrides?.last_time_us ?? timeline[timeline.length - 1]?.time_us ?? null,
+  last_counter: overrides?.last_counter ?? timeline[timeline.length - 1]?.counter ?? null,
 });
 
 // Mock agent service
@@ -87,7 +93,8 @@ describe('TimelineStore', () => {
     });
 
     it('should have null pagination pointers initially', () => {
-      const { earliestTimeUs, earliestCounter, latestTimeUs, latestCounter } = useTimelineStore.getState();
+      const { earliestTimeUs, earliestCounter, latestTimeUs, latestCounter } =
+        useTimelineStore.getState();
       expect(earliestTimeUs).toBe(null);
       expect(earliestCounter).toBe(null);
       expect(latestTimeUs).toBe(null);
@@ -192,8 +199,7 @@ describe('TimelineStore', () => {
 
       await useTimelineStore.getState().getTimeline('conv-1', 'proj-1');
 
-      const { timeline, earliestTimeUs, latestTimeUs } =
-        useTimelineStore.getState();
+      const { timeline, earliestTimeUs, latestTimeUs } = useTimelineStore.getState();
 
       expect(timeline).toEqual([]);
       expect(earliestTimeUs).toBe(null);
@@ -229,14 +235,18 @@ describe('TimelineStore', () => {
     it('should replace existing timeline on new fetch', async () => {
       // Set existing timeline
       useTimelineStore.setState({
-        timeline: [{ id: 'old', type: 'user_message', sequenceNumber: 1, time_us: 1000, counter: 1 }] as any,
+        timeline: [
+          { id: 'old', type: 'user_message', sequenceNumber: 1, time_us: 1000, counter: 1 },
+        ] as any,
         earliestTimeUs: 1000,
         earliestCounter: 1,
         latestTimeUs: 1000,
         latestCounter: 1,
       });
 
-      const newTimeline = [{ id: 'new', type: 'assistant_message', sequenceNumber: 2, time_us: 2000, counter: 2 }];
+      const newTimeline = [
+        { id: 'new', type: 'assistant_message', sequenceNumber: 2, time_us: 2000, counter: 2 },
+      ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(
         createMockResponse(newTimeline as any, 1)
@@ -244,8 +254,7 @@ describe('TimelineStore', () => {
 
       await useTimelineStore.getState().getTimeline('conv-2', 'proj-1');
 
-      const { timeline, earliestTimeUs, latestTimeUs } =
-        useTimelineStore.getState();
+      const { timeline, earliestTimeUs, latestTimeUs } = useTimelineStore.getState();
 
       expect(timeline).toEqual(newTimeline);
       expect(earliestTimeUs).toBe(2000);
@@ -460,11 +469,11 @@ describe('TimelineStore', () => {
       expect(getConversationMessages).toHaveBeenCalledWith(
         'conv-1',
         'proj-1',
-        50,        // limit
+        50, // limit
         undefined, // fromTimeUs
         undefined, // fromCounter
-        10000,     // beforeTimeUs
-        10         // beforeCounter
+        10000, // beforeTimeUs
+        10 // beforeCounter
       );
     });
   });
@@ -612,13 +621,8 @@ describe('TimelineStore', () => {
 
       useTimelineStore.getState().reset();
 
-      const {
-        timeline,
-        timelineLoading,
-        timelineError,
-        earliestTimeUs,
-        latestTimeUs,
-      } = useTimelineStore.getState();
+      const { timeline, timelineLoading, timelineError, earliestTimeUs, latestTimeUs } =
+        useTimelineStore.getState();
 
       expect(timeline).toEqual([]);
       expect(timelineLoading).toBe(false);

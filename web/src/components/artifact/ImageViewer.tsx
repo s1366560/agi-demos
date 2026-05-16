@@ -4,6 +4,8 @@
 
 import React, { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Image, Spin } from 'antd';
 
 export interface ImageViewerProps {
@@ -25,14 +27,16 @@ export interface ImageViewerProps {
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({
   src,
-  alt = 'Artifact image',
+  alt,
   previewSrc,
   maxHeight = 400,
   compact: _compact = false,
   onLoad,
   onError,
 }) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
+  const imageAlt = alt ?? t('components.imageViewer.alt', { defaultValue: 'Artifact image' });
 
   const handleLoad = () => {
     setLoading(false);
@@ -59,13 +63,17 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       )}
       <Image
         src={src}
-        alt={alt}
+        alt={imageAlt}
         preview={{
           src: src, // Full resolution for preview
         }}
         placeholder={
           previewSrc ? (
-            <Image src={previewSrc} preview={false} alt="Loading..." />
+            <Image
+              src={previewSrc}
+              preview={false}
+              alt={t('components.imageViewer.loadingAlt', { defaultValue: 'Loading image' })}
+            />
           ) : (
             <div className="flex items-center justify-center h-32 bg-gray-100">
               <Spin />

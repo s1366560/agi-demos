@@ -5,9 +5,11 @@
  * the API proxy, with auto-resize and clipboard support.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import { Monitor } from 'lucide-react';
 
-import { getAuthToken } from '../../../utils/tokenResolver';
+import { buildDesktopWebSocketUrl } from '../../../services/sandboxWebSocketUtils';
 
 import { KasmVNCViewer } from './KasmVNCViewer';
 
@@ -42,6 +44,7 @@ export function RemoteDesktopViewer({
   onResolutionChange,
   showToolbar = true,
 }: RemoteDesktopViewerProps) {
+  const { t } = useTranslation();
   const isRunning = desktopStatus?.running ?? false;
 
   if (!isRunning || !projectId) {
@@ -49,20 +52,21 @@ export function RemoteDesktopViewer({
       <div className="flex-1 flex items-center justify-center bg-gray-900">
         <div className="text-center text-gray-500">
           <Monitor size={36} className="mb-2 mx-auto" />
-          <p>Desktop is not running</p>
-          <p className="text-sm">Start the desktop to connect</p>
+          <p>
+            {t('components.remoteDesktop.notRunning', { defaultValue: 'Desktop is not running' })}
+          </p>
+          <p className="text-sm">
+            {t('components.remoteDesktop.startHint', {
+              defaultValue: 'Start the desktop to connect',
+            })}
+          </p>
         </div>
       </div>
     );
   }
 
-  // Build WebSocket URL for direct RFB connection through the API proxy
-  const token = getAuthToken();
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl =
-    `${wsProtocol}//${window.location.host}` +
-    `/api/v1/projects/${projectId}/sandbox/desktop/proxy/websockify` +
-    (token ? `?token=${encodeURIComponent(token)}` : '');
+  // Build WebSocket URL for direct RFB connection through the API proxy.
+  const wsUrl = buildDesktopWebSocketUrl(projectId);
 
   return (
     <KasmVNCViewer

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { message } from 'antd';
 
 import type { GroupedItem } from './groupTimelineEvents';
@@ -17,6 +19,7 @@ export interface UseMessageAreaKeyboardReturn {
 export function useMessageAreaKeyboard(
   params: UseMessageAreaKeyboardParams
 ): UseMessageAreaKeyboardReturn {
+  const { t } = useTranslation();
   const { containerRef, groupedItems } = params;
 
   const focusedMsgRef = useRef<number>(-1);
@@ -76,7 +79,7 @@ export function useMessageAreaKeyboard(
           const ev = item.event;
           if (ev.type === 'user_message' || ev.type === 'assistant_message') {
             navigator.clipboard.writeText(ev.content).catch(() => {
-              void message.warning('Failed to copy to clipboard');
+              void message.warning(t('components.messageArea.copyFailed'));
             });
           }
         }
@@ -92,7 +95,7 @@ export function useMessageAreaKeyboard(
     return () => {
       window.removeEventListener('keydown', handleNav);
     };
-  }, [navigableIndices, groupedItems, containerRef]);
+  }, [navigableIndices, groupedItems, containerRef, t]);
 
   return { focusedMsgIndex };
 }

@@ -7,6 +7,8 @@
 
 import { memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Clock, X } from 'lucide-react';
 
 import {
@@ -15,9 +17,16 @@ import {
   type PendingPrompt,
 } from '@/stores/pendingPromptStore';
 
+import type { TFunction } from 'i18next';
+
 interface QueuedPromptStripProps {
   conversationId: string | undefined;
   isStreaming: boolean;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 const Pill = memo<{
@@ -26,8 +35,8 @@ const Pill = memo<{
   isStreaming: boolean;
   onRemove: () => void;
 }>(({ prompt, isHead, isStreaming, onRemove }) => {
-  const preview =
-    prompt.text.length > 60 ? `${prompt.text.slice(0, 60).trim()}…` : prompt.text;
+  const { t } = useTranslation();
+  const preview = prompt.text.length > 60 ? `${prompt.text.slice(0, 60).trim()}…` : prompt.text;
   return (
     <div
       className={`group inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] ${
@@ -53,7 +62,7 @@ const Pill = memo<{
         type="button"
         onClick={onRemove}
         className="shrink-0 rounded-full p-0.5 text-current opacity-60 transition-opacity hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
-        aria-label="Remove queued prompt"
+        aria-label={tFallback(t, 'agent.queuedPrompt.remove', 'Remove queued prompt')}
       >
         <X size={10} />
       </button>
@@ -62,36 +71,38 @@ const Pill = memo<{
 });
 Pill.displayName = 'QueuedPromptPill';
 
-export const QueuedPromptStrip = memo<QueuedPromptStripProps>(
-  ({ conversationId, isStreaming }) => {
-    const queue = usePendingPrompts(conversationId);
-    const remove = usePendingPromptStore((state) => state.remove);
+export const QueuedPromptStrip = memo<QueuedPromptStripProps>(({ conversationId, isStreaming }) => {
+  const { t } = useTranslation();
+  const queue = usePendingPrompts(conversationId);
+  const remove = usePendingPromptStore((state) => state.remove);
 
-    if (!conversationId || queue.length === 0) return null;
+  if (!conversationId || queue.length === 0) return null;
 
-    return (
-      <div
-        className="flex flex-wrap items-center gap-1 px-3 pb-1 pt-2"
-        data-testid="queued-prompt-strip"
-      >
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-          Queued · {String(queue.length)}
-        </span>
-        {queue.map((prompt, idx) => (
-          <Pill
-            key={prompt.id}
-            prompt={prompt}
-            isHead={idx === 0}
-            isStreaming={isStreaming}
-            onRemove={() => {
-              remove(conversationId, prompt.id);
-            }}
-          />
-        ))}
-      </div>
-    );
-  }
-);
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 px-3 pb-1 pt-2"
+      data-testid="queued-prompt-strip"
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+        {t('agent.queuedPrompt.count', {
+          defaultValue: 'Queued · {{count}}',
+          count: queue.length,
+        })}
+      </span>
+      {queue.map((prompt, idx) => (
+        <Pill
+          key={prompt.id}
+          prompt={prompt}
+          isHead={idx === 0}
+          isStreaming={isStreaming}
+          onRemove={() => {
+            remove(conversationId, prompt.id);
+          }}
+        />
+      ))}
+    </div>
+  );
+});
 QueuedPromptStrip.displayName = 'QueuedPromptStrip';
 
 export default QueuedPromptStrip;

@@ -35,6 +35,10 @@ vi.mock('@/services/workspaceService', () => ({
   },
 }));
 
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn(() => Promise.resolve(true)),
+}));
+
 describe('StatusTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -10,10 +10,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { Modal } from 'antd';
-import { AlertCircle, Plus, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, RefreshCw, Search } from 'lucide-react';
 
 import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
 
@@ -70,6 +71,7 @@ function toUIPattern(apiPattern: APIWorkflowPattern): UIWorkflowPattern {
 
 export function WorkflowPatterns() {
   const { tenantId } = useParams<{ tenantId: string }>();
+  const { t } = useTranslation();
   const message = useLazyMessage();
 
   // Data state
@@ -98,17 +100,17 @@ export function WorkflowPatterns() {
       setPatterns(uiPatterns);
     } catch (err) {
       const errorMessage =
-        err instanceof PatternServiceError ? err.message : 'Failed to load patterns';
+        err instanceof PatternServiceError ? err.message : t('tenant.workflowPatterns.loadError');
       setError(errorMessage);
       message?.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [tenantId, message]);
+  }, [tenantId, message, t]);
 
   // Load patterns on mount
   useEffect(() => {
-    fetchPatterns();
+    void fetchPatterns();
   }, [fetchPatterns]);
 
   // Calculate stats from patterns
@@ -144,24 +146,20 @@ export function WorkflowPatterns() {
     setAdminNotes('');
   };
 
-  const handleSavePattern = (_updatedPattern: Record<string, unknown>) => {
-    message?.info('Pattern update is not yet implemented');
-  };
-
-  const handleDeprecatePattern = async (patternId: string) => {
+  const handleDeprecatePattern = (patternId: string) => {
     if (!tenantId) return;
 
     Modal.confirm({
-      title: 'Delete Pattern',
-      content: 'Are you sure you want to delete this pattern? This action cannot be undone.',
-      okText: 'Delete',
+      title: t('tenant.workflowPatterns.deleteTitle'),
+      content: t('tenant.workflowPatterns.deleteConfirm'),
+      okText: t('common.delete'),
       okType: 'danger',
-      cancelText: 'Cancel',
+      cancelText: t('common.cancel'),
       onOk: async () => {
         setDeleting(true);
         try {
           await patternService.deletePattern(patternId, tenantId);
-          message?.success('Pattern deleted successfully');
+          message?.success(t('tenant.workflowPatterns.deleteSuccess'));
 
           // Remove from local state
           setPatterns((prev) => prev.filter((p) => p.id !== patternId));
@@ -172,19 +170,15 @@ export function WorkflowPatterns() {
           }
         } catch (err) {
           const errorMessage =
-            err instanceof PatternServiceError ? err.message : 'Failed to delete pattern';
+            err instanceof PatternServiceError
+              ? err.message
+              : t('tenant.workflowPatterns.deleteError');
           message?.error(errorMessage);
         } finally {
           setDeleting(false);
         }
       },
     });
-  };
-
-  const handleNewPattern = () => {
-    message?.info(
-      'Pattern creation is not yet implemented. Patterns are learned automatically from successful agent executions.'
-    );
   };
 
   // Error state
@@ -196,14 +190,16 @@ export function WorkflowPatterns() {
             <AlertCircle size={32} className="text-red-500" />
           </div>
           <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-            Failed to Load Patterns
+            {t('tenant.workflowPatterns.loadErrorTitle')}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mb-4">{error}</p>
           <button
-            onClick={fetchPatterns}
+            onClick={() => {
+              void fetchPatterns();
+            }}
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
           >
-            Try Again
+            {t('common.retry')}
           </button>
         </div>
       </div>
@@ -216,27 +212,22 @@ export function WorkflowPatterns() {
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
           <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-            Workflow Patterns
+            {t('tenant.workflowPatterns.title')}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Audit, optimize, and manage the AI agent's learned execution behaviors and strategies.
+            {t('tenant.workflowPatterns.description')}
           </p>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={fetchPatterns}
+            onClick={() => {
+              void fetchPatterns();
+            }}
             disabled={loading}
             className="px-4 py-2.5 rounded-lg text-sm font-medium border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={16} className="align-middle mr-1" />
-            Refresh
-          </button>
-          <button
-            onClick={handleNewPattern}
-            className="bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-primary/20 transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-          >
-            <Plus size={20} />
-            Define New Pattern
+            {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -270,7 +261,7 @@ export function WorkflowPatterns() {
             onChange={(e) => {
               setSearchQuery(e.target.value);
             }}
-            placeholder="Search patterns..."
+            placeholder={t('tenant.workflowPatterns.searchPlaceholder')}
             className="w-full pl-10 pr-4 py-2 rounded-lg border-0 focus:outline-none focus:ring-0 text-sm bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400"
           />
         </div>
@@ -281,16 +272,17 @@ export function WorkflowPatterns() {
           onChange={(e) => {
             setSortBy(e.target.value as 'name' | 'usage' | 'success');
           }}
+          aria-label={t('tenant.workflowPatterns.sortLabel')}
           className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark text-slate-700 dark:text-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
         >
-          <option value="usage">Sort by Usage</option>
-          <option value="success">Sort by Success Rate</option>
-          <option value="name">Sort by Name</option>
+          <option value="usage">{t('tenant.workflowPatterns.sortByUsage')}</option>
+          <option value="success">{t('tenant.workflowPatterns.sortBySuccessRate')}</option>
+          <option value="name">{t('tenant.workflowPatterns.sortByName')}</option>
         </select>
       </div>
 
       {/* Split View: List + Inspector */}
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 xl:flex-row">
         {/* Pattern List */}
         <div className="flex-1 min-w-0">
           {loading ? (
@@ -303,20 +295,23 @@ export function WorkflowPatterns() {
               selectedId={selectedPattern?.id}
               onSelect={handleSelectPattern}
               onDeprecate={handleDeprecatePattern}
-              showAllColumns
+              viewMode="detailed"
             />
           )}
         </div>
 
         {/* Pattern Inspector */}
-        <div className="w-120 shrink-0">
+        <div className="w-full xl:w-120 xl:shrink-0">
           <PatternInspector
             pattern={selectedPattern}
             onClose={() => {
               setSelectedPattern(null);
             }}
-            onSave={handleSavePattern}
-            onDeprecate={() => selectedPattern && handleDeprecatePattern(selectedPattern.id)}
+            onDeprecate={() => {
+              if (selectedPattern) {
+                handleDeprecatePattern(selectedPattern.id);
+              }
+            }}
             adminNotes={adminNotes}
             onAdminNotesChange={setAdminNotes}
           />

@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { FC, MouseEvent as ReactMouseEvent } from 'react';
+import type { FC, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { useHexDragDrop } from '@/hooks/useHexDragDrop';
 import { useHexSelection } from '@/hooks/useHexSelection';
@@ -14,9 +16,18 @@ import { HexObjective } from './HexObjective';
 import { HexTooltip } from './HexTooltip';
 import { useHexLayout } from './useHexLayout';
 
-import type { WorkspaceAgent, TopologyNode, TopologyEdge, CyberObjective, WorkspaceTask } from '@/types/workspace';
+import type {
+  WorkspaceAgent,
+  TopologyNode,
+  TopologyEdge,
+  CyberObjective,
+  WorkspaceTask,
+} from '@/types/workspace';
 
 import type { MiniMapCell } from './HexMiniMap';
+
+const hexCoordKey = (q: number, r: number): string => `${q.toString()},${r.toString()}`;
+const svgPoint = (x: number, y: number): string => `${x.toString()},${y.toString()}`;
 
 export interface HexGridProps {
   agents: WorkspaceAgent[];
@@ -43,7 +54,11 @@ export const HexGrid: FC<HexGridProps> = ({
   gridRadius = 5,
   hexSize = 40.0,
 }) => {
-  const { gridCells, hexToPixel, pixelToHex, getHexCorners } = useHexLayout({ size: hexSize, gridRadius });
+  const { t } = useTranslation();
+  const { gridCells, hexToPixel, pixelToHex, getHexCorners } = useHexLayout({
+    size: hexSize,
+    gridRadius,
+  });
   const svgRef = useRef<SVGSVGElement>(null);
 
   const [zoom, setZoom] = useState<number>(1);
@@ -54,7 +69,15 @@ export const HexGrid: FC<HexGridProps> = ({
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
 
   const { isSelected, toggleSelect, selectSingle, clearSelection, selectAll } = useHexSelection();
-  const { isDragging: isAgentDragging, draggedAgentId, dragTarget, startDrag, updateDragTarget, endDrag, cancelDrag } = useHexDragDrop();
+  const {
+    isDragging: isAgentDragging,
+    draggedAgentId,
+    dragTarget,
+    startDrag,
+    updateDragTarget,
+    endDrag,
+    cancelDrag,
+  } = useHexDragDrop();
 
   const [hoverInfo, setHoverInfo] = useState<{
     visible: boolean;
@@ -67,21 +90,24 @@ export const HexGrid: FC<HexGridProps> = ({
   const occupantMap = useMemo(() => {
     const map = new Map<
       string,
-      { type: 'agent' | 'human_seat' | 'corridor' | 'objective'; data: WorkspaceAgent | TopologyNode | CyberObjective }
+      {
+        type: 'agent' | 'human_seat' | 'corridor' | 'objective';
+        data: WorkspaceAgent | TopologyNode | CyberObjective;
+      }
     >();
     agents.forEach((a) => {
       if (a.hex_q !== undefined && a.hex_r !== undefined) {
-        map.set(`${a.hex_q},${a.hex_r}`, { type: 'agent', data: a });
+        map.set(hexCoordKey(a.hex_q, a.hex_r), { type: 'agent', data: a });
       }
     });
     nodes.forEach((n) => {
       if (n.node_type === 'objective') {
-        const obj = (objectives || []).find((o) => o.id === n.ref_id);
+        const obj = objectives.find((o) => o.id === n.ref_id);
         if (obj && n.hex_q !== undefined && n.hex_r !== undefined) {
-          map.set(`${n.hex_q},${n.hex_r}`, { type: 'objective', data: obj });
+          map.set(hexCoordKey(n.hex_q, n.hex_r), { type: 'objective', data: obj });
         }
       } else if (n.hex_q !== undefined && n.hex_r !== undefined) {
-        map.set(`${n.hex_q},${n.hex_r}`, {
+        map.set(hexCoordKey(n.hex_q, n.hex_r), {
           type: n.node_type === 'human_seat' ? 'human_seat' : 'corridor',
           data: n,
         });
@@ -101,9 +127,11 @@ export const HexGrid: FC<HexGridProps> = ({
   useEffect(() => {
     const svgElement = svgRef.current;
     if (!svgElement) return;
-    
+
     svgElement.addEventListener('wheel', handleWheel, { passive: false });
-    return () => { svgElement.removeEventListener('wheel', handleWheel); };
+    return () => {
+      svgElement.removeEventListener('wheel', handleWheel);
+    };
   }, [handleWheel]);
 
   useEffect(() => {
@@ -121,23 +149,27 @@ export const HexGrid: FC<HexGridProps> = ({
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => { window.removeEventListener('keydown', handleKeyDown); };
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [clearSelection, cancelDrag, selectAll, occupantMap]);
 
   useEffect(() => {
     const svgElement = svgRef.current;
     if (!svgElement) return;
-    
+
     const observer = new ResizeObserver((entries) => {
       if (entries[0]) {
         setContainerSize({
           width: entries[0].contentRect.width,
-          height: entries[0].contentRect.height
+          height: entries[0].contentRect.height,
         });
       }
     });
     observer.observe(svgElement);
-    return () => { observer.disconnect(); };
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   const handleMouseDown = (e: ReactMouseEvent<SVGSVGElement>) => {
@@ -172,22 +204,52 @@ export const HexGrid: FC<HexGridProps> = ({
     if (isAgentDragging) cancelDrag();
   };
 
-  const handleHexClick = useCallback((e: ReactMouseEvent, q: number, r: number) => {
-    if (e.shiftKey) {
-      toggleSelect(q, r);
-    } else {
-      selectSingle(q, r);
-      if (onSelectHex) onSelectHex(q, r);
-    }
-  }, [toggleSelect, selectSingle, onSelectHex]);
+  const handleHexClick = useCallback(
+    (e: ReactMouseEvent, q: number, r: number) => {
+      if (e.shiftKey) {
+        toggleSelect(q, r);
+      } else {
+        selectSingle(q, r);
+        if (onSelectHex) onSelectHex(q, r);
+      }
+    },
+    [toggleSelect, selectSingle, onSelectHex]
+  );
 
-  const handleContextMenu = useCallback((q: number, r: number, e: ReactMouseEvent<SVGGElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (onContextMenu) onContextMenu(q, r, e);
-  }, [onContextMenu]);
+  const handleHexKeyDown = useCallback(
+    (e: ReactKeyboardEvent, q: number, r: number) => {
+      if (e.key !== 'Enter' && e.key !== ' ') {
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) {
+        toggleSelect(q, r);
+      } else {
+        selectSingle(q, r);
+        onSelectHex?.(q, r);
+      }
+    },
+    [toggleSelect, selectSingle, onSelectHex]
+  );
 
-  const handleAgentMouseDown = (e: ReactMouseEvent, occupant: { type: "agent" | "human_seat" | "corridor" | "objective"; data: WorkspaceAgent | TopologyNode | CyberObjective }, q: number, r: number) => {
+  const handleContextMenu = useCallback(
+    (q: number, r: number, e: ReactMouseEvent<SVGGElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (onContextMenu) onContextMenu(q, r, e);
+    },
+    [onContextMenu]
+  );
+
+  const handleAgentMouseDown = (
+    e: ReactMouseEvent,
+    occupant: {
+      type: 'agent' | 'human_seat' | 'corridor' | 'objective';
+      data: WorkspaceAgent | TopologyNode | CyberObjective;
+    },
+    q: number,
+    r: number
+  ) => {
     if (e.button !== 0) return;
     if (occupant.type === 'agent') {
       e.stopPropagation();
@@ -196,40 +258,58 @@ export const HexGrid: FC<HexGridProps> = ({
   };
 
   const miniMapCells: MiniMapCell[] = useMemo(() => {
-    return gridCells.map(cell => {
-      const occupant = occupantMap.get(`${cell.q},${cell.r}`);
+    return gridCells.map((cell) => {
+      const occupant = occupantMap.get(hexCoordKey(cell.q, cell.r));
       return {
         q: cell.q,
         r: cell.r,
-        type: occupant?.type ?? 'empty'
+        type: occupant?.type ?? 'empty',
       };
     });
   }, [gridCells, occupantMap]);
 
-  const handleMiniMapNavigate = useCallback((x: number, y: number) => {
-    if (svgRef.current) {
-      const rect = svgRef.current.getBoundingClientRect();
-      setPan({
-        x: -x * zoom + rect.width / 2,
-        y: -y * zoom + rect.height / 2,
-      });
-    }
-  }, [zoom]);
+  const handleMiniMapNavigate = useCallback(
+    (x: number, y: number) => {
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        setPan({
+          x: -x * zoom + rect.width / 2,
+          y: -y * zoom + rect.height / 2,
+        });
+      }
+    },
+    [zoom]
+  );
 
-  const draggedAgent = useMemo(() => agents.find(a => a.agent_id === draggedAgentId), [agents, draggedAgentId]);
+  const draggedAgent = useMemo(
+    () => agents.find((a) => a.agent_id === draggedAgentId),
+    [agents, draggedAgentId]
+  );
 
   const cellElements = useMemo(() => {
     return gridCells.map(({ q, r }) => {
       const { x, y } = hexToPixel(q, r);
-      const occupant = occupantMap.get(`${q},${r}`);
+      const occupant = occupantMap.get(hexCoordKey(q, r));
       const selected = isSelected(q, r);
-      const isDragTarget = isAgentDragging && dragTarget?.q === q && dragTarget?.r === r;
-      const corners = getHexCorners(x, y).map(p => `${p.x},${p.y}`).join(' ');
+      const isDragTarget =
+        isAgentDragging && dragTarget !== null && dragTarget.q === q && dragTarget.r === r;
+      const corners = getHexCorners(x, y)
+        .map((point) => svgPoint(point.x, point.y))
+        .join(' ');
 
       return (
-        <g 
-          key={`cell-wrap-${q}-${r}`}
-          onClickCapture={(e) => { handleHexClick(e, q, r); }}
+        <g
+          key={`cell-wrap-${q.toString()}-${r.toString()}`}
+          role="button"
+          tabIndex={0}
+          aria-label={`Select hex cell q:${q.toString()}, r:${r.toString()}`}
+          onClick={(e) => {
+            handleHexClick(e, q, r);
+          }}
+          onKeyDown={(e) => {
+            handleHexKeyDown(e, q, r);
+          }}
+          className="cursor-pointer focus-visible:outline-none"
         >
           <HexCell
             q={q}
@@ -240,8 +320,9 @@ export const HexGrid: FC<HexGridProps> = ({
             selected={selected}
             occupied={!!occupant}
             cellType={occupant?.type ?? 'empty'}
-            onClick={() => {}}
-            onContextMenu={(e) => { handleContextMenu(q, r, e); }}
+            onContextMenu={(e) => {
+              handleContextMenu(q, r, e);
+            }}
           />
           {selected && (
             <polygon
@@ -265,7 +346,19 @@ export const HexGrid: FC<HexGridProps> = ({
         </g>
       );
     });
-  }, [gridCells, hexToPixel, getHexCorners, occupantMap, hexSize, isSelected, isAgentDragging, dragTarget, handleHexClick, handleContextMenu]);
+  }, [
+    gridCells,
+    hexToPixel,
+    getHexCorners,
+    occupantMap,
+    hexSize,
+    isSelected,
+    isAgentDragging,
+    dragTarget,
+    handleHexClick,
+    handleHexKeyDown,
+    handleContextMenu,
+  ]);
 
   const edgeElements = useMemo(() => {
     return edges.map((edge) => {
@@ -299,7 +392,7 @@ export const HexGrid: FC<HexGridProps> = ({
         ref={svgRef}
         className="w-full h-full"
         role="img"
-        aria-label="Hex grid workspace visualization"
+        aria-label={t('workspaceDetail.hex.gridAria', 'Hex grid workspace visualization')}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -317,20 +410,22 @@ export const HexGrid: FC<HexGridProps> = ({
             `}
           </style>
         </defs>
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+        <g
+          transform={`translate(${pan.x.toString()}, ${pan.y.toString()}) scale(${zoom.toString()})`}
+        >
           {cellElements}
 
           {edgeElements}
 
           {gridCells.map(({ q, r }) => {
             const { x, y } = hexToPixel(q, r);
-            const occupant = occupantMap.get(`${q},${r}`);
+            const occupant = occupantMap.get(hexCoordKey(q, r));
             if (!occupant) return null;
 
             return (
               // biome-ignore lint/a11y/noStaticElementInteractions: SVG <g> requires mouse handlers for hex interactivity
               <g
-                key={`occupant-${q}-${r}`}
+                key={`occupant-${q.toString()}-${r.toString()}`}
                 onMouseEnter={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const details: Record<string, string> = {};
@@ -345,7 +440,7 @@ export const HexGrid: FC<HexGridProps> = ({
                     const obj = occupant.data as CyberObjective;
                     title = obj.title || 'Objective';
                     details['Type'] = obj.obj_type;
-                    details['Progress'] = `${obj.progress || 0}%`;
+                    details['Progress'] = `${(obj.progress || 0).toString()}%`;
                   } else {
                     const node = occupant.data as TopologyNode;
                     title = node.title || node.node_type;
@@ -361,12 +456,21 @@ export const HexGrid: FC<HexGridProps> = ({
                     details,
                   });
                 }}
-                onMouseLeave={() => { setHoverInfo(null); }}
-                onMouseDown={(e) => { handleAgentMouseDown(e, occupant, q, r); }}
-                style={{ 
-                  pointerEvents: 'all', 
+                onMouseLeave={() => {
+                  setHoverInfo(null);
+                }}
+                onMouseDown={(e) => {
+                  handleAgentMouseDown(e, occupant, q, r);
+                }}
+                style={{
+                  pointerEvents: 'all',
                   cursor: occupant.type === 'agent' ? 'grab' : 'default',
-                  opacity: isAgentDragging && occupant.type === 'agent' && draggedAgentId === (occupant.data as WorkspaceAgent).agent_id ? 0.3 : 1
+                  opacity:
+                    isAgentDragging &&
+                    occupant.type === 'agent' &&
+                    draggedAgentId === (occupant.data as WorkspaceAgent).agent_id
+                      ? 0.3
+                      : 1,
                 }}
               >
                 {occupant.type === 'agent' && (
@@ -396,14 +500,14 @@ export const HexGrid: FC<HexGridProps> = ({
               </g>
             );
           })}
-          
+
           {isAgentDragging && draggedAgent && dragTarget && (
             <g style={{ opacity: 0.5, pointerEvents: 'none' }}>
-              <HexAgent 
-                agent={draggedAgent} 
-                cx={hexToPixel(dragTarget.q, dragTarget.r).x} 
-                cy={hexToPixel(dragTarget.q, dragTarget.r).y} 
-                size={hexSize} 
+              <HexAgent
+                agent={draggedAgent}
+                cx={hexToPixel(dragTarget.q, dragTarget.r).x}
+                cy={hexToPixel(dragTarget.q, dragTarget.r).y}
+                size={hexSize}
               />
             </g>
           )}
@@ -429,7 +533,9 @@ export const HexGrid: FC<HexGridProps> = ({
           visible={hoverInfo.visible}
           title={hoverInfo.title}
           {...(hoverInfo.details ? { details: hoverInfo.details } : {})}
-          onClose={() => { setHoverInfo(null); }}
+          onClose={() => {
+            setHoverInfo(null);
+          }}
         />
       )}
     </div>

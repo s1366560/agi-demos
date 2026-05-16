@@ -41,7 +41,6 @@ import type {
   UpdateTenantAgentConfigRequest,
 } from '@/types/agent';
 
-
 const { TextArea } = Input;
 const { Text } = Typography;
 
@@ -308,11 +307,7 @@ export function TenantAgentConfigEditor({
         errors.push(t('tenant.agentConfigEditor.runtimeHooks.custom.validation.sourceRef'));
       }
 
-      if (
-        hook.executor_kind &&
-        hook.executor_kind !== 'builtin' &&
-        !hook.entrypoint?.trim()
-      ) {
+      if (hook.executor_kind && hook.executor_kind !== 'builtin' && !hook.entrypoint?.trim()) {
         errors.push(t('tenant.agentConfigEditor.runtimeHooks.custom.validation.entrypoint'));
       }
 
@@ -361,8 +356,12 @@ export function TenantAgentConfigEditor({
         runtime_hooks: [
           ...serializeCustomRuntimeHooks(
             unmanagedRuntimeHooks.map(
-              ({ ui_key: _uiKey, settings_draft: _settingsDraft, settings_error: _settingsError, ...hook }) =>
-                hook
+              ({
+                ui_key: _uiKey,
+                settings_draft: _settingsDraft,
+                settings_error: _settingsError,
+                ...hook
+              }) => hook
             )
           ),
           ...serializeRuntimeHooks(runtimeHooks, hookCatalog),
@@ -461,13 +460,13 @@ export function TenantAgentConfigEditor({
               ? t('tenant.agentConfigEditor.runtimeStatus.memoryDisabled')
               : runtimeInfo.memory_runtime.tool_provider_mode === 'disabled'
                 ? t('tenant.agentConfigEditor.runtimeStatus.memoryToolsDisabled')
-              : !runtimeInfo.memory_runtime.failure_persistence_enabled
-                ? t('tenant.agentConfigEditor.runtimeStatus.failurePersistenceDisabled')
-                : t('tenant.agentConfigEditor.runtimeStatus.normal', {
-                    agentMode: runtimeInfo.agent_runtime.mode,
-                    memoryMode: runtimeInfo.memory_runtime.mode,
-                    toolMode: runtimeInfo.memory_runtime.tool_provider_mode,
-                  })
+                : !runtimeInfo.memory_runtime.failure_persistence_enabled
+                  ? t('tenant.agentConfigEditor.runtimeStatus.failurePersistenceDisabled')
+                  : t('tenant.agentConfigEditor.runtimeStatus.normal', {
+                      agentMode: runtimeInfo.agent_runtime.mode,
+                      memoryMode: runtimeInfo.memory_runtime.mode,
+                      toolMode: runtimeInfo.memory_runtime.tool_provider_mode,
+                    })
           }
           showIcon
           style={{ marginBottom: 16 }}
@@ -729,7 +728,10 @@ export function TenantAgentConfigEditor({
                             {entry.plugin_name} / {entry.hook_name}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                            <Tag>{currentHook.hook_family || t('tenant.agentConfigEditor.runtimeHooks.unknown')}</Tag>
+                            <Tag>
+                              {currentHook.hook_family ||
+                                t('tenant.agentConfigEditor.runtimeHooks.unknown')}
+                            </Tag>
                             <Tag>
                               {t('tenant.agentConfigEditor.runtimeHooks.executorKindLabel', {
                                 value:
@@ -990,7 +992,9 @@ export function TenantAgentConfigEditor({
                                 </Tag>
                               </div>
                               <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                                {t('tenant.agentConfigEditor.runtimeHooks.custom.identityDescription')}
+                                {t(
+                                  'tenant.agentConfigEditor.runtimeHooks.custom.identityDescription'
+                                )}
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
@@ -1161,7 +1165,9 @@ export function TenantAgentConfigEditor({
                                   updateCustomRuntimeHook(hook.ui_key, (current) => ({
                                     ...current,
                                     settings_draft: nextDraft,
-                                    settings: nextParsed.error ? current.settings : nextParsed.settings,
+                                    settings: nextParsed.error
+                                      ? current.settings
+                                      : nextParsed.settings,
                                     settings_error: nextParsed.error,
                                   }));
                                 }}

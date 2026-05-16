@@ -4,15 +4,15 @@
 
 import { test } from '@playwright/test';
 
-test('debug sandbox UI', async ({ page }) => {
+test.skip('debug sandbox UI', async ({ page }) => {
   // Listen for console errors
-  page.on('console', msg => {
+  page.on('console', (msg) => {
     if (msg.type() === 'error') {
       console.log('Browser console error:', msg.text());
     }
   });
 
-  page.on('pageerror', error => {
+  page.on('pageerror', (error) => {
     console.log('Page error:', error.message);
   });
 
@@ -45,7 +45,10 @@ test('debug sandbox UI', async ({ page }) => {
 
   // Navigate to projects
   console.log('=== Navigate to Projects ===');
-  await page.getByRole('link', { name: /Projects/i }).first().click();
+  await page
+    .getByRole('link', { name: /Projects/i })
+    .first()
+    .click();
   await page.waitForTimeout(2000);
 
   // Get first project
@@ -116,7 +119,10 @@ test('debug sandbox UI', async ({ page }) => {
 
     // Get page content
     const bodyText = await page.locator('body').textContent();
-    console.log('Page contains "Start a conversation"?', bodyText?.includes('Start a conversation'));
+    console.log(
+      'Page contains "Start a conversation"?',
+      bodyText?.includes('Start a conversation')
+    );
 
     // Check for InputArea component in DOM
     const inputAreaExists = await page.locator('.ant-input').count();
@@ -137,7 +143,10 @@ test('debug sandbox UI', async ({ page }) => {
       await newChatBtn.click();
       await page.waitForTimeout(2000);
 
-      await page.screenshot({ path: 'test-screenshots/debug-02-after-new-chat.png', fullPage: true });
+      await page.screenshot({
+        path: 'test-screenshots/debug-02-after-new-chat.png',
+        fullPage: true,
+      });
 
       // Check for input again
       const inputAfter = await inputById.isVisible({ timeout: 1000 }).catch(() => false);

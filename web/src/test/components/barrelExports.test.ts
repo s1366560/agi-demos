@@ -167,17 +167,7 @@ describe('Barrel Exports', () => {
     });
   });
 
-  describe('Agent Shared Barrel', () => {
-    it.skip('exports MaterialIcon component (not exported from any barrel)', () => {
-      expect(true).toBe(true);
-    });
-  });
-
   describe('Agent Execution Barrel', () => {
-    it.skip('exports WorkPlanProgress component (removed in plan redesign)', () => {
-      expect(true).toBe(true);
-    });
-
     it('exports ToolExecutionLive component', () => {
       expect(ToolExecutionLive).toBeDefined();
     });
@@ -256,22 +246,6 @@ describe('Barrel Exports', () => {
 
     it('exports InputBar component (renamed from InputArea)', () => {
       expect(AgentInputBar).toBeDefined();
-    });
-
-    it.skip('exports ExecutionPlanViewer component (removed in plan redesign)', () => {
-      expect(true).toBe(true);
-    });
-
-    it.skip('exports ThinkingChain component', () => {
-      expect(true).toBe(true);
-    });
-
-    it.skip('exports ToolCard component', () => {
-      expect(true).toBe(true);
-    });
-
-    it.skip('exports ExecutionDetailsPanel component', () => {
-      expect(true).toBe(true);
     });
   });
 

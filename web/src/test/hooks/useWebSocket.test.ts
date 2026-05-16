@@ -767,9 +767,11 @@ describe('useWebSocket', () => {
         })
       );
 
-      expect(() => {
-        result.current.connect();
-      }).not.toThrow();
+      act(() => {
+        expect(() => {
+          result.current.connect();
+        }).not.toThrow();
+      });
     });
 
     it('should handle very long messages', () => {

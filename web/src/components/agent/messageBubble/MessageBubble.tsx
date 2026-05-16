@@ -12,7 +12,18 @@ import { useTranslation } from 'react-i18next';
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 
-import { Image as ImageIcon, Film, Music, FileText, Table, Presentation, Archive, FileCode, Paperclip, File, Download ,
+import {
+  Image as ImageIcon,
+  Film,
+  Music,
+  FileText,
+  Table,
+  Presentation,
+  Archive,
+  FileCode,
+  Paperclip,
+  File,
+  Download,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -28,15 +39,13 @@ import { Image as ImageIcon, Film, Music, FileText, Table, Presentation, Archive
   XCircle,
 } from 'lucide-react';
 
-
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
-import { useLocaleNumberFormat } from '@/i18n/formatters';
-
 import { artifactService } from '@/services/artifactService';
 
+import { useLocaleNumberFormat } from '@/i18n/formatters';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 
@@ -91,7 +100,7 @@ const SUMMARY_PILL_CLASSES =
 
 const formatCount = (
   value: number,
-  formatter: Intl.NumberFormat = COUNT_FORMATTER_FALLBACK,
+  formatter: Intl.NumberFormat = COUNT_FORMATTER_FALLBACK
 ): string => formatter.format(value);
 
 const SummaryPill: React.FC<{ label: string; value: string }> = ({ label, value }) => (
@@ -130,7 +139,10 @@ const ExecutionSummaryPanel: React.FC<{
         <SummaryPill label="LLM calls" value={formatCount(summary.callCount, countFormatter)} />
       ) : null}
       {summary.totalTokens.total > 0 ? (
-        <SummaryPill label="Tokens" value={formatCount(summary.totalTokens.total, countFormatter)} />
+        <SummaryPill
+          label="Tokens"
+          value={formatCount(summary.totalTokens.total, countFormatter)}
+        />
       ) : null}
       {summary.totalCost > 0 ? (
         <SummaryPill label="Cost" value={summary.totalCostFormatted} />
@@ -319,7 +331,9 @@ function formatBytesSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getFileIconForMime(mimeType: string): React.ComponentType<{ size?: number; className?: string }> {
+function getFileIconForMime(
+  mimeType: string
+): React.ComponentType<{ size?: number; className?: string }> {
   if (mimeType.startsWith('image/')) return ImageIcon;
   if (mimeType.startsWith('video/')) return Film;
   if (mimeType.startsWith('audio/')) return Music;
@@ -403,7 +417,10 @@ const ArtifactReferenceList: React.FC<{
                 {formatBytesSize(artifact.size_bytes)}
               </span>
             ) : null}
-            <Download size={14} className="ml-auto flex-shrink-0 text-slate-400 dark:text-slate-500" />
+            <Download
+              size={14}
+              className="ml-auto flex-shrink-0 text-slate-400 dark:text-slate-500"
+            />
           </a>
         );
       })}
@@ -423,6 +440,8 @@ const getSafeArtifactReferences = (
 // User Message Component - Modern floating style with action bar
 const UserMessage: React.FC<UserMessageProps> = memo(
   ({ content, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
+    const { t } = useTranslation();
+
     if (!content) return null;
     const hasFiles = fileMetadata && fileMetadata.length > 0;
 
@@ -453,30 +472,28 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                 <div
                   className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-indigo-400 to-primary/90'}`}
                 >
-                   {isSubAgent ? (
-                     <svg
-                       className="w-2.5 h-2.5 text-white"
-                       viewBox="0 0 24 24"
-                       fill="none"
-                       stroke="currentColor"
-                       strokeWidth="3"
-                       strokeLinecap="round"
-                       strokeLinejoin="round"
-                     >
-                       <title>SubAgent Icon</title>
-                       <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                       <line x1="8" y1="21" x2="16" y2="21" />
-                       <line x1="12" y1="17" x2="12" y2="21" />
-                     </svg>
-                   ) : (
-                     <svg
-                       className="w-2.5 h-2.5 text-white"
-                       viewBox="0 0 16 16"
-                       fill="currentColor"
-                     >
-                       <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
-                     </svg>
-                   )}
+                  {isSubAgent ? (
+                    <svg
+                      className="w-2.5 h-2.5 text-white"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <title>
+                        {t('agent.messageBubble.subAgentIcon', { defaultValue: 'SubAgent Icon' })}
+                      </title>
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
+                    </svg>
+                  )}
                 </div>
               )}
 
@@ -525,9 +542,9 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                 <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-50">
                   {file.filename}
                 </span>
-                 <span className="text-2xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                   {formatBytesSize(file.size_bytes)}
-                 </span>
+                <span className="text-2xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                  {formatBytesSize(file.size_bytes)}
+                </span>
               </div>
             ))}
           </div>
@@ -553,7 +570,8 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
     const completionArtifacts = getSafeArtifactReferences(
       artifacts ?? (metadata?.artifacts as ArtifactReference[] | undefined)
     );
-    if (!content && !isStreaming && !executionSummary && completionArtifacts.length === 0) return null;
+    if (!content && !isStreaming && !executionSummary && completionArtifacts.length === 0)
+      return null;
     return (
       <div className="group flex items-start gap-3 pb-1">
         <div className={ASSISTANT_AVATAR_CLASSES}>
@@ -758,9 +776,9 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
             <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700/50">
               {/* Input */}
               <div className="mt-3">
-                 <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                   {t('agent.messageBubble.input', 'Input')}
-                 </p>
+                <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                  {t('agent.messageBubble.input', 'Input')}
+                </p>
                 <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                   <div className="bg-slate-50 dark:bg-slate-900/50 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
@@ -777,9 +795,9 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
               {/* Output */}
               {observeEvent && (
                 <div className="mt-3">
-                   <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                     {t('agent.messageBubble.output', 'Output')}
-                   </p>
+                  <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
+                    {t('agent.messageBubble.output', 'Output')}
+                  </p>
                   {(() => {
                     const formatted = formatToolOutput(observeEvent.toolOutput);
                     if (formatted.type === 'error') {
@@ -908,39 +926,39 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
       <div className={ASSISTANT_AVATAR_CLASSES}>
         <Bot size={18} className="text-primary" />
       </div>
-        <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-          <div className="relative">
-            <div className={ASSISTANT_BUBBLE_CLASSES}>
-              <ExecutionSummaryPanel summary={executionSummary} />
-              <div className={MARKDOWN_PROSE_CLASSES}>
-                {fullText ? (
-                  <ReactMarkdown
-                    remarkPlugins={remarkPlugins}
-                    rehypePlugins={rehypePlugins}
-                    components={safeMarkdownComponents}
-                  >
-                    {fullText}
-                  </ReactMarkdown>
-                ) : null}
-              </div>
-              <ArtifactReferenceList artifacts={completionArtifacts} />
+      <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+        <div className="relative">
+          <div className={ASSISTANT_BUBBLE_CLASSES}>
+            <ExecutionSummaryPanel summary={executionSummary} />
+            <div className={MARKDOWN_PROSE_CLASSES}>
+              {fullText ? (
+                <ReactMarkdown
+                  remarkPlugins={remarkPlugins}
+                  rehypePlugins={rehypePlugins}
+                  components={safeMarkdownComponents}
+                >
+                  {fullText}
+                </ReactMarkdown>
+              ) : null}
             </div>
-            {/* Action bar - appears on hover at top-right */}
-            {fullText ? (
-              <div className="absolute -top-3 right-2 z-10">
-                <MessageActionBar
-                  role="assistant"
-                  content={fullText}
-                  isPinned={isPinned}
-                  onPin={onPin}
-                  onReply={onReply}
-                  onSaveAsTemplate={() => {
-                    setShowSaveTemplate(true);
-                  }}
-                />
-              </div>
-            ) : null}
+            <ArtifactReferenceList artifacts={completionArtifacts} />
           </div>
+          {/* Action bar - appears on hover at top-right */}
+          {fullText ? (
+            <div className="absolute -top-3 right-2 z-10">
+              <MessageActionBar
+                role="assistant"
+                content={fullText}
+                isPinned={isPinned}
+                onPin={onPin}
+                onReply={onReply}
+                onSaveAsTemplate={() => {
+                  setShowSaveTemplate(true);
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
         {showSaveTemplate && fullText ? (
           <SaveTemplateModal
             content={fullText}
@@ -1093,7 +1111,9 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
     }
   };
 
-  const getCategoryIcon = (category: string): React.ComponentType<{ size?: number; className?: string }> => {
+  const getCategoryIcon = (
+    category: string
+  ): React.ComponentType<{ size?: number; className?: string }> => {
     switch (category) {
       case 'image':
         return ImageIcon;
@@ -1139,11 +1159,11 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
               {t('agent.messageBubble.fileGenerated', 'File Generated')}
             </span>
-             {event.sourceTool && (
-               <span className="text-2xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded-full">
-                 {event.sourceTool}
-               </span>
-             )}
+            {event.sourceTool && (
+              <span className="text-2xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded-full">
+                {event.sourceTool}
+              </span>
+            )}
           </div>
 
           {/* Image Preview */}
@@ -1272,8 +1292,8 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             )}
           </div>
 
-           {/* Additional metadata */}
-           <div className="mt-3 flex items-center gap-2 text-2xs">
+          {/* Additional metadata */}
+          <div className="mt-3 flex items-center gap-2 text-2xs">
             <span className="px-2 py-1 bg-white/50 dark:bg-slate-800/50 rounded text-slate-500 dark:text-slate-400 border border-emerald-100 dark:border-emerald-800/20">
               {event.mimeType}
             </span>

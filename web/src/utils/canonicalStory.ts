@@ -77,7 +77,14 @@ export interface CanonicalStoryParseResult {
 
 const CANONICAL_STORY_REGEX = /```yaml\s*\n([\s\S]*?)\n```/i;
 const STATUSES: ReadonlySet<CanonicalStoryStatus> = new Set(['pass', 'fail', 'warning']);
-const INVEST_KEYS = ['independent', 'negotiable', 'valuable', 'estimable', 'small', 'testable'] as const;
+const INVEST_KEYS = [
+  'independent',
+  'negotiable',
+  'valuable',
+  'estimable',
+  'small',
+  'testable',
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -103,7 +110,7 @@ function readStringArray(
   value: unknown,
   path: string,
   issues: string[],
-  options?: { optional?: boolean },
+  options?: { optional?: boolean }
 ): string[] {
   if ((value === undefined || value === null) && options?.optional) return [];
   if (!Array.isArray(value)) {
@@ -111,7 +118,7 @@ function readStringArray(
     return [];
   }
   return value
-    .map((item, idx) => readString(item, `${path}[${idx}]`, issues))
+    .map((item, idx) => readString(item, `${path}[${String(idx)}]`, issues))
     .filter(Boolean);
 }
 
@@ -126,7 +133,7 @@ function readStatus(value: unknown, path: string, issues: string[]): CanonicalSt
 function readInvestCheck(
   value: unknown,
   path: string,
-  issues: string[],
+  issues: string[]
 ): CanonicalStoryInvestCheck {
   if (!isRecord(value)) {
     issues.push(`${path} must be an object { status, reason }`);
@@ -140,14 +147,14 @@ function readInvestCheck(
 
 function readAcceptanceCriteria(
   value: unknown,
-  issues: string[],
+  issues: string[]
 ): CanonicalStoryAcceptanceCriterion[] {
   if (!Array.isArray(value) || value.length === 0) {
     issues.push('story.acceptance_criteria must be a non-empty array');
     return [];
   }
   return value.map((item, idx) => {
-    const path = `story.acceptance_criteria[${idx}]`;
+    const path = `story.acceptance_criteria[${String(idx)}]`;
     if (!isRecord(item)) {
       issues.push(`${path} must be an object { id, text, testable }`);
       return { id: '', text: '', testable: false };
@@ -221,9 +228,7 @@ export function parseCanonicalStory(text: string | null | undefined): CanonicalS
   if (independentCheck === 'pass' || independentCheck === 'fail') {
     independentStoryCheck = independentCheck;
   } else {
-    issues.push(
-      'story.dependencies_and_sequencing.independent_story_check must be pass | fail',
-    );
+    issues.push('story.dependencies_and_sequencing.independent_story_check must be pass | fail');
   }
 
   const story: CanonicalStoryDocument = {
@@ -238,7 +243,7 @@ export function parseCanonicalStory(text: string | null | undefined): CanonicalS
         storyRaw.constraints_and_affected_areas,
         'story.constraints_and_affected_areas',
         issues,
-        { optional: true },
+        { optional: true }
       ),
       dependencies_and_sequencing: {
         independent_story_check: independentStoryCheck,
@@ -246,7 +251,7 @@ export function parseCanonicalStory(text: string | null | undefined): CanonicalS
           dependenciesRaw.depends_on,
           'story.dependencies_and_sequencing.depends_on',
           issues,
-          { optional: true },
+          { optional: true }
         ),
         unblock_condition:
           typeof dependenciesRaw.unblock_condition === 'string'
@@ -261,7 +266,7 @@ export function parseCanonicalStory(text: string | null | undefined): CanonicalS
           acc[key] = readInvestCheck(investRaw[key], `story.invest.${key}`, issues);
           return acc;
         },
-        {} as CanonicalStoryDocument['story']['invest'],
+        {} as CanonicalStoryDocument['story']['invest']
       ),
     },
   };

@@ -6,7 +6,7 @@
  * - AgentChatInputArea component (extracted input section)
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock Resizer component
@@ -79,7 +79,9 @@ describe('useAgentChatPanelState (Extracted Hook)', () => {
     const { result } = renderHook(() => useAgentChatPanelState());
 
     const initialCollapsed = result.current.panelCollapsed;
-    result.current.togglePanel();
+    act(() => {
+      result.current.togglePanel();
+    });
 
     // Wait for state to update
     await waitFor(() => {

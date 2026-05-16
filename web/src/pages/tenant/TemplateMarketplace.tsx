@@ -45,7 +45,7 @@ export const TemplateMarketplace: React.FC = () => {
           }),
           subagentTemplateService.getCategories(),
         ]);
-        setTemplates(listRes.templates || []);
+        setTemplates(listRes.templates);
         setCategories(cats);
       } catch {
         message.error(t('agent.templates.loadError', 'Failed to load templates'));
@@ -53,7 +53,7 @@ export const TemplateMarketplace: React.FC = () => {
         setLoading(false);
       }
     };
-    load();
+    void load();
   }, [selectedCategory, search, message, t]);
 
   const handleInstall = useCallback(
@@ -89,7 +89,7 @@ export const TemplateMarketplace: React.FC = () => {
       );
       // Reload
       const listRes = await subagentTemplateService.list();
-      setTemplates(listRes.templates || []);
+      setTemplates(listRes.templates);
     } catch {
       message.error(t('agent.templates.seedError', 'Failed to seed templates'));
     }
@@ -124,7 +124,10 @@ export const TemplateMarketplace: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={handleSeed}
+          onClick={() => {
+            void handleSeed();
+          }}
+          type="button"
           className="px-3 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-600
             text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
         >
@@ -199,16 +202,17 @@ export const TemplateMarketplace: React.FC = () => {
                   </div>
                 </div>
                 {tpl.is_builtin && (
-                  <span title="Built-in">
+                  <span title={t('agent.templates.builtIn', { defaultValue: 'Built-in' })}>
                     <Shield size={14} className="text-amber-500 shrink-0" />
                   </span>
                 )}
               </div>
 
-               {/* Description */}
-               <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3 min-h-8">
-                 {tpl.description || 'No description'}
-               </p>
+              {/* Description */}
+              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3 min-h-8">
+                {tpl.description ||
+                  t('agent.templates.noDescription', { defaultValue: 'No description' })}
+              </p>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-1 mb-3">
@@ -238,7 +242,10 @@ export const TemplateMarketplace: React.FC = () => {
                   {tpl.author && <span>{tpl.author}</span>}
                 </div>
                 <button
-                  onClick={() => handleInstall(tpl.id)}
+                  onClick={() => {
+                    void handleInstall(tpl.id);
+                  }}
+                  type="button"
                   disabled={installing.has(tpl.id)}
                   className="px-2.5 py-1 text-xs rounded-md bg-blue-500 hover:bg-blue-600
                     text-white disabled:opacity-50 transition-colors flex items-center gap-1"

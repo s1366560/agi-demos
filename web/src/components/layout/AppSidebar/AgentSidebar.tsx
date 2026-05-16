@@ -24,7 +24,7 @@ import type { NavUser } from '@/config/navigation';
  */
 export function AgentSidebar({
   projectId = '',
-  // conversationId // Reserved for future use
+  conversationId: _conversationId,
   defaultCollapsed = false,
   collapsed: controlledCollapsed,
   onCollapseToggle,
@@ -50,7 +50,7 @@ export function AgentSidebar({
     externalLogout ??
     (() => {
       authLogout();
-      navigate('/login');
+      void navigate('/login');
     });
 
   const navUser: NavUser = externalUser ?? {
@@ -64,7 +64,7 @@ export function AgentSidebar({
   const config = getAgentConfig().sidebar;
 
   // Determine collapsed state: controlled > defaultCollapsed > false
-  const isCollapsed = controlledCollapsed ?? defaultCollapsed ?? false;
+  const isCollapsed = controlledCollapsed ?? defaultCollapsed;
 
   return (
     <AppSidebar

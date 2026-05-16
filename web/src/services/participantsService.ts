@@ -43,8 +43,7 @@ export interface RemoveParticipantOptions {
   reason?: string;
 }
 
-const base = (conversationId: string) =>
-  `/agent/conversations/${conversationId}/participants`;
+const base = (conversationId: string) => `/agent/conversations/${conversationId}/participants`;
 
 export interface MentionCandidate {
   agent_id: string;
@@ -96,23 +95,15 @@ export const participantsService = {
     );
   },
 
-  async setCoordinator(
-    conversationId: string,
-    agentId: string | null
-  ): Promise<RosterResponse> {
-    return httpClient.patch<RosterResponse>(
-      `${base(conversationId)}/coordinator`,
-      { agent_id: agentId }
-    );
+  async setCoordinator(conversationId: string, agentId: string | null): Promise<RosterResponse> {
+    return httpClient.patch<RosterResponse>(`${base(conversationId)}/coordinator`, {
+      agent_id: agentId,
+    });
   },
 
-  async setFocusedAgent(
-    conversationId: string,
-    agentId: string | null
-  ): Promise<RosterResponse> {
-    return httpClient.patch<RosterResponse>(
-      `${base(conversationId)}/focused`,
-      { agent_id: agentId }
-    );
+  async setFocusedAgent(conversationId: string, agentId: string | null): Promise<RosterResponse> {
+    return httpClient.patch<RosterResponse>(`${base(conversationId)}/focused`, {
+      agent_id: agentId,
+    });
   },
 };

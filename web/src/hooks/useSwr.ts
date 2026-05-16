@@ -23,7 +23,7 @@
  * ```
  */
 
-import useSWR, { SWRConfiguration, mutate as globalMutate } from 'swr';
+import useSWR, { mutate as globalMutate } from 'swr';
 
 import { schemaAPI } from '@/services/api';
 import { httpClient } from '@/services/client/httpClient';
@@ -35,6 +35,8 @@ import type {
   SchemaEdgeType,
   EdgeMapping,
 } from '@/types/memory';
+
+import type { KeyedMutator, MutatorCallback, SWRConfiguration } from 'swr';
 
 /**
  * SWR Configuration Options
@@ -53,6 +55,8 @@ const swrConfig: SWRConfiguration = {
   errorRetryCount: 3,
   errorRetryInterval: 5000,
 };
+
+type ApiCacheKey = [string, Record<string, unknown>];
 
 /**
  * Generate SWR cache key for API requests
@@ -76,6 +80,13 @@ function generateCacheKey(
   return [base, { ...params, project_id: projectId }];
 }
 
+function requireProjectId(projectId: string | null | undefined): string {
+  if (!projectId) {
+    throw new Error('projectId is required');
+  }
+  return projectId;
+}
+
 /**
  * Hook return type extending SWR response
  */
@@ -89,10 +100,7 @@ export interface SwrHookResponse<T> {
   /** Whether a revalidation is in progress */
   isValidating: boolean;
   /** Function to manually revalidate or mutate the cache */
-  mutate: (
-    data?: T | Promise<T> | MutatorCallback<T>,
-    shouldRevalidate?: boolean
-  ) => Promise<T | undefined>;
+  mutate: KeyedMutator<T>;
 }
 
 /**
@@ -119,14 +127,11 @@ export function useProjectStats(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): SwrHookResponse<ProjectStats> {
-  const cacheKey = generateCacheKey(
-    `/projects/${projectId}/stats`,
-    projectId ? projectId.toString() : null
-  );
+  const cacheKey = projectId ? `/projects/${projectId}/stats` : null;
 
-  const swrResponse = useSWR<ProjectStats>(
+  const swrResponse = useSWR<ProjectStats, Error>(
     cacheKey,
-    () => httpClient.get<ProjectStats>(`/projects/${projectId}/stats`),
+    (url: string) => httpClient.get<ProjectStats>(url),
     { ...swrConfig, ...config }
   );
 
@@ -173,11 +178,11 @@ export function useMemories(
 ): SwrHookResponse<MemoryListResponse> {
   const cacheKey = generateCacheKey('/memories/', projectId, params);
 
-  const swrResponse = useSWR<MemoryListResponse>(
+  const swrResponse = useSWR<MemoryListResponse, Error, ApiCacheKey | null>(
     cacheKey,
-    () =>
+    ([, requestParams]) =>
       httpClient.get<MemoryListResponse>('/memories/', {
-        params: { ...params, project_id: projectId },
+        params: requestParams,
       }),
     { ...swrConfig, ...config }
   );
@@ -216,9 +221,9 @@ export function useProject(
 ): SwrHookResponse<Project> {
   const cacheKey = projectId ? `/projects/${projectId}` : null;
 
-  const swrResponse = useSWR<Project>(
+  const swrResponse = useSWR<Project, Error>(
     cacheKey,
-    () => httpClient.get<Project>(`/projects/${projectId}`),
+    (url: string) => httpClient.get<Project>(url),
     { ...swrConfig, ...config }
   );
 
@@ -246,9 +251,9 @@ export function useEntityTypes(
 ): SwrHookResponse<SchemaEntityType[]> {
   const cacheKey = projectId ? `/projects/${projectId}/schema/entities` : null;
 
-  const swrResponse = useSWR<SchemaEntityType[]>(
+  const swrResponse = useSWR<SchemaEntityType[], Error>(
     cacheKey,
-    () => schemaAPI.listEntityTypes(projectId!),
+    () => schemaAPI.listEntityTypes(requireProjectId(projectId)),
     { ...swrConfig, ...config }
   );
 
@@ -276,9 +281,9 @@ export function useEdgeTypes(
 ): SwrHookResponse<SchemaEdgeType[]> {
   const cacheKey = projectId ? `/projects/${projectId}/schema/edges` : null;
 
-  const swrResponse = useSWR<SchemaEdgeType[]>(
+  const swrResponse = useSWR<SchemaEdgeType[], Error>(
     cacheKey,
-    () => schemaAPI.listEdgeTypes(projectId!),
+    () => schemaAPI.listEdgeTypes(requireProjectId(projectId)),
     { ...swrConfig, ...config }
   );
 
@@ -306,10 +311,14 @@ export function useEdgeMaps(
 ): SwrHookResponse<EdgeMapping[]> {
   const cacheKey = projectId ? `/projects/${projectId}/schema/edge-maps` : null;
 
-  const swrResponse = useSWR<EdgeMapping[]>(cacheKey, () => schemaAPI.listEdgeMaps(projectId!), {
-    ...swrConfig,
-    ...config,
-  });
+  const swrResponse = useSWR<EdgeMapping[], Error>(
+    cacheKey,
+    () => schemaAPI.listEdgeMaps(requireProjectId(projectId)),
+    {
+      ...swrConfig,
+      ...config,
+    }
+  );
 
   return {
     data: swrResponse.data,
@@ -423,9 +432,4 @@ export interface EdgeMapsResponse {
 
 // Re-export schema types from memory.ts for convenience
 export type { SchemaEntityType as EntityType, SchemaEdgeType as EdgeType, EdgeMapping as EdgeMap };
-
-/**
- * SWR Mutator Callback Type
- * Re-exported for convenience
- */
-export type MutatorCallback<T> = (current?: T) => T;
+export type { MutatorCallback };

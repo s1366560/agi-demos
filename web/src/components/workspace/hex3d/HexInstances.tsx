@@ -11,9 +11,10 @@ import type { WorkspaceAgent, TopologyNode } from '@/types/workspace';
 import type { HexCoordinates } from './useHex3DPick';
 import type { ThreeEvent } from '@react-three/fiber';
 
-
-BufferGeometry.prototype.computeBoundsTree = computeBoundsTree as unknown as typeof BufferGeometry.prototype.computeBoundsTree;
-BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree as unknown as typeof BufferGeometry.prototype.disposeBoundsTree;
+BufferGeometry.prototype.computeBoundsTree =
+  computeBoundsTree as unknown as typeof BufferGeometry.prototype.computeBoundsTree;
+BufferGeometry.prototype.disposeBoundsTree =
+  disposeBoundsTree as unknown as typeof BufferGeometry.prototype.disposeBoundsTree;
 Mesh.prototype.raycast = acceleratedRaycast as unknown as typeof Mesh.prototype.raycast;
 
 interface HexInstancesProps {
@@ -71,7 +72,7 @@ export function HexInstances({
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    
+
     nodes.forEach((node, i) => {
       const { x, y: z } = hexToPixel(node.q, node.r, hexSize);
       tempObject.position.set(x, 0.1, z);
@@ -85,9 +86,10 @@ export function HexInstances({
   useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    
+
     nodes.forEach((node, i) => {
-      const isSelected = selectedHex !== null && selectedHex.q === node.q && selectedHex.r === node.r;
+      const isSelected =
+        selectedHex !== null && selectedHex.q === node.q && selectedHex.r === node.r;
       const isHovered = hoveredHex !== null && hoveredHex.q === node.q && hoveredHex.r === node.r;
       const isOccupied = occupiedSet.has(String(node.q) + ',' + String(node.r));
 

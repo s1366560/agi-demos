@@ -227,7 +227,7 @@ describe('PatternList', () => {
       render(<PatternList patterns={mockPatterns} onDeprecate={handleDeprecate} />);
 
       // Find and click the delete button for first pattern
-      const deleteButtons = screen.getAllByTitle('Deprecate pattern');
+      const deleteButtons = screen.getAllByTitle('Delete pattern');
       fireEvent.click(deleteButtons[0]);
 
       expect(handleDeprecate).toHaveBeenCalledWith('pattern-1');
@@ -244,7 +244,7 @@ describe('PatternList', () => {
         />
       );
 
-      const deleteButtons = screen.getAllByTitle('Deprecate pattern');
+      const deleteButtons = screen.getAllByTitle('Delete pattern');
       fireEvent.click(deleteButtons[0]);
 
       expect(handleDeprecate).toHaveBeenCalled();
@@ -341,8 +341,24 @@ describe('PatternList', () => {
     it('should have proper button labels for actions', () => {
       render(<PatternList patterns={mockPatterns} />);
 
-      const deleteButtons = screen.getAllByTitle('Deprecate pattern');
+      const deleteButtons = screen.getAllByTitle('Delete pattern');
       expect(deleteButtons.length).toBeGreaterThan(0);
+    });
+
+    it('does not nest action buttons inside row buttons', () => {
+      const { container } = render(<PatternList patterns={mockPatterns} />);
+
+      expect(container.querySelector('button button')).not.toBeInTheDocument();
+    });
+
+    it('supports keyboard selection for selectable rows', () => {
+      const handleSelect = vi.fn();
+      render(<PatternList patterns={mockPatterns} onSelect={handleSelect} />);
+
+      const row = screen.getByText('Document Search Pattern').closest('[role="button"]');
+      fireEvent.keyDown(row!, { key: 'Enter' });
+
+      expect(handleSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'pattern-1' }));
     });
 
     it('should use semantic HTML structure', () => {

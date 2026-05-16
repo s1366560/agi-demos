@@ -89,8 +89,8 @@ export const SubAgentList: React.FC = () => {
 
   // Load data on mount
   useEffect(() => {
-    listSubAgents();
-    listTemplates();
+    void listSubAgents();
+    void listTemplates();
   }, [listSubAgents, listTemplates]);
 
   // Sync filters to store
@@ -171,7 +171,9 @@ export const SubAgentList: React.FC = () => {
     [createFromTemplate, t]
   );
 
-  const handleRefresh = useCallback(() => listSubAgents(), [listSubAgents]);
+  const handleRefresh = useCallback(() => {
+    void listSubAgents();
+  }, [listSubAgents]);
 
   const handleImportFilesystem = useCallback(
     async (name: string) => {
@@ -195,7 +197,7 @@ export const SubAgentList: React.FC = () => {
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingSubAgent(null);
-    listSubAgents();
+    void listSubAgents();
   }, [listSubAgents]);
 
   // Template dropdown menu
@@ -217,7 +219,9 @@ export const SubAgentList: React.FC = () => {
           <div className="text-xs text-slate-500">{tpl.description}</div>
         </div>
       ),
-      onClick: () => handleCreateFromTemplate(tpl.name),
+      onClick: () => {
+        void handleCreateFromTemplate(tpl.name);
+      },
     }));
   }, [templates, handleCreateFromTemplate, t]);
 
@@ -286,10 +290,16 @@ export const SubAgentList: React.FC = () => {
       ) : (
         <SubAgentGrid
           subagents={filteredSubagents}
-          onToggle={handleToggle}
+          onToggle={(id, enabled) => {
+            void handleToggle(id, enabled);
+          }}
           onEdit={handleEdit}
-          onDelete={handleDelete}
-          onImport={handleImportFilesystem}
+          onDelete={(id) => {
+            void handleDelete(id);
+          }}
+          onImport={(name) => {
+            void handleImportFilesystem(name);
+          }}
         />
       )}
 

@@ -108,9 +108,7 @@ export const TenantList: React.FC<TenantListProps> = ({
               }`}
             />
             <span className="truncate text-sm font-medium">{tenant.name}</span>
-            {isSelected && (
-              <Check size={16} className="ml-auto" />
-            )}
+            {isSelected && <Check size={16} className="ml-auto" />}
           </button>
         );
       })}

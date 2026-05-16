@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { X, Loader2, Save } from 'lucide-react';
 
 import { memoryAPI } from '../../services/api';
-import { Memory } from '../../types/memory';
+
+import type { Memory } from '../../types/memory';
 
 interface EditMemoryModalProps {
   isOpen: boolean;
@@ -33,9 +34,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
   // Initialize form with memory data
   useEffect(() => {
     if (memory) {
-      setTitle(memory.title || '');
-      setContent(memory.content || '');
-      setTags(memory.tags || []);
+      setTitle(memory.title);
+      setContent(memory.content);
+      setTags(memory.tags);
     }
   }, [memory]);
 
@@ -50,8 +51,8 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
     setTags(tags.filter((tag) => tag !== tagToRemove));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
 
     if (!memory) return;
 
@@ -107,21 +108,28 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('memory.edit.title')}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t('memory.edit.title')}
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             disabled={isSaving}
-            aria-label="Close"
+            aria-label={t('memory.detail.closeAria')}
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+          className="flex-1 overflow-y-auto p-6 space-y-4"
+        >
           {error && (
             <div
               className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4"
@@ -212,11 +220,16 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                 onChange={(e) => {
                   setNewTag(e.target.value);
                 }}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-                placeholder="Add new tag"
+                placeholder={t('memory.edit.addTagPlaceholder', 'Add new tag')}
                 disabled={isSaving}
-                aria-label="Add new tag"
+                aria-label={t('memory.edit.addTagAria', 'Add new tag')}
               />
               <button
                 type="button"
@@ -249,7 +262,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => {
+              void handleSubmit();
+            }}
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             disabled={isSaving}
           >

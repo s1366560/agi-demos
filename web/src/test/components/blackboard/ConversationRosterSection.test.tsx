@@ -79,9 +79,7 @@ describe('ConversationRosterSection', () => {
 
     renderAt('conversationId=c1');
 
-    await waitFor(() =>
-      expect(screen.getByTestId('inner-panel-c1')).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByTestId('inner-panel-c1')).toBeInTheDocument());
     expect(screen.getByTestId('mode-panel-c1')).toBeInTheDocument();
     expect(screen.getByTestId('hitl-panel-c1')).toBeInTheDocument();
   });

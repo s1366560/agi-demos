@@ -17,7 +17,7 @@ describe('ProjectList', () => {
 
   it('renders list of projects', async () => {
     vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1' },
+      currentTenant: { id: 't1', max_storage: 1024 },
     } as any);
 
     const mockProjects: Project[] = [
@@ -42,6 +42,13 @@ describe('ProjectList', () => {
         },
         is_public: false,
         created_at: '2024-01-01T00:00:00Z',
+        stats: {
+          memory_count: 0,
+          storage_used: 0,
+          node_count: 0,
+          member_count: 0,
+          last_active: null,
+        },
       },
       {
         id: 'p2',
@@ -64,6 +71,13 @@ describe('ProjectList', () => {
         },
         is_public: false,
         created_at: '2024-01-01T00:00:00Z',
+        stats: {
+          memory_count: 0,
+          storage_used: 512,
+          node_count: 0,
+          member_count: 3,
+          last_active: null,
+        },
       },
     ];
 
@@ -80,11 +94,20 @@ describe('ProjectList', () => {
       expect(screen.getByText('Project A')).toBeInTheDocument();
       expect(screen.getByText('Project B')).toBeInTheDocument();
     });
+
+    expect(screen.getByRole('button', { name: /Owner/i })).toBeInTheDocument();
+    expect(screen.queryByText('common.stats.owner')).not.toBeInTheDocument();
+    expect(screen.getByText('0 Members')).toBeInTheDocument();
+    expect(screen.getByText('3 Members')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Grid view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'List view' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open actions for Project A' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open actions for Project B' })).toBeInTheDocument();
   });
 
   it('renders empty state', async () => {
     vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1' },
+      currentTenant: { id: 't1', max_storage: 1024 },
     } as any);
 
     vi.mocked(projectAPI.list).mockResolvedValue({

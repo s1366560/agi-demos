@@ -7,7 +7,9 @@
  * - Legacy props API (backward compatible)
  */
 
-import React, { useState, createContext, useContext, useCallback } from 'react';
+import React, { useState, createContext, useContext, useCallback, useMemo } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { Share2 } from 'lucide-react';
 
@@ -21,6 +23,8 @@ import { CytoscapeGraphNodeInfoPanel as NodeInfoPanelComponent } from './NodeInf
 import { CytoscapeGraphViewport } from './Viewport';
 
 import type { GraphConfig, NodeData, GraphActions } from './types';
+import type cytoscape from 'cytoscape';
+import type { TFunction } from 'i18next';
 
 // ========================================
 // Context for Composite Pattern
@@ -35,6 +39,11 @@ interface GraphContextValue {
   selectedNode: NodeData | null;
   setSelectedNode: (node: NodeData | null) => void;
   actions: GraphActions;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 const GraphContext = createContext<GraphContextValue | null>(null);
@@ -81,17 +90,50 @@ interface NodeInfoPanelMarkerProps {
   className?: string | undefined;
 }
 
+type ViewportMarkerComponent = React.FC<ViewportMarkerProps> & {
+  [VIEWPORT_SYMBOL]?: true;
+  displayName?: string | undefined;
+};
+
+type ControlsMarkerComponent = React.FC<ControlsMarkerProps> & {
+  [CONTROLS_SYMBOL]?: true;
+  displayName?: string | undefined;
+};
+
+type NodeInfoPanelMarkerComponent = React.FC<NodeInfoPanelMarkerProps> & {
+  [NODE_INFO_PANEL_SYMBOL]?: true;
+  displayName?: string | undefined;
+};
+
+function hasMarker<P>(child: React.ReactNode, marker: symbol): child is React.ReactElement<P> {
+  if (!React.isValidElement(child)) {
+    return false;
+  }
+
+  const elementType = child.type as unknown;
+  if (
+    typeof elementType !== 'function' &&
+    (typeof elementType !== 'object' || elementType === null)
+  ) {
+    return false;
+  }
+
+  return (elementType as Record<symbol, unknown>)[marker] === true;
+}
+
 CytoscapeGraph.Viewport = function CytoscapeGraphViewportMarker(_props: ViewportMarkerProps) {
   // This is a marker component - actual rendering happens in parent
   return null;
 };
-(CytoscapeGraph.Viewport as any)[VIEWPORT_SYMBOL] = true;
+const viewportMarker = CytoscapeGraph.Viewport as ViewportMarkerComponent;
+viewportMarker[VIEWPORT_SYMBOL] = true;
 
 CytoscapeGraph.Controls = function CytoscapeGraphControlsMarker(_props: ControlsMarkerProps) {
   // This is a marker component - actual rendering happens in parent
   return null;
 };
-(CytoscapeGraph.Controls as any)[CONTROLS_SYMBOL] = true;
+const controlsMarker = CytoscapeGraph.Controls as ControlsMarkerComponent;
+controlsMarker[CONTROLS_SYMBOL] = true;
 
 CytoscapeGraph.NodeInfoPanel = function CytoscapeGraphNodeInfoPanelMarker(
   _props: NodeInfoPanelMarkerProps
@@ -99,12 +141,13 @@ CytoscapeGraph.NodeInfoPanel = function CytoscapeGraphNodeInfoPanelMarker(
   // This is a marker component - actual rendering happens in parent
   return null;
 };
-(CytoscapeGraph.NodeInfoPanel as any)[NODE_INFO_PANEL_SYMBOL] = true;
+const nodeInfoPanelMarker = CytoscapeGraph.NodeInfoPanel as NodeInfoPanelMarkerComponent;
+nodeInfoPanelMarker[NODE_INFO_PANEL_SYMBOL] = true;
 
 // Set display names for testing
-(CytoscapeGraph.Viewport as any).displayName = 'CytoscapeGraphViewport';
-(CytoscapeGraph.Controls as any).displayName = 'CytoscapeGraphControls';
-(CytoscapeGraph.NodeInfoPanel as any).displayName = 'CytoscapeGraphNodeInfoPanel';
+viewportMarker.displayName = 'CytoscapeGraphViewport';
+controlsMarker.displayName = 'CytoscapeGraphControls';
+nodeInfoPanelMarker.displayName = 'CytoscapeGraphNodeInfoPanel';
 
 // ========================================
 // Main Component
@@ -126,37 +169,62 @@ interface CytoscapeGraphProps {
 }
 
 export function CytoscapeGraph(props: CytoscapeGraphProps) {
+  const { t } = useTranslation();
   const { computedTheme } = useThemeStore();
   const { onNodeClick } = props;
 
   // Parse children FIRST to detect sub-components
   const childrenArray = React.Children.toArray(props.children);
-  const viewportChild = childrenArray.find((child: any) => child?.type?.[VIEWPORT_SYMBOL]) as any;
-  const controlsChild = childrenArray.find((child: any) => child?.type?.[CONTROLS_SYMBOL]) as any;
+  const viewportChild = childrenArray.find(
+    (child): child is React.ReactElement<ViewportMarkerProps> =>
+      hasMarker<ViewportMarkerProps>(child, VIEWPORT_SYMBOL)
+  );
+  const controlsChild = childrenArray.find(
+    (child): child is React.ReactElement<ControlsMarkerProps> =>
+      hasMarker<ControlsMarkerProps>(child, CONTROLS_SYMBOL)
+  );
   const nodeInfoPanelChild = childrenArray.find(
-    (child: any) => child?.type?.[NODE_INFO_PANEL_SYMBOL]
-  ) as any;
+    (child): child is React.ReactElement<NodeInfoPanelMarkerProps> =>
+      hasMarker<NodeInfoPanelMarkerProps>(child, NODE_INFO_PANEL_SYMBOL)
+  );
 
-  const hasSubComponents = viewportChild || controlsChild || nodeInfoPanelChild;
+  const hasSubComponents = Boolean(viewportChild || controlsChild || nodeInfoPanelChild);
 
   // Determine if using legacy API - only legacy if NO sub-components AND has legacy props
   const isLegacy =
     !hasSubComponents && (props.projectId !== undefined || props.config === undefined);
 
-  // Create config from either source
-  const config: GraphConfig = isLegacy
-    ? legacyPropsToConfig({
-        projectId: props.projectId,
-        tenantId: props.tenantId,
-        includeCommunities: props.includeCommunities,
-        minConnections: props.minConnections,
-      })
-    : createGraphConfig(props.config);
+  // Create config from either source. The viewport reload effect depends on this object.
+  const config = useMemo<GraphConfig>(() => {
+    const nextConfig = isLegacy
+      ? legacyPropsToConfig({
+          projectId: props.projectId,
+          tenantId: props.tenantId,
+          includeCommunities: props.includeCommunities,
+          minConnections: props.minConnections,
+        })
+      : createGraphConfig(props.config);
 
-  // Add subgraphNodeIds from legacy API if provided
-  if (props.subgraphNodeIds) {
-    config.data.subgraphNodeIds = props.subgraphNodeIds;
-  }
+    if (!props.subgraphNodeIds) {
+      return nextConfig;
+    }
+
+    return {
+      ...nextConfig,
+      data: {
+        ...nextConfig.data,
+        subgraphNodeIds: props.subgraphNodeIds,
+      },
+    };
+  }, [
+    isLegacy,
+    props.config,
+    props.includeCommunities,
+    props.minConnections,
+    props.projectId,
+    props.subgraphNodeIds,
+    props.tenantId,
+  ]);
 
   // Internal state
   const [nodeCount, setNodeCount] = useState(0);
@@ -164,7 +232,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
-  const [cyInstance, setCyInstance] = useState<any>(null);
+  const [cyInstance, setCyInstance] = useState<cytoscape.Core | null>(null);
 
   // Handle node selection
   const handleNodeClick = useCallback(
@@ -207,7 +275,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
         });
         const link = document.createElement('a');
         link.href = png;
-        link.download = `graph-${Date.now()}.png`;
+        link.download = 'graph-' + String(Date.now()) + '.png';
         link.click();
       }
     }, [cyInstance, computedTheme]),
@@ -228,21 +296,41 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   };
 
   // Extract props from sub-components
-  const viewportProps = viewportChild?.props || {};
-  const nodeInfoPanelProps = nodeInfoPanelChild?.props || {};
+  const viewportProps = viewportChild?.props;
+  const nodeInfoPanelProps = nodeInfoPanelChild?.props;
 
   // Merge viewport props with config
-  const mergedConfig: GraphConfig = {
-    ...config,
-    data: {
-      ...config.data,
-      projectId: viewportProps.projectId ?? config.data.projectId,
-      tenantId: viewportProps.tenantId ?? config.data.tenantId,
-      includeCommunities: viewportProps.includeCommunities ?? config.data.includeCommunities,
-      minConnections: viewportProps.minConnections ?? config.data.minConnections,
-      subgraphNodeIds: viewportProps.subgraphNodeIds ?? config.data.subgraphNodeIds,
+  const mergedConfig = useMemo<GraphConfig>(
+    () => ({
+      ...config,
+      data: {
+        ...config.data,
+        projectId: viewportProps?.projectId ?? config.data.projectId,
+        tenantId: viewportProps?.tenantId ?? config.data.tenantId,
+        includeCommunities: viewportProps?.includeCommunities ?? config.data.includeCommunities,
+        minConnections: viewportProps?.minConnections ?? config.data.minConnections,
+        subgraphNodeIds: viewportProps?.subgraphNodeIds ?? config.data.subgraphNodeIds,
+      },
+    }),
+    [
+      config,
+      viewportProps?.includeCommunities,
+      viewportProps?.minConnections,
+      viewportProps?.projectId,
+      viewportProps?.subgraphNodeIds,
+      viewportProps?.tenantId,
+    ]
+  );
+
+  const handleViewportStateChange = useCallback(
+    (state: { nodeCount: number; edgeCount: number; loading: boolean; error: string | null }) => {
+      setNodeCount((current) => (current === state.nodeCount ? current : state.nodeCount));
+      setEdgeCount((current) => (current === state.edgeCount ? current : state.edgeCount));
+      setLoading((current) => (current === state.loading ? current : state.loading));
+      setError((current) => (current === state.error ? current : state.error));
     },
-  };
+    []
+  );
 
   // Context value
   const contextValue: GraphContextValue = {
@@ -251,12 +339,15 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
     edgeCount,
     loading,
     error,
-    selectedNode: nodeInfoPanelProps.node ?? selectedNode,
+    selectedNode: nodeInfoPanelProps?.node ?? selectedNode,
     setSelectedNode: (node) => {
       setSelectedNode(node);
-      const handler = nodeInfoPanelProps.onClose || viewportProps.onNodeClick;
-      if (node === null && handler) {
-        handler();
+      if (node === null) {
+        if (nodeInfoPanelProps?.onClose) {
+          nodeInfoPanelProps.onClose();
+        } else {
+          viewportProps?.onNodeClick?.(null);
+        }
       }
     },
     actions,
@@ -266,18 +357,13 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   if (hasSubComponents && !isLegacy) {
     return (
       <GraphContext.Provider value={contextValue}>
-        <div className="flex flex-col h-full relative">
+        <div className="relative flex h-full min-h-[420px] flex-col">
           {controlsChild && <ControlsComponent setCyInstance={setCyInstance} />}
           {viewportChild && (
             <CytoscapeGraphViewport
               config={mergedConfig}
-              onNodeClick={viewportProps.onNodeClick || handleNodeClick}
-              onStateChange={(state) => {
-                setNodeCount(state.nodeCount);
-                setEdgeCount(state.edgeCount);
-                setLoading(state.loading);
-                setError(state.error);
-              }}
+              onNodeClick={viewportProps?.onNodeClick || handleNodeClick}
+              onStateChange={handleViewportStateChange}
               setCyInstance={setCyInstance}
             />
           )}
@@ -285,17 +371,21 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
               <StateDisplay.Empty
                 icon={Share2}
-                title="No nodes to display"
-                description="The knowledge graph is empty"
+                title={tFallback(t, 'project.graph.cytoscapeEmpty.title', 'No nodes to display')}
+                description={tFallback(
+                  t,
+                  'project.graph.cytoscapeEmpty.description',
+                  'The knowledge graph is empty'
+                )}
                 card={false}
               />
             </div>
           )}
           {nodeInfoPanelChild && (
             <NodeInfoPanelComponent
-              node={nodeInfoPanelProps.node ?? selectedNode}
+              node={nodeInfoPanelProps?.node ?? selectedNode}
               onClose={
-                nodeInfoPanelProps.onClose ||
+                nodeInfoPanelProps?.onClose ||
                 (() => {
                   setSelectedNode(null);
                 })
@@ -316,27 +406,26 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   // Default render - all sub-components included
   return (
     <GraphContext.Provider value={contextValue}>
-      <div className="flex flex-col h-full relative">
+      <div className="relative flex h-full min-h-[420px] flex-col overflow-hidden">
         {config.features?.showToolbar !== false && (
           <ControlsComponent setCyInstance={setCyInstance} />
         )}
         <CytoscapeGraphViewport
           config={config}
           onNodeClick={handleNodeClick}
-          onStateChange={(state) => {
-            setNodeCount(state.nodeCount);
-            setEdgeCount(state.edgeCount);
-            setLoading(state.loading);
-            setError(state.error);
-          }}
+          onStateChange={handleViewportStateChange}
           setCyInstance={setCyInstance}
         />
         {!loading && nodeCount === 0 && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80">
             <StateDisplay.Empty
               icon={Share2}
-              title="No nodes to display"
-              description="The knowledge graph is empty"
+              title={tFallback(t, 'project.graph.cytoscapeEmpty.title', 'No nodes to display')}
+              description={tFallback(
+                t,
+                'project.graph.cytoscapeEmpty.description',
+                'The knowledge graph is empty'
+              )}
               card={false}
             />
           </div>
@@ -364,25 +453,30 @@ interface GraphLegendProps {
 }
 
 function GraphLegend({ includeCommunities }: GraphLegendProps) {
+  const { t } = useTranslation();
   const { computedTheme } = useThemeStore();
   const theme = THEME_COLORS[computedTheme];
 
   return (
-    <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
-      <div className="flex items-center gap-6 text-sm">
+    <div className="border-t border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
         <div className="flex items-center gap-2">
           <div
             className="w-4 h-4 rounded-full"
             style={{ backgroundColor: theme.colors.default }}
           ></div>
-          <span className="text-slate-600 dark:text-slate-400">Entity</span>
+          <span className="text-slate-600 dark:text-slate-400">
+            {tFallback(t, 'project.graph.cytoscapeLegend.entity', 'Entity')}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <div
             className="w-4 h-4 rounded-full"
             style={{ backgroundColor: theme.colors.episodic }}
           ></div>
-          <span className="text-slate-600 dark:text-slate-400">Episode</span>
+          <span className="text-slate-600 dark:text-slate-400">
+            {tFallback(t, 'project.graph.cytoscapeLegend.episode', 'Episode')}
+          </span>
         </div>
         {includeCommunities !== false && (
           <div className="flex items-center gap-2">
@@ -390,11 +484,17 @@ function GraphLegend({ includeCommunities }: GraphLegendProps) {
               className="w-6 h-6 rounded-full"
               style={{ backgroundColor: theme.colors.community }}
             ></div>
-            <span className="text-slate-600 dark:text-slate-400">Community</span>
+            <span className="text-slate-600 dark:text-slate-400">
+              {tFallback(t, 'project.graph.cytoscapeLegend.community', 'Community')}
+            </span>
           </div>
         )}
-        <div className="ml-auto text-slate-500 text-xs">
-          Drag to pan - Scroll to zoom - Click to select
+        <div className="w-full text-xs leading-5 text-slate-500 sm:ml-auto sm:w-auto">
+          {tFallback(
+            t,
+            'project.graph.cytoscapeLegend.help',
+            'Drag to pan, scroll to zoom, click to select'
+          )}
         </div>
       </div>
     </div>

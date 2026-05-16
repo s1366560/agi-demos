@@ -34,6 +34,16 @@ interface OAuthTokenResponse {
 
 type CallbackStatus = 'loading' | 'success' | 'error';
 
+function parseRedirectUrl(encodedState: string): string | undefined {
+  try {
+    const stateData = JSON.parse(atob(encodedState)) as { redirect_to?: unknown };
+    return typeof stateData.redirect_to === 'string' ? stateData.redirect_to : undefined;
+  } catch {
+    // State is not encoded JSON, ignore
+    return undefined;
+  }
+}
+
 export const OAuthCallback: React.FC = () => {
   const { provider } = useParams<{ provider: string }>();
   const [searchParams] = useSearchParams();
@@ -110,19 +120,12 @@ export const OAuthCallback: React.FC = () => {
 
       // Check if state contains a redirect URL (encoded JSON)
       if (state) {
-        try {
-          const stateData = JSON.parse(atob(state));
-          if (stateData.redirect_to) {
-            redirectUrl = stateData.redirect_to;
-          }
-        } catch {
-          // State is not encoded JSON, ignore
-        }
+        redirectUrl = parseRedirectUrl(state) ?? redirectUrl;
       }
 
       // Short delay to show success state before redirect
       setTimeout(() => {
-        navigate(redirectUrl, { replace: true });
+        void navigate(redirectUrl, { replace: true });
       }, 500);
     } catch (err) {
       setStatus('error');
@@ -141,15 +144,15 @@ export const OAuthCallback: React.FC = () => {
     // Only run callback once
     if (status === 'loading' && !token) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      handleOAuthCallback();
+      void handleOAuthCallback();
     } else if (token) {
       // Already authenticated, redirect to home
-      navigate('/', { replace: true });
+      void navigate('/', { replace: true });
     }
   }, [status, token, handleOAuthCallback, navigate]);
 
   const handleRetry = () => {
-    navigate('/login');
+    void navigate('/login');
   };
 
   const providerName = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : '';

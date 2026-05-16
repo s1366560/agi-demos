@@ -1,6 +1,8 @@
 import { memo, useState, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   Activity,
   ChevronRight,
@@ -15,38 +17,47 @@ import {
 
 import type { SubAgentRunDTO } from '../../../types/multiAgent';
 
-const RUN_STATUS_STYLES: Record<string, { color: string; bg: string; label: string }> = {
+const RUN_STATUS_STYLES: Record<
+  string,
+  { color: string; bg: string; labelKey: string; defaultLabel: string }
+> = {
   pending: {
     color: 'text-slate-500 dark:text-slate-400',
     bg: 'bg-slate-100 dark:bg-slate-800',
-    label: 'Pending',
+    labelKey: 'agent.multiAgent.status.pending',
+    defaultLabel: 'Pending',
   },
   running: {
     color: 'text-blue-600 dark:text-blue-400',
     bg: 'bg-blue-50 dark:bg-blue-900/30',
-    label: 'Running',
+    labelKey: 'agent.multiAgent.status.running',
+    defaultLabel: 'Running',
   },
   completed: {
     color: 'text-green-600 dark:text-green-400',
     bg: 'bg-green-50 dark:bg-green-900/30',
-    label: 'Completed',
+    labelKey: 'agent.multiAgent.status.completed',
+    defaultLabel: 'Completed',
   },
   failed: {
     color: 'text-red-600 dark:text-red-400',
     bg: 'bg-red-50 dark:bg-red-900/30',
-    label: 'Failed',
+    labelKey: 'agent.multiAgent.status.failed',
+    defaultLabel: 'Failed',
   },
   cancelled: {
     color: 'text-amber-600 dark:text-amber-400',
     bg: 'bg-amber-50 dark:bg-amber-900/30',
-    label: 'Cancelled',
+    labelKey: 'agent.multiAgent.status.cancelled',
+    defaultLabel: 'Cancelled',
   },
 };
 
 const DEFAULT_STATUS_STYLE = {
   color: 'text-slate-500 dark:text-slate-400',
   bg: 'bg-slate-100 dark:bg-slate-800',
-  label: 'Unknown',
+  labelKey: 'agent.multiAgent.status.unknown',
+  defaultLabel: 'Unknown',
 };
 
 function getStatusStyle(status: string) {
@@ -99,6 +110,7 @@ interface RunItemProps {
 }
 
 const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
+  const { t } = useTranslation();
   const style = getStatusStyle(run.status);
 
   const handleClick = useCallback(() => {
@@ -123,7 +135,7 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
         <span
           className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium ${style.color} ${style.bg}`}
         >
-          {style.label}
+          {t(style.labelKey, { defaultValue: style.defaultLabel })}
         </span>
       </div>
 
@@ -141,7 +153,10 @@ const RunItem: FC<RunItemProps> = memo(({ run, onSelect, selected }) => {
         {run.tokens_used !== null && (
           <span className="flex items-center gap-1">
             <Hash size={10} />
-            {run.tokens_used.toLocaleString()} tokens
+            {t('agent.multiAgent.traceTimeline.tokens', {
+              count: run.tokens_used,
+              defaultValue: '{{count}} tokens',
+            })}
           </span>
         )}
       </div>
@@ -168,6 +183,7 @@ interface TraceGroupProps {
 }
 
 const TraceGroup: FC<TraceGroupProps> = memo(({ traceId, runs, selectedRunId, onSelectRun }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
 
   const toggleExpand = useCallback(() => {
@@ -193,15 +209,41 @@ const TraceGroup: FC<TraceGroupProps> = memo(({ traceId, runs, selectedRunId, on
         )}
         <Activity size={14} className="text-blue-500 flex-shrink-0" />
         <span className="text-xs font-mono text-slate-600 dark:text-slate-300 truncate flex-1 text-left">
-          {traceId === 'no-trace' ? 'Untraced Runs' : traceId.slice(0, 12)}
+          {traceId === 'no-trace'
+            ? t('agent.multiAgent.traceTimeline.untracedRuns', { defaultValue: 'Untraced Runs' })
+            : traceId.slice(0, 12)}
         </span>
         <div className="flex items-center gap-2 text-2xs flex-shrink-0">
-          <span className="text-slate-400">{runs.length} runs</span>
+          <span className="text-slate-400">
+            {t('agent.multiAgent.traceTimeline.runCount', {
+              count: runs.length,
+              defaultValue: '{{count}} runs',
+            })}
+          </span>
           {runningCount > 0 && (
-            <span className="text-blue-500 font-medium">{runningCount} active</span>
+            <span className="text-blue-500 font-medium">
+              {t('agent.multiAgent.traceTimeline.activeCount', {
+                count: runningCount,
+                defaultValue: '{{count}} active',
+              })}
+            </span>
           )}
-          {completedCount > 0 && <span className="text-green-500">{completedCount} done</span>}
-          {failedCount > 0 && <span className="text-red-500">{failedCount} failed</span>}
+          {completedCount > 0 && (
+            <span className="text-green-500">
+              {t('agent.multiAgent.traceTimeline.doneCount', {
+                count: completedCount,
+                defaultValue: '{{count}} done',
+              })}
+            </span>
+          )}
+          {failedCount > 0 && (
+            <span className="text-red-500">
+              {t('agent.multiAgent.traceTimeline.failedCount', {
+                count: failedCount,
+                defaultValue: '{{count}} failed',
+              })}
+            </span>
+          )}
         </div>
       </button>
 
@@ -228,17 +270,25 @@ interface TraceTimelineProps {
   onSelectRun?: (run: SubAgentRunDTO) => void;
 }
 
-const EmptyTraceState: FC = memo(() => (
-  <div className="flex flex-col items-center justify-center p-8 text-center">
-    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
-      <Activity size={24} className="text-slate-400 dark:text-slate-500" />
+const EmptyTraceState: FC = memo(() => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+        <Activity size={24} className="text-slate-400 dark:text-slate-500" />
+      </div>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {t('agent.multiAgent.traceTimeline.emptyTitle', { defaultValue: 'No execution traces' })}
+      </p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+        {t('agent.multiAgent.traceTimeline.emptyDescription', {
+          defaultValue: 'SubAgent execution traces will appear here when agents run tasks.',
+        })}
+      </p>
     </div>
-    <p className="text-sm text-slate-500 dark:text-slate-400">No execution traces</p>
-    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-      SubAgent execution traces will appear here when agents run tasks.
-    </p>
-  </div>
-));
+  );
+});
 EmptyTraceState.displayName = 'EmptyTraceState';
 
 export const TraceTimeline: FC<TraceTimelineProps> = memo(

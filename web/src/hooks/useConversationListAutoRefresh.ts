@@ -75,7 +75,7 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
       return;
     }
 
-    let refreshTimer: ReturnType<typeof window.setTimeout> | undefined;
+    let refreshTimer: number | undefined;
     let refreshController: AbortController | undefined;
 
     const refreshConversations = () => {

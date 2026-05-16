@@ -23,7 +23,7 @@ import { agentConfigService } from '../../services/agentConfigService';
 import { traceAPI } from '../../services/traceService';
 import { useTenantStore } from '../../stores/tenant';
 
-import type { SubAgentRunDTO , TraceChainDTO , UntracedRunDetailsDTO } from '../../types/multiAgent';
+import type { SubAgentRunDTO, TraceChainDTO, UntracedRunDetailsDTO } from '../../types/multiAgent';
 import type { TFunction } from 'i18next';
 import type { LucideIcon } from 'lucide-react';
 
@@ -415,47 +415,44 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors duration-150 hover:border-slate-300 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200"
                           aria-label={t('tenant.agentDashboard.clearSelectedTrace')}
                         >
-                            <X size={16} />
+                          <X size={16} />
+                        </button>
+                      </div>
+                      {chainLoadError ? (
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-5 dark:border-rose-900 dark:bg-rose-950/40">
+                          <h4 className="text-sm font-semibold text-rose-900 dark:text-rose-100">
+                            {t(
+                              'tenant.agentDashboard.traceChainLoadErrorTitle',
+                              'Failed to load trace details'
+                            )}
+                          </h4>
+                          <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-300">
+                            {t(
+                              'tenant.agentDashboard.traceChainLoadErrorDescription',
+                              'The selected trace exists, but its detail chain could not be loaded right now.'
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleSelectRun(selectedRun);
+                            }}
+                            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-medium text-rose-800 transition-colors duration-150 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/60"
+                          >
+                            {t('tenant.agentDashboard.retryTraceChainLoad', 'Retry loading trace')}
                           </button>
                         </div>
-                        {chainLoadError ? (
-                          <div className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-5 dark:border-rose-900 dark:bg-rose-950/40">
-                            <h4 className="text-sm font-semibold text-rose-900 dark:text-rose-100">
-                              {t(
-                                'tenant.agentDashboard.traceChainLoadErrorTitle',
-                                'Failed to load trace details'
-                              )}
-                            </h4>
-                            <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-300">
-                              {t(
-                                'tenant.agentDashboard.traceChainLoadErrorDescription',
-                                'The selected trace exists, but its detail chain could not be loaded right now.'
-                              )}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleSelectRun(selectedRun);
-                              }}
-                              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-medium text-rose-800 transition-colors duration-150 hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 dark:border-rose-800 dark:text-rose-100 dark:hover:bg-rose-900/60"
-                            >
-                              {t(
-                                'tenant.agentDashboard.retryTraceChainLoad',
-                                'Retry loading trace'
-                              )}
-                            </button>
-                          </div>
-                        ) : (
-                          <TraceChainView
-                            data={traceChain}
-                            isLoading={isChainLoading}
-                            onSelectRun={handleSelectRun}
-                          />
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
+                      ) : (
+                        <TraceChainView
+                          data={traceChain}
+                          isLoading={isChainLoading}
+                          onSelectRun={handleSelectRun}
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </section>
           </div>
 

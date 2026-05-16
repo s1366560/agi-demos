@@ -7,12 +7,14 @@
  */
 
 import { agentService } from '../../services/agentService';
+import { httpClient } from '../../services/client/httpClient';
 import {
   type ConversationState,
   createDefaultConversationState,
 } from '../../types/conversationState';
 import { loadConversationState, saveConversationState } from '../../utils/conversationDB';
 import { logger } from '../../utils/logger';
+import { useContextStore } from '../contextStore';
 
 import { replayCanvasEventsFromTimeline } from './canvasReplay';
 import {
@@ -27,7 +29,7 @@ import {
 } from './deltaBuffers';
 import { useExecutionStore } from './executionStore';
 import { useAgentHITLStore } from './hitlStore';
-import { createStreamEventHandlers } from './streamEventHandlers';
+import { createStreamEventHandlers, type StreamHandlerDeps } from './streamEventHandlers';
 import { useStreamingStore } from './streamingStore';
 import { useTimelineStore } from './timelineStore';
 import { mergeHITLResponseEvents, timelineToMessages } from './timelineUtils';
@@ -53,6 +55,16 @@ export interface MessageLoadActionDeps {
   };
   set: StoreApi<AgentV3State>['setState'];
 }
+
+type ExecutionStatusWithCursor = Awaited<ReturnType<typeof agentService.getExecutionStatus>> & {
+  current_message_id?: string;
+};
+
+const compareTimelineEvents = (a: TimelineEvent, b: TimelineEvent): number => {
+  const timeDiff = a.eventTimeUs - b.eventTimeUs;
+  if (timeDiff !== 0) return timeDiff;
+  return a.eventCounter - b.eventCounter;
+};
 
 export function createMessageLoadActions(deps: MessageLoadActionDeps) {
   const { get, set } = deps;
@@ -130,7 +142,6 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
               }),
             // Restore context status indicator on conversation switch / page refresh
             (async () => {
-              const { useContextStore } = await import('../../stores/contextStore');
               await useContextStore.getState().fetchContextStatus(conversationId, projectId);
             })().catch((_err: unknown) => {
               logger.warn(`[AgentV3] fetchContextStatus failed:`, _err);
@@ -146,7 +157,6 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
             }),
             // Fetch tasks for conversation
             (async () => {
-              const { httpClient } = await import('../../services/client/httpClient');
               const res = await httpClient.get<{ tasks?: AgentTask[] }>(
                 `/agent/plan/tasks/${conversationId}`
               );
@@ -158,7 +168,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           ]);
 
         // Update plan mode from API response
-        if (planModeResult && planModeResult.mode) {
+        if (planModeResult !== null) {
           const isPlan = planModeResult.mode === 'plan';
           useExecutionStore.getState().setAgentIsPlanMode(isPlan);
           get().updateConversationState(conversationId, { isPlanMode: isPlan });
@@ -221,11 +231,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
         });
 
         // Ensure timeline is sorted by eventTimeUs + eventCounter (defensive fix)
-        const sortedTimeline = [...response.timeline].sort((a, b) => {
-          const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
-          if (timeDiff !== 0) return timeDiff;
-          return a.eventCounter - b.eventCounter;
-        });
+        const sortedTimeline = [...response.timeline].sort(compareTimelineEvents);
 
         // Merge HITL response events into request events for single-card rendering
         const mergedTimeline = mergeHITLResponseEvents(sortedTimeline);
@@ -261,7 +267,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
 
         // Update both global state and conversation-specific state
         const newConvState: Partial<ConversationState> = {
-          hasEarlier: response.has_more ?? false,
+          hasEarlier: response.has_more,
           earliestTimeUs: firstTimeUs,
           earliestCounter: firstCounter,
         };
@@ -280,15 +286,11 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           }
           for (const event of currentAgentTimeline) {
             const existing = eventMap.get(event.id);
-            if (!existing || (event.eventTimeUs ?? 0) >= (existing.eventTimeUs ?? 0)) {
+            if (!existing || event.eventTimeUs >= existing.eventTimeUs) {
               eventMap.set(event.id, event);
             }
           }
-          finalTimeline = Array.from(eventMap.values()).sort((a, b) => {
-            const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
-            if (timeDiff !== 0) return timeDiff;
-            return a.eventCounter - b.eventCounter;
-          });
+          finalTimeline = Array.from(eventMap.values()).sort(compareTimelineEvents);
           finalMessages = timelineToMessages(finalTimeline);
         } else {
           finalTimeline = mergedTimeline;
@@ -313,7 +315,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           tls.setAgentTimeline(finalTimeline);
           tls.setAgentMessages(finalMessages);
           tls.setAgentIsLoadingHistory(false);
-          tls.setAgentHasEarlier(response.has_more ?? false);
+          tls.setAgentHasEarlier(response.has_more);
           tls.setAgentEarliestPointers(firstTimeUs, firstCounter);
         }
 
@@ -330,9 +332,10 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           lastKnownTimeUs,
           lastTimeUs,
         });
+        const recoveredExecStatus = execStatus as ExecutionStatusWithCursor | null;
 
         // If agent is already running, recover streaming state before subscribing.
-        if ((execStatus as { is_running?: boolean })?.is_running) {
+        if (recoveredExecStatus?.is_running) {
           logger.debug(
             `[AgentV3] Conversation ${conversationId} is running, recovering live stream...`
           );
@@ -364,29 +367,30 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
             updateConversationState: get().updateConversationState,
           });
 
+          const streamHandlerDeps: StreamHandlerDeps = {
+            get,
+            set: set as StreamHandlerDeps['set'],
+            getDeltaBuffer,
+            clearDeltaBuffers,
+            clearAllDeltaBuffers,
+            timelineToMessages,
+            tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
+            thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+            queueTimelineEvent: (event, stateUpdates) => {
+              queueTimelineEventRaw(conversationId, event, stateUpdates);
+            },
+            flushTimelineBufferSync: () => {
+              flushTimelineBufferSyncRaw(conversationId);
+            },
+          };
           const streamHandler: AgentStreamHandler = createStreamEventHandlers(
             conversationId,
             undefined,
-            {
-              get: get as any,
-              set: set as any,
-              getDeltaBuffer,
-              clearDeltaBuffers,
-              clearAllDeltaBuffers,
-              timelineToMessages,
-              tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
-              thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
-              queueTimelineEvent: (event, stateUpdates) => {
-                queueTimelineEventRaw(conversationId, event, stateUpdates);
-              },
-              flushTimelineBufferSync: () => {
-                flushTimelineBufferSyncRaw(conversationId);
-              },
-            }
+            streamHandlerDeps
           );
 
           const subscribeOpts: SubscribeOptions = {};
-          const currentMsgId = (execStatus as { current_message_id?: string })?.current_message_id;
+          const currentMsgId = recoveredExecStatus?.current_message_id;
           if (typeof currentMsgId === 'string') {
             subscribeOpts.message_id = currentMsgId;
           }
@@ -395,10 +399,10 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
             if (typeof response.last_counter === 'number') {
               subscribeOpts.from_counter = response.last_counter;
             }
-          } else if (typeof execStatus?.last_event_time_us === 'number') {
-            subscribeOpts.from_time_us = execStatus.last_event_time_us;
-            if (typeof execStatus?.last_event_counter === 'number') {
-              subscribeOpts.from_counter = execStatus.last_event_counter;
+          } else if (typeof recoveredExecStatus?.last_event_time_us === 'number') {
+            subscribeOpts.from_time_us = recoveredExecStatus.last_event_time_us;
+            if (typeof recoveredExecStatus.last_event_counter === 'number') {
+              subscribeOpts.from_counter = recoveredExecStatus.last_event_counter;
             }
           }
           agentService.subscribe(conversationId, streamHandler, subscribeOpts);
@@ -456,11 +460,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
 
         // Prepend new events to existing timeline and sort by eventTimeUs + eventCounter
         const combinedTimeline = [...response.timeline, ...timeline];
-        const sortedTimeline = combinedTimeline.sort((a: TimelineEvent, b: TimelineEvent) => {
-          const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
-          if (timeDiff !== 0) return timeDiff;
-          return a.eventCounter - b.eventCounter;
-        });
+        const sortedTimeline = combinedTimeline.sort(compareTimelineEvents);
         // Merge HITL response events into request events for single-card rendering
         const mergedTimeline = mergeHITLResponseEvents(sortedTimeline);
         const newMessages = timelineToMessages(mergedTimeline);
@@ -473,7 +473,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           tlsWrite.setAgentTimeline(mergedTimeline);
           tlsWrite.setAgentMessages(newMessages);
           tlsWrite.setAgentIsLoadingEarlier(false);
-          tlsWrite.setAgentHasEarlier(response.has_more ?? false);
+          tlsWrite.setAgentHasEarlier(response.has_more);
           tlsWrite.setAgentEarliestPointers(newFirstTimeUs, newFirstCounter);
         }
 

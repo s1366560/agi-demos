@@ -44,7 +44,7 @@ export const UserMenu = React.memo(function UserMenu({
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    void navigate('/login');
   };
 
   if (!user) return null;
@@ -69,7 +69,7 @@ export const UserMenu = React.memo(function UserMenu({
           setIsOpen(!isOpen);
         }}
         className="flex items-center gap-1.5 sm:gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        aria-label="User menu"
+        aria-label={t('components.layout.header.userMenu', 'User menu')}
         type="button"
       >
         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs sm:text-sm font-medium overflow-hidden flex-shrink-0">
@@ -85,7 +85,7 @@ export const UserMenu = React.memo(function UserMenu({
             {displayName}
           </span>
           <span className="text-xs text-slate-500 dark:text-slate-400 leading-tight truncate w-full">
-            {user.roles?.[0] || 'User'}
+            {user.roles[0] || t('user.defaultRole', 'User')}
           </span>
         </div>
 

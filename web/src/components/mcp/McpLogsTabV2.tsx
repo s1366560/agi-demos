@@ -5,7 +5,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Spin, Select, Button, Empty, Tag } from 'antd';
+import { useTranslation } from 'react-i18next';
+
+import { Alert, Button, Empty, Select, Spin, Tag } from 'antd';
 import { RefreshCw, Server, ScrollText } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
@@ -55,11 +57,13 @@ function getLevelColor(level: string): string {
 }
 
 export const McpLogsTabV2: React.FC = () => {
+  const { t } = useTranslation();
   const [selectedServer, setSelectedServer] = useState<string>('');
   const [logLevel, setLogLevel] = useState<string>('info');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSettingLevel, setIsSettingLevel] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const servers = useMCPStore((s) => s.servers);
   const listServers = useMCPStore((s) => s.listServers);
@@ -68,7 +72,7 @@ export const McpLogsTabV2: React.FC = () => {
   // Ensure servers are loaded
   useEffect(() => {
     if (servers.length === 0 && currentProject?.id) {
-      listServers({ project_id: currentProject.id });
+      void listServers({ project_id: currentProject.id });
     }
   }, [servers.length, currentProject?.id, listServers]);
 
@@ -85,18 +89,25 @@ export const McpLogsTabV2: React.FC = () => {
     [servers]
   );
 
+  const logLevelOptions = useMemo(
+    () => LOG_LEVELS.map((level) => ({ label: t(`mcp.logs.levels.${level}`), value: level })),
+    [t]
+  );
+
   const fetchLogs = useCallback(async () => {
     if (!selectedServer) return;
     setIsLoading(true);
+    setErrorMessage(null);
     try {
       const resp = await mcpAPI.getLogs(selectedServer);
-      setLogs(resp.logs ?? []);
+      setLogs(resp.logs);
     } catch {
       setLogs([]);
+      setErrorMessage(t('mcp.logs.fetchFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [selectedServer]);
+  }, [selectedServer, t]);
 
   // Fetch logs when server changes
   useEffect(() => {
@@ -108,10 +119,12 @@ export const McpLogsTabV2: React.FC = () => {
   const handleSetLevel = async () => {
     if (!selectedServer) return;
     setIsSettingLevel(true);
+    setErrorMessage(null);
     try {
       await mcpAPI.setLogLevel(selectedServer, logLevel);
+      await fetchLogs();
     } catch {
-      // silently handle
+      setErrorMessage(t('mcp.logs.setLevelFailed'));
     } finally {
       setIsSettingLevel(false);
     }
@@ -119,46 +132,43 @@ export const McpLogsTabV2: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className={`${CARD_STYLES.base} p-4 shadow-sm`}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 flex items-center justify-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
             <ScrollText size={20} className="text-amber-600 dark:text-amber-400" />
           </div>
           <div>
-            <p className="text-lg font-bold text-slate-900 dark:text-white">Server Logs</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              View MCP server log messages (SEP-1865 logging)
+            <p className="text-lg font-bold text-slate-900 dark:text-white">
+              {t('mcp.logs.title')}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Controls */}
       <div className={`${CARD_STYLES.base} p-4 shadow-sm`}>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div className="flex-1 min-w-0">
             <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">
-              Server
+              {t('mcp.logs.server')}
             </label>
             <Select
               value={selectedServer || null}
               onChange={setSelectedServer}
               className="w-full"
-              placeholder="Select server"
+              placeholder={t('mcp.logs.selectServer')}
               options={serverOptions}
-              suffixIcon={<Server size={14} className="text-slate-400" />}
+              suffix={<Server size={14} className="text-slate-400" />}
             />
           </div>
           <div className="w-40">
             <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">
-              Log Level
+              {t('mcp.logs.logLevel')}
             </label>
             <Select
               value={logLevel}
               onChange={setLogLevel}
               className="w-full"
-              options={LOG_LEVELS.map((l) => ({ label: l, value: l }))}
+              options={logLevelOptions}
             />
           </div>
           <Button
@@ -167,7 +177,7 @@ export const McpLogsTabV2: React.FC = () => {
             loading={isSettingLevel}
             disabled={!selectedServer}
           >
-            Set Level
+            {t('mcp.logs.setLevel')}
           </Button>
           <Button
             size="middle"
@@ -176,25 +186,22 @@ export const McpLogsTabV2: React.FC = () => {
             loading={isLoading}
             disabled={!selectedServer}
           >
-            Refresh
+            {t('mcp.logs.refresh')}
           </Button>
         </div>
       </div>
 
-      {/* Logs */}
+      {errorMessage && <Alert type="error" showIcon title={errorMessage} />}
+
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Spin size="large" />
-          <p className="text-sm text-slate-400 mt-4">Loading logs...</p>
+          <p className="text-sm text-slate-400 mt-4">{t('mcp.logs.loading')}</p>
         </div>
       ) : logs.length === 0 ? (
         <div className={`${CARD_STYLES.base} p-8`}>
           <Empty
-            description={
-              selectedServer
-                ? 'No log messages captured yet. Set a log level and interact with the server.'
-                : 'Select a server to view logs.'
-            }
+            description={selectedServer ? t('mcp.logs.emptySelected') : t('mcp.logs.emptyNoServer')}
           />
         </div>
       ) : (
@@ -204,23 +211,23 @@ export const McpLogsTabV2: React.FC = () => {
               <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide w-24">
-                    Level
+                    {t('mcp.logs.level')}
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide w-40">
-                    Logger
+                    {t('mcp.logs.logger')}
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                    Data
+                    {t('mcp.logs.data')}
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide w-44">
-                    Time
+                    {t('mcp.logs.time')}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {logs.map((log, idx) => (
                   <tr
-                    key={idx}
+                    key={`${log.timestamp ?? 'log'}-${idx.toString()}`}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
                   >
                     <td className="px-4 py-2">
@@ -235,7 +242,9 @@ export const McpLogsTabV2: React.FC = () => {
                       <pre className="whitespace-pre-wrap break-all max-w-xl">
                         {typeof log.data === 'string'
                           ? log.data
-                          : (JSON.stringify(log.data, null, 2) ?? '-')}
+                          : log.data === undefined
+                            ? '-'
+                            : JSON.stringify(log.data, null, 2)}
                       </pre>
                     </td>
                     <td className="px-4 py-2 text-xs text-slate-500 dark:text-slate-400">

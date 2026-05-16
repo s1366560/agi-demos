@@ -101,7 +101,13 @@ export const LifecycleControls: FC<LifecycleControlsProps> = ({
           cancelText={t('agent.lifecycle.controls.cancel')}
           okButtonProps={{ danger: true }}
         >
-          <LazyTooltip title={enablePoolManagement && poolEnabled ? t('agent.lifecycle.controls.terminateInstance') : t('agent.lifecycle.controls.stopAgent')}>
+          <LazyTooltip
+            title={
+              enablePoolManagement && poolEnabled
+                ? t('agent.lifecycle.controls.terminateInstance')
+                : t('agent.lifecycle.controls.stopAgent')
+            }
+          >
             <button
               type="button"
               disabled={isActionPending}

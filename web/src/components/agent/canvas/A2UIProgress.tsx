@@ -42,16 +42,17 @@ export const A2UIProgress = memo(function A2UIProgress({
   const actions = useA2UIActions();
   const { version } = useA2UIState();
 
-  const props = (node.properties ?? {});
-  const label = useMemo(
-    () => resolveBoundStringValue(props.label, node, surfaceId, actions),
-    [actions, node, props.label, surfaceId, version]
-  );
-  const resolvedValue = useMemo(
-    () => resolveBoundNumberValue(props.value, node, surfaceId, actions) ?? 0,
-    [actions, node, props.value, surfaceId, version]
-  );
+  const props = node.properties ?? {};
+  const label = useMemo(() => {
+    void version;
+    return resolveBoundStringValue(props.label, node, surfaceId, actions);
+  }, [actions, node, props.label, surfaceId, version]);
+  const resolvedValue = useMemo(() => {
+    void version;
+    return resolveBoundNumberValue(props.value, node, surfaceId, actions) ?? 0;
+  }, [actions, node, props.value, surfaceId, version]);
   const resolvedMax = useMemo(() => {
+    void version;
     const maxValue = resolveBoundNumberValue(props.max ?? 100, node, surfaceId, actions);
     return typeof maxValue === 'number' && maxValue > 0 ? maxValue : 100;
   }, [actions, node, props.max, surfaceId, version]);
@@ -59,7 +60,7 @@ export const A2UIProgress = memo(function A2UIProgress({
     typeof props.tone === 'string' && PROGRESS_TONES.has(props.tone) ? props.tone : 'neutral';
   const clampedValue = clamp(resolvedValue, 0, resolvedMax);
   const percent = resolvedMax > 0 ? clamp((clampedValue / resolvedMax) * 100, 0, 100) : 0;
-  const valueText = `${Math.round(percent)}%`;
+  const valueText = `${Math.round(percent).toString()}%`;
   const labelText = label ?? 'Progress';
   const labelId = `${surfaceId}-${node.id}-progress-label`.replace(/[^a-zA-Z0-9_-]/g, '-');
 
@@ -100,7 +101,10 @@ export const A2UIProgress = memo(function A2UIProgress({
           aria-valuetext={valueText}
           className="a2ui-progress__track"
         >
-          <div className="a2ui-progress__fill" style={{ transform: `scaleX(${percent / 100})` }} />
+          <div
+            className="a2ui-progress__fill"
+            style={{ transform: `scaleX(${(percent / 100).toString()})` }}
+          />
         </div>
       </section>
     </div>

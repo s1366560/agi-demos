@@ -141,6 +141,9 @@ const McpServerList = lazy(() =>
     default: m.McpServerListV2,
   }))
 );
+const UnifiedRuntimes = lazy(() =>
+  import('./pages/tenant/UnifiedRuntimes').then((m) => ({ default: m.UnifiedRuntimes }))
+);
 const AgentDefinitions = lazy(() =>
   import('./pages/tenant/AgentDefinitions').then((m) => ({ default: m.AgentDefinitions }))
 );
@@ -819,6 +822,14 @@ function App() {
                 }
               />
               <Route
+                path="runtimes"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <UnifiedRuntimes />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="instances"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1179,6 +1190,14 @@ function App() {
                 }
               />
               <Route
+                path=":tenantId/profile"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <UserProfile />
+                  </Suspense>
+                }
+              />
+              <Route
                 path=":tenantId/analytics"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1353,6 +1372,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <PoolDashboard />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/runtimes"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <UnifiedRuntimes />
                   </Suspense>
                 }
               />

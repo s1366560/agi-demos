@@ -672,11 +672,15 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">{t('agent.lifecycle.pool.activeRequests')}:</span>
+                          <span className="opacity-70">
+                            {t('agent.lifecycle.pool.activeRequests')}:
+                          </span>
                           <span>{poolInstance.active_requests}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="opacity-70">{t('agent.lifecycle.pool.totalRequests')}:</span>
+                          <span className="opacity-70">
+                            {t('agent.lifecycle.pool.totalRequests')}:
+                          </span>
                           <span>{poolInstance.total_requests}</span>
                         </div>
                         <div className="flex justify-between">
@@ -796,9 +800,15 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               title={
                 <div className="space-y-1">
                   <div className="font-medium">{t('agent.lifecycle.stats.toolStats')}</div>
-                  <div>{t('agent.lifecycle.stats.totalTools')}: {status.toolStats.total}</div>
-                  <div>{t('agent.lifecycle.stats.builtinTools')}: {status.toolStats.builtin}</div>
-                  <div>{t('agent.lifecycle.stats.mcpTools')}: {status.toolStats.mcp}</div>
+                  <div>
+                    {t('agent.lifecycle.stats.totalTools')}: {status.toolStats.total}
+                  </div>
+                  <div>
+                    {t('agent.lifecycle.stats.builtinTools')}: {status.toolStats.builtin}
+                  </div>
+                  <div>
+                    {t('agent.lifecycle.stats.mcpTools')}: {status.toolStats.mcp}
+                  </div>
                 </div>
               }
             >
@@ -825,8 +835,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               title={
                 <div className="space-y-1">
                   <div className="font-medium">{t('agent.lifecycle.stats.skillStats')}</div>
-                  <div>{t('agent.lifecycle.stats.totalSkills')}: {status.skillStats.total}</div>
-                  <div>{t('agent.lifecycle.stats.loaded')}: {status.skillStats.loaded}</div>
+                  <div>
+                    {t('agent.lifecycle.stats.totalSkills')}: {status.skillStats.total}
+                  </div>
+                  <div>
+                    {t('agent.lifecycle.stats.loaded')}: {status.skillStats.loaded}
+                  </div>
                 </div>
               }
             >
@@ -858,10 +872,17 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 <div className="space-y-1">
                   <div className="font-medium">{t('agent.lifecycle.stats.taskProgress')}</div>
                   <div>
-                    {t('agent.lifecycle.stats.completed')}: {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
+                    {t('agent.lifecycle.stats.completed')}:{' '}
+                    {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
                   </div>
-                  <div>{t('agent.lifecycle.stats.inProgress')}: {tasks.filter((t) => t.status === 'in_progress').length}</div>
-                  <div>{t('agent.lifecycle.stats.pending')}: {tasks.filter((t) => t.status === 'pending').length}</div>
+                  <div>
+                    {t('agent.lifecycle.stats.inProgress')}:{' '}
+                    {tasks.filter((t) => t.status === 'in_progress').length}
+                  </div>
+                  <div>
+                    {t('agent.lifecycle.stats.pending')}:{' '}
+                    {tasks.filter((t) => t.status === 'pending').length}
+                  </div>
                 </div>
               }
             >
@@ -886,12 +907,16 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
             <LazyTooltip
-              title={t('agent.lifecycle.planMode.tooltip', { mode: status.planMode.currentMode?.toUpperCase() || 'PLAN' })}
+              title={t('agent.lifecycle.planMode.tooltip', {
+                mode: status.planMode.currentMode?.toUpperCase() || 'PLAN',
+              })}
             >
               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                 <Zap size={11} />
                 <span className="hidden sm:inline">
-                  {status.planMode.currentMode === 'plan' ? t('agent.lifecycle.planMode.label') : status.planMode.currentMode}
+                  {status.planMode.currentMode === 'plan'
+                    ? t('agent.lifecycle.planMode.label')
+                    : status.planMode.currentMode}
                 </span>
               </div>
             </LazyTooltip>
@@ -906,16 +931,20 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               title={
                 <div className="space-y-2 max-w-xs">
                   <div className="font-medium border-b border-slate-200/20 pb-1">
-                    Execution Insights
+                    {t('agent.lifecycle.insights.executionInsights')}
                   </div>
                   {executionPathDecision && (
                     <div className="flex items-start gap-2 text-xs">
                       <Route size={12} className="mt-0.5 text-blue-400 flex-shrink-0" />
                       <div>
-                        <span className="font-medium">Path:</span>{' '}
+                        <span className="font-medium">{t('agent.lifecycle.insights.path')}:</span>{' '}
                         {executionPathDecision.path.replace(/_/g, ' ')} (
                         {executionPathDecision.confidence.toFixed(2)})
-                        {domainLane && <span className="ml-1 opacity-70">· lane {domainLane}</span>}
+                        {domainLane && (
+                          <span className="ml-1 opacity-70">
+                            · {t('agent.lifecycle.insights.lane', { lane: domainLane })}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -923,9 +952,14 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                     <div className="flex items-start gap-2 text-xs">
                       <Filter size={12} className="mt-0.5 text-purple-400 flex-shrink-0" />
                       <div>
-                        <span className="font-medium">Selection:</span> {selectionTrace.final_count}
-                        /{selectionTrace.initial_count} tools kept across{' '}
-                        {selectionTrace.stages.length} stages
+                        <span className="font-medium">
+                          {t('agent.lifecycle.insights.selection')}:
+                        </span>{' '}
+                        {t('agent.lifecycle.insights.selectionSummary', {
+                          final: selectionTrace.final_count,
+                          initial: selectionTrace.initial_count,
+                          stages: selectionTrace.stages.length,
+                        })}
                       </div>
                     </div>
                   )}
@@ -933,8 +967,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                     <div className="flex items-start gap-2 text-xs">
                       <Filter size={12} className="mt-0.5 text-amber-400 flex-shrink-0" />
                       <div>
-                        <span className="font-medium">Policy:</span> filtered{' '}
-                        {policyFiltered.removed_total} tools
+                        <span className="font-medium">{t('agent.lifecycle.insights.policy')}:</span>{' '}
+                        {t('agent.lifecycle.insights.policySummary', {
+                          count: policyFiltered.removed_total,
+                        })}
                       </div>
                     </div>
                   )}
@@ -1037,7 +1073,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               cancelText={t('agent.lifecycle.controls.cancel')}
               okButtonProps={{ danger: true }}
             >
-              <LazyTooltip title={enablePoolManagement && poolEnabled ? t('agent.lifecycle.controls.terminateInstance') : t('agent.lifecycle.controls.stopAgent')}>
+              <LazyTooltip
+                title={
+                  enablePoolManagement && poolEnabled
+                    ? t('agent.lifecycle.controls.terminateInstance')
+                    : t('agent.lifecycle.controls.stopAgent')
+                }
+              >
                 <button
                   type="button"
                   disabled={isActionPending}
@@ -1102,13 +1144,18 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <div className="space-y-1">
               <div>
                 {isLoading
-                  ? 'Loading...'
+                  ? t('agent.statusBar.connection.loading', 'Loading...')
                   : status.connection.websocket
-                    ? 'WebSocket Connected'
-                    : 'Ready'}
+                    ? t('agent.statusBar.connection.websocketConnected', 'WebSocket Connected')
+                    : t('agent.statusBar.connection.ready', 'Ready')}
               </div>
               {status.resources.activeCalls > 0 && (
-                <div>Active tool calls: {status.resources.activeCalls}</div>
+                <div>
+                  {t('agent.statusBar.connection.activeToolCalls', {
+                    count: status.resources.activeCalls,
+                    defaultValue: 'Active tool calls: {{count}}',
+                  })}
+                </div>
               )}
             </div>
           }
@@ -1123,18 +1170,25 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   className="text-blue-500 animate-pulse motion-reduce:animate-none"
                 />
                 <span className="hidden sm:inline text-blue-500">
-                  {status.resources.activeCalls} active
+                  {t('agent.statusBar.connection.activeCount', {
+                    count: status.resources.activeCalls,
+                    defaultValue: '{{count}} active',
+                  })}
                 </span>
               </>
             ) : status.connection.websocket ? (
               <>
                 <Wifi size={12} className="text-emerald-500" />
-                <span className="hidden sm:inline text-emerald-500">Online</span>
+                <span className="hidden sm:inline text-emerald-500">
+                  {t('agent.statusBar.connection.online', 'Online')}
+                </span>
               </>
             ) : (
               <>
                 <Wifi size={12} />
-                <span className="hidden sm:inline">Ready</span>
+                <span className="hidden sm:inline">
+                  {t('agent.statusBar.connection.ready', 'Ready')}
+                </span>
               </>
             )}
           </div>

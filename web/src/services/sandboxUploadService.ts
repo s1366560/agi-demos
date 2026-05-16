@@ -34,6 +34,13 @@ export type UploadProgressCallback = (progress: {
   percentage: number;
 }) => void;
 
+interface ImportFileToolResult {
+  success?: boolean;
+  path?: string;
+  size_bytes?: number;
+  md5?: string;
+}
+
 // ==================== Service ====================
 
 class SandboxUploadServiceClass {
@@ -92,11 +99,11 @@ class SandboxUploadServiceClass {
       // Parse successful response - the tool returns JSON in content[0].text
       const resultText = response.content[0]?.text || '{}';
       try {
-        const result = JSON.parse(resultText);
+        const result = JSON.parse(resultText) as ImportFileToolResult;
         return {
           success: result.success ?? true,
-          sandbox_path: result.path || `/workspace/input/${file.name}`,
-          size_bytes: result.size_bytes || file.size,
+          sandbox_path: result.path ?? `/workspace/input/${file.name}`,
+          size_bytes: result.size_bytes ?? file.size,
           md5: result.md5,
         };
       } catch {

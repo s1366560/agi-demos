@@ -390,11 +390,12 @@ function normalizeBackendIterationRuns(
   if (backendRuns.length === 0 || !snapshot.plan) {
     return [];
   }
+  const plan = snapshot.plan;
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
-  const nodesById = new Map(snapshot.plan.nodes.map((node) => [node.id, node]));
+  const nodesById = new Map(plan.nodes.map((node) => [node.id, node]));
   return backendRuns.map((run) => {
-    const nodeIds = new Set(run.node_ids ?? []);
-    const nodes = snapshot.plan?.nodes.filter((node) => nodeIds.has(node.id)) ?? [];
+    const nodeIds = new Set(run.node_ids);
+    const nodes = plan.nodes.filter((node) => nodeIds.has(node.id));
     const taskIds = uniqueStrings(nodes.map((node) => node.workspace_task_id));
     const outputs: IterationOutputSummary = {
       artifacts: listFromRecord(run.deliverables, 'artifacts'),
@@ -403,7 +404,7 @@ function normalizeBackendIterationRuns(
       pipelineRefs: listFromRecord(run.deliverables, 'pipeline_refs'),
       commitRefs: listFromRecord(run.deliverables, 'commit_refs'),
       blackboardKeys: listFromRecord(run.deliverables, 'blackboard_keys'),
-      total: new Set(Object.values(run.deliverables ?? {}).flat()).size,
+      total: new Set(Object.values(run.deliverables).flat()).size,
     };
     const interactions: IterationInteractionStats = {
       total: numberFromRecord(run.interaction_counts, 'total'),
@@ -427,9 +428,9 @@ function normalizeBackendIterationRuns(
       sprintGoal: run.sprint_goal,
       reviewSummary: run.review_summary,
       nextSprintGoal: run.next_sprint_goal,
-      startedAt: run.time_range?.started_at ?? '',
-      updatedAt: run.time_range?.updated_at ?? '',
-      completedAt: run.time_range?.completed_at ?? '',
+      startedAt: run.time_range.started_at ?? '',
+      updatedAt: run.time_range.updated_at ?? '',
+      completedAt: run.time_range.completed_at ?? '',
       nodes:
         nodes.length > 0 ? nodes : Array.from(nodeIds).flatMap((id) => nodesById.get(id) ?? []),
       linkedTasks: taskIds
@@ -439,11 +440,11 @@ function normalizeBackendIterationRuns(
       outbox: snapshot.outbox.filter((item) => outboxBelongsToNodes(item, nodes)),
       outputs,
       interactions,
-      attempts: run.attempt_counts ?? {},
-      verification: run.verification_summary ?? {},
-      feedback: run.feedback_counts ?? {},
-      repairTurns: run.repair_turns ?? [],
-      carryoverNodeIds: run.carryover_node_ids ?? [],
+      attempts: run.attempt_counts,
+      verification: run.verification_summary,
+      feedback: run.feedback_counts,
+      repairTurns: run.repair_turns,
+      carryoverNodeIds: run.carryover_node_ids,
       counts: {
         total: numberFromRecord(run.task_counts, 'total'),
         done: numberFromRecord(run.task_counts, 'done'),

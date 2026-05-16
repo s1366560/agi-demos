@@ -47,9 +47,8 @@ export function attachWatchdog(ws: WebSocket, options: WatchdogOptions): Watchdo
     if (ws.readyState !== OPEN) return;
     const elapsed = Date.now() - lastMessageTime;
     if (elapsed > staleAfterMs) {
-       
       console.warn(
-        `[${label}] watchdog: no inbound for ${elapsed}ms (>${staleAfterMs}ms), closing as stale`
+        `[${label}] watchdog: no inbound for ${String(elapsed)}ms (>${String(staleAfterMs)}ms), closing as stale`
       );
       stopped = true;
       clearInterval(timer);

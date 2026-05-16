@@ -357,7 +357,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           await geneMarketService.createGeneReview(geneId, data);
           set({ isSubmitting: false });
           // Fetch again to update list
-          get().fetchGeneReviews(geneId);
+          void get().fetchGeneReviews(geneId);
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to create review'), isSubmitting: false });
           throw error;
@@ -370,7 +370,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           await geneMarketService.deleteGeneReview(geneId, reviewId);
           set({ isSubmitting: false });
           // Fetch again to update list
-          get().fetchGeneReviews(geneId);
+          void get().fetchGeneReviews(geneId);
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to delete review'), isSubmitting: false });
           throw error;
@@ -405,7 +405,11 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.listEvolutionEvents(instanceId, params);
-          set({ evolutionEvents: response.events, evolutionTotal: response.total, isLoading: false });
+          set({
+            evolutionEvents: response.events,
+            evolutionTotal: response.total,
+            isLoading: false,
+          });
         } catch (error: unknown) {
           set({
             error: getErrorMessage(error, 'Failed to list evolution events'),

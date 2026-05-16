@@ -92,6 +92,26 @@ describe('Login', () => {
     expect(screen.getByText('Signing in...')).toBeInTheDocument();
   });
 
+  it('shows static account recovery and registration guidance without fake links', () => {
+    const { container } = render(<Login />);
+
+    expect(container.querySelectorAll('a[href="#"]')).toHaveLength(0);
+    expect(
+      screen.getByText('Password reset is handled by your organization administrator.')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription(
+      'Password reset is handled by your organization administrator.'
+    );
+
+    expect(
+      screen.getByText('New accounts are created through tenant invitations.')
+    ).toBeInTheDocument();
+
+    expect(screen.queryByRole('button', { name: 'Forgot password?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Register Now' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Privacy Policy' })).not.toBeInTheDocument();
+  });
+
   it('auto fills demo credentials', () => {
     render(<Login />);
     const emailInput = screen.getByLabelText('Email');
@@ -108,6 +128,26 @@ describe('Login', () => {
     // Test user credential
     const userCred = screen.getByText('user@memstack.ai / userpassword');
     fireEvent.click(userCred.parentElement!);
+
+    expect(emailInput).toHaveValue('user@memstack.ai');
+    expect(passwordInput).toHaveValue('userpassword');
+  });
+
+  it('supports keyboard activation for demo credentials', () => {
+    render(<Login />);
+    const emailInput = screen.getByLabelText('Email');
+    const passwordInput = screen.getByLabelText('Password');
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Use admin demo credentials' }), {
+      key: 'Enter',
+    });
+
+    expect(emailInput).toHaveValue('admin@memstack.ai');
+    expect(passwordInput).toHaveValue('adminpassword');
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Use user demo credentials' }), {
+      key: ' ',
+    });
 
     expect(emailInput).toHaveValue('user@memstack.ai');
     expect(passwordInput).toHaveValue('userpassword');

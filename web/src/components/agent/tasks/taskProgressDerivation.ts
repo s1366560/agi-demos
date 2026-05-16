@@ -11,11 +11,7 @@
 
 import type { AgentTask } from '@/types/agent';
 
-export type TaskProgressStatus =
-  | 'thinking'
-  | 'step_executing'
-  | 'completed'
-  | 'failed';
+export type TaskProgressStatus = 'thinking' | 'step_executing' | 'completed' | 'failed';
 
 export interface TaskProgressSummary {
   /** 1-indexed current step (the in-progress task, or completed+1 if none). */
@@ -45,7 +41,7 @@ export interface TaskProgressSummary {
  */
 export function deriveTaskProgress(
   tasks: readonly AgentTask[],
-  isStreaming: boolean,
+  isStreaming: boolean
 ): TaskProgressSummary {
   const total = tasks.length;
   if (total === 0) {

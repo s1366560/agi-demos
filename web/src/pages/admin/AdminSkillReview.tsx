@@ -8,10 +8,11 @@
 
 import { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Empty, Input, Modal, Radio, Skeleton, Tabs, Tag, Typography, message } from 'antd';
 import { Check, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import {
   curatedSkillAPI,
@@ -106,7 +107,11 @@ function ReviewDialog({
 
   return (
     <Modal
-      title={mode === 'approve' ? t('admin.skillReview.approveTitle') : t('admin.skillReview.rejectTitle')}
+      title={
+        mode === 'approve'
+          ? t('admin.skillReview.approveTitle')
+          : t('admin.skillReview.rejectTitle')
+      }
       open={open}
       onCancel={() => {
         setNote('');
@@ -135,16 +140,19 @@ function ReviewDialog({
                 setBump(e.target.value as SemverBump | 'trust');
               }}
             >
-              <Radio value="trust">{t('admin.skillReview.trustSubmitter', { version: submission?.proposed_semver ?? '-' })}</Radio>
+              <Radio value="trust">
+                {t('admin.skillReview.trustSubmitter', {
+                  version: submission?.proposed_semver ?? '-',
+                })}
+              </Radio>
               <Radio value="patch">{t('admin.skillReview.bumpPatch')}</Radio>
               <Radio value="minor">{t('admin.skillReview.bumpMinor')}</Radio>
               <Radio value="major">{t('admin.skillReview.bumpMajor')}</Radio>
             </Radio.Group>
             <Text type="secondary" className="text-xs">
-              {t('admin.skillReview.effectiveVersion')}<Tag color="blue">v{effectiveSemver}</Tag>
-              <span className="ml-2">
-                {t('admin.skillReview.deprecateNote')}
-              </span>
+              {t('admin.skillReview.effectiveVersion')}
+              <Tag color="blue">v{effectiveSemver}</Tag>
+              <span className="ml-2">{t('admin.skillReview.deprecateNote')}</span>
             </Text>
           </div>
         ) : null}
@@ -191,7 +199,10 @@ function SubmissionRow({
           {new Date(submission.created_at).toLocaleString()}
         </div>
         {submission.submission_note ? (
-          <div className={`mt-2 text-sm ${mutedText}`}>{t('admin.skillReview.submissionNotePrefix')}{submission.submission_note}</div>
+          <div className={`mt-2 text-sm ${mutedText}`}>
+            {t('admin.skillReview.submissionNotePrefix')}
+            {submission.submission_note}
+          </div>
         ) : null}
         {submission.review_note ? (
           <div
@@ -201,7 +212,8 @@ function SubmissionRow({
                 : `mt-2 text-sm ${mutedText}`
             }
           >
-            {t('admin.skillReview.reviewNotePrefix')}{submission.review_note}
+            {t('admin.skillReview.reviewNotePrefix')}
+            {submission.review_note}
           </div>
         ) : null}
       </div>
@@ -298,10 +310,26 @@ export default function AdminSkillReview() {
         <Tabs
           defaultActiveKey="pending"
           items={[
-            { key: 'pending', label: t('admin.skillReview.tabs.pending'), children: <SubmissionsList status="pending" /> },
-            { key: 'approved', label: t('admin.skillReview.tabs.approved'), children: <SubmissionsList status="approved" /> },
-            { key: 'rejected', label: t('admin.skillReview.tabs.rejected'), children: <SubmissionsList status="rejected" /> },
-            { key: 'withdrawn', label: t('admin.skillReview.tabs.withdrawn'), children: <SubmissionsList status="withdrawn" /> },
+            {
+              key: 'pending',
+              label: t('admin.skillReview.tabs.pending'),
+              children: <SubmissionsList status="pending" />,
+            },
+            {
+              key: 'approved',
+              label: t('admin.skillReview.tabs.approved'),
+              children: <SubmissionsList status="approved" />,
+            },
+            {
+              key: 'rejected',
+              label: t('admin.skillReview.tabs.rejected'),
+              children: <SubmissionsList status="rejected" />,
+            },
+            {
+              key: 'withdrawn',
+              label: t('admin.skillReview.tabs.withdrawn'),
+              children: <SubmissionsList status="withdrawn" />,
+            },
           ]}
         />
       </div>

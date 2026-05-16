@@ -33,7 +33,9 @@ export const KeyboardShortcutsPopover: React.FC<KeyboardShortcutsPopoverProps> =
     <div className="relative" ref={containerRef}>
       <button
         type="button"
-        onClick={() => { setIsOpen(!isOpen); }}
+        onClick={() => {
+          setIsOpen(!isOpen);
+        }}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-light text-text-secondary transition hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-surface-dark-alt dark:text-text-muted dark:hover:bg-white/5 dark:hover:text-text-inverse"
@@ -53,7 +55,9 @@ export const KeyboardShortcutsPopover: React.FC<KeyboardShortcutsPopoverProps> =
           <dl className="flex flex-col gap-2">
             {KEYBOARD_HINTS.map((hint) => (
               <div key={hint.keys} className="flex items-center justify-between gap-4">
-                <dt className="text-xs text-text-secondary dark:text-text-muted">{t(hint.labelKey, hint.defaultLabel)}</dt>
+                <dt className="text-xs text-text-secondary dark:text-text-muted">
+                  {t(hint.labelKey, hint.defaultLabel)}
+                </dt>
                 <dd>
                   <kbd className="inline-flex min-w-[20px] items-center justify-center rounded border border-border-light bg-background-light px-1 text-[10px] font-medium text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-muted">
                     {hint.keys}
@@ -65,7 +69,10 @@ export const KeyboardShortcutsPopover: React.FC<KeyboardShortcutsPopoverProps> =
 
           {!!moveMode && (
             <p className="mt-3 border-t border-border-light pt-3 text-xs text-text-secondary dark:border-border-dark dark:text-text-muted">
-              {t('blackboard.arrangement.moveHint', 'Use arrow keys to move the selected workstation.')}
+              {t(
+                'blackboard.arrangement.moveHint',
+                'Use arrow keys to move the selected workstation.'
+              )}
             </p>
           )}
         </div>

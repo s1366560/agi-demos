@@ -18,6 +18,7 @@ import {
   Download,
   History,
   RefreshCw,
+  Search as SearchIcon,
   Shield,
 } from 'lucide-react';
 
@@ -648,6 +649,8 @@ export const AuditLogs: React.FC = () => {
               });
             }}
             disabled={isLoading || isRuntimeHookSummaryLoading}
+            aria-label={t('common.refresh', 'Refresh')}
+            title={t('common.refresh', 'Refresh')}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={16} />
@@ -756,6 +759,12 @@ export const AuditLogs: React.FC = () => {
                   setHookNameFilter(e.target.value);
                 }}
                 allowClear
+                enterButton={
+                  <>
+                    <span className="sr-only">{t('common.search', 'Search')}</span>
+                    <SearchIcon size={16} aria-hidden="true" />
+                  </>
+                }
               />
             </div>
             <LazySelect
@@ -816,6 +825,12 @@ export const AuditLogs: React.FC = () => {
                   setActionFilter(e.target.value);
                 }}
                 allowClear
+                enterButton={
+                  <>
+                    <span className="sr-only">{t('common.search', 'Search')}</span>
+                    <SearchIcon size={16} aria-hidden="true" />
+                  </>
+                }
               />
             </div>
             <LazySelect
@@ -1000,7 +1015,7 @@ export const AuditLogs: React.FC = () => {
                     {t('tenant.auditLogs.colResourceId')}
                   </th>
                   <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    {t('common.actions')}
+                    {t('common.actions.label')}
                   </th>
                 </tr>
               </thead>

@@ -227,7 +227,7 @@ function buildSnapshotComponents(state: A2UIMessageStreamState): A2UIComponents 
           ? preferredKey
           : isSafeComponentKey(componentId)
             ? componentId
-            : `component-${syntheticIndex++}`;
+            : `component-${String(syntheticIndex++)}`;
       components[snapshotKey] = cloneValue(component);
     }
     return components;

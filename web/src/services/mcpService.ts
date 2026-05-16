@@ -119,7 +119,6 @@ export const mcpAPI = {
    */
   callTool: async (request: MCPToolCallRequest): Promise<MCPToolCallResponse> => {
     return await api.post<MCPToolCallResponse>('/mcp/tools/call', request);
-    return await api.post<MCPToolCallResponse>('/mcp/tools/call', request);
   },
 
   /**

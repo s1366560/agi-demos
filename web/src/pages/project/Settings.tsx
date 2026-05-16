@@ -21,6 +21,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
+import { Input, Modal, message as antdMessage } from 'antd';
 import {
   Settings as SettingsIcon,
   Save,
@@ -36,6 +39,7 @@ import {
 import api, { projectAPI } from '../../services/api';
 import { projectSandboxService } from '../../services/projectSandboxService';
 import { useProjectStore } from '../../stores/project';
+import { confirmAction } from '../../utils/confirmAction';
 
 import type {
   ProjectSettingsHeaderProps,
@@ -51,55 +55,15 @@ import type {
 } from './settings/types';
 import type { ProjectSandbox } from '../../types/sandbox';
 
-const TEXTS = {
-  title: 'Project Settings',
-  noProject: 'No project selected',
-  messages: {
-    saved: 'Settings saved successfully',
-    failed: 'Failed to save settings',
-  },
-  basic: {
-    title: 'Basic Settings',
-    name: 'Project Name',
-    description: 'Description',
-    public: 'Make project public',
-    save: 'Save',
-    saving: 'Saving...',
-  },
-  memory: {
-    title: 'Memory Rules',
-    max_episodes: 'Max Episodes',
-    retention: 'Retention Days',
-    auto_refresh: 'Auto Refresh',
-    interval: 'Refresh Interval (hours)',
-    save: 'Save',
-  },
-  graph: {
-    title: 'Graph Configuration',
-    max_nodes: 'Max Nodes',
-    max_edges: 'Max Edges',
-    threshold: 'Similarity Threshold',
-    save: 'Save',
-  },
-  advanced: {
-    title: 'Advanced',
-    export: 'Export Data',
-    clear_cache: 'Clear Cache',
-    rebuild: 'Rebuild Communities',
-    confirm_clear: 'Are you sure you want to clear the cache?',
-    confirm_rebuild: 'Are you sure you want to rebuild communities?',
-  },
-  danger: {
-    title: 'Danger Zone',
-    desc: 'Once you delete a project, there is no going back. Please be certain.',
-    warning: 'This action cannot be undone.',
-    delete: 'Delete Project',
-    confirm_prompt: 'Type project name to confirm:',
-    name_mismatch: 'Project name does not match.',
-    success: 'Project deleted successfully.',
-    fail: 'Failed to delete project.',
-  },
-} as const;
+interface ProjectSettingsError {
+  response?: { data?: { detail?: string | undefined } | undefined } | undefined;
+  message?: string | undefined;
+}
+
+const getProjectSettingsErrorMessage = (error: unknown, fallback: string) => {
+  const err = error as ProjectSettingsError;
+  return err.response?.data?.detail ?? err.message ?? fallback;
+};
 
 // ============================================================================
 // Sub-Components
@@ -116,6 +80,8 @@ Header.displayName = 'ProjectSettings.Header';
 
 // Message Sub-Component
 const Message: React.FC<ProjectSettingsMessageProps> = ({ message, onClose }) => {
+  const { t } = useTranslation();
+
   if (!message) return null;
 
   const isSuccess = message.type === 'success';
@@ -136,7 +102,7 @@ const Message: React.FC<ProjectSettingsMessageProps> = ({ message, onClose }) =>
         <button
           onClick={onClose}
           className="text-current opacity-70 hover:opacity-100"
-          aria-label="Close"
+          aria-label={t('common.close')}
         >
           ×
         </button>
@@ -155,19 +121,21 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
   onIsPublicChange,
   onSave,
 }) => {
+  const { t } = useTranslation();
+
   const handleSaveClick = useCallback(() => {
-    onSave();
+    void onSave();
   }, [onSave]);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {TEXTS.basic.title}
+        {t('project.settings.basicTitle')}
       </h2>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            {TEXTS.basic.name} *
+            {t('project.settings.basicName')} *
           </label>
           <input
             type="text"
@@ -181,7 +149,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            {TEXTS.basic.description}
+            {t('project.settings.basicDescription')}
           </label>
           <textarea
             value={data.description}
@@ -204,7 +172,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
             className="rounded border-gray-300 dark:border-slate-600"
           />
           <label htmlFor="isPublic" className="text-sm text-gray-700 dark:text-slate-300">
-            {TEXTS.basic.public}
+            {t('project.settings.basicPublic')}
           </label>
         </div>
 
@@ -215,7 +183,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <Save className="h-4 w-4" />
-            {isSaving ? TEXTS.basic.saving : TEXTS.basic.save}
+            {isSaving ? t('project.settings.basicSaving') : t('project.settings.basicSave')}
           </button>
         </div>
       </div>
@@ -234,20 +202,22 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
   onRefreshIntervalChange,
   onSave,
 }) => {
+  const { t } = useTranslation();
+
   const handleSaveClick = useCallback(() => {
-    onSave();
+    void onSave();
   }, [onSave]);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {TEXTS.memory.title}
+        {t('project.settings.memoryTitle')}
       </h2>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {TEXTS.memory.max_episodes}
+              {t('project.settings.memoryMaxEpisodes')}
             </label>
             <input
               type="number"
@@ -260,7 +230,7 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {TEXTS.memory.retention}
+              {t('project.settings.memoryRetention')}
             </label>
             <input
               type="number"
@@ -284,14 +254,14 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             className="rounded border-gray-300 dark:border-slate-600"
           />
           <label htmlFor="autoRefresh" className="text-sm text-gray-700 dark:text-slate-300">
-            {TEXTS.memory.auto_refresh}
+            {t('project.settings.memoryAutoRefresh')}
           </label>
         </div>
 
         {data.autoRefresh && (
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {TEXTS.memory.interval}
+              {t('project.settings.memoryInterval')}
             </label>
             <input
               type="number"
@@ -311,7 +281,7 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <Save className="h-4 w-4" />
-            {isSaving ? TEXTS.basic.saving : TEXTS.memory.save}
+            {isSaving ? t('project.settings.basicSaving') : t('project.settings.memorySave')}
           </button>
         </div>
       </div>
@@ -330,20 +300,22 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
   onCommunityDetectionChange,
   onSave,
 }) => {
+  const { t } = useTranslation();
+
   const handleSaveClick = useCallback(() => {
-    onSave();
+    void onSave();
   }, [onSave]);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {TEXTS.graph.title}
+        {t('project.settings.graphTitle')}
       </h2>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {TEXTS.graph.max_nodes}
+              {t('project.settings.graphMaxNodes')}
             </label>
             <input
               type="number"
@@ -356,7 +328,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {TEXTS.graph.max_edges}
+              {t('project.settings.graphMaxEdges')}
             </label>
             <input
               type="number"
@@ -371,7 +343,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            {TEXTS.graph.threshold}: {data.similarityThreshold}
+            {t('project.settings.graphThreshold')}: {data.similarityThreshold}
           </label>
           <input
             type="range"
@@ -397,7 +369,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             className="rounded border-gray-300 dark:border-slate-600"
           />
           <label htmlFor="communityDetection" className="text-sm text-gray-700 dark:text-slate-300">
-            Enable Community Detection
+            {t('project.settings.graphCommunityDetection')}
           </label>
         </div>
 
@@ -408,7 +380,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <Save className="h-4 w-4" />
-            {isSaving ? TEXTS.basic.saving : TEXTS.graph.save}
+            {isSaving ? t('project.settings.basicSaving') : t('project.settings.graphSave')}
           </button>
         </div>
       </div>
@@ -423,45 +395,50 @@ const Advanced: React.FC<ProjectSettingsAdvancedProps> = ({
   onClearCache,
   onRebuildCommunities,
 }) => {
+  const { t } = useTranslation();
+
   const handleExport = useCallback(() => {
-    onExportData();
+    void onExportData();
   }, [onExportData]);
 
   const handleClearCache = useCallback(() => {
-    onClearCache();
+    void onClearCache();
   }, [onClearCache]);
 
   const handleRebuild = useCallback(() => {
-    onRebuildCommunities();
+    void onRebuildCommunities();
   }, [onRebuildCommunities]);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {TEXTS.advanced.title}
+        {t('project.settings.advancedTitle')}
       </h2>
       <div className="space-y-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <button
+            type="button"
             onClick={handleExport}
-            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
+            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
           >
             <Download className="h-4 w-4" />
-            {TEXTS.advanced.export}
+            {t('project.settings.advancedExport')}
           </button>
           <button
+            type="button"
             onClick={handleClearCache}
-            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
+            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
           >
             <RefreshCw className="h-4 w-4" />
-            {TEXTS.advanced.clear_cache}
+            {t('project.settings.advancedClearCache')}
           </button>
           <button
+            type="button"
             onClick={handleRebuild}
-            className="px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
+            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
           >
             <RefreshCw className="h-4 w-4" />
-            {TEXTS.advanced.rebuild}
+            {t('project.settings.advancedRebuild')}
           </button>
         </div>
       </div>
@@ -472,26 +449,33 @@ Advanced.displayName = 'ProjectSettings.Advanced';
 
 // Danger Zone Sub-Component
 const Danger: React.FC<ProjectSettingsDangerProps> = ({ projectName: _projectName, onDelete }) => {
+  const { t } = useTranslation();
+
   const handleDelete = useCallback(() => {
-    onDelete();
+    void onDelete();
   }, [onDelete]);
 
   return (
     <div className="bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-6">
       <h2 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-4">
-        {TEXTS.danger.title}
+        {t('project.settings.dangerTitle')}
       </h2>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-red-800 dark:text-red-300 mb-1">{TEXTS.danger.desc}</p>
-          <p className="text-xs text-red-600 dark:text-red-400">{TEXTS.danger.warning}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm text-red-800 dark:text-red-300 mb-1">
+            {t('project.settings.dangerDesc')}
+          </p>
+          <p className="text-xs text-red-600 dark:text-red-400">
+            {t('project.settings.dangerWarning')}
+          </p>
         </div>
         <button
+          type="button"
           onClick={handleDelete}
-          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center gap-2"
+          className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 sm:flex-none"
         >
           <Trash2 className="h-4 w-4" />
-          {TEXTS.danger.delete}
+          {t('project.settings.dangerDelete')}
         </button>
       </div>
     </div>
@@ -500,16 +484,21 @@ const Danger: React.FC<ProjectSettingsDangerProps> = ({ projectName: _projectNam
 Danger.displayName = 'ProjectSettings.Danger';
 
 // NoProject Sub-Component
-const NoProject: React.FC<ProjectSettingsNoProjectProps> = () => (
-  <div className="p-8 text-center text-slate-500">
-    <SettingsIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
-    <p>{TEXTS.noProject}</p>
-  </div>
-);
+const NoProject: React.FC<ProjectSettingsNoProjectProps> = () => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="p-8 text-center text-slate-500">
+      <SettingsIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+      <p>{t('project.settings.noProject')}</p>
+    </div>
+  );
+};
 NoProject.displayName = 'ProjectSettings.NoProject';
 
 // Sandbox Sub-Component
 const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
+  const { t } = useTranslation();
   const [sandboxInfo, setSandboxInfo] = useState<ProjectSandbox | null>(null);
   const [stats, setStats] = useState<{
     cpu_percent?: number;
@@ -544,7 +533,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
   }, [projectId]);
 
   useEffect(() => {
-    fetchSandboxInfo();
+    void fetchSandboxInfo();
   }, [fetchSandboxInfo]);
 
   const handleRestart = useCallback(async () => {
@@ -580,32 +569,35 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
       <div className="flex items-center gap-2 mb-4">
         <Box className="h-5 w-5 text-purple-500" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Sandbox</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {t('project.settings.sandboxSectionTitle')}
+        </h3>
       </div>
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-        Sandboxes provide isolated execution environments for tools and code. They are automatically
-        created on first use and destroyed after idle timeout.
+        {t('project.settings.sandboxDescription')}
       </p>
 
       {loading ? (
-        <div className="text-sm text-gray-400">Loading sandbox status...</div>
+        <div className="text-sm text-gray-400">{t('project.settings.sandboxLoading')}</div>
       ) : !sandboxInfo ? (
         <div className="text-sm text-gray-500 dark:text-slate-400">
-          No sandbox provisioned. A sandbox will be created automatically when tools are first used.
+          {t('project.settings.sandboxEmpty')}
         </div>
       ) : (
         <div className="space-y-4">
           {/* Status Row */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
             <div>
-              <span className="text-gray-500 dark:text-slate-400">Status:</span>{' '}
-              <span className={`font-medium ${statusColor}`}>
-                {sandboxInfo.status ?? 'Unknown'}
-              </span>
+              <span className="text-gray-500 dark:text-slate-400">
+                {t('project.settings.sandboxStatusLabel')}:
+              </span>{' '}
+              <span className={`font-medium ${statusColor}`}>{sandboxInfo.status}</span>
             </div>
             <div>
-              <span className="text-gray-500 dark:text-slate-400">ID:</span>{' '}
-              <span className="font-mono text-xs text-gray-600 dark:text-slate-300">
+              <span className="text-gray-500 dark:text-slate-400">
+                {t('project.settings.sandboxIdLabel')}:
+              </span>{' '}
+              <span className="break-all font-mono text-xs text-gray-600 dark:text-slate-300">
                 {sandboxInfo.sandbox_id ? sandboxInfo.sandbox_id.slice(0, 12) + '...' : '-'}
               </span>
             </div>
@@ -614,7 +606,9 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
           {/* Last Accessed */}
           {sandboxInfo.last_accessed_at && (
             <div className="text-sm">
-              <span className="text-gray-500 dark:text-slate-400">Last accessed:</span>{' '}
+              <span className="text-gray-500 dark:text-slate-400">
+                {t('project.settings.sandboxLastAccessed')}:
+              </span>{' '}
               <span className="text-gray-700 dark:text-slate-300">
                 {new Date(sandboxInfo.last_accessed_at).toLocaleString()}
               </span>
@@ -623,15 +617,19 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
 
           {/* Resource Stats (only when running) */}
           {stats && (
-            <div className="grid grid-cols-2 gap-4 text-sm bg-gray-50 dark:bg-slate-800/50 rounded-md p-3">
+            <div className="grid grid-cols-1 gap-4 rounded-md bg-gray-50 p-3 text-sm dark:bg-slate-800/50 sm:grid-cols-2">
               <div>
-                <span className="text-gray-500 dark:text-slate-400">CPU:</span>{' '}
+                <span className="text-gray-500 dark:text-slate-400">
+                  {t('project.settings.sandboxCpuLabel')}:
+                </span>{' '}
                 <span className="text-gray-700 dark:text-slate-300">
                   {stats.cpu_percent?.toFixed(1) ?? '-'}%
                 </span>
               </div>
               <div>
-                <span className="text-gray-500 dark:text-slate-400">Memory:</span>{' '}
+                <span className="text-gray-500 dark:text-slate-400">
+                  {t('project.settings.sandboxMemoryLabel')}:
+                </span>{' '}
                 <span className="text-gray-700 dark:text-slate-300">
                   {stats.memory_used_mb?.toFixed(0) ?? '-'} /{' '}
                   {stats.memory_limit_mb?.toFixed(0) ?? '-'} MB
@@ -641,33 +639,39 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2 sm:gap-3">
             <button
               type="button"
-              onClick={handleRestart}
+              onClick={() => {
+                void handleRestart();
+              }}
               disabled={actionLoading || sandboxInfo.status === 'terminated'}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:flex-none"
             >
               <RotateCcw className="h-4 w-4" />
-              Restart
+              {t('project.settings.sandboxRestart')}
             </button>
             <button
               type="button"
-              onClick={handleTerminate}
+              onClick={() => {
+                void handleTerminate();
+              }}
               disabled={actionLoading || sandboxInfo.status === 'terminated'}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-800 border border-red-300 dark:border-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-600 dark:bg-slate-800 dark:text-red-400 dark:hover:bg-red-900/20 sm:flex-none"
             >
               <Power className="h-4 w-4" />
-              Terminate
+              {t('project.settings.sandboxTerminate')}
             </button>
             <button
               type="button"
-              onClick={fetchSandboxInfo}
+              onClick={() => {
+                void fetchSandboxInfo();
+              }}
               disabled={actionLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:flex-none"
             >
               <RefreshCw className="h-4 w-4" />
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
         </div>
@@ -692,6 +696,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
   Danger: typeof Danger;
   NoProject: typeof NoProject;
 } = ({ className = '' }) => {
+  const { t } = useTranslation();
   const { currentProject } = useProjectStore();
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -720,19 +725,15 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       setDescription(currentProject.description || '');
       setIsPublic(currentProject.is_public || false);
 
-      if (currentProject.memory_rules) {
-        setMaxEpisodes(currentProject.memory_rules.max_episodes || 100);
-        setRetentionDays(currentProject.memory_rules.retention_days || 365);
-        setAutoRefresh(currentProject.memory_rules.auto_refresh);
-        setRefreshInterval(currentProject.memory_rules.refresh_interval || 24);
-      }
+      setMaxEpisodes(currentProject.memory_rules.max_episodes || 100);
+      setRetentionDays(currentProject.memory_rules.retention_days || 365);
+      setAutoRefresh(currentProject.memory_rules.auto_refresh);
+      setRefreshInterval(currentProject.memory_rules.refresh_interval || 24);
 
-      if (currentProject.graph_config) {
-        setMaxNodes(currentProject.graph_config.max_nodes || 10000);
-        setMaxEdges(currentProject.graph_config.max_edges || 50000);
-        setSimilarityThreshold(currentProject.graph_config.similarity_threshold || 0.8);
-        setCommunityDetection(currentProject.graph_config.community_detection);
-      }
+      setMaxNodes(currentProject.graph_config.max_nodes || 10000);
+      setMaxEdges(currentProject.graph_config.max_edges || 50000);
+      setSimilarityThreshold(currentProject.graph_config.similarity_threshold || 0.8);
+      setCommunityDetection(currentProject.graph_config.community_detection);
     }
   }, [currentProject]);
 
@@ -749,24 +750,21 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
         description,
         is_public: isPublic,
       });
-      setMessage({ type: 'success', text: TEXTS.messages.saved });
+      setMessage({ type: 'success', text: t('project.settings.saved') });
       setTimeout(() => {
         window.location.reload();
       }, 1000);
     } catch (error) {
       console.error('Failed to save settings:', error);
-      const err = error as {
-        response?: { data?: { detail?: string | undefined } | undefined } | undefined;
-        message?: string | undefined;
-      };
+      const fallback = t('project.settings.failed');
       setMessage({
         type: 'error',
-        text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
+        text: `${fallback}: ${getProjectSettingsErrorMessage(error, fallback)}`,
       });
     } finally {
       setIsSaving(false);
     }
-  }, [currentProject, name, description, isPublic]);
+  }, [currentProject, name, description, isPublic, t]);
 
   const handleSaveMemoryRules = useCallback(async () => {
     if (!currentProject) return;
@@ -783,21 +781,18 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
           refresh_interval: refreshInterval,
         },
       });
-      setMessage({ type: 'success', text: TEXTS.messages.saved });
+      setMessage({ type: 'success', text: t('project.settings.saved') });
     } catch (error) {
       console.error('Failed to save memory rules:', error);
-      const err = error as {
-        response?: { data?: { detail?: string | undefined } | undefined } | undefined;
-        message?: string | undefined;
-      };
+      const fallback = t('project.settings.failed');
       setMessage({
         type: 'error',
-        text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
+        text: `${fallback}: ${getProjectSettingsErrorMessage(error, fallback)}`,
       });
     } finally {
       setIsSaving(false);
     }
-  }, [currentProject, maxEpisodes, retentionDays, autoRefresh, refreshInterval]);
+  }, [currentProject, maxEpisodes, retentionDays, autoRefresh, refreshInterval, t]);
 
   const handleSaveGraphConfig = useCallback(async () => {
     if (!currentProject) return;
@@ -814,26 +809,25 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
           community_detection: communityDetection,
         },
       });
-      setMessage({ type: 'success', text: TEXTS.messages.saved });
+      setMessage({ type: 'success', text: t('project.settings.saved') });
     } catch (error) {
       console.error('Failed to save graph config:', error);
-      const err = error as {
-        response?: { data?: { detail?: string | undefined } | undefined } | undefined;
-        message?: string | undefined;
-      };
+      const fallback = t('project.settings.failed');
       setMessage({
         type: 'error',
-        text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
+        text: `${fallback}: ${getProjectSettingsErrorMessage(error, fallback)}`,
       });
     } finally {
       setIsSaving(false);
     }
-  }, [currentProject, maxNodes, maxEdges, similarityThreshold, communityDetection]);
+  }, [currentProject, maxNodes, maxEdges, similarityThreshold, communityDetection, t]);
 
   const handleClearCache = useCallback(async () => {
     if (!currentProject) return;
 
-    if (!window.confirm(TEXTS.advanced.confirm_clear)) {
+    if (
+      !(await confirmAction({ title: t('project.settings.advancedConfirmClear'), danger: true }))
+    ) {
       return;
     }
 
@@ -842,29 +836,31 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       await api.post('/maintenance/refresh/incremental', {
         rebuild_communities: true,
       });
-      setMessage({ type: 'success', text: 'Cache cleared successfully' });
+      setMessage({ type: 'success', text: t('project.settings.advancedClearCacheSuccess') });
     } catch (error) {
       console.error('Failed to clear cache:', error);
-      setMessage({ type: 'error', text: 'Failed to clear cache' });
+      setMessage({ type: 'error', text: t('project.settings.advancedClearCacheError') });
     }
-  }, [currentProject]);
+  }, [currentProject, t]);
 
   const handleRebuildCommunities = useCallback(async () => {
     if (!currentProject) return;
 
-    if (!window.confirm(TEXTS.advanced.confirm_rebuild)) {
+    if (
+      !(await confirmAction({ title: t('project.settings.advancedConfirmRebuild'), danger: true }))
+    ) {
       return;
     }
 
     setMessage(null);
     try {
       await api.post('/communities/rebuild');
-      setMessage({ type: 'success', text: 'Community rebuild submitted' });
+      setMessage({ type: 'success', text: t('project.settings.advancedRebuildSuccess') });
     } catch (error) {
       console.error('Failed to rebuild communities:', error);
-      setMessage({ type: 'error', text: 'Failed to rebuild communities' });
+      setMessage({ type: 'error', text: t('project.settings.advancedRebuildError') });
     }
-  }, [currentProject]);
+  }, [currentProject, t]);
 
   const handleExportData = useCallback(async () => {
     if (!currentProject) return;
@@ -884,38 +880,66 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
+      const exportDate = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `project-${currentProject.id}-export-${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `project-${currentProject.id}-export-${exportDate}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      setMessage({ type: 'success', text: 'Data exported successfully' });
+      setMessage({ type: 'success', text: t('project.settings.advancedExportSuccess') });
     } catch (error) {
       console.error('Failed to export data:', error);
-      setMessage({ type: 'error', text: 'Failed to export data' });
+      setMessage({ type: 'error', text: t('project.settings.advancedExportError') });
     }
-  }, [currentProject]);
+  }, [currentProject, t]);
 
   const handleDeleteProject = useCallback(async () => {
     if (!currentProject) return;
 
-    const confirmText = prompt(TEXTS.danger.confirm_prompt);
-    if (confirmText !== currentProject.name) {
-      alert(TEXTS.danger.name_mismatch);
+    let confirmText = '';
+    const confirmed = await new Promise<boolean>((resolve) => {
+      Modal.confirm({
+        title: t('project.settings.dangerConfirmPrompt'),
+        content: (
+          <Input
+            aria-label={t('project.settings.dangerConfirmPrompt')}
+            autoFocus
+            placeholder={currentProject.name}
+            onChange={(event) => {
+              confirmText = event.target.value;
+            }}
+          />
+        ),
+        okButtonProps: { danger: true },
+        centered: true,
+        onOk: () => {
+          if (confirmText !== currentProject.name) {
+            void antdMessage.error(t('project.settings.dangerNameMismatch'));
+            return Promise.reject(new Error(t('project.settings.dangerNameMismatch')));
+          }
+          resolve(true);
+          return undefined;
+        },
+        onCancel: () => {
+          resolve(false);
+        },
+      });
+    });
+    if (!confirmed) {
       return;
     }
 
     try {
       await projectAPI.delete(currentProject.tenant_id, currentProject.id);
-      alert(TEXTS.danger.success);
+      void antdMessage.success(t('project.settings.dangerSuccess'));
       window.location.href = '/tenant';
     } catch (error) {
       console.error('Failed to delete project:', error);
-      alert(TEXTS.danger.fail);
+      void antdMessage.error(t('project.settings.dangerFail'));
     }
-  }, [currentProject]);
+  }, [currentProject, t]);
 
   const clearMessage = useCallback(() => {
     setMessage(null);
@@ -927,8 +951,8 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
   }
 
   return (
-    <div className={`p-8 space-y-6 ${className}`}>
-      <Header title={TEXTS.title} />
+    <div className={`space-y-6 p-4 sm:p-6 lg:p-8 ${className}`}>
+      <Header title={t('project.settings.title')} />
       <Message message={message} onClose={clearMessage} />
       <Basic
         data={{ name, description, isPublic }}

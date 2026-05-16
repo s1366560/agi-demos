@@ -12,6 +12,8 @@
 import { useMemo, useState } from 'react';
 import type { FC, ReactNode } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 
 import {
@@ -22,6 +24,8 @@ import {
   type CanonicalStoryParseResult,
   type CanonicalStoryStatus,
 } from './canonicalStory';
+
+import type { TFunction } from 'i18next';
 
 interface CanonicalStoryCardProps {
   result: CanonicalStoryParseResult;
@@ -58,7 +62,18 @@ const INVEST_LABEL: Record<CanonicalStoryInvestKey, string> = {
   testable: 'T',
 };
 
-function InvestBadge({ k, check }: { k: CanonicalStoryInvestKey; check: CanonicalStoryInvestCheck }) {
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+function InvestBadge({
+  k,
+  check,
+}: {
+  k: CanonicalStoryInvestKey;
+  check: CanonicalStoryInvestCheck;
+}) {
   const styles = STATUS_STYLES[check.status];
   return (
     <span
@@ -71,13 +86,7 @@ function InvestBadge({ k, check }: { k: CanonicalStoryInvestKey; check: Canonica
   );
 }
 
-function Section({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-t border-slate-200/70 py-2 dark:border-slate-700/50">
       <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
@@ -107,6 +116,7 @@ const ParsedStoryView: FC<{
   story: CanonicalStoryDocument['story'];
   defaultOpen?: boolean | undefined;
 }> = ({ story, defaultOpen = false }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const investEntries = useMemo(
     () =>
@@ -120,6 +130,7 @@ const ParsedStoryView: FC<{
   const failingChecks = investEntries.filter(({ check }) => check.status !== 'pass').length;
   const acCount = story.acceptance_criteria.length;
   const dependencyOk = story.dependencies_and_sequencing.independent_story_check === 'pass';
+  const noneLabel = tFallback(t, 'agent.canonicalStory.none', 'none');
 
   return (
     <div
@@ -140,25 +151,33 @@ const ParsedStoryView: FC<{
         <span className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
-              Story · v{String(story.version)}
+              {tFallback(t, 'agent.canonicalStory.story', 'Story')} · v{String(story.version)}
             </span>
             {!dependencyOk ? (
               <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
                 <AlertTriangle size={10} />
-                depends on others
+                {tFallback(t, 'agent.canonicalStory.dependsOnOthers', 'depends on others')}
               </span>
             ) : null}
           </div>
           <div className="mt-0.5 truncate text-sm font-medium text-slate-900 dark:text-slate-50">
-            {story.title || '(untitled story)'}
+            {story.title || tFallback(t, 'agent.canonicalStory.untitled', '(untitled story)')}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {investEntries.map(({ k, check }) => (
               <InvestBadge key={k} k={k} check={check} />
             ))}
             <span className="ml-1 text-[11px] text-slate-500 dark:text-slate-400">
-              {String(acCount)} AC{acCount === 1 ? '' : 's'}
-              {failingChecks > 0 ? ` · ${String(failingChecks)} INVEST issue${failingChecks === 1 ? '' : 's'}` : ''}
+              {t('agent.canonicalStory.acceptanceCount', {
+                defaultValue: '{{count}} AC',
+                count: acCount,
+              })}
+              {failingChecks > 0
+                ? ` · ${t('agent.canonicalStory.investIssueCount', {
+                    defaultValue: '{{count}} INVEST issue',
+                    count: failingChecks,
+                  })}`
+                : ''}
             </span>
           </div>
         </span>
@@ -166,17 +185,23 @@ const ParsedStoryView: FC<{
 
       {open ? (
         <div className="px-3 pb-2">
-          <Section label="Problem">
+          <Section label={tFallback(t, 'agent.canonicalStory.sections.problem', 'Problem')}>
             <span className="whitespace-pre-wrap break-words">
               {story.problem_statement || '—'}
             </span>
           </Section>
-          <Section label="User value">
+          <Section label={tFallback(t, 'agent.canonicalStory.sections.userValue', 'User value')}>
             <span className="whitespace-pre-wrap break-words">{story.user_value || '—'}</span>
           </Section>
-          <Section label="Acceptance criteria">
+          <Section
+            label={tFallback(
+              t,
+              'agent.canonicalStory.sections.acceptanceCriteria',
+              'Acceptance criteria'
+            )}
+          >
             {story.acceptance_criteria.length === 0 ? (
-              <span className="text-slate-400 dark:text-slate-500">none</span>
+              <span className="text-slate-400 dark:text-slate-500">{noneLabel}</span>
             ) : (
               <ul className="space-y-1">
                 {story.acceptance_criteria.map((ac) => (
@@ -197,20 +222,37 @@ const ParsedStoryView: FC<{
                           : 'text-rose-500 dark:text-rose-400'
                       }`}
                     >
-                      {ac.testable ? 'testable' : 'untestable'}
+                      {ac.testable
+                        ? tFallback(t, 'agent.canonicalStory.testable', 'testable')
+                        : tFallback(t, 'agent.canonicalStory.untestable', 'untestable')}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
           </Section>
-          <Section label="Constraints / affected areas">
-            <StringList items={story.constraints_and_affected_areas} empty="none" />
+          <Section
+            label={tFallback(
+              t,
+              'agent.canonicalStory.sections.constraints',
+              'Constraints / affected areas'
+            )}
+          >
+            <StringList items={story.constraints_and_affected_areas} empty={noneLabel} />
           </Section>
-          <Section label="Dependencies">
+          <Section
+            label={tFallback(t, 'agent.canonicalStory.sections.dependencies', 'Dependencies')}
+          >
             <div className="space-y-1">
               <div>
-                <span className="text-slate-500 dark:text-slate-400">Independent story check: </span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {tFallback(
+                    t,
+                    'agent.canonicalStory.independentStoryCheck',
+                    'Independent story check'
+                  )}
+                  :{' '}
+                </span>
                 <span
                   className={
                     dependencyOk
@@ -223,13 +265,17 @@ const ParsedStoryView: FC<{
               </div>
               {story.dependencies_and_sequencing.depends_on.length > 0 ? (
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400">Depends on: </span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    {tFallback(t, 'agent.canonicalStory.dependsOn', 'Depends on')}:{' '}
+                  </span>
                   <span>{story.dependencies_and_sequencing.depends_on.join(', ')}</span>
                 </div>
               ) : null}
               {story.dependencies_and_sequencing.unblock_condition ? (
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400">Unblock when: </span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    {tFallback(t, 'agent.canonicalStory.unblockWhen', 'Unblock when')}:{' '}
+                  </span>
                   <span className="break-words">
                     {story.dependencies_and_sequencing.unblock_condition}
                   </span>
@@ -238,8 +284,10 @@ const ParsedStoryView: FC<{
             </div>
           </Section>
           {story.out_of_scope.length > 0 ? (
-            <Section label="Out of scope">
-              <StringList items={story.out_of_scope} empty="none" />
+            <Section
+              label={tFallback(t, 'agent.canonicalStory.sections.outOfScope', 'Out of scope')}
+            >
+              <StringList items={story.out_of_scope} empty={noneLabel} />
             </Section>
           ) : null}
           <Section label="INVEST">
@@ -262,6 +310,7 @@ const ParsedStoryView: FC<{
 };
 
 const InvalidStoryView: FC<{ result: CanonicalStoryParseResult }> = ({ result }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <div
@@ -277,7 +326,12 @@ const InvalidStoryView: FC<{ result: CanonicalStoryParseResult }> = ({ result })
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <AlertTriangle size={12} />
-        <span className="font-medium">Canonical story has {String(result.issues.length)} issue{result.issues.length === 1 ? '' : 's'}</span>
+        <span className="font-medium">
+          {t('agent.canonicalStory.invalidIssueCount', {
+            defaultValue: 'Canonical story has {{count}} issue',
+            count: result.issues.length,
+          })}
+        </span>
       </button>
       {open ? (
         <div className="border-t border-amber-200/70 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/60 dark:text-amber-300">

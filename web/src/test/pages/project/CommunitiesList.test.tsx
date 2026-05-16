@@ -14,6 +14,10 @@ vi.mock('../../../services/graphService', () => ({
   },
 }));
 
+vi.mock('../../../utils/confirmAction', () => ({
+  confirmAction: vi.fn(() => Promise.resolve(true)),
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -45,6 +49,7 @@ describe('CommunitiesList', () => {
     render(<CommunitiesList />);
 
     expect(screen.getByText('Communities')).toBeInTheDocument();
+    expect(screen.getByTestId('communities-list-root')).toHaveClass('min-w-0');
 
     await waitFor(() => {
       expect(screen.getByText('Community 1')).toBeInTheDocument();
@@ -69,22 +74,55 @@ describe('CommunitiesList', () => {
       expect(screen.getByText('Community Details')).toBeInTheDocument();
       expect(screen.getByText('Member 1')).toBeInTheDocument();
     });
+
+    expect(screen.getByRole('button', { name: 'Close community details' })).toBeInTheDocument();
   });
 
   it('handles rebuild communities', async () => {
-    (graphService.rebuildCommunities as any).mockResolvedValue({});
+    let resolveRebuild!: (value: Record<string, never>) => void;
+    const rebuildPromise = new Promise<Record<string, never>>((resolve) => {
+      resolveRebuild = resolve;
+    });
+    (graphService.rebuildCommunities as any).mockReturnValue(rebuildPromise);
 
     render(<CommunitiesList />);
 
     const rebuildBtn = screen.getByText('Rebuild Communities');
     fireEvent.click(rebuildBtn);
 
-    expect(screen.getByText('Rebuilding...')).toBeInTheDocument();
+    expect(await screen.findByText('Rebuilding...')).toBeInTheDocument();
+    resolveRebuild({});
 
     await waitFor(() => {
       expect(graphService.rebuildCommunities).toHaveBeenCalled();
       expect(screen.queryByText('Rebuilding...')).not.toBeInTheDocument();
     });
+  });
+
+  it('keeps rebuild errors visible after communities refresh', async () => {
+    (graphService.listCommunities as any).mockResolvedValue({
+      communities: [],
+    });
+    (graphService.rebuildCommunities as any).mockRejectedValue(new Error('Internal server error'));
+
+    render(<CommunitiesList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No communities found')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Rebuild Communities'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error-message')).toHaveTextContent(/Internal server error/i);
+    });
+
+    fireEvent.click(screen.getByText('Refresh'));
+
+    await waitFor(() => {
+      expect(graphService.listCommunities).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByTestId('error-message')).toHaveTextContent(/Internal server error/i);
   });
 
   it('handles empty state', async () => {
@@ -115,17 +153,24 @@ describe('CommunitiesList - Performance Optimizations', () => {
   });
 
   it('should use useCallback for event handlers', async () => {
-    render(<CommunitiesList />);
+    const { rerender } = render(<CommunitiesList />);
 
     await waitFor(() => {
-      expect(graphService.listCommunities).toHaveBeenCalled();
+      expect(screen.getByText('No communities found')).toBeInTheDocument();
     });
-
-    // Handlers should be stable - component re-renders should not break them
-    const { rerender } = render(<CommunitiesList />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('loading-indicator')).not.toBeInTheDocument();
+    });
 
     // Re-render should not cause issues with stable handler references
     rerender(<CommunitiesList />);
+    await waitFor(() => {
+      expect(graphService.listCommunities).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('loading-indicator')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('communities-list-root')).toBeInTheDocument();
   });
 
   it('should use useMemo for computed pagination values', async () => {

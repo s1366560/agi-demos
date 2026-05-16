@@ -3,7 +3,6 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Tabs } from 'antd';
-import type { TFunction } from 'i18next';
 import {
   Activity,
   AlertTriangle,
@@ -19,8 +18,8 @@ import {
 
 import { formatTaskProjectionLabel } from '@/utils/workspaceTaskProjection';
 
-import { CanonicalStoryCard } from '@/components/agent/canonicalStory/CanonicalStoryCard';
-import { parseCanonicalStory } from '@/components/agent/canonicalStory/canonicalStory';
+import { parseCanonicalStory } from '../agent/canonicalStory/canonicalStory';
+import { CanonicalStoryCard } from '../agent/canonicalStory/CanonicalStoryCard';
 
 import type {
   TaskExecutionSession,
@@ -30,6 +29,8 @@ import type {
   WorkspaceTaskExperienceSummary,
   WorkspaceTaskTransitionGate,
 } from '@/types/workspace';
+
+import type { TFunction } from 'i18next';
 
 interface TaskExperiencePanelProps {
   task: WorkspaceTask;
@@ -56,6 +57,9 @@ const TAB_KEYS: PanelTab[] = [
   'activity',
 ];
 
+const UNKNOWN_SESSION_HEALTH_TONE =
+  'border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-muted';
+
 const SESSION_HEALTH_TONES: Record<string, string> = {
   healthy:
     'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark',
@@ -65,8 +69,7 @@ const SESSION_HEALTH_TONES: Record<string, string> = {
     'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
   blocked:
     'border-error-border bg-error-bg text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark',
-  unknown:
-    'border-border-light bg-surface-muted text-text-secondary dark:border-border-dark dark:bg-background-dark dark:text-text-muted',
+  unknown: UNKNOWN_SESSION_HEALTH_TONE,
 };
 
 const RECOVERY_ACTION_ORDER: TaskRecoveryAction[] = [
@@ -75,6 +78,18 @@ const RECOVERY_ACTION_ORDER: TaskRecoveryAction[] = [
   'terminate_stale_conversation',
   'mark_human_blocked',
 ];
+
+function taskExperienceText(
+  t: TFunction,
+  key: string,
+  defaultValue: string,
+  options?: Record<string, unknown>
+): string {
+  return t(`workspaceDetail.taskExperience.${key}`, {
+    defaultValue,
+    ...options,
+  });
+}
 
 export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
   task,
@@ -93,9 +108,8 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
   const assignedAgent = useMemo(() => resolveAgentLabel(task, agents), [agents, task]);
   const readiness = experience?.readiness;
   const evidence = experience?.evidence;
-  const execution = (experience?.execution ?? {}) as WorkspaceTaskExperienceSummary['execution'];
-  const diagnostics = (experience?.diagnostics ??
-    {}) as WorkspaceTaskExperienceSummary['diagnostics'];
+  const execution = experience?.execution ?? {};
+  const diagnostics = experience?.diagnostics ?? {};
   const activity = experience?.activity ?? [];
   const gates = readiness?.transition_gates ?? diagnostics.transition_gates ?? {};
 
@@ -150,7 +164,7 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
   return (
     <aside
       className={panelClassName}
-      aria-label={t('workspaceDetail.taskExperience.title', 'Task experience')}
+      aria-label={taskExperienceText(t, 'title', 'Task experience')}
     >
       <div className={headerClassName}>
         <div className="min-w-0 flex-1">
@@ -188,7 +202,7 @@ export const TaskExperiencePanel: React.FC<TaskExperiencePanelProps> = ({
           type="text"
           size="small"
           icon={<X size={14} />}
-          aria-label={t('workspaceDetail.taskExperience.close', 'Close task details')}
+          aria-label={taskExperienceText(t, 'close', 'Close task details')}
           onClick={onClose}
         />
       </div>
@@ -233,6 +247,7 @@ function OverviewTab({
   recoveryActionLoading: boolean;
   onRecoveryAction: (action: TaskRecoveryAction) => void;
 }) {
+  const { t } = useTranslation();
   const diagnostics = experience?.diagnostics ?? {};
   const evidence = experience?.evidence ?? {};
   return (
@@ -242,19 +257,48 @@ function OverviewTab({
         recoveryActionLoading={recoveryActionLoading}
         onRecoveryAction={onRecoveryAction}
       />
-      <Section title="Status" icon={<Radio size={13} />}>
-        <MetaRow label="Workspace task" value={task.id} mono />
-        <MetaRow label="Assignee" value={assignedAgent || task.assignee_user_id || 'Unassigned'} />
+      <Section
+        title={taskExperienceText(t, 'sections.status', 'Status')}
+        icon={<Radio size={13} />}
+      >
         <MetaRow
-          label="Pending adjudication"
-          value={boolText(diagnostics.pending_leader_adjudication)}
+          label={taskExperienceText(t, 'labels.workspaceTask', 'Workspace task')}
+          value={task.id}
+          mono
         />
-        <MetaRow label="Missing conversation" value={boolText(diagnostics.missing_conversation)} />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.assignee', 'Assignee')}
+          value={
+            assignedAgent ||
+            task.assignee_user_id ||
+            taskExperienceText(t, 'values.unassigned', 'Unassigned')
+          }
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.pendingAdjudication', 'Pending adjudication')}
+          value={boolText(diagnostics.pending_leader_adjudication, t)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.missingConversation', 'Missing conversation')}
+          value={boolText(diagnostics.missing_conversation, t)}
+        />
       </Section>
-      <Section title="Evidence signal" icon={<CheckCircle2 size={13} />}>
-        <MetaRow label="Goal grade" value={textValue(evidence.goal_evidence_grade)} />
-        <InlineList label="Artifacts" items={stringList(evidence.artifacts)} />
-        <InlineList label="Checks" items={stringList(evidence.verification_summaries)} />
+      <Section
+        title={taskExperienceText(t, 'sections.evidenceSignal', 'Evidence signal')}
+        icon={<CheckCircle2 size={13} />}
+      >
+        <MetaRow
+          label={taskExperienceText(t, 'labels.goalGrade', 'Goal grade')}
+          value={textValue(evidence.goal_evidence_grade)}
+        />
+        <InlineList
+          label={taskExperienceText(t, 'labels.artifacts', 'Artifacts')}
+          items={stringList(evidence.artifacts)}
+        />
+        <InlineList
+          label={taskExperienceText(t, 'labels.checks', 'Checks')}
+          items={stringList(evidence.verification_summaries)}
+        />
       </Section>
     </div>
   );
@@ -269,21 +313,50 @@ function ContractTab({
     | Record<string, WorkspaceTaskTransitionGate>
     | Partial<Record<string, WorkspaceTaskTransitionGate>>;
 }) {
+  const { t } = useTranslation();
   const contract = readiness?.goal_contract ?? {};
   return (
     <div className="space-y-4">
-      <Section title="Goal contract" icon={<FileText size={13} />}>
-        <MetaRow label="Role" value={textValue(contract.task_role)} />
-        <MetaRow label="Root goal" value={textValue(contract.root_goal_task_id)} mono />
-        <MetaRow label="Health" value={textValue(contract.goal_health)} />
-        <MetaRow label="Remediation" value={textValue(contract.remediation_status)} />
-        <MetaRow label="Progress" value={textValue(contract.goal_progress_summary)} />
+      <Section
+        title={taskExperienceText(t, 'sections.goalContract', 'Goal contract')}
+        icon={<FileText size={13} />}
+      >
+        <MetaRow
+          label={taskExperienceText(t, 'labels.role', 'Role')}
+          value={textValue(contract.task_role)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.rootGoal', 'Root goal')}
+          value={textValue(contract.root_goal_task_id)}
+          mono
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.health', 'Health')}
+          value={textValue(contract.goal_health)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.remediation', 'Remediation')}
+          value={textValue(contract.remediation_status)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.progress', 'Progress')}
+          value={textValue(contract.goal_progress_summary)}
+        />
       </Section>
-      <Section title="Transition gates" icon={<ListChecks size={13} />}>
-        <GateRow label="Done" gate={gates.done} />
-        <GateRow label="Blocked" gate={gates.blocked} />
-        <InlineList label="Missing evidence" items={readiness?.missing_evidence ?? []} />
-        <InlineList label="Blocked requirements" items={readiness?.blocked_requirements ?? []} />
+      <Section
+        title={taskExperienceText(t, 'sections.transitionGates', 'Transition gates')}
+        icon={<ListChecks size={13} />}
+      >
+        <GateRow label={taskExperienceText(t, 'labels.done', 'Done')} gate={gates.done} />
+        <GateRow label={taskExperienceText(t, 'labels.blocked', 'Blocked')} gate={gates.blocked} />
+        <InlineList
+          label={taskExperienceText(t, 'labels.missingEvidence', 'Missing evidence')}
+          items={readiness?.missing_evidence ?? []}
+        />
+        <InlineList
+          label={taskExperienceText(t, 'labels.blockedRequirements', 'Blocked requirements')}
+          items={readiness?.blocked_requirements ?? []}
+        />
       </Section>
     </div>
   );
@@ -300,38 +373,65 @@ function ExecutionTab({
   assignedAgent: string;
   executionSession: TaskExecutionSession | null;
 }) {
+  const { t } = useTranslation();
   const activeAttempt = asRecord(execution.active_attempt);
   return (
     <div className="space-y-4">
       <ExecutionSessionSection session={executionSession} />
-      <Section title="Current owner" icon={<Activity size={13} />}>
-        <MetaRow label="Agent" value={assignedAgent || textValue(execution.assignee_agent_id)} />
+      <Section
+        title={taskExperienceText(t, 'sections.currentOwner', 'Current owner')}
+        icon={<Activity size={13} />}
+      >
         <MetaRow
-          label="User"
+          label={taskExperienceText(t, 'labels.agent', 'Agent')}
+          value={assignedAgent || textValue(execution.assignee_agent_id)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.user', 'User')}
           value={textValue(execution.assignee_user_id ?? task.assignee_user_id)}
         />
-        <MetaRow label="Workspace binding" value={textValue(execution.workspace_agent_id)} mono />
-      </Section>
-      <Section title="Attempt" icon={<Radio size={13} />}>
-        <MetaRow label="Attempt id" value={textValue(execution.current_attempt_id)} mono />
-        <MetaRow label="Attempt number" value={textValue(execution.current_attempt_number)} />
         <MetaRow
-          label="Conversation"
+          label={taskExperienceText(t, 'labels.workspaceBinding', 'Workspace binding')}
+          value={textValue(execution.workspace_agent_id)}
+          mono
+        />
+      </Section>
+      <Section
+        title={taskExperienceText(t, 'sections.attempt', 'Attempt')}
+        icon={<Radio size={13} />}
+      >
+        <MetaRow
+          label={taskExperienceText(t, 'labels.attemptId', 'Attempt id')}
+          value={textValue(execution.current_attempt_id)}
+          mono
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.attemptNumber', 'Attempt number')}
+          value={textValue(execution.current_attempt_number)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.conversation', 'Conversation')}
           value={textValue(execution.current_attempt_conversation_id)}
           mono
         />
         <MetaRow
-          label="Worker binding"
+          label={taskExperienceText(t, 'labels.workerBinding', 'Worker binding')}
           value={textValue(execution.current_attempt_worker_binding_id)}
           mono
         />
         <MetaRow
-          label="Worker agent"
+          label={taskExperienceText(t, 'labels.workerAgent', 'Worker agent')}
           value={textValue(execution.current_attempt_worker_agent_id)}
           mono
         />
-        <MetaRow label="Active status" value={textValue(activeAttempt.status)} />
-        <MetaRow label="Last attempt" value={textValue(execution.last_attempt_status)} />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.activeStatus', 'Active status')}
+          value={textValue(activeAttempt.status)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.lastAttempt', 'Last attempt')}
+          value={textValue(execution.last_attempt_status)}
+        />
       </Section>
     </div>
   );
@@ -346,10 +446,14 @@ function SessionHealthSection({
   recoveryActionLoading: boolean;
   onRecoveryAction: (action: TaskRecoveryAction) => void;
 }) {
+  const { t } = useTranslation();
   if (!session) {
     return (
-      <Section title="Execution session" icon={<ShieldAlert size={13} />}>
-        <EmptyLine label="No session data" />
+      <Section
+        title={taskExperienceText(t, 'sections.executionSession', 'Execution session')}
+        icon={<ShieldAlert size={13} />}
+      >
+        <EmptyLine label={taskExperienceText(t, 'empty.noSessionData', 'No session data')} />
       </Section>
     );
   }
@@ -357,11 +461,14 @@ function SessionHealthSection({
     session.available_interventions.includes(action)
   );
   return (
-    <Section title="Execution session" icon={<ShieldAlert size={13} />}>
+    <Section
+      title={taskExperienceText(t, 'sections.executionSession', 'Execution session')}
+      icon={<ShieldAlert size={13} />}
+    >
       <div className="flex flex-wrap items-center gap-1.5">
         <span
           className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-            SESSION_HEALTH_TONES[session.health] ?? SESSION_HEALTH_TONES.unknown
+            SESSION_HEALTH_TONES[session.health] ?? UNKNOWN_SESSION_HEALTH_TONE
           }`}
         >
           {formatTaskProjectionLabel(session.health)}
@@ -370,16 +477,36 @@ function SessionHealthSection({
           {formatTaskProjectionLabel(session.session_status)}
         </span>
       </div>
-      <MetaRow label="Conversation" value={session.conversation_id} mono />
-      <MetaRow label="Attempt" value={session.attempt_id} mono />
       <MetaRow
-        label="Leader decision"
+        label={taskExperienceText(t, 'labels.conversation', 'Conversation')}
+        value={session.conversation_id}
+        mono
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.attempt', 'Attempt')}
+        value={session.attempt_id}
+        mono
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.leaderDecision', 'Leader decision')}
         value={formatTaskProjectionLabel(textValue(session.recommended_recovery_action))}
       />
-      <MetaRow label="Last event" value={session.last_event_at} />
-      <MetaRow label="Assistant event" value={session.last_assistant_event_at} />
-      <MetaRow label="Last error" value={session.last_error} />
-      <InlineList label="Incidents" items={session.incidents.map((incident) => incident.type)} />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.lastEvent', 'Last event')}
+        value={session.last_event_at}
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.assistantEvent', 'Assistant event')}
+        value={session.last_assistant_event_at}
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.lastError', 'Last error')}
+        value={session.last_error}
+      />
+      <InlineList
+        label={taskExperienceText(t, 'labels.incidents', 'Incidents')}
+        items={session.incidents.map((incident) => incident.type)}
+      />
       {runnableActions.length > 0 && (
         <RecoveryActionRow
           actions={runnableActions}
@@ -388,28 +515,54 @@ function SessionHealthSection({
         />
       )}
       {session.available_interventions.includes('reassign') && (
-        <MetaRow label="Reassign" value="Available from agent assignment control" />
+        <MetaRow
+          label={taskExperienceText(t, 'actions.reassign', 'Reassign')}
+          value={taskExperienceText(
+            t,
+            'values.reassignAvailable',
+            'Available from agent assignment control'
+          )}
+        />
       )}
     </Section>
   );
 }
 
 function ExecutionSessionSection({ session }: { session: TaskExecutionSession | null }) {
+  const { t } = useTranslation();
   if (!session) {
     return (
-      <Section title="Session runtime" icon={<Clock size={13} />}>
-        <EmptyLine label="No runtime state" />
+      <Section
+        title={taskExperienceText(t, 'sections.sessionRuntime', 'Session runtime')}
+        icon={<Clock size={13} />}
+      >
+        <EmptyLine label={taskExperienceText(t, 'empty.noRuntimeState', 'No runtime state')} />
       </Section>
     );
   }
   return (
-    <Section title="Session runtime" icon={<Clock size={13} />}>
-      <MetaRow label="Session" value={formatTaskProjectionLabel(session.session_status)} />
-      <MetaRow label="Execution row" value={session.execution_status} />
-      <MetaRow label="User input" value={boolText(session.has_user_input)} />
-      <MetaRow label="Assistant output" value={boolText(session.has_assistant_output)} />
+    <Section
+      title={taskExperienceText(t, 'sections.sessionRuntime', 'Session runtime')}
+      icon={<Clock size={13} />}
+    >
+      <MetaRow
+        label={taskExperienceText(t, 'labels.session', 'Session')}
+        value={formatTaskProjectionLabel(session.session_status)}
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.executionRow', 'Execution row')}
+        value={session.execution_status}
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.userInput', 'User input')}
+        value={boolText(session.has_user_input, t)}
+      />
+      <MetaRow
+        label={taskExperienceText(t, 'labels.assistantOutput', 'Assistant output')}
+        value={boolText(session.has_assistant_output, t)}
+      />
       <InlineList
-        label="Recent events"
+        label={taskExperienceText(t, 'labels.recentEvents', 'Recent events')}
         items={session.recent_events.map((event) => textValue(event.type))}
       />
     </Section>
@@ -417,10 +570,14 @@ function ExecutionSessionSection({ session }: { session: TaskExecutionSession | 
 }
 
 function IncidentSection({ session }: { session: TaskExecutionSession | null }) {
+  const { t } = useTranslation();
   if (!session) {
     return (
-      <Section title="Session incidents" icon={<AlertTriangle size={13} />}>
-        <EmptyLine label="No session data" />
+      <Section
+        title={taskExperienceText(t, 'sections.sessionIncidents', 'Session incidents')}
+        icon={<AlertTriangle size={13} />}
+      >
+        <EmptyLine label={taskExperienceText(t, 'empty.noSessionData', 'No session data')} />
       </Section>
     );
   }
@@ -428,9 +585,12 @@ function IncidentSection({ session }: { session: TaskExecutionSession | null }) 
     [textValue(item.action), textValue(item.status), textValue(item.at)].filter(Boolean).join(' · ')
   );
   return (
-    <Section title="Session incidents" icon={<AlertTriangle size={13} />}>
+    <Section
+      title={taskExperienceText(t, 'sections.sessionIncidents', 'Session incidents')}
+      icon={<AlertTriangle size={13} />}
+    >
       {session.incidents.length === 0 ? (
-        <EmptyLine label="No open incidents" />
+        <EmptyLine label={taskExperienceText(t, 'empty.noOpenIncidents', 'No open incidents')} />
       ) : (
         session.incidents.map((incident) => (
           <div
@@ -451,7 +611,10 @@ function IncidentSection({ session }: { session: TaskExecutionSession | null }) 
           </div>
         ))
       )}
-      <InlineList label="Recovery ledger" items={ledger} />
+      <InlineList
+        label={taskExperienceText(t, 'labels.recoveryLedger', 'Recovery ledger')}
+        items={ledger}
+      />
     </Section>
   );
 }
@@ -465,9 +628,12 @@ function RecoveryActionRow({
   loading: boolean;
   onRecoveryAction: (action: TaskRecoveryAction) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
-      <span className="text-text-muted dark:text-text-muted">Actions</span>
+      <span className="text-text-muted dark:text-text-muted">
+        {taskExperienceText(t, 'labels.actions', 'Actions')}
+      </span>
       <div className="flex min-w-0 flex-wrap gap-1.5">
         {actions.map((action) => (
           <Button
@@ -476,9 +642,11 @@ function RecoveryActionRow({
             icon={<RefreshCcw size={12} />}
             loading={loading}
             danger={action === 'mark_human_blocked'}
-            onClick={() => onRecoveryAction(action)}
+            onClick={() => {
+              onRecoveryAction(action);
+            }}
           >
-            {recoveryActionLabel(action)}
+            {recoveryActionLabel(action, t)}
           </Button>
         ))}
       </div>
@@ -491,19 +659,49 @@ function EvidenceTab({
 }: {
   evidence: WorkspaceTaskExperienceSummary['evidence'] | undefined;
 }) {
+  const { t } = useTranslation();
   const workerReport = asRecord(evidence?.worker_report);
   return (
     <div className="space-y-4">
-      <Section title="Evidence" icon={<CheckCircle2 size={13} />}>
-        <InlineList label="Refs" items={evidence?.evidence_refs ?? []} />
-        <InlineList label="Artifacts" items={evidence?.artifacts ?? []} />
-        <InlineList label="Checks" items={evidence?.verification_summaries ?? []} />
+      <Section
+        title={taskExperienceText(t, 'sections.evidence', 'Evidence')}
+        icon={<CheckCircle2 size={13} />}
+      >
+        <InlineList
+          label={taskExperienceText(t, 'labels.refs', 'Refs')}
+          items={evidence?.evidence_refs ?? []}
+        />
+        <InlineList
+          label={taskExperienceText(t, 'labels.artifacts', 'Artifacts')}
+          items={evidence?.artifacts ?? []}
+        />
+        <InlineList
+          label={taskExperienceText(t, 'labels.checks', 'Checks')}
+          items={evidence?.verification_summaries ?? []}
+        />
       </Section>
-      <Section title="Worker report" icon={<FileText size={13} />}>
-        <MetaRow label="Type" value={textValue(workerReport.type)} />
-        <MetaRow label="Summary" value={textValue(workerReport.summary)} />
-        <MetaRow label="Report id" value={textValue(workerReport.id)} mono />
-        <MetaRow label="Fingerprint" value={textValue(workerReport.fingerprint)} mono />
+      <Section
+        title={taskExperienceText(t, 'sections.workerReport', 'Worker report')}
+        icon={<FileText size={13} />}
+      >
+        <MetaRow
+          label={taskExperienceText(t, 'labels.type', 'Type')}
+          value={textValue(workerReport.type)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.summary', 'Summary')}
+          value={textValue(workerReport.summary)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.reportId', 'Report id')}
+          value={textValue(workerReport.id)}
+          mono
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.fingerprint', 'Fingerprint')}
+          value={textValue(workerReport.fingerprint)}
+          mono
+        />
       </Section>
     </div>
   );
@@ -522,35 +720,54 @@ function DiagnosticsTab({
     | Partial<Record<string, WorkspaceTaskTransitionGate>>;
   executionSession: TaskExecutionSession | null;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <IncidentSection session={executionSession} />
-      <Section title="Diagnostics" icon={<AlertTriangle size={13} />}>
+      <Section
+        title={taskExperienceText(t, 'sections.diagnostics', 'Diagnostics')}
+        icon={<AlertTriangle size={13} />}
+      >
         <MetaRow
-          label="Blocker"
+          label={taskExperienceText(t, 'labels.blocker', 'Blocker')}
           value={task.blocker_reason || textValue(diagnostics.blocker_reason)}
         />
-        <MetaRow label="Durable verdict" value={textValue(diagnostics.durable_plan_verdict)} />
-        <MetaRow label="Last attempt" value={textValue(diagnostics.last_attempt_status)} />
         <MetaRow
-          label="Pending adjudication"
-          value={boolText(diagnostics.pending_leader_adjudication)}
+          label={taskExperienceText(t, 'labels.durableVerdict', 'Durable verdict')}
+          value={textValue(diagnostics.durable_plan_verdict)}
         />
-        <MetaRow label="Missing conversation" value={boolText(diagnostics.missing_conversation)} />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.lastAttempt', 'Last attempt')}
+          value={textValue(diagnostics.last_attempt_status)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.pendingAdjudication', 'Pending adjudication')}
+          value={boolText(diagnostics.pending_leader_adjudication, t)}
+        />
+        <MetaRow
+          label={taskExperienceText(t, 'labels.missingConversation', 'Missing conversation')}
+          value={boolText(diagnostics.missing_conversation, t)}
+        />
       </Section>
-      <Section title="Gate reasons" icon={<ListChecks size={13} />}>
-        <GateRow label="Done" gate={gates.done} />
-        <GateRow label="Blocked" gate={gates.blocked} />
+      <Section
+        title={taskExperienceText(t, 'sections.gateReasons', 'Gate reasons')}
+        icon={<ListChecks size={13} />}
+      >
+        <GateRow label={taskExperienceText(t, 'labels.done', 'Done')} gate={gates.done} />
+        <GateRow label={taskExperienceText(t, 'labels.blocked', 'Blocked')} gate={gates.blocked} />
       </Section>
     </div>
   );
 }
 
 function ActivityTab({ activity }: { activity: Array<Record<string, unknown>> }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       {activity.length === 0 ? (
-        <EmptyLine label="No activity recorded" />
+        <EmptyLine
+          label={taskExperienceText(t, 'empty.noActivityRecorded', 'No activity recorded')}
+        />
       ) : (
         activity.map((item, index) => (
           <div
@@ -561,7 +778,9 @@ function ActivityTab({ activity }: { activity: Array<Record<string, unknown>> })
               {formatTaskProjectionLabel(textValue(item.type))}
             </p>
             <p className="mt-0.5 break-words text-[11px] leading-4 text-text-secondary dark:text-text-muted">
-              {textValue(item.summary) || textValue(item.status) || 'No summary'}
+              {textValue(item.summary) ||
+                textValue(item.status) ||
+                taskExperienceText(t, 'empty.noSummary', 'No summary')}
             </p>
             {textValue(item.at) && (
               <p className="mt-1 font-mono text-[10px] text-text-muted dark:text-text-muted">
@@ -604,6 +823,7 @@ function MetaRow({
   value: unknown;
   mono?: boolean;
 }) {
+  const { t } = useTranslation();
   const display = textValue(value);
   return (
     <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
@@ -613,19 +833,20 @@ function MetaRow({
           mono ? 'font-mono text-[11px]' : ''
         }`}
       >
-        {display || <EmptyLine label="None" />}
+        {display || <EmptyLine label={taskExperienceText(t, 'empty.none', 'None')} />}
       </span>
     </div>
   );
 }
 
 function InlineList({ label, items }: { label: string; items: string[] }) {
+  const { t } = useTranslation();
   const cleaned = stringList(items);
   return (
     <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
       <span className="text-text-muted dark:text-text-muted">{label}</span>
       {cleaned.length === 0 ? (
-        <EmptyLine label="None" />
+        <EmptyLine label={taskExperienceText(t, 'empty.none', 'None')} />
       ) : (
         <div className="flex min-w-0 flex-wrap gap-1">
           {cleaned.map((item) => (
@@ -649,8 +870,11 @@ function GateRow({
   label: string;
   gate: WorkspaceTaskTransitionGate | undefined;
 }) {
+  const { t } = useTranslation();
   if (!gate) {
-    return <MetaRow label={label} value="No gate data" />;
+    return (
+      <MetaRow label={label} value={taskExperienceText(t, 'empty.noGateData', 'No gate data')} />
+    );
   }
   return (
     <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
@@ -663,10 +887,18 @@ function GateRow({
               : 'border-success-border bg-success-bg text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark'
           }`}
         >
-          {gate.would_block ? 'Needs evidence' : 'Ready'}
+          {gate.would_block
+            ? taskExperienceText(t, 'values.needsEvidence', 'Needs evidence')
+            : taskExperienceText(t, 'values.ready', 'Ready')}
         </span>
-        <InlineList label="Missing" items={gate.missing} />
-        <InlineList label="Reasons" items={gate.reasons} />
+        <InlineList
+          label={taskExperienceText(t, 'labels.missing', 'Missing')}
+          items={gate.missing}
+        />
+        <InlineList
+          label={taskExperienceText(t, 'labels.reasons', 'Reasons')}
+          items={gate.reasons}
+        />
       </div>
     </div>
   );
@@ -692,7 +924,7 @@ function tabLabel(key: PanelTab, t: TFunction): string {
     diagnostics: 'Diagnostics',
     activity: 'Activity',
   };
-  return t(`workspaceDetail.taskExperience.${key}`, labels[key]);
+  return taskExperienceText(t, `tabs.${key}`, labels[key]);
 }
 
 function textValue(value: unknown): string {
@@ -701,19 +933,22 @@ function textValue(value: unknown): string {
   return '';
 }
 
-function boolText(value: unknown): string {
-  return value === true ? 'Yes' : 'No';
+function boolText(value: unknown, t: TFunction): string {
+  return value === true
+    ? taskExperienceText(t, 'values.yes', 'Yes')
+    : taskExperienceText(t, 'values.no', 'No');
 }
 
-function recoveryActionLabel(action: TaskRecoveryAction): string {
-  const labels: Record<TaskRecoveryAction, string> = {
-    retry_launch: 'Retry launch',
-    new_attempt: 'New attempt',
-    reassign: 'Reassign',
-    mark_human_blocked: 'Need human',
-    terminate_stale_conversation: 'Archive stale',
+function recoveryActionLabel(action: TaskRecoveryAction, t: TFunction): string {
+  const labels: Record<TaskRecoveryAction, { key: string; defaultValue: string }> = {
+    retry_launch: { key: 'actions.retryLaunch', defaultValue: 'Retry launch' },
+    new_attempt: { key: 'actions.newAttempt', defaultValue: 'New attempt' },
+    reassign: { key: 'actions.reassign', defaultValue: 'Reassign' },
+    mark_human_blocked: { key: 'actions.needHuman', defaultValue: 'Need human' },
+    terminate_stale_conversation: { key: 'actions.archiveStale', defaultValue: 'Archive stale' },
   };
-  return labels[action];
+  const label = labels[action];
+  return taskExperienceText(t, label.key, label.defaultValue);
 }
 
 function stringList(value: unknown): string[] {

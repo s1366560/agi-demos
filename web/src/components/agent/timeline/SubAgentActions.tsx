@@ -61,7 +61,11 @@ export const SubAgentActions: React.FC<SubAgentActionsProps> = ({ subagentId, co
             onChange={(e) => {
               setInstruction(e.target.value);
             }}
-            onKeyDown={(e) => e.key === 'Enter' && handleRedirect()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleRedirect();
+              }
+            }}
             placeholder={t('agent.subagent.redirect_placeholder')}
             aria-label={t('agent.subagent.redirect_placeholder')}
             className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"

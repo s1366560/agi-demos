@@ -15,7 +15,7 @@ export const OrgSetupGuard: React.FC<{ children: React.ReactNode }> = ({ childre
     // Only redirect if setup is incomplete, we are inside a tenant route,
     // and not already on the org-settings page.
     if (!orgSetupComplete && currentTenant && !location.pathname.includes('/org-settings/')) {
-      navigate(`/tenant/${currentTenant.id}/org-settings/info`, { replace: true });
+      void navigate(`/tenant/${currentTenant.id}/org-settings/info`, { replace: true });
     }
   }, [orgSetupComplete, currentTenant, location.pathname, navigate]);
 

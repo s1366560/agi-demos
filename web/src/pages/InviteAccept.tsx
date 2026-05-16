@@ -101,14 +101,11 @@ export const InviteAccept: React.FC = () => {
         setPageState('valid');
       } catch (error) {
         setPageState('error');
-        setErrorMessage(
-          getErrorMessage(error) ??
-            t('inviteAccept.errors.verifyFailed', 'Failed to verify invitation')
-        );
+        setErrorMessage(getErrorMessage(error));
       }
     };
 
-    verifyToken();
+    void verifyToken();
   }, [token, t]);
 
   /**
@@ -127,23 +124,22 @@ export const InviteAccept: React.FC = () => {
       setPageState('accepted');
     } catch (error) {
       setPageState('error');
-      const msg = getErrorMessage(error);
-      setErrorMessage(msg ?? t('inviteAccept.errors.acceptFailed', 'Failed to accept invitation'));
+      setErrorMessage(getErrorMessage(error));
     }
-  }, [token, isAuthenticated, t]);
+  }, [token, isAuthenticated]);
 
   /**
    * Handle invitation decline - redirect to home
    */
   const handleDecline = useCallback(() => {
-    navigate('/', { replace: true });
+    void navigate('/', { replace: true });
   }, [navigate]);
 
   /**
    * Redirect to login with return URL
    */
   const redirectToLogin = useCallback(() => {
-    navigate('/login', {
+    void navigate('/login', {
       replace: true,
       state: { from: currentPath },
     });
@@ -155,9 +151,9 @@ export const InviteAccept: React.FC = () => {
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const navigateToWorkspace = useCallback(() => {
     if (invitationDetails?.tenantId) {
-      navigate(`/tenant/${invitationDetails.tenantId}`, { replace: true });
+      void navigate(`/tenant/${invitationDetails.tenantId}`, { replace: true });
     } else {
-      navigate('/tenant', { replace: true });
+      void navigate('/tenant', { replace: true });
     }
   }, [navigate, invitationDetails?.tenantId]);
 
@@ -222,7 +218,13 @@ export const InviteAccept: React.FC = () => {
                   ))
             }
             extra={[
-              <Button key="home" type="primary" onClick={() => navigate('/', { replace: true })}>
+              <Button
+                key="home"
+                type="primary"
+                onClick={() => {
+                  void navigate('/', { replace: true });
+                }}
+              >
                 {t('inviteAccept.actions.goHome', 'Go to Home')}
               </Button>,
             ]}
@@ -256,7 +258,13 @@ export const InviteAccept: React.FC = () => {
               >
                 {t('common.actions.retry', 'Retry')}
               </Button>,
-              <Button key="home" type="primary" onClick={() => navigate('/', { replace: true })}>
+              <Button
+                key="home"
+                type="primary"
+                onClick={() => {
+                  void navigate('/', { replace: true });
+                }}
+              >
                 {t('inviteAccept.actions.goHome', 'Go to Home')}
               </Button>,
             ]}
@@ -322,13 +330,13 @@ export const InviteAccept: React.FC = () => {
           )}
 
           <Alert
-            message={t('inviteAccept.login.prompt', 'Please log in to accept this invitation')}
+            title={t('inviteAccept.login.prompt', 'Please log in to accept this invitation')}
             type="info"
             showIcon
             className="mb-4"
           />
 
-          <Space direction="vertical" className="w-full">
+          <Space orientation="vertical" className="w-full">
             <Button type="primary" size="large" block onClick={redirectToLogin}>
               {t('common.login', 'Login')}
             </Button>
@@ -342,8 +350,9 @@ export const InviteAccept: React.FC = () => {
   }
 
   // Authenticated - show accept/decline
-  const emailMismatch =
-    user?.email && invitationDetails?.email && user.email !== invitationDetails.email;
+  const invitedEmail = invitationDetails?.email ?? '';
+  const currentEmail = user?.email ?? '';
+  const emailMismatch = Boolean(invitedEmail && currentEmail && currentEmail !== invitedEmail);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -384,13 +393,13 @@ export const InviteAccept: React.FC = () => {
 
         {emailMismatch && (
           <Alert
-            message={t('inviteAccept.emailMismatch.title', 'Email Mismatch')}
+            title={t('inviteAccept.emailMismatch.title', 'Email Mismatch')}
             description={t(
               'inviteAccept.emailMismatch.description',
               'This invitation was sent to {{invitedEmail}}, but you are logged in as {{currentEmail}}. You can still accept the invitation.',
               {
-                invitedEmail: invitationDetails?.email,
-                currentEmail: user?.email,
+                invitedEmail,
+                currentEmail,
               }
             )}
             type="warning"
@@ -404,23 +413,19 @@ export const InviteAccept: React.FC = () => {
             <Text>{t('inviteAccept.accepting', 'Accepting invitation...')}</Text>
           </div>
         ) : (
-          <Space direction="vertical" className="w-full">
+          <Space orientation="vertical" className="w-full">
             <Button
               type="primary"
               size="large"
               block
               icon={<CheckCircle2 size={16} />}
-              onClick={handleAccept}
+              onClick={() => {
+                void handleAccept();
+              }}
             >
               {t('inviteAccept.actions.accept', 'Accept Invitation')}
             </Button>
-            <Button
-              size="large"
-              block
-              danger
-              icon={<XCircle size={16} />}
-              onClick={handleDecline}
-            >
+            <Button size="large" block danger icon={<XCircle size={16} />} onClick={handleDecline}>
               {t('inviteAccept.actions.decline', 'Decline')}
             </Button>
           </Space>

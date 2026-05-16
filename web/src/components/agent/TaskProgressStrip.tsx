@@ -13,9 +13,9 @@ import { memo, useMemo, useState } from 'react';
 
 import { ChevronDown, ChevronUp, ListChecks } from 'lucide-react';
 
-import type { AgentTask, TaskStatus } from '@/types/agent';
-
 import { TaskList } from './TaskList';
+
+import type { AgentTask, TaskStatus } from '@/types/agent';
 
 export interface TaskProgressStripProps {
   tasks: AgentTask[];
@@ -45,8 +45,7 @@ function deriveCounts(tasks: AgentTask[]): TaskCounts {
   }
   if (active === null) {
     // Fall back to first non-terminal task as the "current" one.
-    active =
-      tasks.find((t) => t.status === 'pending' || t.status === 'in_progress') ?? null;
+    active = tasks.find((t) => t.status === 'pending' || t.status === 'in_progress') ?? null;
   }
   return { total: tasks.length, completed, active };
 }
@@ -69,7 +68,9 @@ export const TaskProgressStrip = memo<TaskProgressStripProps>(
       >
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => {
+            setExpanded((v) => !v);
+          }}
           aria-expanded={expanded}
           aria-controls="task-progress-strip-list"
           className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors rounded-lg"
@@ -84,7 +85,10 @@ export const TaskProgressStrip = memo<TaskProgressStripProps>(
           <Caret size={14} className="text-slate-400 dark:text-slate-500 flex-shrink-0" />
         </button>
         {expanded && (
-          <div id="task-progress-strip-list" className="border-t border-slate-200 dark:border-slate-700 p-2">
+          <div
+            id="task-progress-strip-list"
+            className="border-t border-slate-200 dark:border-slate-700 p-2"
+          >
             <TaskList tasks={tasks} />
           </div>
         )}

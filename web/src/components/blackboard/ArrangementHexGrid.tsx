@@ -49,37 +49,35 @@ export function ArrangementHexGrid({
 
   const edgeElements = useMemo(
     () =>
-      edges
-        .filter(hasEdgeCoordinates)
-        .map((edge) => {
-          const from = hexToPixel(edge.source_hex_q, edge.source_hex_r, HEX_SIZE);
-          const to = hexToPixel(edge.target_hex_q, edge.target_hex_r, HEX_SIZE);
-          return (
-            <g key={edge.id}>
-              <line
-                x1={from.x}
-                y1={from.y}
-                x2={to.x}
-                y2={to.y}
-                stroke="var(--color-success)"
-                strokeOpacity={0.24}
-                strokeWidth={10}
-                strokeLinecap="round"
-              />
-              <line
-                x1={from.x}
-                y1={from.y}
-                x2={to.x}
-                y2={to.y}
-                stroke="var(--color-info)"
-                strokeOpacity={0.9}
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeDasharray={edge.direction === 'bidirectional' ? '0' : '12 8'}
-              />
-            </g>
-          );
-        }),
+      edges.filter(hasEdgeCoordinates).map((edge) => {
+        const from = hexToPixel(edge.source_hex_q, edge.source_hex_r, HEX_SIZE);
+        const to = hexToPixel(edge.target_hex_q, edge.target_hex_r, HEX_SIZE);
+        return (
+          <g key={edge.id}>
+            <line
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+              stroke="var(--color-success)"
+              strokeOpacity={0.24}
+              strokeWidth={10}
+              strokeLinecap="round"
+            />
+            <line
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+              stroke="var(--color-info)"
+              strokeOpacity={0.9}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeDasharray={edge.direction === 'bidirectional' ? '0' : '12 8'}
+            />
+          </g>
+        );
+      }),
     [edges]
   );
 
@@ -96,7 +94,8 @@ export function ArrangementHexGrid({
         const node = nodeByCoord.get(key);
         const isSelected = selectedHex != null && selectedHex.q === q && selectedHex.r === r;
         const isKeyboardTarget = keyboardCursor.q === q && keyboardCursor.r === r;
-        const isMoveTarget = moveMode != null && selection?.kind === 'empty' && selection.q === q && selection.r === r;
+        const isMoveTarget =
+          moveMode != null && selection?.kind === 'empty' && selection.q === q && selection.r === r;
 
         return (
           <g
@@ -158,7 +157,10 @@ export function ArrangementHexGrid({
                   textAnchor="middle"
                   className="fill-[var(--color-primary-200)] text-[12px]"
                 >
-                  {t('blackboard.arrangement.centerSubtitle', 'Open discussion, goals, and execution')}
+                  {t(
+                    'blackboard.arrangement.centerSubtitle',
+                    'Open discussion, goals, and execution'
+                  )}
                 </text>
               </g>
             )}
@@ -197,7 +199,9 @@ export function ArrangementHexGrid({
 
             {node && node.node_type === 'corridor' && (
               <g>
-                <title>{getNodeLabel(node, t('blackboard.arrangement.defaults.corridor', 'Corridor'))}</title>
+                <title>
+                  {getNodeLabel(node, t('blackboard.arrangement.defaults.corridor', 'Corridor'))}
+                </title>
                 <line
                   x1={center.x - 18}
                   y1={center.y}
@@ -224,7 +228,10 @@ export function ArrangementHexGrid({
                   textAnchor="middle"
                   className="fill-[var(--color-text-inverse)] text-[11px] font-medium"
                 >
-                  {getNodeLabel(node, t('blackboard.arrangement.defaults.corridor', 'Corridor')).slice(0, 16)}
+                  {getNodeLabel(
+                    node,
+                    t('blackboard.arrangement.defaults.corridor', 'Corridor')
+                  ).slice(0, 16)}
                 </text>
               </g>
             )}

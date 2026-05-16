@@ -24,6 +24,8 @@
 
 import * as React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 // Import subcomponents
 import { useThemeStore } from '@/stores/theme';
 
@@ -31,8 +33,8 @@ import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { MobileMenu } from './MobileMenu';
-import { Notifications } from './Notifications';
 import { NotificationDropdown } from './NotificationDropdown';
+import { Notifications } from './Notifications';
 import { PrimaryAction } from './PrimaryAction';
 import { Search } from './Search';
 import { SidebarToggle } from './SidebarToggle';
@@ -62,11 +64,13 @@ const AppHeaderContext = React.createContext<AppHeaderContextValue | null>(null)
  * Breadcrumb display component
  */
 function BreadcrumbNav({ breadcrumbs }: { breadcrumbs: Breadcrumb[] }) {
-  if (!breadcrumbs || breadcrumbs.length === 0) return null;
+  const { t } = useTranslation();
+
+  if (breadcrumbs.length === 0) return null;
 
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label={t('components.layout.header.breadcrumb', 'Breadcrumb')}
       className="flex items-center text-sm text-slate-500 dark:text-slate-400"
     >
       {breadcrumbs.map((crumb, index) => {
@@ -159,7 +163,11 @@ function HeaderWrapper({
     if (!React.isValidElement(child)) return;
 
     // Check the slot prop to determine position
-    const slot = (child.props as any)?.slot ?? 'right';
+    const childProps = child.props as { slot?: unknown };
+    const slot =
+      childProps.slot === 'left' || childProps.slot === 'center' || childProps.slot === 'right'
+        ? childProps.slot
+        : 'right';
 
     if (slot === 'left') {
       leftChildren.push(child);
@@ -177,7 +185,9 @@ function HeaderWrapper({
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {leftChildren}
           {/* Show breadcrumbs in left if no explicit left children */}
-          {leftChildren.length === 0 && breadcrumbs && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
+          {leftChildren.length === 0 && breadcrumbs.length > 0 && (
+            <BreadcrumbNav breadcrumbs={breadcrumbs} />
+          )}
         </div>
 
         {/* Center section: Title/Breadcrumbs (hidden on small screens if empty) */}
@@ -209,6 +219,7 @@ function HeaderContent({
   breadcrumbs?: Breadcrumb[] | undefined;
   context?: 'tenant' | 'project' | 'agent' | undefined;
 }) {
+  const { t } = useTranslation();
   // Get breadcrumbs from hook if not provided
   const hookBreadcrumbs2 = useBreadcrumbs(context);
   const breadcrumbs = customBreadcrumbs ?? hookBreadcrumbs2;
@@ -220,7 +231,7 @@ function HeaderContent({
           <header className="h-16 px-4 sm:px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex items-center flex-none shrink-0">
             <div className="h-full w-full flex items-center justify-between">
               <div className="flex items-center gap-2 sm:gap-3">
-                {breadcrumbs && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
+                {breadcrumbs.length > 0 && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
               </div>
               <div className="flex items-center gap-2 sm:gap-3" />
             </div>
@@ -233,7 +244,7 @@ function HeaderContent({
             <div className="h-full w-full flex items-center justify-between gap-4">
               {/* Left: Breadcrumb */}
               <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                {breadcrumbs && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
+                {breadcrumbs.length > 0 && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
               </div>
 
               {/* Right: Essential actions only */}
@@ -258,7 +269,7 @@ function HeaderContent({
             <div className="h-full w-full flex items-center justify-between gap-2 sm:gap-4">
               {/* Left: Breadcrumbs */}
               <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
-                {breadcrumbs && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
+                {breadcrumbs.length > 0 && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
               </div>
 
               {/* Right: Actions - responsive visibility */}
@@ -272,7 +283,7 @@ function HeaderContent({
                 <button
                   type="button"
                   className="md:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors flex-shrink-0"
-                  aria-label="Search"
+                  aria-label={t('common.search', 'Search')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -331,6 +342,7 @@ function HeaderContent({
  * Simple theme toggle for mobile - shows only current theme with dropdown
  */
 function SimpleThemeToggle() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const theme = useThemeStore((state) => state.theme);
@@ -398,7 +410,7 @@ function SimpleThemeToggle() {
           setIsOpen(!isOpen);
         }}
         className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        aria-label="Toggle theme"
+        aria-label={t('components.layout.header.toggleTheme', 'Toggle theme')}
         type="button"
       >
         {themeIcons[theme as keyof typeof themeIcons]}
@@ -406,22 +418,22 @@ function SimpleThemeToggle() {
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-surface-dark rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
-          {(['light', 'dark', 'system'] as const).map((t) => (
+          {(['light', 'dark', 'system'] as const).map((themeName) => (
             <button
-              key={t}
+              key={themeName}
               onClick={() => {
-                setTheme(t);
+                setTheme(themeName);
                 setIsOpen(false);
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-sm capitalize transition-colors ${
-                theme === t
+                theme === themeName
                   ? 'bg-slate-50 dark:bg-slate-800 text-primary'
                   : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
               type="button"
             >
-              {themeIcons[t]}
-              {t}
+              {themeIcons[themeName]}
+              {t(`theme.${themeName}`, themeName)}
             </button>
           ))}
         </div>

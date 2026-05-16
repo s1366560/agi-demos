@@ -76,7 +76,7 @@ export function useBlackboardLifecycle({
       setWorkspaces(result);
       setSelectedWorkspaceId((current) =>
         requestedWorkspaceIdRef.current &&
-          result.some((workspace) => workspace.id === requestedWorkspaceIdRef.current)
+        result.some((workspace) => workspace.id === requestedWorkspaceIdRef.current)
           ? requestedWorkspaceIdRef.current
           : result.some((workspace) => workspace.id === current)
             ? current
@@ -107,6 +107,10 @@ export function useBlackboardLifecycle({
   }, [loadWorkspaceSurface, projectId, selectedWorkspaceId, tenantId]);
 
   useEffect(() => {
+    if (!tenantId || !projectId || !selectedWorkspaceId) {
+      return;
+    }
+
     let cancelled = false;
 
     const loadSurface = async () => {
@@ -127,7 +131,7 @@ export function useBlackboardLifecycle({
     return () => {
       cancelled = true;
     };
-  }, [hydrateSurface]);
+  }, [hydrateSurface, projectId, selectedWorkspaceId, tenantId]);
 
   useEffect(() => {
     if (!requestedWorkspaceId) {

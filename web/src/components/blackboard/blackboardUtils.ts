@@ -23,7 +23,6 @@ export function statusBadgeTone(status: string | undefined): string {
   return 'bg-warning';
 }
 
-
 export type BlackboardCanvasActorKind = 'agent' | 'human';
 
 export interface BlackboardCanvasActor {
@@ -43,6 +42,8 @@ export interface BlackboardCanvasLink {
 
 export interface BlackboardStats {
   totalTasks: number;
+  todoTasks: number;
+  inProgressTasks: number;
   completedTasks: number;
   blockedTasks: number;
   pendingAdjudicationTasks: number;
@@ -140,6 +141,8 @@ export function buildBlackboardStats(
   topologyNodes: TopologyNode[]
 ): BlackboardStats {
   const totalTasks = tasks.length;
+  const todoTasks = tasks.filter((task) => task.status === 'todo').length;
+  const inProgressTasks = tasks.filter((task) => task.status === 'in_progress').length;
   const completedTasks = tasks.filter((task) => task.status === 'done').length;
   const blockedTasks = tasks.filter((task) => task.status === 'blocked').length;
   const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication).length;
@@ -153,6 +156,8 @@ export function buildBlackboardStats(
 
   return {
     totalTasks,
+    todoTasks,
+    inProgressTasks,
     completedTasks,
     blockedTasks,
     pendingAdjudicationTasks,

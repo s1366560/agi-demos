@@ -64,6 +64,19 @@ describe('TaskBoard', () => {
     expect(workspaceTaskService.create).toHaveBeenCalledWith('ws-1', { title: 'Build MVP' });
   });
 
+  it('labels the show archived switch', async () => {
+    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+
+    vi.mocked(useWorkspaceTasks).mockReturnValue([] as any);
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+
+    render(<TaskBoard workspaceId="ws-1" />);
+
+    expect(
+      screen.getByRole('switch', { name: 'workspaceDetail.taskBoard.showArchived' })
+    ).toBeInTheDocument();
+  });
+
   it('renders root goal health, remediation, and evidence grade badges', async () => {
     const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
 

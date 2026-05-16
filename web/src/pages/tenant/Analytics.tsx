@@ -32,9 +32,11 @@ const KPICard = memo<KPICardProps>(({ label, value, subtext, subtextIcon, subtex
         <div
           className={`flex items-center gap-1 mt-2 text-sm font-medium ${subtextColorClass || 'text-slate-500'}`}
         >
-          {subtextIcon && (
-            (() => { const SubtextIcon = subtextIcon; return <SubtextIcon size={16} />; })()
-          )}
+          {subtextIcon &&
+            (() => {
+              const SubtextIcon = subtextIcon;
+              return <SubtextIcon size={16} />;
+            })()}
           <span>{subtext}</span>
         </div>
       )}
@@ -109,14 +111,14 @@ export const Analytics: FC = memo(() => {
   }, [currentTenant]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   // Memoize chart data to prevent recalculation on re-renders
   const chartData = useMemo(() => {
     // Use real data from API, or fallback to empty arrays
-    const memoryGrowthLabels = analytics?.memoryGrowth?.map((p) => p.date) || [];
-    const memoryGrowthCounts = analytics?.memoryGrowth?.map((p) => p.count) || [];
+    const memoryGrowthLabels = analytics ? analytics.memoryGrowth.map((p) => p.date) : [];
+    const memoryGrowthCounts = analytics ? analytics.memoryGrowth.map((p) => p.count) : [];
 
     const memoryGrowthData = {
       labels: memoryGrowthLabels,
@@ -132,9 +134,12 @@ export const Analytics: FC = memo(() => {
     };
 
     // Use real project storage data
-    const projectStorageLabels =
-      analytics?.projectStorage?.map((p) => p.name) || projects.map((p) => p.name);
-    const projectStorageValues = analytics?.projectStorage?.map((p) => p.storage_bytes) || [];
+    const projectStorageLabels = analytics
+      ? analytics.projectStorage.map((p) => p.name)
+      : projects.map((p) => p.name);
+    const projectStorageValues = analytics
+      ? analytics.projectStorage.map((p) => p.storage_bytes)
+      : [];
 
     const projectStorageData = {
       labels: projectStorageLabels,
@@ -197,19 +202,17 @@ export const Analytics: FC = memo(() => {
 
   // Calculate average memories per project
   const avgMemoriesPerProject =
-    analytics?.summary?.total_projects && analytics.summary.total_projects > 0
+    analytics && analytics.summary.total_projects > 0
       ? Math.round(
           analytics.summary.total_memories / analytics.summary.total_projects
         ).toLocaleString()
       : '0';
 
   // Format total memories with locale
-  const totalMemoriesDisplay = analytics?.summary?.total_memories
-    ? analytics.summary.total_memories.toLocaleString()
-    : '0';
+  const totalMemoriesDisplay = analytics ? analytics.summary.total_memories.toLocaleString() : '0';
 
   // Format storage display
-  const storageDisplay = analytics?.summary?.total_storage_bytes
+  const storageDisplay = analytics
     ? `${formatStorage(analytics.summary.total_storage_bytes)} / 100 GB`
     : '0 GB / 100 GB';
 
@@ -238,7 +241,7 @@ export const Analytics: FC = memo(() => {
         />
         <KPICard
           label={t('tenant.analytics.active_projects')}
-          value={analytics?.summary?.total_projects ?? projects.length}
+          value={analytics ? analytics.summary.total_projects : projects.length}
           subtext={t('tenant.analytics.project_count')}
         />
         <KPICard

@@ -19,6 +19,8 @@
 
 import React from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { ChevronDown, ChevronUp, CircleAlert, RefreshCw, CheckCircle } from 'lucide-react';
 
 import {
@@ -98,6 +100,7 @@ const AssistantMessageRenderer: React.FC<{
 const SystemMessageRenderer: React.FC<{
   message: SystemMessage;
 }> = ({ message }) => {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = React.useState(message.metadata?.collapsed ?? true);
 
   if (!message.metadata?.collapsible) {
@@ -123,7 +126,13 @@ const SystemMessageRenderer: React.FC<{
         ) : (
           <ChevronUp size={14} className="align-middle mr-1" />
         )}
-        {collapsed ? 'Show system message' : 'Hide system message'}
+        {collapsed
+          ? t('components.messageRenderer.showSystemMessage', {
+              defaultValue: 'Show system message',
+            })
+          : t('components.messageRenderer.hideSystemMessage', {
+              defaultValue: 'Hide system message',
+            })}
       </button>
       {!collapsed && (
         <div className="mt-2 text-xs text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
@@ -140,6 +149,7 @@ const SystemMessageRenderer: React.FC<{
 const ToolMessageRenderer: React.FC<{
   message: ToolMessage;
 }> = ({ message }) => {
+  const { t } = useTranslation();
   const statusColors = {
     pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
     running: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -149,9 +159,15 @@ const ToolMessageRenderer: React.FC<{
 
   const status = message.metadata?.status || 'completed';
   const statusColor = statusColors[status] || statusColors.completed;
+  const statusLabel = {
+    pending: t('components.messageRenderer.status.pending', { defaultValue: 'Pending' }),
+    running: t('components.messageRenderer.status.running', { defaultValue: 'Running' }),
+    completed: t('components.messageRenderer.status.completed', { defaultValue: 'Completed' }),
+    failed: t('components.messageRenderer.status.failed', { defaultValue: 'Failed' }),
+  }[status];
 
   return (
-    <div className="my-2 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+    <div className="my-2 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-md">
       <div className="flex items-center gap-2 mb-2">
         {status === 'failed' ? (
           <CircleAlert size={14} className="text-slate-500" />
@@ -161,16 +177,20 @@ const ToolMessageRenderer: React.FC<{
           <CheckCircle size={14} className="text-slate-500" />
         )}
         <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-          {message.metadata?.toolName || 'Tool'}
+          {message.metadata?.toolName ||
+            t('components.messageRenderer.defaultToolName', { defaultValue: 'Tool' })}
         </span>
-        <span className={`text-2xs px-2 py-0.5 rounded-full ${statusColor}`}>{status}</span>
+        <span className={`text-2xs px-2 py-0.5 rounded-full ${statusColor}`}>{statusLabel}</span>
       </div>
       <div className="text-xs text-slate-600 dark:text-slate-400 font-mono whitespace-pre-wrap">
         {message.content}
       </div>
       {message.metadata?.error && (
         <div className="mt-2 text-xs text-red-600 dark:text-red-400 font-mono">
-          Error: {message.metadata.error}
+          {t('components.messageRenderer.errorPrefix', {
+            defaultValue: 'Error: {{error}}',
+            error: message.metadata.error,
+          })}
         </div>
       )}
     </div>
@@ -185,6 +205,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   onClick,
   className = '',
 }) => {
+  const { t } = useTranslation();
   const handleClick = React.useCallback(() => {
     onClick?.(message);
   }, [onClick, message]);
@@ -202,7 +223,9 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
       default:
         return (
           <div className="text-sm text-slate-500">
-            Unknown message role: {(message as any).role}
+            {t('components.messageRenderer.unknownRole', {
+              defaultValue: 'Unknown message role',
+            })}
           </div>
         );
     }
@@ -211,9 +234,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   return (
     <MessageErrorBoundary
       fallback={
-        <div className="p-4 my-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+        <div className="p-4 my-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
           <p className="text-sm text-red-600 dark:text-red-400">
-            Failed to render message {message.id.slice(0, 8)}...
+            {t('components.messageRenderer.renderFailed', {
+              defaultValue: 'Failed to render message {{messageId}}...',
+              messageId: message.id.slice(0, 8),
+            })}
           </p>
         </div>
       }
@@ -227,7 +253,10 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
         data-message-role={message.role}
         onClick={handleClick}
         role="article"
-        aria-label={`${message.role} message`}
+        aria-label={t('components.messageRenderer.messageAria', {
+          defaultValue: '{{role}} message',
+          role: message.role,
+        })}
       >
         {renderMessage()}
       </div>

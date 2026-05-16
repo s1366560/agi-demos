@@ -117,10 +117,11 @@ describe('ProjectOverview - Performance Optimizations', () => {
   };
 
   describe('Basic Rendering', () => {
-    it('should render loading state initially', () => {
+    it('should render loading state initially', async () => {
       renderWithRouter(<ProjectOverview />);
 
       expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      await screen.findByText('150');
     });
 
     it('should render stats cards after data loads', async () => {
@@ -143,6 +144,31 @@ describe('ProjectOverview - Performance Optimizations', () => {
 
       expect(screen.getByText('Memory 2')).toBeInTheDocument();
       expect(screen.getByText(/active memories/i)).toBeInTheDocument();
+    });
+
+    it('labels memory row action buttons with the memory title', async () => {
+      renderWithRouter(<ProjectOverview />);
+
+      expect(
+        await screen.findByRole('button', { name: 'Open actions for Memory 1' })
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Open actions for Memory 2' })).toBeInTheDocument();
+    });
+
+    it('links the show more action to the full memories page', async () => {
+      renderWithRouter(<ProjectOverview />);
+
+      const showMore = await screen.findByRole('link', { name: /show more/i });
+
+      expect(showMore).toHaveAttribute('href', '/project/p1/memories');
+    });
+
+    it('links the project team action to project settings', async () => {
+      renderWithRouter(<ProjectOverview />);
+
+      const projectTeam = await screen.findByRole('link', { name: /project team/i });
+
+      expect(projectTeam).toHaveAttribute('href', '/project/p1/settings');
     });
 
     it('should render empty state when no memories', async () => {

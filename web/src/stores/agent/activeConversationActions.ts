@@ -5,9 +5,13 @@
  * LRU eviction, and restoring new conversation state.
  */
 
-import { createDefaultConversationState, type ConversationState } from '../../types/conversationState';
+import {
+  createDefaultConversationState,
+  type ConversationState,
+} from '../../types/conversationState';
 import { getHITLSummaryFromState } from '../../types/conversationState';
 import { saveConversationState } from '../../utils/conversationDB';
+import { useContextStore } from '../contextStore';
 
 import { replayCanvasEventsFromTimeline } from './canvasReplay';
 import { useConversationsStore } from './conversationsStore';
@@ -35,10 +39,7 @@ export function createActiveConversationActions(deps: ActiveConversationDeps) {
 
   return {
     setActiveConversation: (id: string | null): void => {
-      const {
-        activeConversationId,
-        conversationStates,
-      } = get();
+      const { activeConversationId, conversationStates } = get();
 
       // Skip if already on this conversation
       if (activeConversationId === id) return;
@@ -48,12 +49,8 @@ export function createActiveConversationActions(deps: ActiveConversationDeps) {
       clearAllTimelineBuffers();
       resetCanvasForConversationScope();
 
-      // Reset context status for the new conversation (async import for browser compatibility)
-      import('../../stores/contextStore')
-        .then(({ useContextStore }) => {
-          useContextStore.getState().reset();
-        })
-        .catch(console.error);
+      // Reset context status for the new conversation.
+      useContextStore.getState().reset();
 
       // Save current conversation state before switching
       if (activeConversationId && activeConversationId !== id) {
@@ -122,7 +119,7 @@ export function createActiveConversationActions(deps: ActiveConversationDeps) {
         if (newState) {
           // Sort timeline by eventTimeUs + eventCounter to ensure correct order
           const sortedTimeline = [...newState.timeline].sort((a, b) => {
-            const timeDiff = a.eventTimeUs - (b.eventTimeUs ?? 0);
+            const timeDiff = a.eventTimeUs - b.eventTimeUs;
             if (timeDiff !== 0) return timeDiff;
             return a.eventCounter - b.eventCounter;
           });
@@ -133,11 +130,15 @@ export function createActiveConversationActions(deps: ActiveConversationDeps) {
           // Sync sub-stores from loaded conversation state
           useTimelineStore.getState().setAgentTimeline(sortedTimeline);
           useTimelineStore.getState().setAgentHasEarlier(newState.hasEarlier);
-          useTimelineStore.getState().setAgentEarliestPointers(newState.earliestTimeUs, newState.earliestCounter);
+          useTimelineStore
+            .getState()
+            .setAgentEarliestPointers(newState.earliestTimeUs, newState.earliestCounter);
 
           useStreamingStore.getState().setAgentIsStreaming(newState.isStreaming);
           useStreamingStore.getState().setAgentStreamStatus(newState.streamStatus);
-          useStreamingStore.getState().setAgentStreamingAssistantContent(newState.streamingAssistantContent);
+          useStreamingStore
+            .getState()
+            .setAgentStreamingAssistantContent(newState.streamingAssistantContent);
           useStreamingStore.getState().setAgentError(newState.error);
           useStreamingStore.getState().setAgentCurrentThought(newState.currentThought);
           useStreamingStore.getState().setAgentStreamingThought(newState.streamingThought);
@@ -155,7 +156,7 @@ export function createActiveConversationActions(deps: ActiveConversationDeps) {
             pendingPermission: null,
             doomLoopDetected: newState.doomLoopDetected,
             costTracking: null,
-            suggestions: newState.suggestions ?? [],
+            suggestions: newState.suggestions,
             pinnedEventIds: new Set(),
           });
           // Sync currentConversation to conversationsStore
@@ -193,7 +194,7 @@ export function createActiveConversationActions(deps: ActiveConversationDeps) {
         pinnedEventIds: new Set(),
       });
       const convForDefault = id
-        ? useConversationsStore.getState().conversations.find((c) => c.id === id) ?? null
+        ? (useConversationsStore.getState().conversations.find((c) => c.id === id) ?? null)
         : null;
       useConversationsStore.getState().setCurrentConversation(convForDefault);
     },

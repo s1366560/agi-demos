@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import {
   createApiUrl,
+  createWebSocketAuthProtocols,
   createWebSocketUrl,
   apiFetch,
   handleUnauthorized,
@@ -97,6 +98,10 @@ describe('createWebSocketUrl', () => {
     // Port 3000 is automatically redirected to 8000 (backend port) in development
     expect(result).toBe('ws://localhost:8000/api/v1/agent/ws?token=abc123&session_id=xyz');
   });
+
+  it('should create auth subprotocols for WebSocket handshakes', () => {
+    expect(createWebSocketAuthProtocols('ms_sk_test')).toEqual(['memstack.auth', 'ms_sk_test']);
+  });
 });
 
 describe('apiFetch', () => {
@@ -148,9 +153,6 @@ describe('apiFetch', () => {
     useAuthStore.setState({ token: 'old-token', isAuthenticated: true });
 
     handleUnauthorized();
-
-    // clearAuthState() does an async dynamic import, so wait for it
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const state = useAuthStore.getState();
     expect(state.token).toBeNull();

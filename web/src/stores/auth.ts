@@ -14,10 +14,13 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
+import i18n from '../i18n/config';
 import { authAPI, tenantAPI } from '../services/api';
 import { httpClient } from '../services/client/httpClient';
 import { setFeatures } from '../utils/featureCheck';
-import i18n from '../i18n/config';
+import { registerAuthStateClearer } from '../utils/tokenResolver';
+
+import { useTenantStore } from './tenant';
 
 import type { User } from '../types/memory';
 
@@ -130,10 +133,7 @@ export const useAuthStore = create<AuthState>()(
           });
 
           // Clear tenant state as well
-          // Dynamic import to avoid circular dependency
-          import('./tenant').then(({ useTenantStore }) => {
-            useTenantStore.getState().setCurrentTenant(null);
-          });
+          useTenantStore.getState().setCurrentTenant(null);
         },
 
         /**
@@ -185,12 +185,10 @@ export const useAuthStore = create<AuthState>()(
 
             // Check org setup
             const tenantResp = await tenantAPI.list();
-            if (tenantResp && tenantResp.tenants && tenantResp.tenants.length > 0) {
-              const firstTenant = tenantResp.tenants[0];
-              const isSetup =
-                !!firstTenant?.name &&
-                firstTenant?.name !== 'New Tenant' &&
-                firstTenant?.name.trim() !== '';
+            const firstTenant = tenantResp.tenants[0];
+            if (firstTenant) {
+              const { name } = firstTenant;
+              const isSetup = !!name && name !== 'New Tenant' && name.trim() !== '';
               set({ orgSetupComplete: isSetup });
             } else {
               set({ orgSetupComplete: false });
@@ -218,6 +216,15 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+registerAuthStateClearer(() => {
+  useAuthStore.setState({
+    user: null,
+    token: null,
+    isAuthenticated: false,
+    isLoading: false,
+  });
+});
 
 // ============================================================================
 // SELECTORS - Fine-grained subscriptions for performance

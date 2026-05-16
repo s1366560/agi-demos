@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Modal, Form, Input, Select, message } from 'antd';
 
 import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
-
 
 export interface AddAgentModalProps {
   open: boolean;
@@ -24,12 +25,8 @@ interface FormValues {
   description: string;
 }
 
-export const AddAgentModal: FC<AddAgentModalProps> = ({
-  open,
-  onClose,
-  onSubmit,
-  hexCoords,
-}) => {
+export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit, hexCoords }) => {
+  const { t } = useTranslation();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [definitionsLoaded, setDefinitionsLoaded] = useState(false);
@@ -77,26 +74,28 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({
       if (values.display_name) payload.display_name = values.display_name;
       if (values.description) payload.description = values.description;
       await onSubmit(payload);
-      message.success('Agent added to workspace');
+      message.success(t('workspaceDetail.agents.addSuccess', 'Agent added to workspace'));
       onClose();
     } catch (error: unknown) {
       const err = error as { errorFields?: unknown[] | undefined };
       if (!err.errorFields) {
-        message.error('Failed to add agent');
+        message.error(t('workspaceDetail.agents.addError', 'Failed to add agent'));
       }
     } finally {
       setSubmitting(false);
     }
-  }, [form, onSubmit, onClose]);
+  }, [form, onSubmit, onClose, t]);
 
   return (
     <Modal
-      title="Add Agent to Workspace"
+      title={t('workspaceDetail.agents.addTitle', 'Add Agent to Workspace')}
       open={open}
       onCancel={onClose}
-      onOk={() => { void handleOk(); }}
-      okText="Add"
-      cancelText="Cancel"
+      onOk={() => {
+        void handleOk();
+      }}
+      okText={t('common.add', 'Add')}
+      cancelText={t('common.cancel', 'Cancel')}
       confirmLoading={submitting}
       width={480}
       destroyOnHidden
@@ -104,11 +103,19 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({
       <Form form={form} layout="vertical" className="mt-4">
         <Form.Item
           name="agent_id"
-          label="Agent Definition"
-          rules={[{ required: true, message: 'Please select an agent' }]}
+          label={t('workspaceDetail.agents.definitionLabel', 'Agent Definition')}
+          rules={[
+            {
+              required: true,
+              message: t('workspaceDetail.agents.definitionRequired', 'Please select an agent'),
+            },
+          ]}
         >
           <Select
-            placeholder="Select an agent definition"
+            placeholder={t(
+              'workspaceDetail.agents.definitionPlaceholder',
+              'Select an agent definition'
+            )}
             showSearch={{
               filterOption: (input, option) =>
                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase()),
@@ -121,17 +128,38 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({
           />
         </Form.Item>
 
-        <Form.Item name="display_name" label="Display Name">
-          <Input placeholder="Name shown in workspace (optional)" />
+        <Form.Item
+          name="display_name"
+          label={t('workspaceDetail.agents.displayNameLabel', 'Display Name')}
+        >
+          <Input
+            placeholder={t(
+              'workspaceDetail.agents.displayNamePlaceholder',
+              'Name shown in workspace (optional)'
+            )}
+          />
         </Form.Item>
 
-        <Form.Item name="description" label="Description">
-          <Input.TextArea rows={2} placeholder="Brief description (optional)" />
+        <Form.Item
+          name="description"
+          label={t('workspaceDetail.agents.descriptionLabel', 'Description')}
+        >
+          <Input.TextArea
+            rows={2}
+            placeholder={t(
+              'workspaceDetail.agents.descriptionPlaceholder',
+              'Brief description (optional)'
+            )}
+          />
         </Form.Item>
 
         {hexCoords != null && (
           <div className="text-xs text-slate-400 mt-2">
-            Will be placed at hex ({hexCoords.q}, {hexCoords.r})
+            {t('workspaceDetail.agents.placementHint', {
+              q: hexCoords.q,
+              r: hexCoords.r,
+              defaultValue: `Will be placed at hex (${hexCoords.q.toString()}, ${hexCoords.r.toString()})`,
+            })}
           </div>
         )}
       </Form>

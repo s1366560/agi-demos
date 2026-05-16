@@ -16,19 +16,18 @@ import {
 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
+import { usePendingPromptStore, usePendingPrompts } from '@/stores/pendingPromptStore';
 import { useVoiceCallStore } from '@/stores/voiceCallStore';
 
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { useFrameCapture } from '@/hooks/rtc/useFrameCapture';
 import { useActiveModelCapabilities } from '@/hooks/useActiveModelCapabilities';
+import { useConversationParticipants } from '@/hooks/useConversationParticipants';
 import { useVoiceTranscribe } from '@/hooks/useVoiceTranscribe';
 
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
-import { useConversationParticipants } from '@/hooks/useConversationParticipants';
-
-import { MentionPicker } from './MentionPicker';
 import { MentionPopover } from './chat/MentionPopover';
 import { PromptTemplateLibrary } from './chat/PromptTemplateLibrary';
 import { VoiceCallPanel } from './chat/VoiceCallPanel';
@@ -37,10 +36,9 @@ import { useDragAndDrop } from './hooks/useDragAndDrop';
 import { useMentionDetection } from './hooks/useMentionDetection';
 import { useSlashCommand } from './hooks/useSlashCommand';
 import { InputToolbar } from './InputToolbar';
-import { SlashCommandDropdown } from './SlashCommandDropdown';
+import { MentionPicker } from './MentionPicker';
 import { QueuedPromptStrip } from './QueuedPromptStrip';
-
-import { usePendingPromptStore, usePendingPrompts } from '@/stores/pendingPromptStore';
+import { SlashCommandDropdown } from './SlashCommandDropdown';
 
 interface InputBarProps {
   onSend: (
@@ -61,6 +59,19 @@ interface InputBarProps {
   onAgentSelect?: ((agentId: string) => void) | undefined;
   ref?: React.Ref<HTMLTextAreaElement>;
 }
+
+interface WritableRef<T> {
+  current: T | null;
+}
+
+const assignRef = <T,>(ref: React.Ref<T> | undefined, value: T | null): void => {
+  if (!ref) return;
+  if (typeof ref === 'function') {
+    ref(value);
+    return;
+  }
+  (ref as WritableRef<T>).current = value;
+};
 
 const getFileIcon = (mimeType: string) => {
   if (mimeType.startsWith('image/')) return <ImageIcon size={14} className="text-emerald-500" />;
@@ -98,11 +109,7 @@ export const InputBar = memo<InputBarProps>(
     const mergedRef = useCallback(
       (node: HTMLTextAreaElement | null) => {
         textareaRef.current = node;
-        if (typeof ref === 'function') {
-          ref(node);
-        } else if (ref) {
-          (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
-        }
+        assignRef(ref, node);
       },
       [ref]
     );
@@ -131,7 +138,7 @@ export const InputBar = memo<InputBarProps>(
     const { captureFrame } = useFrameCapture();
     const handleVoiceCall = useCallback(() => {
       if (voiceCallStatus !== 'idle') {
-        useVoiceCallStore.getState().endCall();
+        void useVoiceCallStore.getState().endCall();
       } else {
         if (!activeConversationId) {
           console.warn('[InputBar] Cannot start voice call without an active conversation');
@@ -141,7 +148,7 @@ export const InputBar = memo<InputBarProps>(
           console.warn('[InputBar] Cannot start voice call without a projectId');
           return;
         }
-        useVoiceCallStore.getState().startCall(activeConversationId, projectId);
+        void useVoiceCallStore.getState().startCall(activeConversationId, projectId);
       }
     }, [voiceCallStatus, activeConversationId, projectId]);
 
@@ -192,8 +199,7 @@ export const InputBar = memo<InputBarProps>(
     const queue = usePendingPrompts(queueConvId ?? undefined);
     const enqueuePrompt = usePendingPromptStore((s) => s.enqueue);
     const shiftPrompt = usePendingPromptStore((s) => s.shift);
-    const canQueue =
-      isStreaming && !disabled && content.trim().length > 0 && Boolean(queueConvId);
+    const canQueue = isStreaming && !disabled && content.trim().length > 0 && Boolean(queueConvId);
 
     // --- Extracted hooks ---
     const {
@@ -372,7 +378,7 @@ export const InputBar = memo<InputBarProps>(
 
         if (processSlashInput(value)) return;
 
-        const cursorPos = target.selectionStart;
+        const cursorPos = target.selectionStart || value.length;
         processMentionInput(value, cursorPos);
       },
       [resizeTextarea, processSlashInput, processMentionInput]
@@ -608,6 +614,7 @@ export const InputBar = memo<InputBarProps>(
               />
             )}
             <textarea
+              id="agent-message-input"
               ref={mergedRef}
               value={content}
               onChange={handleInput}

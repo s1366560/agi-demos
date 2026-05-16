@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasPanel } from '@/components/agent/canvas/CanvasPanel';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -24,8 +24,14 @@ vi.mock('@/components/agent/canvas/useSyntaxHighlighter', () => ({
 
 describe('CanvasPanel block rendering', () => {
   beforeEach(() => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('about:blank#canvas-preview');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     useCanvasStore.getState().reset();
     useLayoutModeStore.getState().setMode('canvas');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders image preview from JSON payload', () => {
@@ -93,6 +99,30 @@ describe('CanvasPanel block rendering', () => {
 
     expect(screen.queryByRole('link', { name: 'Download File' })).not.toBeInTheDocument();
     expect(screen.getByText('Invalid file URL')).toBeInTheDocument();
+  });
+
+  it('offers a concrete download path for PowerPoint files', () => {
+    useCanvasStore.getState().openTab({
+      id: 'pptx-tab',
+      title: 'roadmap.pptx',
+      type: 'preview',
+      content: '',
+      artifactUrl: '/api/v1/artifacts/artifact-1/download',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    });
+
+    render(<CanvasPanel />);
+
+    expect(screen.queryByText(/future update|not yet supported/i)).not.toBeInTheDocument();
+
+    const downloadLink = screen.getByRole('link', { name: 'Download File' });
+    expect(downloadLink).toHaveAttribute('href', '/api/v1/artifacts/artifact-1/download');
+    expect(downloadLink).toHaveAttribute('download', 'roadmap.pptx');
+    expect(
+      screen.getByText(
+        'Download this presentation to open it in PowerPoint, Keynote, or compatible office software.'
+      )
+    ).toBeInTheDocument();
   });
 
   it('renders form-style data payload as read-only form preview', () => {

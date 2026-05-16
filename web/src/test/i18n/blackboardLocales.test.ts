@@ -5,8 +5,14 @@ import zhCN from '@/locales/zh-CN.json';
 
 const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.title',
+  'blackboard.dashboardEyebrow',
+  'blackboard.liveSync',
   'blackboard.shellHint',
   'blackboard.shellSensingHint',
+  'blackboard.summary.completion',
+  'blackboard.summary.runningTasks',
+  'blackboard.summary.blockedTasks',
+  'blackboard.summaryTaskMix',
   'blackboard.tabs.goals',
   'blackboard.tabGroups.work',
   'blackboard.autonomy.title',
@@ -63,6 +69,11 @@ const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.executionDiagnosticsNoBlockers',
   'blackboard.pendingAdjudicationTitle',
   'blackboard.pendingAdjudicationEmpty',
+  'blackboard.agentStatusAgent',
+  'blackboard.agentStatusState',
+  'blackboard.agentStatusCoordinates',
+  'blackboard.agentStatusStyle',
+  'blackboard.notAvailable',
 ] as const;
 
 function readLocaleValue(locale: Record<string, unknown>, key: string): unknown {

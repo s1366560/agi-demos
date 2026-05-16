@@ -160,7 +160,10 @@ describe('MessageArea Compound Component', () => {
 
   describe('StreamingContent Sub-Component', () => {
     it('should render streaming thought when thinking', () => {
-      useStreamingStore.setState({ agentStreamingThought: 'Thinking...', agentIsThinkingStreaming: true });
+      useStreamingStore.setState({
+        agentStreamingThought: 'Thinking...',
+        agentIsThinkingStreaming: true,
+      });
       render(<MessageArea {...defaultProps} isStreaming />);
 
       expect(screen.getByTestId('streaming-thought')).toBeInTheDocument();

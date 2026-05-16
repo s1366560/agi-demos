@@ -4,11 +4,36 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { Input, Tag, Dropdown, Breadcrumb, Tree, Modal } from 'antd';
-import { Download, Eye, FilePlus, FileText, Folder, FolderOpen, FolderPlus, HardDrive, MoreVertical, Trash2, Upload, Image as ImageIcon, FileBox, Terminal, Code, Braces, File } from 'lucide-react';
+import {
+  Download,
+  Eye,
+  FilePlus,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  HardDrive,
+  MoreVertical,
+  Trash2,
+  Upload,
+  Image as ImageIcon,
+  FileBox,
+  Terminal,
+  Code,
+  Braces,
+  File,
+  Search as SearchIcon,
+} from 'lucide-react';
 
 import { instanceFileService } from '@/services/instanceFileService';
 
-import { useLazyMessage, LazyEmpty, LazySpin, LazyModal, LazyButton } from '@/components/ui/lazyAntd';
+import {
+  useLazyMessage,
+  LazyEmpty,
+  LazySpin,
+  LazyModal,
+  LazyButton,
+} from '@/components/ui/lazyAntd';
 
 import type { MenuProps, TreeDataNode } from 'antd';
 
@@ -25,7 +50,9 @@ interface FileNode {
   children?: FileNode[];
 }
 
-const getFileIcon = (node: FileNode): React.ComponentType<{ size?: number; className?: string }> => {
+const getFileIcon = (
+  node: FileNode
+): React.ComponentType<{ size?: number; className?: string }> => {
   if (node.type === 'folder') return Folder;
 
   const ext = node.name.split('.').pop()?.toLowerCase();
@@ -46,7 +73,7 @@ const getFileIcon = (node: FileNode): React.ComponentType<{ size?: number; class
 
 const formatFileSize = (bytes: number | null): string => {
   if (bytes === null) return '-';
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
@@ -84,31 +111,28 @@ export const InstanceFiles: React.FC = () => {
   }, [instanceId, messageApi, t]);
 
   useEffect(() => {
-    fetchFileTree();
+    void fetchFileTree();
   }, [fetchFileTree]);
 
   // Recursively filter tree nodes by search term, keeping parent folders if any descendant matches
-  const filterTree = useCallback(
-    (nodes: FileNode[], term: string): FileNode[] => {
-      if (!term) return nodes;
-      const lowerTerm = term.toLowerCase();
-      return nodes.reduce<FileNode[]>((acc, node) => {
-        const nameMatches = node.name.toLowerCase().includes(lowerTerm);
-        const filteredChildren = node.children ? filterTree(node.children, term) : [];
-        if (nameMatches || filteredChildren.length > 0) {
-          const newNode = { ...node };
-          if (node.children) {
-            newNode.children = filteredChildren;
-          } else {
-            delete newNode.children;
-          }
-          acc.push(newNode);
+  const filterTree = useCallback((nodes: FileNode[], term: string): FileNode[] => {
+    if (!term) return nodes;
+    const lowerTerm = term.toLowerCase();
+    return nodes.reduce<FileNode[]>((acc, node) => {
+      const nameMatches = node.name.toLowerCase().includes(lowerTerm);
+      const filteredChildren = node.children ? filterTree(node.children, term) : [];
+      if (nameMatches || filteredChildren.length > 0) {
+        const newNode = { ...node };
+        if (node.children) {
+          newNode.children = filteredChildren;
+        } else {
+          delete newNode.children;
         }
-        return acc;
-      }, []);
-    },
-    []
-  );
+        acc.push(newNode);
+      }
+      return acc;
+    }, []);
+  }, []);
 
   const filteredFileTree = useMemo(
     () => filterTree(fileTree, search),
@@ -138,7 +162,10 @@ export const InstanceFiles: React.FC = () => {
           key: node.key,
           title: (
             <div className="flex items-center gap-2">
-              {(() => { const Icon = getFileIcon(node); return <Icon size={16} />; })()}
+              {(() => {
+                const Icon = getFileIcon(node);
+                return <Icon size={16} />;
+              })()}
               <span className={selectedNode?.key === node.key ? 'font-medium text-info-dark' : ''}>
                 {node.name}
               </span>
@@ -182,13 +209,13 @@ export const InstanceFiles: React.FC = () => {
 
   const handlePreview = useCallback(
     async (node: FileNode) => {
-      if (node.type !== 'file') return;
+      if (!instanceId || node.type !== 'file') return;
 
       setIsPreviewLoading(true);
       setIsPreviewModalOpen(true);
 
       try {
-        const response = await instanceFileService.previewFile(instanceId!, node.key);
+        const response = await instanceFileService.previewFile(instanceId, node.key);
         setPreviewContent(response.content);
       } catch {
         messageApi?.error(t('tenant.instances.files.previewError'));
@@ -201,10 +228,10 @@ export const InstanceFiles: React.FC = () => {
 
   const handleDownload = useCallback(
     async (node: FileNode) => {
-      if (node.type !== 'file') return;
+      if (!instanceId || node.type !== 'file') return;
 
       try {
-        const blob = await instanceFileService.downloadFile(instanceId!, node.key);
+        const blob = await instanceFileService.downloadFile(instanceId, node.key);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -230,7 +257,7 @@ export const InstanceFiles: React.FC = () => {
         await instanceFileService.deleteFile(instanceId, node.key);
         messageApi?.success(t('tenant.instances.files.deleteSuccess'));
         setSelectedNode(null);
-        fetchFileTree();
+        void fetchFileTree();
       } catch {
         messageApi?.error(t('tenant.instances.files.deleteError'));
       } finally {
@@ -258,7 +285,7 @@ export const InstanceFiles: React.FC = () => {
       setIsCreateModalOpen(false);
       setCreateName('');
       setCreateParentPath('');
-      fetchFileTree();
+      void fetchFileTree();
     } catch {
       messageApi?.error(t('tenant.instances.files.createError'));
     } finally {
@@ -277,14 +304,13 @@ export const InstanceFiles: React.FC = () => {
         const directory = selectedNode?.type === 'folder' ? selectedNode.key : '';
         await instanceFileService.uploadFile(instanceId, file, directory);
         messageApi?.success(t('tenant.instances.files.uploadSuccess'));
-        fetchFileTree();
+        void fetchFileTree();
       } catch {
         messageApi?.error(t('tenant.instances.files.uploadError'));
       }
     };
     input.click();
   }, [instanceId, selectedNode, messageApi, t, fetchFileTree]);
-
 
   const getBreadcrumbItems = useCallback((key: string) => {
     const parts = key.split('/');
@@ -304,13 +330,17 @@ export const InstanceFiles: React.FC = () => {
         key: 'preview',
         label: t('tenant.instances.files.preview'),
         icon: <Eye size={16} />,
-        onClick: () => handlePreview(selectedNode),
+        onClick: () => {
+          void handlePreview(selectedNode);
+        },
       });
       items.push({
         key: 'download',
         label: t('common.download'),
         icon: <Download size={16} />,
-        onClick: () => handleDownload(selectedNode),
+        onClick: () => {
+          void handleDownload(selectedNode);
+        },
       });
       items.push({ type: 'divider' });
     } else {
@@ -367,14 +397,14 @@ export const InstanceFiles: React.FC = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('tenant.instances.files.title')}
           </h2>
           <p className="text-sm text-text-muted">{t('tenant.instances.files.description')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LazyButton
             onClick={() => {
               setCreateType('folder');
@@ -397,11 +427,7 @@ export const InstanceFiles: React.FC = () => {
           >
             {t('tenant.instances.files.newFile')}
           </LazyButton>
-          <LazyButton
-            type="primary"
-            onClick={handleUpload}
-            icon={<Upload size={16} />}
-          >
+          <LazyButton type="primary" onClick={handleUpload} icon={<Upload size={16} />}>
             {t('tenant.instances.files.upload')}
           </LazyButton>
         </div>
@@ -486,6 +512,12 @@ export const InstanceFiles: React.FC = () => {
                   setSearch(e.target.value);
                 }}
                 allowClear
+                enterButton={
+                  <>
+                    <span className="sr-only">{t('common.search', 'Search')}</span>
+                    <SearchIcon size={16} aria-hidden="true" />
+                  </>
+                }
               />
             </div>
             <div className="p-2 max-h-[500px] overflow-y-auto">
@@ -495,7 +527,13 @@ export const InstanceFiles: React.FC = () => {
                 </div>
               ) : filteredFileTree.length === 0 ? (
                 <div className="py-8">
-                  <LazyEmpty description={search ? t('tenant.instances.files.noSearchResults') : t('tenant.instances.files.noFiles')} />
+                  <LazyEmpty
+                    description={
+                      search
+                        ? t('tenant.instances.files.noSearchResults')
+                        : t('tenant.instances.files.noFiles')
+                    }
+                  />
                 </div>
               ) : (
                 <Tree
@@ -520,7 +558,10 @@ export const InstanceFiles: React.FC = () => {
                 {/* Header with path */}
                 <div className="p-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {(() => { const Icon = getFileIcon(selectedNode); return <Icon size={16} className="text-text-muted" />; })()}
+                    {(() => {
+                      const Icon = getFileIcon(selectedNode);
+                      return <Icon size={16} className="text-text-muted" />;
+                    })()}
                     <Breadcrumb items={getBreadcrumbItems(selectedNode.key)} className="text-sm" />
                   </div>
                   <Dropdown menu={{ items: contextMenuItems ?? [] }} trigger={['click']}>
@@ -568,18 +609,18 @@ export const InstanceFiles: React.FC = () => {
                     <div className="flex gap-2 pt-2">
                       <LazyButton
                         type="primary"
-                        icon={
-                          <Eye size={16} />
-                        }
-                        onClick={() => handlePreview(selectedNode)}
+                        icon={<Eye size={16} />}
+                        onClick={() => {
+                          void handlePreview(selectedNode);
+                        }}
                       >
                         {t('tenant.instances.files.preview')}
                       </LazyButton>
                       <LazyButton
-                        icon={
-                          <Download size={16} />
-                        }
-                        onClick={() => handleDownload(selectedNode)}
+                        icon={<Download size={16} />}
+                        onClick={() => {
+                          void handleDownload(selectedNode);
+                        }}
                       >
                         {t('common.download')}
                       </LazyButton>
@@ -628,7 +669,9 @@ export const InstanceFiles: React.FC = () => {
             : t('tenant.instances.files.newFile')
         }
         open={isCreateModalOpen}
-        onOk={handleCreate}
+        onOk={() => {
+          void handleCreate();
+        }}
         onCancel={() => {
           setIsCreateModalOpen(false);
           setCreateName('');
@@ -640,14 +683,20 @@ export const InstanceFiles: React.FC = () => {
         <div className="space-y-4 py-2">
           {createParentPath && (
             <div>
-              <label htmlFor="create-parent-path" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+              <label
+                htmlFor="create-parent-path"
+                className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+              >
                 {t('tenant.instances.files.parentFolder')}
               </label>
               <Input id="create-parent-path" value={createParentPath} disabled />
             </div>
           )}
           <div>
-            <label htmlFor="create-file-name" className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1">
+            <label
+              htmlFor="create-file-name"
+              className="block text-sm font-medium text-text-secondary dark:text-text-muted-light mb-1"
+            >
               {createType === 'folder'
                 ? t('tenant.instances.files.folderName')
                 : t('tenant.instances.files.fileName')}

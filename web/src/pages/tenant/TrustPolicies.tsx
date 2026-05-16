@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input, Button, Form, Select } from 'antd';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
 
 import {
   useLazyMessage,
@@ -79,7 +79,7 @@ export const TrustPolicies: React.FC = () => {
     setIsCreating(true);
     try {
       await createPolicy(tenantId, values);
-      message?.success('Trust policy created successfully');
+      message?.success(t('tenant.trustPolicies.messages.created'));
       setIsCreateModalOpen(false);
       createForm.resetFields();
     } catch {
@@ -97,6 +97,9 @@ export const TrustPolicies: React.FC = () => {
     }
   };
 
+  const getGrantTypeLabel = (grantType: string) =>
+    t(`tenant.trustPolicies.grantTypes.${grantType}`, grantType);
+
   if (!tenantId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -110,16 +113,18 @@ export const TrustPolicies: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Trust Policies</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Manage automated execution permissions for agents in your workspaces.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            {t('tenant.trustPolicies.title')}
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">{t('tenant.trustPolicies.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isLoading}
+            aria-label={t('tenant.trustPolicies.refresh')}
+            title={t('tenant.trustPolicies.refresh')}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={16} />
@@ -132,7 +137,7 @@ export const TrustPolicies: React.FC = () => {
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
           >
             <Plus size={16} />
-            Create Policy
+            {t('tenant.trustPolicies.actions.createPolicy')}
           </button>
         </div>
       </div>
@@ -142,22 +147,34 @@ export const TrustPolicies: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 max-w-xs">
             <Search
-              placeholder="Filter by Workspace ID"
+              placeholder={t('tenant.trustPolicies.filters.workspaceId')}
               value={workspaceFilter}
               onChange={(e) => {
                 setWorkspaceFilter(e.target.value);
               }}
               allowClear
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
             />
           </div>
           <div className="flex-1 max-w-xs">
             <Search
-              placeholder="Filter by Agent Instance ID"
+              placeholder={t('tenant.trustPolicies.filters.agentInstanceId')}
               value={agentFilter}
               onChange={(e) => {
                 setAgentFilter(e.target.value);
               }}
               allowClear
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
+              }
             />
           </div>
         </div>
@@ -170,7 +187,7 @@ export const TrustPolicies: React.FC = () => {
         </div>
       ) : policies.length === 0 ? (
         <div className="flex items-center justify-center py-20">
-          <LazyEmpty description="No trust policies found" />
+          <LazyEmpty description={t('tenant.trustPolicies.empty')} />
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -179,22 +196,22 @@ export const TrustPolicies: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Action Type
+                    {t('tenant.trustPolicies.columns.actionType')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Agent Instance
+                    {t('tenant.trustPolicies.columns.agentInstance')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Grant Type
+                    {t('tenant.trustPolicies.columns.grantType')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Granted By
+                    {t('tenant.trustPolicies.columns.grantedBy')}
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Created At
+                    {t('tenant.trustPolicies.columns.createdAt')}
                   </th>
                   <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-slate-400">
-                    Actions
+                    {t('common.actions.label')}
                   </th>
                 </tr>
               </thead>
@@ -218,7 +235,7 @@ export const TrustPolicies: React.FC = () => {
                             : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                         }`}
                       >
-                        {policy.grant_type}
+                        {getGrantTypeLabel(policy.grant_type)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
@@ -235,7 +252,7 @@ export const TrustPolicies: React.FC = () => {
                         }}
                         className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium"
                       >
-                        View Details
+                        {t('tenant.trustPolicies.actions.viewDetails')}
                       </button>
                     </td>
                   </tr>
@@ -248,19 +265,19 @@ export const TrustPolicies: React.FC = () => {
 
       {/* Detail Drawer */}
       <LazyDrawer
-        title="Trust Policy Details"
+        title={t('tenant.trustPolicies.details.title')}
         open={selectedPolicy !== null}
         onClose={() => {
           setSelectedPolicy(null);
         }}
-        width={500}
+        size={500}
       >
         {selectedPolicy && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Policy ID
+                  {t('tenant.trustPolicies.details.policyId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono break-all">
                   {selectedPolicy.id}
@@ -268,7 +285,7 @@ export const TrustPolicies: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Created At
+                  {t('tenant.trustPolicies.details.createdAt')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white">
                   {formatTimestamp(selectedPolicy.created_at)}
@@ -276,7 +293,7 @@ export const TrustPolicies: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Action Type
+                  {t('tenant.trustPolicies.details.actionType')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-medium">
                   {selectedPolicy.action_type}
@@ -284,15 +301,15 @@ export const TrustPolicies: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Grant Type
+                  {t('tenant.trustPolicies.details.grantType')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white">
-                  {selectedPolicy.grant_type}
+                  {getGrantTypeLabel(selectedPolicy.grant_type)}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Workspace ID
+                  {t('tenant.trustPolicies.details.workspaceId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono break-all">
                   {selectedPolicy.workspace_id}
@@ -300,7 +317,7 @@ export const TrustPolicies: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Agent Instance ID
+                  {t('tenant.trustPolicies.details.agentInstanceId')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono break-all">
                   {selectedPolicy.agent_instance_id}
@@ -308,7 +325,7 @@ export const TrustPolicies: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  Granted By
+                  {t('tenant.trustPolicies.details.grantedBy')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white">
                   {selectedPolicy.granted_by}
@@ -317,7 +334,7 @@ export const TrustPolicies: React.FC = () => {
               {selectedPolicy.deleted_at && (
                 <div>
                   <p className="text-xs font-medium text-red-500 dark:text-red-400 uppercase tracking-wide mb-1">
-                    Deleted At
+                    {t('tenant.trustPolicies.details.deletedAt')}
                   </p>
                   <p className="text-sm text-red-600 dark:text-red-400">
                     {formatTimestamp(selectedPolicy.deleted_at)}
@@ -331,7 +348,7 @@ export const TrustPolicies: React.FC = () => {
 
       {/* Create Modal */}
       <LazyModal
-        title="Create Trust Policy"
+        title={t('tenant.trustPolicies.create.title')}
         open={isCreateModalOpen}
         onCancel={() => {
           setIsCreateModalOpen(false);
@@ -340,41 +357,68 @@ export const TrustPolicies: React.FC = () => {
         footer={null}
         destroyOnClose
       >
-        <Form form={createForm} layout="vertical" onFinish={handleCreateSubmit} className="mt-4">
+        <Form
+          form={createForm}
+          layout="vertical"
+          onFinish={(values: TrustPolicyCreate) => {
+            void handleCreateSubmit(values);
+          }}
+          className="mt-4"
+        >
           <Form.Item
             name="workspace_id"
-            label="Workspace ID"
-            rules={[{ required: true, message: 'Please enter a workspace ID' }]}
+            label={t('tenant.trustPolicies.create.workspaceId')}
+            rules={[
+              {
+                required: true,
+                message: t('tenant.trustPolicies.create.workspaceIdRequired'),
+              },
+            ]}
           >
-            <Input placeholder="Enter workspace ID" />
+            <Input placeholder={t('tenant.trustPolicies.create.workspaceIdPlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="agent_instance_id"
-            label="Agent Instance ID"
-            rules={[{ required: true, message: 'Please enter an agent instance ID' }]}
+            label={t('tenant.trustPolicies.create.agentInstanceId')}
+            rules={[
+              {
+                required: true,
+                message: t('tenant.trustPolicies.create.agentInstanceIdRequired'),
+              },
+            ]}
           >
-            <Input placeholder="Enter agent instance ID" />
+            <Input placeholder={t('tenant.trustPolicies.create.agentInstanceIdPlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="action_type"
-            label="Action Type"
-            rules={[{ required: true, message: 'Please enter the action type' }]}
-            tooltip="E.g., shell_execution, file_write, or * for all"
+            label={t('tenant.trustPolicies.create.actionType')}
+            rules={[
+              {
+                required: true,
+                message: t('tenant.trustPolicies.create.actionTypeRequired'),
+              },
+            ]}
+            tooltip={t('tenant.trustPolicies.create.actionTypeTooltip')}
           >
-            <Input placeholder="Enter action type" />
+            <Input placeholder={t('tenant.trustPolicies.create.actionTypePlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="grant_type"
-            label="Grant Type"
-            rules={[{ required: true, message: 'Please select a grant type' }]}
+            label={t('tenant.trustPolicies.create.grantType')}
+            rules={[
+              {
+                required: true,
+                message: t('tenant.trustPolicies.create.grantTypeRequired'),
+              },
+            ]}
             initialValue="once"
           >
             <Select>
-              <Option value="once">Allow Once</Option>
-              <Option value="always">Allow Always</Option>
+              <Option value="once">{t('tenant.trustPolicies.grantTypes.once')}</Option>
+              <Option value="always">{t('tenant.trustPolicies.grantTypes.always')}</Option>
             </Select>
           </Form.Item>
 
@@ -384,10 +428,10 @@ export const TrustPolicies: React.FC = () => {
                 setIsCreateModalOpen(false);
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="primary" htmlType="submit" loading={isCreating}>
-              Create Policy
+              {t('tenant.trustPolicies.actions.createPolicy')}
             </Button>
           </div>
         </Form>

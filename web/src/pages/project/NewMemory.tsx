@@ -1,27 +1,106 @@
-import React, { useState, useCallback } from 'react';
-
+import React, { useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
-import { AlertCircle, Bold, CheckCircle, ChevronDown, Code, Italic, Link as LinkIcon, List, Loader2, Save, Sparkles, Type, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Bold,
+  CheckCircle,
+  ChevronDown,
+  Code,
+  Italic,
+  Link as LinkIcon,
+  List,
+  Loader2,
+  Save,
+  Sparkles,
+  Type,
+  X,
+} from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 
 import { memoryAPI } from '../../services/api';
-import { createApiUrl } from '../../services/client/urlUtils';
 import { graphService } from '../../services/graphService';
+import { subscribeToTaskEvents } from '../../services/taskStream';
 
 interface TaskStatus {
   task_id: string;
   status: string;
   progress: number;
   message: string;
-  result?: any | undefined;
+  result?: unknown;
 }
+
+type EditorMode = 'split' | 'edit' | 'preview';
+
+interface MemoryDraft {
+  title: string;
+  content: string;
+  tags: string[];
+  savedAt: string;
+}
+
+const STATUS_MAP: Record<string, TaskStatus['status']> = {
+  processing: 'running',
+  pending: 'pending',
+  completed: 'completed',
+  failed: 'failed',
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const parseEventRecord = (data: unknown): Record<string, unknown> | null => {
+  if (typeof data !== 'string') {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(data) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const readString = (record: Record<string, unknown>, key: string): string | undefined => {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+const readNumber = (record: Record<string, unknown>, key: string, fallback: number): number => {
+  const value = record[key];
+  const parsed =
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const clampProgress = (value: number): number => Math.max(0, Math.min(100, value));
+
+const normalizeStatus = (status: string | undefined): TaskStatus['status'] => {
+  const normalized = status?.toLowerCase();
+  return normalized ? (STATUS_MAP[normalized] ?? normalized) : 'running';
+};
+
+const getResponseDetail = (error: unknown): string | undefined => {
+  if (!isRecord(error) || !isRecord(error.response) || !isRecord(error.response.data)) {
+    return undefined;
+  }
+
+  return typeof error.response.data.detail === 'string' ? error.response.data.detail : undefined;
+};
 
 export const NewMemory: React.FC = () => {
   const { t } = useTranslation();
+  const translate = useCallback(
+    (key: string, fallback: string) => {
+      const value = t(key, fallback);
+      return value === key ? fallback : value;
+    },
+    [t]
+  );
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { projectBasePath } = useProjectBasePath();
@@ -34,76 +113,92 @@ export const NewMemory: React.FC = () => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [currentTask, setCurrentTask] = useState<TaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>('split');
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+
+  const draftStorageKey = `memstack:new-memory-draft:${projectId ?? 'default'}`;
+
+  React.useEffect(() => {
+    try {
+      const rawDraft = window.localStorage.getItem(draftStorageKey);
+      if (!rawDraft) return;
+
+      const parsed = JSON.parse(rawDraft) as Partial<MemoryDraft>;
+      if (typeof parsed.title === 'string') {
+        setTitle(parsed.title);
+      }
+      if (typeof parsed.content === 'string') {
+        setContent(parsed.content);
+      }
+      if (Array.isArray(parsed.tags) && parsed.tags.every((tag) => typeof tag === 'string')) {
+        setTags(parsed.tags);
+      }
+      if (typeof parsed.savedAt === 'string') {
+        setDraftSavedAt(parsed.savedAt);
+      }
+    } catch (error) {
+      console.warn('Failed to load memory draft:', error);
+    }
+  }, [draftStorageKey]);
 
   const streamTaskStatus = useCallback(
     (taskId: string) => {
-      // Use centralized URL utility for consistent API URL construction
-      const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
+      subscribeToTaskEvents(taskId, {
+        onProgress: (event) => {
+          const data = parseEventRecord(event.data);
+          if (!data) {
+            console.warn('Invalid task progress payload');
+            return;
+          }
 
-      const eventSource = new EventSource(streamUrl);
+          const progress = clampProgress(readNumber(data, 'progress', 0));
 
-      eventSource.onopen = () => {};
+          setCurrentTask({
+            task_id: readString(data, 'id') ?? taskId,
+            status: normalizeStatus(readString(data, 'status')),
+            progress,
+            message: readString(data, 'message') ?? t('project.memories.status.processing'),
+          });
+        },
+        onCompleted: (event) => {
+          const task = parseEventRecord(event.data);
+          if (!task) {
+            console.warn('Invalid task completion payload');
+            return;
+          }
 
-      // Listen for progress events
-      eventSource.addEventListener('progress', (e: MessageEvent) => {
-        const data = JSON.parse(e.data);
+          setCurrentTask({
+            task_id: readString(task, 'id') ?? taskId,
+            status: 'completed',
+            progress: 100,
+            message: readString(task, 'message') ?? t('project.memories.status.complete'),
+            result: task.result,
+          });
 
-        // Map status: processing -> running
-        const statusMap: { [key: string]: string } = {
-          processing: 'running',
-          pending: 'pending',
-          completed: 'completed',
-          failed: 'failed',
-        };
-        const normalizedStatus =
-          statusMap[data.status?.toLowerCase()] || data.status?.toLowerCase();
-
-        setCurrentTask({
-          task_id: data.id,
-          status: normalizedStatus,
-          progress: data.progress || 0,
-          message: data.message || t('project.memories.status.processing'),
-        });
-      });
-
-      // Listen for completion
-      eventSource.addEventListener('completed', (e: MessageEvent) => {
-        const task = JSON.parse(e.data);
-        setCurrentTask({
-          task_id: task.id,
-          status: 'completed',
-          progress: 100,
-          message: task.message || t('project.memories.status.complete'),
-          result: task.result,
-        });
-
-        // Close connection and navigate after a short delay
-        setTimeout(() => {
-          eventSource.close();
-          navigate(`${projectBasePath}/memories`);
-        }, 1500);
-      });
-
-      // Listen for failed event
-      eventSource.addEventListener('failed', (e: MessageEvent) => {
-        const task = JSON.parse(e.data);
-        console.error('❌ Failed event:', task);
-        setError(task.message || t('project.memories.new.error.processing'));
-        eventSource.close();
-        setIsSaving(false);
-        setCurrentTask(null);
-      });
-
-      // Error handling
-      eventSource.onerror = (e) => {
-        console.error('❌ SSE connection error:', e);
-        if (eventSource.readyState === 2) {
-          // CLOSED
-          setError('Failed to connect to task updates. Please check if the task completed.');
+          // Close connection and navigate after a short delay
+          setTimeout(() => {
+            void navigate(`${projectBasePath}/memories`);
+          }, 1500);
+        },
+        onFailed: (event) => {
+          const task = parseEventRecord(event.data);
+          console.error('Failed event:', task);
+          setError(readString(task ?? {}, 'message') ?? t('project.memories.new.error.processing'));
           setIsSaving(false);
           setCurrentTask(null);
-        }
-      };
+        },
+        onError: (error) => {
+          console.error('SSE connection error:', error);
+          setError(
+            t(
+              'project.memories.new.error.taskUpdatesFailed',
+              'Failed to connect to task updates. Please check if the task completed.'
+            )
+          );
+          setIsSaving(false);
+          setCurrentTask(null);
+        },
+      });
     },
     [navigate, projectBasePath, t]
   );
@@ -184,38 +279,90 @@ export const NewMemory: React.FC = () => {
         streamTaskStatus(response.task_id);
       } else {
         // Fallback: no task ID, navigate directly
-        navigate(`${projectBasePath}/memories`);
+        void navigate(`${projectBasePath}/memories`);
         setIsSaving(false);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create memory:', err);
-      setError(err?.response?.data?.detail || 'Failed to create memory');
+      setError(
+        getResponseDetail(err) ??
+          t('project.memories.new.error.createFailed', 'Failed to create memory')
+      );
       setIsSaving(false);
     }
   };
 
+  const handleSaveDraft = () => {
+    const savedAt = new Date().toISOString();
+    const draft: MemoryDraft = {
+      title,
+      content,
+      tags,
+      savedAt,
+    };
+
+    try {
+      window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+      setDraftSavedAt(savedAt);
+      setError(null);
+    } catch (error) {
+      console.error('Failed to save memory draft:', error);
+      setError(t('project.memories.new.error.createFailed', 'Failed to create memory'));
+    }
+  };
+
+  const getEditorModeButtonClass = (mode: EditorMode): string =>
+    `rounded px-3 py-1 text-xs font-medium transition-colors ${
+      editorMode === mode
+        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white'
+        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+    }`;
+
+  const editorLayoutClass =
+    editorMode === 'split'
+      ? 'grid grid-cols-1 lg:grid-cols-2 h-[600px] divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800'
+      : 'grid grid-cols-1 h-[600px]';
+  const markdownButtonClass = `rounded p-1.5 text-slate-500 dark:text-slate-400 transition-colors ${
+    editorMode === 'preview'
+      ? 'opacity-50 cursor-not-allowed'
+      : 'hover:bg-slate-100 hover:text-primary dark:hover:bg-slate-700'
+  }`;
+  const draftSavedTime = draftSavedAt
+    ? new Date(draftSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] -m-6 lg:-m-10">
+    <div className="flex min-h-[calc(100vh-6rem)] flex-col">
       {/* Top Header / Breadcrumbs - Integrated into page since layout handles main header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark px-6 py-3">
-        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <Link to={`${projectBasePath}/memories`} className="hover:text-primary transition-colors">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-surface-light px-4 py-3 dark:border-slate-800 dark:bg-surface-dark sm:px-6">
+        <div className="flex min-w-0 items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+          <Link
+            to={`${projectBasePath}/memories`}
+            className="truncate hover:text-primary transition-colors"
+          >
             {t('project.memories.title')}
           </Link>
           <span>/</span>
-          <span className="font-medium text-slate-900 dark:text-white">
+          <span className="truncate font-medium text-slate-900 dark:text-white">
             {t('project.memories.new.title')}
           </span>
         </div>
-        <div className="flex gap-3">
-          <button type="button" className="rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            disabled={isSaving}
+            className="rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:px-4"
+          >
             {t('project.memories.new.save_draft')}
           </button>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => {
+              void handleSave();
+            }}
             disabled={isSaving || !content}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70 sm:px-4"
           >
             {isSaving ? (
               <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
@@ -249,7 +396,10 @@ export const NewMemory: React.FC = () => {
                     {currentTask.status === 'completed' ? (
                       <CheckCircle size={24} className="text-indigo-600 dark:text-indigo-400" />
                     ) : (
-                      <Loader2 size={24} className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none" />
+                      <Loader2
+                        size={24}
+                        className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none"
+                      />
                     )}
                   </div>
                   <div>
@@ -265,7 +415,7 @@ export const NewMemory: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                    {currentTask.progress}%
+                    {currentTask.progress.toString()}%
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     {t('project.memories.new.status.complete')}
@@ -277,7 +427,7 @@ export const NewMemory: React.FC = () => {
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
-                  style={{ width: `${currentTask.progress}%` }}
+                  style={{ width: `${currentTask.progress.toString()}%` }}
                 />
               </div>
 
@@ -306,6 +456,7 @@ export const NewMemory: React.FC = () => {
                     setError(null);
                     setCurrentTask(null);
                   }}
+                  aria-label={t('project.memories.new.actions.dismiss_error')}
                   className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
                 >
                   <X size={16} />
@@ -320,7 +471,10 @@ export const NewMemory: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 border-b border-slate-100 dark:border-slate-800">
               {/* Title */}
               <div className="md:col-span-8">
-                <label htmlFor="memory-title" className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
+                <label
+                  htmlFor="memory-title"
+                  className="mb-2 block text-sm font-medium text-slate-900 dark:text-white"
+                >
                   {t('project.memories.new.form.title')}{' '}
                   <span className="text-slate-400 font-normal">({t('common.optional')})</span>
                 </label>
@@ -337,11 +491,17 @@ export const NewMemory: React.FC = () => {
               </div>
               {/* Context */}
               <div className="md:col-span-4">
-                <label htmlFor="memory-context" className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
+                <label
+                  htmlFor="memory-context"
+                  className="mb-2 block text-sm font-medium text-slate-900 dark:text-white"
+                >
                   {t('project.memories.new.form.context')}
                 </label>
                 <div className="relative">
-                  <select id="memory-context" className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]">
+                  <select
+                    id="memory-context"
+                    className="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                  >
                     <option>{t('project.memories.new.placeholders.context_option_1')}</option>
                     <option>{t('project.memories.new.placeholders.context_option_2')}</option>
                     <option>{t('project.memories.new.placeholders.context_option_3')}</option>
@@ -353,7 +513,10 @@ export const NewMemory: React.FC = () => {
               </div>
               {/* Tags */}
               <div className="md:col-span-12">
-                <label htmlFor="memory-tags" className="mb-2 block text-sm font-medium text-slate-900 dark:text-white">
+                <label
+                  htmlFor="memory-tags"
+                  className="mb-2 block text-sm font-medium text-slate-900 dark:text-white"
+                >
                   {t('project.memories.new.form.tags')}
                 </label>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-2 min-h-[46px]">
@@ -368,6 +531,7 @@ export const NewMemory: React.FC = () => {
                         onClick={() => {
                           removeTag(tag);
                         }}
+                        aria-label={t('project.memories.new.actions.remove_tag', { tag })}
                         className="ml-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                       >
                         <X size={14} />
@@ -398,8 +562,10 @@ export const NewMemory: React.FC = () => {
                     onClick={() => {
                       insertMarkdown('**', '**');
                     }}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
-                    title="Bold"
+                    disabled={editorMode === 'preview'}
+                    className={markdownButtonClass}
+                    title={translate('project.memories.new.tooltips.bold', 'Bold')}
+                    aria-label={translate('project.memories.new.tooltips.bold', 'Bold')}
                   >
                     <Bold size={20} />
                   </button>
@@ -408,8 +574,10 @@ export const NewMemory: React.FC = () => {
                     onClick={() => {
                       insertMarkdown('*', '*');
                     }}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
-                    title="Italic"
+                    disabled={editorMode === 'preview'}
+                    className={markdownButtonClass}
+                    title={translate('project.memories.new.tooltips.italic', 'Italic')}
+                    aria-label={translate('project.memories.new.tooltips.italic', 'Italic')}
                   >
                     <Italic size={20} />
                   </button>
@@ -418,8 +586,10 @@ export const NewMemory: React.FC = () => {
                     onClick={() => {
                       insertMarkdown('### ');
                     }}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
-                    title="Heading"
+                    disabled={editorMode === 'preview'}
+                    className={markdownButtonClass}
+                    title={translate('project.memories.new.tooltips.heading', 'Heading')}
+                    aria-label={translate('project.memories.new.tooltips.heading', 'Heading')}
                   >
                     <Type size={20} />
                   </button>
@@ -431,8 +601,10 @@ export const NewMemory: React.FC = () => {
                     onClick={() => {
                       insertMarkdown('- ');
                     }}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
-                    title="List"
+                    disabled={editorMode === 'preview'}
+                    className={markdownButtonClass}
+                    title={translate('project.memories.new.tooltips.list', 'List')}
+                    aria-label={translate('project.memories.new.tooltips.list', 'List')}
                   >
                     <List size={20} />
                   </button>
@@ -441,8 +613,10 @@ export const NewMemory: React.FC = () => {
                     onClick={() => {
                       insertMarkdown('[', '](url)');
                     }}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
-                    title="Link"
+                    disabled={editorMode === 'preview'}
+                    className={markdownButtonClass}
+                    title={translate('project.memories.new.tooltips.link', 'Link')}
+                    aria-label={translate('project.memories.new.tooltips.link', 'Link')}
                   >
                     <LinkIcon size={20} />
                   </button>
@@ -451,8 +625,10 @@ export const NewMemory: React.FC = () => {
                     onClick={() => {
                       insertMarkdown('```\n', '\n```');
                     }}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
-                    title="Code Block"
+                    disabled={editorMode === 'preview'}
+                    className={markdownButtonClass}
+                    title={translate('project.memories.new.tooltips.code', 'Code Block')}
+                    aria-label={translate('project.memories.new.tooltips.code', 'Code Block')}
                   >
                     <Code size={20} />
                   </button>
@@ -462,7 +638,9 @@ export const NewMemory: React.FC = () => {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={handleAIAssist}
+                  onClick={() => {
+                    void handleAIAssist();
+                  }}
                   disabled={isOptimizing || !content}
                   className="flex items-center gap-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-100 dark:border-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -476,13 +654,34 @@ export const NewMemory: React.FC = () => {
                     : t('project.memories.new.ai.assist')}
                 </button>
                 <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800">
-                  <button type="button" className="rounded px-3 py-1 text-xs font-medium bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorMode('split');
+                    }}
+                    aria-pressed={editorMode === 'split'}
+                    className={getEditorModeButtonClass('split')}
+                  >
                     {t('project.memories.new.actions.split')}
                   </button>
-                  <button type="button" className="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorMode('edit');
+                    }}
+                    aria-pressed={editorMode === 'edit'}
+                    className={getEditorModeButtonClass('edit')}
+                  >
                     {t('project.memories.new.actions.edit')}
                   </button>
-                  <button type="button" className="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditorMode('preview');
+                    }}
+                    aria-pressed={editorMode === 'preview'}
+                    className={getEditorModeButtonClass('preview')}
+                  >
                     {t('project.memories.new.actions.preview')}
                   </button>
                 </div>
@@ -490,64 +689,72 @@ export const NewMemory: React.FC = () => {
             </div>
 
             {/* Editor Content Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 h-[600px] divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800">
+            <div className={editorLayoutClass}>
               {/* Left: Markdown Input */}
-              <div className="flex flex-col h-full bg-white dark:bg-surface-dark relative">
-                <textarea
-                  ref={textareaRef}
-                  className="w-full h-full resize-none border-none p-6 outline-none text-slate-800 dark:text-slate-200 font-mono text-sm leading-relaxed bg-transparent focus:ring-0"
-                  placeholder={t('project.memories.new.editor.placeholder')}
-                  value={content}
-                  onChange={(e) => {
-                    setContent(e.target.value);
-                  }}
-                ></textarea>
-                <div className="absolute bottom-4 right-4 text-xs text-slate-400 pointer-events-none">
-                  {t('project.memories.new.editor.markdown_supported')}
+              {editorMode !== 'preview' && (
+                <div className="flex flex-col h-full bg-white dark:bg-surface-dark relative">
+                  <textarea
+                    ref={textareaRef}
+                    className="w-full h-full resize-none border-none p-6 outline-none text-slate-800 dark:text-slate-200 font-mono text-sm leading-relaxed bg-transparent focus:ring-0"
+                    placeholder={t('project.memories.new.editor.placeholder')}
+                    value={content}
+                    onChange={(e) => {
+                      setContent(e.target.value);
+                    }}
+                  ></textarea>
+                  <div className="absolute bottom-4 right-4 text-xs text-slate-400 pointer-events-none">
+                    {t('project.memories.new.editor.markdown_supported')}
+                  </div>
                 </div>
-              </div>
+              )}
               {/* Right: Preview */}
-              <div className="flex flex-col h-full bg-slate-50/50 dark:bg-[#1a1d26]/50 p-6 overflow-y-auto">
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  {content ? (
-                    <div className="whitespace-pre-wrap">{content}</div>
-                  ) : (
-                    <>
-                      <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
-                        {t('project.memories.new.placeholders.content_title')}
-                      </h1>
-                      <p className="text-slate-600 dark:text-slate-300 mb-4">
-                        {t('project.memories.new.placeholders.content_intro')}
-                      </p>
-                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2">
-                        {t('project.memories.new.placeholders.content_heading')}
-                      </h3>
-                      <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-300 mb-4">
-                        <li>{t('project.memories.new.placeholders.content_list_1')}</li>
-                        <li>{t('project.memories.new.placeholders.content_list_2')}</li>
-                        <li>{t('project.memories.new.placeholders.content_list_3')}</li>
-                      </ul>
-                      <div className="rounded-lg bg-slate-100 dark:bg-slate-800 p-4 border-l-4 border-primary my-4">
-                        <p className="italic text-slate-700 dark:text-slate-300 m-0">
-                          {t('project.memories.new.placeholders.content_quote')}
+              {editorMode !== 'edit' && (
+                <div className="flex flex-col h-full bg-slate-50/50 dark:bg-[#1a1d26]/50 p-6 overflow-y-auto">
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    {content ? (
+                      <div className="whitespace-pre-wrap">{content}</div>
+                    ) : (
+                      <>
+                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
+                          {t('project.memories.new.placeholders.content_title')}
+                        </h1>
+                        <p className="text-slate-600 dark:text-slate-300 mb-4">
+                          {t('project.memories.new.placeholders.content_intro')}
                         </p>
-                      </div>
-                    </>
-                  )}
+                        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2">
+                          {t('project.memories.new.placeholders.content_heading')}
+                        </h3>
+                        <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-300 mb-4">
+                          <li>{t('project.memories.new.placeholders.content_list_1')}</li>
+                          <li>{t('project.memories.new.placeholders.content_list_2')}</li>
+                          <li>{t('project.memories.new.placeholders.content_list_3')}</li>
+                        </ul>
+                        <div className="my-4 rounded-lg border border-slate-200 bg-slate-100 p-4 dark:border-slate-700 dark:bg-slate-800">
+                          <p className="italic text-slate-700 dark:text-slate-300 m-0">
+                            {t('project.memories.new.placeholders.content_quote')}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Footer Status Bar */}
-            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-surface-dark px-6 py-3 text-xs text-slate-500 dark:text-slate-400">
-              <div className="flex items-center gap-4">
-                <span>{t('project.memories.new.footer.last_saved')}</span>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-surface-dark dark:text-slate-400 sm:px-6">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span>
+                  {draftSavedTime
+                    ? t('project.memories.new.footer.draft_saved', { time: draftSavedTime })
+                    : t('project.memories.new.footer.last_saved')}
+                </span>
                 <span className="flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
                   {t('project.memories.new.footer.online')}
                 </span>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span>
                   {t('project.memories.new.footer.word_count', {
                     count: content.split(/\s+/).filter(Boolean).length,

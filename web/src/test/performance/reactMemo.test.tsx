@@ -57,7 +57,7 @@ describe('React.memo - ExecutionStatsCard', () => {
     expect(ExecutionStatsCard.name).toBe('ExecutionStatsCard');
   });
 
-  it('should re-render when stats values change', () => {
+  it('should re-render when stats values change', async () => {
     const TrackedExecutionStatsCard = withRenderTracking(ExecutionStatsCard, 'ExecutionStatsCard');
 
     const mockStats1 = {
@@ -76,13 +76,25 @@ describe('React.memo - ExecutionStatsCard', () => {
       tool_usage: { search: 100, analyze: 60 },
     };
 
-    const { rerender } = render(<TrackedExecutionStatsCard stats={mockStats1} />);
+    const { rerender } = render(
+      <Suspense fallback={<div>Loading...</div>}>
+        <TrackedExecutionStatsCard stats={mockStats1} />
+      </Suspense>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Execution Statistics/i)).toBeInTheDocument();
+    });
 
     const initialRenderCount = getRenderCount('ExecutionStatsCard');
     // May be 1 or 2 depending on StrictMode double-render
     expect(initialRenderCount).toBeGreaterThanOrEqual(1);
 
-    rerender(<TrackedExecutionStatsCard stats={mockStats2} />);
+    rerender(
+      <Suspense fallback={<div>Loading...</div>}>
+        <TrackedExecutionStatsCard stats={mockStats2} />
+      </Suspense>
+    );
 
     const secondRenderCount = getRenderCount('ExecutionStatsCard');
     expect(secondRenderCount).toBeGreaterThan(initialRenderCount);
@@ -111,7 +123,7 @@ describe('React.memo - ExecutionStatsCard', () => {
 });
 
 describe('CSS Containment Integration', () => {
-  it('should render ExecutionStatsCard without crashing', () => {
+  it('should render ExecutionStatsCard without crashing', async () => {
     // ExecutionStatsCard uses LazyCard (not the card-optimized CSS class directly).
     // Verify the component renders without errors.
     const { container } = render(
@@ -130,6 +142,10 @@ describe('CSS Containment Integration', () => {
 
     // Component should render something (even if lazy components show fallback)
     expect(container.firstChild).not.toBeNull();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Execution Statistics/i)).toBeInTheDocument();
+    });
   });
 });
 

@@ -12,7 +12,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-import { createWebSocketUrl } from '@/services/client/urlUtils';
+import { createWebSocketAuthProtocols, createWebSocketUrl } from '@/services/client/urlUtils';
 
 import { getAuthToken } from '@/utils/tokenResolver';
 
@@ -201,12 +201,11 @@ export const useVoiceChat = (options: UseVoiceChatOptions): UseVoiceChatReturn =
     const connId = ++connectionIdRef.current;
 
     const wsUrl = createWebSocketUrl('/voice/chat', {
-      token,
       project_id: optionsRef.current.projectId,
       conversation_id: optionsRef.current.conversationId,
     });
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, createWebSocketAuthProtocols(token));
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
@@ -326,13 +325,14 @@ export const useVoiceChat = (options: UseVoiceChatOptions): UseVoiceChatReturn =
   // double-mounts in dev, which would tear down the WebSocket mid-connection.
   // The caller (VoiceCallPanel.handleEndCall) is responsible for calling disconnect().
   useEffect(() => {
+    const connectionId = connectionIdRef;
     isMountedRef.current = true;
 
     return () => {
       isMountedRef.current = false;
       // Invalidate any in-flight connection so stale events are ignored,
       // but do NOT close the WebSocket here -- the parent manages lifecycle.
-      connectionIdRef.current++;
+      connectionId.current += 1;
     };
   }, []);
 

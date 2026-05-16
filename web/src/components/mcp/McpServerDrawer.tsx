@@ -3,7 +3,9 @@
  * Replaces McpServerModal with an Ant Design Drawer for more form space.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import { Drawer, Form, Input, Select, Switch, message, Alert, Button } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
@@ -15,12 +17,26 @@ import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '@/types/
 
 const { TextArea } = Input;
 
-const DEFAULT_TRANSPORT_CONFIGS: Record<MCPServerType, object> = {
+const DEFAULT_TRANSPORT_CONFIGS: Record<MCPServerType, Record<string, unknown>> = {
   stdio: { command: '', args: [], env: {} },
   sse: { url: '', headers: {} },
   http: { url: '', headers: {} },
   websocket: { url: '' },
 };
+
+interface McpServerFormValues {
+  project_id?: string | undefined;
+  name?: string | undefined;
+  description?: string | undefined;
+  server_type?: MCPServerType | undefined;
+  enabled?: boolean | undefined;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasValidationErrors = (error: unknown): boolean =>
+  isRecord(error) && Array.isArray(error.errorFields);
 
 export interface McpServerDrawerProps {
   open: boolean;
@@ -35,7 +51,8 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const [form] = Form.useForm();
+  const { t } = useTranslation();
+  const [form] = Form.useForm<McpServerFormValues>();
   const isEdit = !!server;
 
   const initialJsonConfig = useMemo(
@@ -48,7 +65,6 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
 
   const [jsonConfig, setJsonConfig] = useState(initialJsonConfig);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const prevServerIdRef = useRef<string | undefined>(server?.id);
 
   const { createServer, updateServer, isSubmitting } = useMCPStore(
     useShallow((s) => ({
@@ -63,10 +79,9 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (prevServerIdRef.current === server?.id && prevServerIdRef.current !== undefined) {
+    if (!open) {
       return;
     }
-    prevServerIdRef.current = server?.id;
 
     if (server) {
       form.setFieldsValue({
@@ -87,7 +102,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
       setJsonConfig(JSON.stringify(DEFAULT_TRANSPORT_CONFIGS.stdio, null, 2));
       setJsonError(null);
     }
-  }, [server, form, currentProject]);
+  }, [open, server, form, currentProject?.id]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleServerTypeChange = useCallback((type: MCPServerType) => {
@@ -95,136 +110,155 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
     setJsonError(null);
   }, []);
 
-  const validateJsonConfig = useCallback((json: string): boolean => {
-    try {
-      JSON.parse(json);
-      setJsonError(null);
-      return true;
-    } catch (e) {
-      setJsonError((e as Error).message);
-      return false;
-    }
-  }, []);
+  const parseTransportConfig = useCallback(
+    (json: string): Record<string, unknown> | null => {
+      try {
+        const parsed = JSON.parse(json) as unknown;
+        if (!isRecord(parsed)) {
+          setJsonError(t('mcp.serverDrawer.jsonObjectRequired'));
+          return null;
+        }
+        setJsonError(null);
+        return parsed;
+      } catch (e) {
+        setJsonError(e instanceof Error ? e.message : t('mcp.serverDrawer.invalidJson'));
+        return null;
+      }
+    },
+    [t]
+  );
 
   const handleSubmit = useCallback(async () => {
     try {
       await form.validateFields(['project_id', 'name', 'server_type']);
       const values = form.getFieldsValue();
 
-      if (!validateJsonConfig(jsonConfig)) {
-        message.error('Invalid JSON configuration');
+      const transportConfig = parseTransportConfig(jsonConfig);
+      if (!transportConfig) {
+        message.error(t('mcp.serverDrawer.invalidJson'));
         return;
       }
 
-      const transportConfig = JSON.parse(jsonConfig);
       const projectId = values.project_id;
       if (!projectId) {
-        message.error('Please select a project');
+        message.error(t('mcp.serverDrawer.projectRequired'));
+        return;
+      }
+      const name = values.name;
+      const serverType = values.server_type;
+      if (!name || !serverType) {
+        message.error(t('mcp.serverDrawer.requiredFields'));
         return;
       }
 
       const data: MCPServerCreate = {
-        name: values.name,
+        name,
         description: values.description,
-        server_type: values.server_type,
+        server_type: serverType,
         transport_config: transportConfig,
         enabled: values.enabled ?? true,
         project_id: projectId,
       };
 
-      if (isEdit && server) {
+      if (server) {
         await updateServer(server.id, data);
-        message.success('Server updated successfully');
+        message.success(t('mcp.serverDrawer.updateSuccess'));
       } else {
         await createServer(data);
-        message.success('Server created successfully');
+        message.success(t('mcp.serverDrawer.createSuccess'));
       }
       onSuccess();
     } catch (error: unknown) {
-      const err = error as { errorFields?: unknown | undefined };
-      if (!err.errorFields) {
+      if (!hasValidationErrors(error)) {
         console.error('Submit error:', error);
       }
     }
-  }, [form, jsonConfig, validateJsonConfig, isEdit, server, updateServer, createServer, onSuccess]);
+  }, [form, jsonConfig, parseTransportConfig, server, updateServer, createServer, onSuccess, t]);
 
   return (
     <Drawer
-      title={isEdit ? 'Edit MCP Server' : 'Create MCP Server'}
+      title={isEdit ? t('mcp.serverDrawer.editTitle') : t('mcp.serverDrawer.createTitle')}
       open={open}
       onClose={onClose}
       size="large"
-      destroyOnClose
+      destroyOnHidden
       extra={
-        <Button type="primary" onClick={handleSubmit} loading={isSubmitting}>
-          {isEdit ? 'Save' : 'Create'}
+        <Button
+          type="primary"
+          onClick={() => {
+            void handleSubmit();
+          }}
+          loading={isSubmitting}
+        >
+          {isEdit ? t('common.save') : t('common.create')}
         </Button>
       }
     >
-      <Form form={form} layout="vertical" onValuesChange={() => {}}>
+      <Form form={form} layout="vertical">
         <Form.Item
-          label="Project"
+          label={t('common.project')}
           name="project_id"
-          rules={[{ required: true, message: 'Please select a project' }]}
+          rules={[{ required: true, message: t('mcp.serverDrawer.projectRequired') }]}
         >
           <Select
-            placeholder="Select a project"
+            placeholder={t('mcp.serverDrawer.projectPlaceholder')}
             disabled={isEdit}
             options={projects.map((p) => ({ label: p.name, value: p.id }))}
-            showSearch
-            filterOption={(input, option) =>
-              (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
-            }
+            showSearch={{
+              filterOption: (input, option) =>
+                typeof option?.label === 'string' &&
+                option.label.toLowerCase().includes(input.toLowerCase()),
+            }}
           />
         </Form.Item>
 
         <Form.Item
-          label="Name"
+          label={t('common.forms.name')}
           name="name"
           rules={[
-            { required: true, message: 'Name is required' },
-            { max: 100, message: 'Name must be less than 100 characters' },
+            { required: true, message: t('mcp.serverDrawer.nameRequired') },
+            { max: 100, message: t('mcp.serverDrawer.nameMax') },
           ]}
         >
-          <Input placeholder="My MCP Server" />
+          <Input placeholder={t('mcp.serverDrawer.namePlaceholder')} />
         </Form.Item>
 
-        <Form.Item label="Description" name="description">
-          <TextArea rows={2} placeholder="Server description (optional)" />
+        <Form.Item label={t('common.forms.description')} name="description">
+          <TextArea rows={2} placeholder={t('mcp.serverDrawer.descriptionPlaceholder')} />
         </Form.Item>
 
         <Form.Item
-          label="Server Type"
+          label={t('mcp.serverDrawer.serverType')}
           name="server_type"
-          rules={[{ required: true, message: 'Server type is required' }]}
+          rules={[{ required: true, message: t('mcp.serverDrawer.serverTypeRequired') }]}
         >
           <Select
             options={[
-              { label: 'STDIO (Standard I/O)', value: 'stdio' },
-              { label: 'SSE (Server-Sent Events)', value: 'sse' },
-              { label: 'HTTP', value: 'http' },
-              { label: 'WebSocket', value: 'websocket' },
+              { label: t('mcp.serverDrawer.serverTypes.stdio'), value: 'stdio' },
+              { label: t('mcp.serverDrawer.serverTypes.sse'), value: 'sse' },
+              { label: t('mcp.serverDrawer.serverTypes.http'), value: 'http' },
+              { label: t('mcp.serverDrawer.serverTypes.websocket'), value: 'websocket' },
             ]}
             onChange={handleServerTypeChange}
           />
         </Form.Item>
 
-        <Form.Item label="Enabled" name="enabled" valuePropName="checked">
+        <Form.Item label={t('common.status.enabled')} name="enabled" valuePropName="checked">
           <Switch />
         </Form.Item>
 
-        <Form.Item label="Transport Config">
+        <Form.Item label={t('mcp.serverDrawer.transportConfig')}>
           <TextArea
             value={jsonConfig}
             onChange={(e) => {
               setJsonConfig(e.target.value);
-              validateJsonConfig(e.target.value);
+              parseTransportConfig(e.target.value);
             }}
             rows={10}
             className="font-mono text-sm"
             status={jsonError ? 'error' : ('' as const)}
           />
-          {jsonError && <Alert type="error" message={jsonError} showIcon className="mt-2" />}
+          {jsonError && <Alert type="error" title={jsonError} showIcon className="mt-2" />}
         </Form.Item>
       </Form>
     </Drawer>

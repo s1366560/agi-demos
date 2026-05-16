@@ -3,7 +3,24 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { App } from 'antd';
-import { Activity, AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Bot, ChevronDown, ExternalLink, LayoutGrid, List, Loader2, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Bot,
+  ChevronDown,
+  ExternalLink,
+  LayoutGrid,
+  List,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Star,
+  Trash2,
+} from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import {
@@ -20,6 +37,7 @@ import { providerAPI } from '../../services/api';
 import { useProviderStore } from '../../stores/provider';
 import { useTenantStore } from '../../stores/tenant';
 import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory';
+import { confirmAction } from '../../utils/confirmAction';
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   openai: 'OpenAI',
@@ -56,6 +74,19 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   volcengine_embedding: 'Volcengine Embedding',
   volcengine_reranker: 'Volcengine Reranker',
 };
+
+const PROVIDER_TYPE_FILTER_OPTIONS: Array<{ value: ProviderType; label: string }> = [
+  { value: 'openai', label: PROVIDER_TYPE_LABELS.openai },
+  { value: 'anthropic', label: PROVIDER_TYPE_LABELS.anthropic },
+  { value: 'gemini', label: PROVIDER_TYPE_LABELS.gemini },
+  { value: 'dashscope', label: PROVIDER_TYPE_LABELS.dashscope },
+  { value: 'deepseek', label: PROVIDER_TYPE_LABELS.deepseek },
+  { value: 'minimax', label: PROVIDER_TYPE_LABELS.minimax },
+  { value: 'zai', label: PROVIDER_TYPE_LABELS.zai },
+  { value: 'groq', label: PROVIDER_TYPE_LABELS.groq },
+  { value: 'cohere', label: PROVIDER_TYPE_LABELS.cohere },
+  { value: 'mistral', label: PROVIDER_TYPE_LABELS.mistral },
+];
 
 type ViewMode = 'cards' | 'table';
 type SortField = 'name' | 'health' | 'responseTime' | 'createdAt';
@@ -115,8 +146,8 @@ export const ProviderList: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadProviders();
-    loadSystemStatus();
+    void loadProviders();
+    void loadSystemStatus();
   }, [loadProviders, loadSystemStatus]);
 
   const handleCheckHealth = async (providerId: string) => {
@@ -147,10 +178,11 @@ export const ProviderList: React.FC = () => {
   };
 
   const handleDelete = async (providerId: string) => {
-    if (!confirm(t('tenant.providers.deleteConfirm'))) return;
+    if (!(await confirmAction({ title: t('tenant.providers.deleteConfirm'), danger: true })))
+      return;
     try {
       await deleteProvider(providerId);
-      message.success(t('tenant.providers.deleteSuccess') || 'Provider deleted');
+      message.success(t('tenant.providers.deleteSuccess', 'Provider deleted'));
       await loadProviders();
       await loadSystemStatus();
     } catch (err) {
@@ -182,8 +214,8 @@ export const ProviderList: React.FC = () => {
 
   const handleModalSuccess = () => {
     handleModalClose();
-    loadProviders();
-    loadSystemStatus();
+    void loadProviders();
+    void loadSystemStatus();
   };
 
   const handleSort = (field: SortField) => {
@@ -272,7 +304,7 @@ export const ProviderList: React.FC = () => {
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
-          My Providers
+          {t('tenant.providers.tabs.myProviders', { defaultValue: 'My Providers' })}
         </button>
         <button
           onClick={() => {
@@ -284,7 +316,7 @@ export const ProviderList: React.FC = () => {
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
-          Marketplace
+          {t('tenant.providers.tabs.marketplace', { defaultValue: 'Marketplace' })}
         </button>
         <button
           onClick={() => {
@@ -296,7 +328,7 @@ export const ProviderList: React.FC = () => {
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
-          Routing & Assignments
+          {t('tenant.providers.tabs.assignments', { defaultValue: 'Routing & Assignments' })}
         </button>
       </div>
 
@@ -315,7 +347,9 @@ export const ProviderList: React.FC = () => {
               <AlertCircle size={20} className="text-red-600" />
               <span className="text-red-800 dark:text-red-200">{error}</span>
               <button
-                onClick={loadProviders}
+                onClick={() => {
+                  void loadProviders();
+                }}
                 className="ml-auto text-red-600 hover:text-red-800 text-sm font-medium"
               >
                 {t('common.actions.retry')}
@@ -351,16 +385,11 @@ export const ProviderList: React.FC = () => {
                     }}
                   >
                     <option value="all">{t('tenant.providers.allTypes')}</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="dashscope">Dashscope</option>
-                    <option value="deepseek">Deepseek</option>
-                    <option value="minimax">MiniMax</option>
-                    <option value="zai">ZhipuAI</option>
-                    <option value="groq">Groq</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="mistral">Mistral</option>
+                    {PROVIDER_TYPE_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
                     <ChevronDown size={16} />
@@ -392,7 +421,7 @@ export const ProviderList: React.FC = () => {
                       setViewMode('cards');
                     }}
                     className={`p-2 transition-colors ${viewMode === 'cards' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                    title="Card View"
+                    title={t('tenant.providers.view.card', { defaultValue: 'Card View' })}
                   >
                     <LayoutGrid size={18} />
                   </button>
@@ -401,7 +430,7 @@ export const ProviderList: React.FC = () => {
                       setViewMode('table');
                     }}
                     className={`p-2 transition-colors ${viewMode === 'table' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                    title="Table View"
+                    title={t('tenant.providers.view.table', { defaultValue: 'Table View' })}
                   >
                     <List size={18} />
                   </button>
@@ -412,7 +441,10 @@ export const ProviderList: React.FC = () => {
             {/* Content Area */}
             {isLoading ? (
               <div className="p-12 text-center">
-                <Loader2 size={32} className="animate-spin motion-reduce:animate-none text-primary mx-auto" />
+                <Loader2
+                  size={32}
+                  className="animate-spin motion-reduce:animate-none text-primary mx-auto"
+                />
                 <p className="mt-4 text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
               </div>
             ) : filteredAndSortedProviders.length === 0 ? (
@@ -426,7 +458,9 @@ export const ProviderList: React.FC = () => {
                       {t('tenant.providers.noProviders')}
                     </p>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      Get started by adding your first LLM provider
+                      {t('tenant.providers.emptyHint', {
+                        defaultValue: 'Get started by adding your first LLM provider',
+                      })}
                     </p>
                   </div>
                   <button
@@ -449,9 +483,15 @@ export const ProviderList: React.FC = () => {
                     provider={provider}
                     onEdit={handleEdit}
                     onAssign={handleAssign}
-                    onDelete={handleDelete}
-                    onCheckHealth={handleCheckHealth}
-                    onResetCircuitBreaker={handleResetCircuitBreaker}
+                    onDelete={(providerId) => {
+                      void handleDelete(providerId);
+                    }}
+                    onCheckHealth={(providerId) => {
+                      void handleCheckHealth(providerId);
+                    }}
+                    onResetCircuitBreaker={(providerType) => {
+                      void handleResetCircuitBreaker(providerType);
+                    }}
                     onViewStats={setViewingStats}
                     isCheckingHealth={checkingHealth === provider.id}
                     isResettingCircuitBreaker={resettingCircuitBreaker === provider.provider_type}
@@ -471,8 +511,21 @@ export const ProviderList: React.FC = () => {
                         }}
                       >
                         <div className="flex items-center gap-2">
-                          Provider
-                          {sortField === 'name' || sortField === 'health' || sortField === 'responseTime' ? (sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                          {t('tenant.providers.columns.provider', { defaultValue: 'Provider' })}
+                          {sortField === 'name' ||
+                          sortField === 'health' ||
+                          sortField === 'responseTime' ? (
+                            sortOrder === 'asc' ? (
+                              <ArrowUp size={14} />
+                            ) : (
+                              <ArrowDown size={14} />
+                            )
+                          ) : (
+                            <ArrowUpDown
+                              size={14}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            />
+                          )}
                         </div>
                       </th>
                       <th
@@ -495,7 +548,20 @@ export const ProviderList: React.FC = () => {
                       >
                         <div className="flex items-center gap-2">
                           {t('common.stats.healthStatus')}
-                          {sortField === 'name' || sortField === 'health' || sortField === 'responseTime' ? (sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                          {sortField === 'name' ||
+                          sortField === 'health' ||
+                          sortField === 'responseTime' ? (
+                            sortOrder === 'asc' ? (
+                              <ArrowUp size={14} />
+                            ) : (
+                              <ArrowDown size={14} />
+                            )
+                          ) : (
+                            <ArrowUpDown
+                              size={14}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            />
+                          )}
                         </div>
                       </th>
                       <th
@@ -505,12 +571,29 @@ export const ProviderList: React.FC = () => {
                         }}
                       >
                         <div className="flex items-center gap-2">
-                          Response Time
-                          {sortField === 'name' || sortField === 'health' || sortField === 'responseTime' ? (sortOrder === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+                          {t('tenant.providers.columns.responseTime', {
+                            defaultValue: 'Response Time',
+                          })}
+                          {sortField === 'name' ||
+                          sortField === 'health' ||
+                          sortField === 'responseTime' ? (
+                            sortOrder === 'asc' ? (
+                              <ArrowUp size={14} />
+                            ) : (
+                              <ArrowDown size={14} />
+                            )
+                          ) : (
+                            <ArrowUpDown
+                              size={14}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            />
+                          )}
                         </div>
                       </th>
                       <th className="relative px-6 py-3" scope="col">
-                        <span className="sr-only">Actions</span>
+                        <span className="sr-only">
+                          {t('tenant.providers.columns.actions', { defaultValue: 'Actions' })}
+                        </span>
                       </th>
                     </tr>
                   </thead>
@@ -534,8 +617,12 @@ export const ProviderList: React.FC = () => {
                                 </span>
                                 {provider.is_default && (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                                     <Star size={10} fill="currentColor" />
-                                    <span className="ml-0.5">Default</span>
+                                    <Star size={10} fill="currentColor" />
+                                    <span className="ml-0.5">
+                                      {t('tenant.providers.defaultBadge', {
+                                        defaultValue: 'Default',
+                                      })}
+                                    </span>
                                   </span>
                                 )}
                               </div>
@@ -596,17 +683,28 @@ export const ProviderList: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
-                          {provider.response_time_ms ? `${provider.response_time_ms}ms` : 'N/A'}
+                          {provider.response_time_ms
+                            ? `${String(provider.response_time_ms)}ms`
+                            : t('tenant.providers.notAvailable', { defaultValue: 'N/A' })}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => handleCheckHealth(provider.id)}
+                              onClick={() => {
+                                void handleCheckHealth(provider.id);
+                              }}
                               disabled={checkingHealth === provider.id}
                               className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50"
                               title={t('common.actions.checkHealth')}
                             >
-                              {checkingHealth === provider.id ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" /> : <Activity size={18} />}
+                              {checkingHealth === provider.id ? (
+                                <Loader2
+                                  size={18}
+                                  className="animate-spin motion-reduce:animate-none"
+                                />
+                              ) : (
+                                <Activity size={18} />
+                              )}
                             </button>
                             <button
                               onClick={() => {
@@ -618,7 +716,9 @@ export const ProviderList: React.FC = () => {
                               <Pencil size={18} />
                             </button>
                             <button
-                              onClick={() => handleDelete(provider.id)}
+                              onClick={() => {
+                                void handleDelete(provider.id);
+                              }}
                               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
                               title={t('common.delete')}
                             >
@@ -660,7 +760,8 @@ export const ProviderList: React.FC = () => {
                   rel="noopener noreferrer"
                   className="text-sm text-slate-500 hover:text-primary flex items-center gap-1"
                 >
-                  Docs <ExternalLink size={14} />
+                  {t('tenant.providers.marketplace.docs', { defaultValue: 'Docs' })}
+                  <ExternalLink size={14} />
                 </a>
                 <button
                   onClick={() => {
@@ -669,7 +770,7 @@ export const ProviderList: React.FC = () => {
                   className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                 >
                   <Plus size={16} />
-                  Connect
+                  {t('tenant.providers.marketplace.connect', { defaultValue: 'Connect' })}
                 </button>
               </div>
             </div>
@@ -707,7 +808,7 @@ export const ProviderList: React.FC = () => {
           }}
           onSuccess={() => {
             setAssigningProvider(null);
-            loadProviders();
+            void loadProviders();
           }}
           provider={assigningProvider}
           tenantId={currentTenant.id}

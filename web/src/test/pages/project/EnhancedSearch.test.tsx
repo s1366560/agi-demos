@@ -213,6 +213,16 @@ describe('EnhancedSearch Compound Component', () => {
       expect(screen.getByTestId('cytoscape-graph')).toBeInTheDocument();
     });
 
+    it('wraps graph visualization in a responsive non-overflowing section', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Graph />
+        </EnhancedSearch>
+      );
+
+      expect(screen.getByTestId('cytoscape-graph').closest('section')).toHaveClass('min-w-0');
+    });
+
     it('should not render graph when excluded', () => {
       render(
         <EnhancedSearch>

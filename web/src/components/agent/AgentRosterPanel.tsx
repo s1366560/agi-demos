@@ -33,9 +33,9 @@ import type { GraphNodeState, GraphRunStatus } from '../../stores/graphStore';
 
 const formatDuration = (seconds: number | undefined): string => {
   if (seconds == null) return '--';
-  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
+  if (seconds < 1) return `${String(Math.round(seconds * 1000))}ms`;
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${String(Math.floor(seconds / 60))}m ${String(Math.round(seconds % 60))}s`;
 };
 
 const formatElapsedFromStart = (
@@ -44,9 +44,9 @@ const formatElapsedFromStart = (
 ): string => {
   if (startedAt == null) return '--';
   const ms = (completedAt ?? Date.now()) - startedAt;
-  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 1000) return `${String(Math.round(ms))}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+  return `${String(Math.floor(ms / 60000))}m ${String(Math.round((ms % 60000) / 1000))}s`;
 };
 
 const NodeStatusBadge = memo<{ status: GraphNodeState['status'] }>(({ status }) => {
@@ -130,16 +130,16 @@ const NodeItem = memo<{
 
           <div className="flex items-center gap-3 mt-1">
             <span className="text-2xs text-slate-400 flex items-center gap-0.5">
-               <Clock size={9} />
-               {node.durationSeconds != null
-                 ? formatDuration(node.durationSeconds)
-                 : formatElapsedFromStart(node.startedAt, node.completedAt)}
-             </span>
-             {node.agentDefinitionId && (
-               <span className="text-2xs text-slate-400 truncate max-w-[120px]">
-                 {node.agentDefinitionId}
-               </span>
-             )}
+              <Clock size={9} />
+              {node.durationSeconds != null
+                ? formatDuration(node.durationSeconds)
+                : formatElapsedFromStart(node.startedAt, node.completedAt)}
+            </span>
+            {node.agentDefinitionId && (
+              <span className="text-2xs text-slate-400 truncate max-w-[120px]">
+                {node.agentDefinitionId}
+              </span>
+            )}
           </div>
 
           {isExpanded && (
@@ -158,13 +158,13 @@ const NodeItem = memo<{
                   </p>
                 </div>
               )}
-           {node.outputKeys && node.outputKeys.length > 0 && (
-                 <div className="p-2 rounded bg-white/60 dark:bg-slate-900/40 border border-slate-200/30 dark:border-slate-700/20">
-                    <p className="text-2xs text-slate-500 dark:text-slate-400 truncate">
-                      Output keys: {node.outputKeys.join(', ')}
-                    </p>
-                 </div>
-               )}
+              {node.outputKeys && node.outputKeys.length > 0 && (
+                <div className="p-2 rounded bg-white/60 dark:bg-slate-900/40 border border-slate-200/30 dark:border-slate-700/20">
+                  <p className="text-2xs text-slate-500 dark:text-slate-400 truncate">
+                    Output keys: {node.outputKeys.join(', ')}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -238,12 +238,12 @@ const AgentRosterDrawer = memo(() => {
         </div>
       }
       placement="right"
-      width={380}
+      size={380}
       open={true}
       onClose={() => {
         setPanel(false);
       }}
-      destroyOnClose
+      destroyOnHidden
       extra={
         activeRun && (
           <button
@@ -281,9 +281,9 @@ const AgentRosterDrawer = memo(() => {
                 <span className="text-2xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Pattern
                 </span>
-                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300 line-clamp-1">
-                   {activeRun.pattern}
-                 </span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300 line-clamp-1">
+                  {activeRun.pattern}
+                </span>
               </div>
               {activeRun.errorMessage && (
                 <p className="text-xs text-red-500 mt-1 line-clamp-2">{activeRun.errorMessage}</p>

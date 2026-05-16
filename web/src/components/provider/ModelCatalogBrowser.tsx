@@ -1,6 +1,8 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Button, Input, Space, Table, Tag, Typography } from 'antd';
 import { Search } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
@@ -24,6 +26,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
   selectedModel,
   filterProvider,
 }) => {
+  const { t } = useTranslation();
   const { catalogLoading, modelSearchResults } = useProviderStore(
     useShallow((s) => ({
       catalogLoading: s.catalogLoading,
@@ -66,17 +69,17 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
   });
 
   const filterTags = [
-    { key: 'vision', label: 'Vision' },
-    { key: 'reasoning', label: 'Reasoning' },
-    { key: 'tools', label: 'Tools' },
-    { key: 'temp', label: 'Temp' },
-    { key: 'seed', label: 'Seed' },
-    { key: 'json', label: 'JSON' },
-    { key: 'open', label: 'Open' },
+    { key: 'vision', labelKey: 'components.provider.modelCatalog.features.vision' },
+    { key: 'reasoning', labelKey: 'components.provider.modelCatalog.features.reasoning' },
+    { key: 'tools', labelKey: 'components.provider.modelCatalog.features.tools' },
+    { key: 'temp', labelKey: 'components.provider.modelCatalog.features.temp' },
+    { key: 'seed', labelKey: 'components.provider.modelCatalog.features.seed' },
+    { key: 'json', labelKey: 'components.provider.modelCatalog.features.json' },
+    { key: 'open', labelKey: 'components.provider.modelCatalog.features.open' },
   ];
 
   useEffect(() => {
-    fetchModelCatalog(filterProvider);
+    void fetchModelCatalog(filterProvider);
   }, [fetchModelCatalog, filterProvider]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,15 +95,19 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
 
   const columns = [
     {
-      title: 'Model',
+      title: t('components.provider.modelCatalog.columns.model', 'Model'),
       dataIndex: 'name',
       key: 'name',
       width: 220,
       render: (text: string, record: ModelCatalogEntry) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text strong>
             {record.provider && (
-              <span className="mr-2" role="img" aria-label="provider">
+              <span
+                className="mr-2"
+                role="img"
+                aria-label={t('components.provider.modelCatalog.providerIconAria', 'provider')}
+              >
                 {getProviderIcon(record.provider)}
               </span>
             )}
@@ -115,7 +122,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
       ),
     },
     {
-      title: 'Context',
+      title: t('components.provider.modelCatalog.columns.context', 'Context'),
       dataIndex: 'context_length',
       key: 'context_length',
       width: 100,
@@ -127,7 +134,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
       ),
     },
     {
-      title: 'Max Output',
+      title: t('components.provider.modelCatalog.columns.maxOutput', 'Max Output'),
       dataIndex: 'max_output_tokens',
       key: 'max_output_tokens',
       width: 110,
@@ -140,7 +147,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
       ),
     },
     {
-      title: 'Cost ($/1M)',
+      title: t('components.provider.modelCatalog.columns.cost', 'Cost ($/1M)'),
       key: 'cost',
       width: 120,
       render: (_: unknown, record: ModelCatalogEntry) => {
@@ -148,40 +155,82 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
         const outCost = record.output_cost_per_1m;
         if (inCost == null && outCost == null) return <Text type="secondary">-</Text>;
         return (
-          <Space direction="vertical" size={0}>
-            <Text className="text-xs">In: ${inCost?.toFixed(2) ?? '-'}</Text>
-            <Text className="text-xs">Out: ${outCost?.toFixed(2) ?? '-'}</Text>
+          <Space orientation="vertical" size={0}>
+            <Text className="text-xs">
+              {t('components.provider.modelCatalog.cost.in', 'In')}: ${inCost?.toFixed(2) ?? '-'}
+            </Text>
+            <Text className="text-xs">
+              {t('components.provider.modelCatalog.cost.out', 'Out')}: ${outCost?.toFixed(2) ?? '-'}
+            </Text>
           </Space>
         );
       },
     },
     {
-      title: 'Features',
+      title: t('components.provider.modelCatalog.columns.features', 'Features'),
       key: 'features',
       width: 240,
       render: (_: unknown, record: ModelCatalogEntry) => (
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Space size={[0, 4]} wrap>
-            {record.reasoning && <Tag color="gold">Reasoning</Tag>}
-            {record.supports_tool_call && <Tag color="green">Tools</Tag>}
-            {record.supports_attachment && <Tag color="purple">Vision</Tag>}
-            {record.supports_structured_output && <Tag color="cyan">Structured</Tag>}
-            {record.open_weights && <Tag color="orange">Open</Tag>}
+            {record.reasoning && (
+              <Tag color="gold">
+                {t('components.provider.modelCatalog.features.reasoning', 'Reasoning')}
+              </Tag>
+            )}
+            {record.supports_tool_call && (
+              <Tag color="green">
+                {t('components.provider.modelCatalog.features.tools', 'Tools')}
+              </Tag>
+            )}
+            {record.supports_attachment && (
+              <Tag color="purple">
+                {t('components.provider.modelCatalog.features.vision', 'Vision')}
+              </Tag>
+            )}
+            {record.supports_structured_output && (
+              <Tag color="cyan">
+                {t('components.provider.modelCatalog.features.structured', 'Structured')}
+              </Tag>
+            )}
+            {record.open_weights && (
+              <Tag color="orange">
+                {t('components.provider.modelCatalog.features.open', 'Open')}
+              </Tag>
+            )}
           </Space>
           <Space size={[0, 4]} wrap>
-            {record.supports_temperature && <Tag>Temp</Tag>}
-            {record.supports_top_p === true && <Tag>TopP</Tag>}
-            {record.supports_frequency_penalty === true && <Tag>FreqP</Tag>}
-            {record.supports_presence_penalty === true && <Tag>PresP</Tag>}
-            {record.supports_seed === true && <Tag color="volcano">Seed</Tag>}
-            {record.supports_stop === true && <Tag>Stop</Tag>}
-            {record.supports_response_format === true && <Tag color="geekblue">JSON</Tag>}
+            {record.supports_temperature && (
+              <Tag>{t('components.provider.modelCatalog.features.temp', 'Temp')}</Tag>
+            )}
+            {record.supports_top_p === true && (
+              <Tag>{t('components.provider.modelCatalog.features.topP', 'TopP')}</Tag>
+            )}
+            {record.supports_frequency_penalty === true && (
+              <Tag>{t('components.provider.modelCatalog.features.freqP', 'FreqP')}</Tag>
+            )}
+            {record.supports_presence_penalty === true && (
+              <Tag>{t('components.provider.modelCatalog.features.presP', 'PresP')}</Tag>
+            )}
+            {record.supports_seed === true && (
+              <Tag color="volcano">
+                {t('components.provider.modelCatalog.features.seed', 'Seed')}
+              </Tag>
+            )}
+            {record.supports_stop === true && (
+              <Tag>{t('components.provider.modelCatalog.features.stop', 'Stop')}</Tag>
+            )}
+            {record.supports_response_format === true && (
+              <Tag color="geekblue">
+                {t('components.provider.modelCatalog.features.json', 'JSON')}
+              </Tag>
+            )}
           </Space>
         </Space>
       ),
     },
     {
-      title: 'Action',
+      title: t('components.provider.modelCatalog.columns.action', 'Action'),
       key: 'action',
       width: 90,
       render: (_: unknown, record: ModelCatalogEntry) => {
@@ -192,7 +241,9 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
             size="small"
             onClick={() => onSelect?.(record)}
           >
-            {isSelected ? 'Selected' : 'Select'}
+            {isSelected
+              ? t('components.provider.modelCatalog.actions.selected', 'Selected')
+              : t('components.provider.modelCatalog.actions.select', 'Select')}
           </Button>
         );
       },
@@ -202,7 +253,10 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
   return (
     <div className="flex flex-col gap-4">
       <Input
-        placeholder="Search models by name, provider, or capability..."
+        placeholder={t(
+          'components.provider.modelCatalog.searchPlaceholder',
+          'Search models by name, provider, or capability...'
+        )}
         prefix={<Search size={16} className="text-gray-400" />}
         value={localSearch}
         onChange={handleSearch}
@@ -210,7 +264,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
       />
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <Text type="secondary" className="text-sm">
-          Filters:
+          {t('components.provider.modelCatalog.filtersLabel', 'Filters:')}
         </Text>
         {filterTags.map((tag) => (
           <Tag.CheckableTag
@@ -220,7 +274,7 @@ export const ModelCatalogBrowser: React.FC<ModelCatalogBrowserProps> = ({
               toggleFilter(tag.key, checked);
             }}
           >
-            {tag.label}
+            {t(tag.labelKey)}
           </Tag.CheckableTag>
         ))}
       </div>

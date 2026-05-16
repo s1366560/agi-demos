@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { authAPI, tenantAPI, projectAPI, memoryAPI } from '../services/api';
+import { authAPI, tenantAPI, projectAPI, memoryAPI, taskAPI } from '../services/api';
 
 import type { MemoryCreate, MemoryUpdate, Entity, Relationship } from '../types/memory';
 
@@ -161,10 +161,19 @@ describe('API Services', () => {
     });
 
     it('listMembers should list members', async () => {
-      const mockData: unknown[] = [];
+      const mockData = [{ user_id: 'u1' }];
       mockApiInstance.get.mockResolvedValue({ data: mockData });
-      await tenantAPI.listMembers('t1');
+      const result = await tenantAPI.listMembers('t1');
       expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/t1/members', undefined);
+      expect(result).toEqual(mockData);
+    });
+
+    it('listMembers should normalize backend members envelope', async () => {
+      const mockData = [{ user_id: 'u1' }];
+      mockApiInstance.get.mockResolvedValue({ data: { members: mockData, total: 1 } });
+      const result = await tenantAPI.listMembers('t1');
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/tenants/t1/members', undefined);
+      expect(result).toEqual(mockData);
     });
   });
 
@@ -310,6 +319,37 @@ describe('API Services', () => {
         { text: 'text', project_id: 'p1' },
         undefined
       );
+    });
+  });
+
+  describe('taskAPI', () => {
+    it('getRecentTasks should pass filters and return list responses', async () => {
+      const mockTasks = [
+        { id: 'task-1', task_type: 'embedding', status: 'completed', created_at: 'now' },
+      ];
+      mockApiInstance.get.mockResolvedValue({ data: mockTasks });
+
+      const result = await taskAPI.getRecentTasks({
+        entity_id: 'entity-1',
+        entity_type: 'memory',
+        limit: 25,
+      });
+
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/tasks/recent', {
+        params: { entity_id: 'entity-1', entity_type: 'memory', limit: 25 },
+      });
+      expect(result).toEqual(mockTasks);
+    });
+
+    it('getRecentTasks should normalize enveloped task responses', async () => {
+      const mockTasks = [
+        { id: 'task-1', task_type: 'embedding', status: 'completed', created_at: 'now' },
+      ];
+      mockApiInstance.get.mockResolvedValue({ data: { tasks: mockTasks, total: 1 } });
+
+      const result = await taskAPI.getRecentTasks();
+
+      expect(result).toEqual(mockTasks);
     });
   });
 });

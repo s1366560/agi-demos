@@ -105,9 +105,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           >
             <Folder size={18} className="opacity-70" />
             <span className="truncate text-sm font-medium">{project.name}</span>
-            {isSelected && (
-              <Check size={16} className="ml-auto" />
-            )}
+            {isSelected && <Check size={16} className="ml-auto" />}
           </button>
         );
       })}

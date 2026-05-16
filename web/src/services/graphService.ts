@@ -111,8 +111,8 @@ export interface SearchResults {
   total: number;
   search_type: string;
   strategy?: string | undefined;
-  time_range?: unknown | undefined;
-  facets?: unknown | undefined;
+  time_range?: unknown;
+  facets?: unknown;
 }
 
 export interface GraphStats {
@@ -120,6 +120,13 @@ export interface GraphStats {
   episodic_count: number;
   community_count: number;
   edge_count: number;
+}
+
+interface GraphStatsApiResponse extends Partial<GraphStats> {
+  entities?: number | undefined;
+  episodes?: number | undefined;
+  communities?: number | undefined;
+  relationships?: number | undefined;
 }
 
 export interface EpisodeData {
@@ -264,20 +271,19 @@ export const graphService = {
     if (params.offset) queryParams.append('offset', params.offset.toString());
 
     const response = await apiClient.get<{
-      entities: Entity[];
-      items: Entity[];
+      entities?: Entity[] | undefined;
+      items?: Entity[] | undefined;
       total: number;
       limit?: number | undefined;
       offset?: number | undefined;
     }>(`/graph/entities/?${queryParams.toString()}`);
+    const items = response.entities ?? response.items ?? [];
     return {
-      items: response.entities || response.items || [],
+      items,
       total: response.total,
       limit: response.limit ?? 50,
       offset: response.offset ?? 0,
-      has_more:
-        (response.offset ?? 0) + (response.entities || response.items || []).length <
-        response.total,
+      has_more: (response.offset ?? 0) + items.length < response.total,
     };
   },
 
@@ -335,7 +341,7 @@ export const graphService = {
 
   async getCommunityMembers(communityId: string, limit = 100): Promise<CommunityMembers> {
     return await apiClient.get<CommunityMembers>(
-      `/graph/communities/${communityId}/members?limit=${limit}`
+      `/graph/communities/${communityId}/members?limit=${String(limit)}`
     );
   },
 
@@ -450,7 +456,13 @@ export const graphService = {
 
   async getGraphStats(tenant_id?: string): Promise<GraphStats> {
     const queryParams = tenant_id ? `?tenant_id=${tenant_id}` : '';
-    return await apiClient.get<GraphStats>(`/data/stats${queryParams}`);
+    const response = await apiClient.get<GraphStatsApiResponse>(`/data/stats${queryParams}`);
+    return {
+      entity_count: response.entity_count ?? response.entities ?? 0,
+      episodic_count: response.episodic_count ?? response.episodes ?? 0,
+      community_count: response.community_count ?? response.communities ?? 0,
+      edge_count: response.edge_count ?? response.relationships ?? 0,
+    };
   },
 
   // Episodes (Enhanced)

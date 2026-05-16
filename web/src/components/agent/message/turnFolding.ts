@@ -124,5 +124,5 @@ export function applyTurnCollapse(
 }
 
 export function isTurnPlaceholder(item: DisplayItem): item is TurnPlaceholderItem {
-  return (item as TurnPlaceholderItem).kind === 'turn-placeholder';
+  return item.kind === 'turn-placeholder';
 }

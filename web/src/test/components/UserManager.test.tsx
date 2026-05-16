@@ -148,6 +148,28 @@ describe('UserManager - Component Tests', () => {
         expect(screen.getByText('Viewer User')).toBeInTheDocument();
       });
     });
+
+    it('normalizes backend project member envelopes', async () => {
+      (projectService.listMembers as any).mockResolvedValue({
+        members: [
+          {
+            user_id: 'user-4',
+            email: 'backend@example.com',
+            name: 'Backend Member',
+            role: 'viewer',
+            created_at: '2024-03-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      });
+
+      render(<UserManager context="project" />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Backend Member')).toBeInTheDocument();
+        expect(screen.getByText('backend@example.com')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('Error Handling', () => {

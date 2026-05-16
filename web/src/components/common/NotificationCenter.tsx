@@ -22,7 +22,11 @@ import {
   type ReactNode,
 } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Bell, CheckCheck, X } from 'lucide-react';
+
+import type { TFunction } from 'i18next';
 
 export type NotificationKind =
   | 'pr_review'
@@ -84,7 +88,7 @@ function makeId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
-  return `n_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `n_${String(Date.now())}_${Math.random().toString(36).slice(2)}`;
 }
 
 export interface NotificationProviderProps {
@@ -156,7 +160,15 @@ export const NotificationProvider = memo<NotificationProviderProps>(({ children 
       removeNotification,
       clearAll,
     }),
-    [notifications, unreadCount, pushNotification, markRead, markAllRead, removeNotification, clearAll]
+    [
+      notifications,
+      unreadCount,
+      pushNotification,
+      markRead,
+      markAllRead,
+      removeNotification,
+      clearAll,
+    ]
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
@@ -164,6 +176,7 @@ export const NotificationProvider = memo<NotificationProviderProps>(({ children 
 
 NotificationProvider.displayName = 'NotificationProvider';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useNotifications(): NotificationContextValue {
   const ctx = useContext(NotificationContext);
   if (ctx === null) {
@@ -181,16 +194,16 @@ const KIND_ACCENT: Record<NotificationKind, string> = {
   info: 'bg-slate-400',
 };
 
-function relativeTime(ms: number): string {
+function relativeTime(ms: number, t: TFunction): string {
   const delta = Date.now() - ms;
   const sec = Math.round(delta / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  if (sec < 60) return t('common.time.secondsAgo', { count: sec });
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t('common.time.minutesAgo', { count: min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return t('common.time.hoursAgo', { count: hr });
   const day = Math.round(hr / 24);
-  return `${day}d ago`;
+  return t('common.time.daysAgo', { count: day });
 }
 
 export interface NotificationCenterProps {
@@ -198,6 +211,7 @@ export interface NotificationCenterProps {
 }
 
 export const NotificationCenter = memo<NotificationCenterProps>(({ className = '' }) => {
+  const { t } = useTranslation();
   const { notifications, unreadCount, markRead, markAllRead, removeNotification, clearAll } =
     useNotifications();
   const [open, setOpen] = useState(false);
@@ -206,8 +220,13 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
     <div className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`Notifications (${unreadCount} unread)`}
+        onClick={() => {
+          setOpen((v) => !v);
+        }}
+        aria-label={t('components.notificationCenter.buttonAria', {
+          count: unreadCount,
+          defaultValue: 'Notifications ({{count}} unread)',
+        })}
         aria-expanded={open}
         className="relative rounded-md p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
       >
@@ -222,12 +241,12 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
       {open && (
         <div
           role="dialog"
-          aria-label="Notifications"
+          aria-label={t('notifications.title', 'Notifications')}
           className="absolute right-0 mt-2 w-[360px] max-h-[480px] overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl z-50 flex flex-col"
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-700">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              Notifications
+              {t('notifications.title', 'Notifications')}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -236,7 +255,7 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
                 disabled={unreadCount === 0}
                 className="text-xs px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 inline-flex items-center gap-1"
               >
-                <CheckCheck size={12} /> All read
+                <CheckCheck size={12} /> {t('components.notificationCenter.allRead', 'All read')}
               </button>
               <button
                 type="button"
@@ -244,14 +263,14 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
                 disabled={notifications.length === 0}
                 className="text-xs px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
               >
-                Clear
+                {t('components.notificationCenter.clear', 'Clear')}
               </button>
             </div>
           </div>
           <div className="overflow-y-auto flex-1">
             {notifications.length === 0 ? (
               <div className="text-xs text-slate-500 dark:text-slate-400 px-3 py-8 text-center">
-                No notifications yet.
+                {t('components.notificationCenter.empty', 'No notifications yet.')}
               </div>
             ) : (
               <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -262,10 +281,14 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
                       n.read ? 'opacity-60' : 'bg-slate-50/60 dark:bg-slate-800/30'
                     }`}
                   >
-                    <span className={`mt-1.5 inline-block h-2 w-2 rounded-full ${KIND_ACCENT[n.kind]}`} />
+                    <span
+                      className={`mt-1.5 inline-block h-2 w-2 rounded-full ${KIND_ACCENT[n.kind]}`}
+                    />
                     <button
                       type="button"
-                      onClick={() => markRead(n.id)}
+                      onClick={() => {
+                        markRead(n.id);
+                      }}
                       className="flex-1 text-left"
                     >
                       <div className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">
@@ -277,13 +300,18 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
                         </div>
                       )}
                       <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                        {relativeTime(n.createdAt)}
+                        {relativeTime(n.createdAt, t)}
                       </div>
                     </button>
                     <button
                       type="button"
-                      aria-label="Dismiss notification"
-                      onClick={() => removeNotification(n.id)}
+                      aria-label={t(
+                        'components.notificationCenter.dismiss',
+                        'Dismiss notification'
+                      )}
+                      onClick={() => {
+                        removeNotification(n.id);
+                      }}
                       className="rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
                       <X size={12} />

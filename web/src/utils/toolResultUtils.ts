@@ -117,7 +117,9 @@ export function foldText(text: string | undefined, keepLines: number = 5): strin
   const lastLines = lines.slice(-keepLines);
   const foldedCount = totalLines - keepLines * 2;
 
-  return [...firstLines, `\n... (${foldedCount} lines collapsed) ...\n`, ...lastLines].join('\n');
+  return [...firstLines, `\n... (${String(foldedCount)} lines collapsed) ...\n`, ...lastLines].join(
+    '\n'
+  );
 }
 
 /**
@@ -144,7 +146,11 @@ export function foldTextWithMetadata(
   const foldedCount = totalLines - keepLines * 2;
 
   return {
-    text: [...firstLines, `\n... (${foldedCount} lines collapsed) ...\n`, ...lastLines].join('\n'),
+    text: [
+      ...firstLines,
+      `\n... (${String(foldedCount)} lines collapsed) ...\n`,
+      ...lastLines,
+    ].join('\n'),
     folded: true,
   };
 }

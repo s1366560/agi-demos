@@ -1,5 +1,10 @@
 import { test, expect } from './base';
 
+async function logoutThroughUserMenu(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'User menu' }).click();
+  await page.getByRole('button', { name: /logout|sign out|退出/i }).click();
+}
+
 test.describe('Authentication', () => {
   test.beforeEach(async ({ page }) => {
     // Set English locale first (tests use English labels)
@@ -48,9 +53,12 @@ test.describe('Authentication', () => {
     await page.getByTestId('login-submit-button').click();
 
     // Wait for navigation
-    await page.waitForURL((url) => {
-      return !url.pathname.includes('/login');
-    }, { timeout: 10000 });
+    await page.waitForURL(
+      (url) => {
+        return !url.pathname.includes('/login');
+      },
+      { timeout: 10000 }
+    );
 
     // Verify we are no longer on login page
     await expect(page).not.toHaveURL(/\/login/);
@@ -68,7 +76,9 @@ test.describe('Authentication', () => {
     await page.getByTestId('login-submit-button').click();
 
     // Wait for error message to appear
-    await expect(page.locator('.text-red-700, .text-red-300').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.text-red-700, .text-red-300').first()).toBeVisible({
+      timeout: 5000,
+    });
 
     // Verify we are still on login page
     await expect(page).toHaveURL(/\/login/);
@@ -118,7 +128,7 @@ test.describe('Authentication', () => {
     await page.goto('/login');
 
     // Click on admin demo credentials
-    await page.locator('text=管理员').click();
+    await page.getByRole('button', { name: /Use admin demo credentials/i }).click();
 
     // Verify form is filled using data-testid
     await expect(page.getByTestId('email-input')).toHaveValue('admin@memstack.ai');
@@ -206,9 +216,12 @@ test.describe('Authentication', () => {
     await page.getByTestId('password-input').press('Enter');
 
     // Should navigate away from login
-    await page.waitForURL((url) => {
-      return !url.pathname.includes('/login');
-    }, { timeout: 10000 });
+    await page.waitForURL(
+      (url) => {
+        return !url.pathname.includes('/login');
+      },
+      { timeout: 10000 }
+    );
   });
 });
 
@@ -228,21 +241,7 @@ test.describe('Authentication Logout', () => {
   });
 
   test('should logout successfully', async ({ page }) => {
-    // Click user menu or logout button
-    // Look for a logout option in the UI
-    const logoutButton = page.getByRole('button', { name: /logout|sign out|退出/i });
-
-    if (await logoutButton.isVisible({ timeout: 3000 })) {
-      await logoutButton.click();
-    } else {
-      // Try clicking on user avatar/menu first
-      const userMenu = page.locator('[class*="avatar"], [class*="user"]').first();
-      if (await userMenu.isVisible({ timeout: 3000 })) {
-        await userMenu.click();
-        await page.waitForTimeout(500);
-        await logoutButton.click();
-      }
-    }
+    await logoutThroughUserMenu(page);
 
     // Should redirect to login page
     await page.waitForURL(/\/login/, { timeout: 5000 });
@@ -251,26 +250,22 @@ test.describe('Authentication Logout', () => {
 
   test('should clear session data after logout', async ({ page }) => {
     // Check that token is stored
-    const tokenBeforeLogout = await page.evaluate(() => localStorage.getItem('memstack-auth-storage'));
+    const tokenBeforeLogout = await page.evaluate(() =>
+      localStorage.getItem('memstack-auth-storage')
+    );
     expect(tokenBeforeLogout).toBeTruthy();
 
-    // Logout
-    const logoutButton = page.getByRole('button', { name: /logout|sign out|退出/i });
-    if (await logoutButton.isVisible({ timeout: 3000 })) {
-      await logoutButton.click();
-    } else {
-      const userMenu = page.locator('[class*="avatar"], [class*="user"]').first();
-      if (await userMenu.isVisible({ timeout: 3000 })) {
-        await userMenu.click();
-        await page.waitForTimeout(500);
-        await logoutButton.click();
-      }
-    }
+    await logoutThroughUserMenu(page);
 
     await page.waitForURL(/\/login/, { timeout: 5000 });
 
     // Check that auth data is cleared
-    const tokenAfterLogout = await page.evaluate(() => localStorage.getItem('memstack-auth-storage'));
-    expect(tokenAfterLogout).toBeFalsy();
+    const tokenAfterLogout = await page.evaluate(() =>
+      localStorage.getItem('memstack-auth-storage')
+    );
+    const persistedAuth =
+      tokenAfterLogout && tokenAfterLogout.length > 0 ? JSON.parse(tokenAfterLogout) : null;
+    expect(persistedAuth?.state?.token ?? null).toBeNull();
+    expect(persistedAuth?.state?.isAuthenticated ?? false).toBe(false);
   });
 });

@@ -6,7 +6,7 @@
  * here to enter/confirm the 8-char user_code and approve the session.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -26,7 +26,10 @@ const CODE_LEN = 8;
 const CODE_PATTERN = /^[A-Z0-9]{8}$/;
 
 const normalize = (raw: string): string =>
-  raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, CODE_LEN);
+  raw
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, CODE_LEN);
 
 export const DeviceApprove: React.FC = () => {
   const { t } = useTranslation();
@@ -41,22 +44,17 @@ export const DeviceApprove: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [approved, setApproved] = useState(false);
 
-  useEffect(() => {
-    // No auto-redirect: App.tsx doesn't support a post-login return URL.
-    // If unauthenticated we render an inline prompt below.
-  }, []);
-
   if (!isAuthenticated) {
     const ret = `/device${code ? `?user_code=${code}` : ''}`;
     const loginHref = `/login?redirect=${encodeURIComponent(ret)}`;
     return (
       <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
         <Card
-          bordered={false}
+          variant="borderless"
           style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)', borderRadius: 6 }}
         >
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Space direction="vertical" size={4}>
+          <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+            <Space orientation="vertical" size={4}>
               <Terminal size={28} strokeWidth={1.5} />
               <Title level={3} style={{ margin: 0 }}>
                 {t('device.signInTitle')}
@@ -69,7 +67,7 @@ export const DeviceApprove: React.FC = () => {
               </Paragraph>
             </Space>
             <Space>
-              <Button type="primary" onClick={() => navigate(loginHref)}>
+              <Button type="primary" onClick={() => void navigate(loginHref)}>
                 {t('common.signIn')}
               </Button>
               <Text copyable={{ text: window.location.origin + ret }} type="secondary">
@@ -86,9 +84,7 @@ export const DeviceApprove: React.FC = () => {
     setError(null);
     const normalized = normalize(code);
     if (!CODE_PATTERN.test(normalized)) {
-      setError(
-        t('device.invalidCode')
-      );
+      setError(t('device.invalidCode'));
       return;
     }
     setSubmitting(true);
@@ -114,7 +110,7 @@ export const DeviceApprove: React.FC = () => {
             'Your terminal should be signed in. You can close this tab.'
           )}
           extra={
-            <Button type="primary" onClick={() => navigate('/')}>
+            <Button type="primary" onClick={() => void navigate('/')}>
               {t('common.goHome')}
             </Button>
           }
@@ -126,11 +122,11 @@ export const DeviceApprove: React.FC = () => {
   return (
     <div style={{ maxWidth: 560, margin: '64px auto', padding: 24 }}>
       <Card
-        bordered={false}
+        variant="borderless"
         style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.08)', borderRadius: 6 }}
       >
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-          <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+          <Space orientation="vertical" size={4}>
             <Terminal size={28} strokeWidth={1.5} />
             <Title level={3} style={{ margin: 0 }}>
               {t('device.title')}
@@ -143,9 +139,9 @@ export const DeviceApprove: React.FC = () => {
             </Paragraph>
           </Space>
 
-          {error && <Alert type="error" message={error} showIcon />}
+          {error && <Alert type="error" title={error} showIcon />}
 
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={8} style={{ width: '100%' }}>
             <Text strong>{t('device.codeLabel')}</Text>
             <Input
               autoFocus
@@ -153,7 +149,9 @@ export const DeviceApprove: React.FC = () => {
               placeholder="ABCD1234"
               value={code}
               maxLength={CODE_LEN}
-              onChange={(e) => { setCode(normalize(e.target.value)); }}
+              onChange={(e) => {
+                setCode(normalize(e.target.value));
+              }}
               onPressEnter={() => void handleSubmit()}
               style={{
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -165,9 +163,7 @@ export const DeviceApprove: React.FC = () => {
           </Space>
 
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-            <Button onClick={() => navigate('/')}>
-              {t('common.cancel')}
-            </Button>
+            <Button onClick={() => void navigate('/')}>{t('common.cancel')}</Button>
             <Button
               type="primary"
               loading={submitting}
@@ -178,10 +174,7 @@ export const DeviceApprove: React.FC = () => {
             </Button>
           </Space>
 
-          <Paragraph
-            type="secondary"
-            style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}
-          >
+          <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
             {t(
               'device.footer',
               'Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI.'

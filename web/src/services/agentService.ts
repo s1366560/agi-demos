@@ -17,6 +17,7 @@ import { routeToHandler, routeSubagentLifecycleMessage } from './agent/messageRo
 import { restApi } from './agent/restApi';
 import { WebSocketConnection } from './agent/wsConnection';
 
+import type { ExecutionStatusApiResponse } from './agent/restApi';
 import type { ServerMessage, WebSocketStatus } from './agent/types';
 import type {
   AgentEventType,
@@ -39,11 +40,22 @@ import type {
 } from '../types/agent';
 
 function generateSessionId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  return `${String(Date.now())}-${Math.random().toString(36).substring(2, 15)}`;
 }
+
+const SILENT_AGENT_EVENT_TYPES = new Set<string>([
+  'text_delta',
+  'thought_delta',
+  'act_delta',
+  'status_update',
+  'lifecycle_state',
+  'lifecycle_state_change',
+  'sandbox_state_change',
+  'sandbox_event',
+]);
 
 class AgentServiceImpl implements AgentService {
   private sessionId: string = generateSessionId();
@@ -125,8 +137,7 @@ class AgentServiceImpl implements AgentService {
     const receiveTime = performance.now();
     this.recordEventMetric(type, receiveTime);
 
-    // Filter out high-frequency noise from logs unless it's a structural event
-    if (type !== 'text_delta' && type !== 'thought_delta' && type !== 'act_delta') {
+    if (!SILENT_AGENT_EVENT_TYPES.has(type)) {
       logger.debug('[AgentWS] handleMessage:', {
         type,
         conversation_id,
@@ -146,7 +157,9 @@ class AgentServiceImpl implements AgentService {
     }
 
     if (type === 'ack') {
-      logger.debug(`[AgentWS] Ack for ${message.action} on ${conversation_id}`);
+      logger.debug(
+        `[AgentWS] Ack for ${message.action ?? 'unknown'} on ${conversation_id ?? 'global'}`
+      );
       return;
     }
 
@@ -383,21 +396,7 @@ class AgentServiceImpl implements AgentService {
     checkRecovery = false,
     sinceTimeUs?: number,
     sinceCounter?: number
-  ): Promise<{
-    status: 'running' | 'completed' | 'failed' | 'paused' | 'unknown';
-    is_active: boolean;
-    is_running?: boolean;
-    last_event_time_us?: number;
-    last_event_counter?: number;
-    conversation_id: string;
-    can_recover?: boolean;
-    recovery_events_count?: number;
-    latest_event?: {
-      type: string;
-      time_us: number;
-      counter: number;
-    };
-  }> {
+  ): Promise<ExecutionStatusApiResponse> {
     return restApi.getExecutionStatus(conversationId, checkRecovery, sinceTimeUs, sinceCounter);
   }
 
@@ -629,10 +628,12 @@ class AgentServiceImpl implements AgentService {
   }
 
   private recordEventMetric(eventType: string, timestamp: number): void {
-    if (!this.performanceMetrics.has(eventType)) {
-      this.performanceMetrics.set(eventType, []);
+    let metrics = this.performanceMetrics.get(eventType);
+    if (metrics === undefined) {
+      metrics = [];
+      this.performanceMetrics.set(eventType, metrics);
     }
-    const metrics = this.performanceMetrics.get(eventType)!;
+
     metrics.push(timestamp);
 
     if (metrics.length > this.MAX_METRICS_SAMPLES) {

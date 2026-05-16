@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Form, Input, Modal, Select, Slider } from 'antd';
 
 import type { CyberObjective } from '@/types/workspace';
@@ -29,6 +31,7 @@ export const ObjectiveCreateModal: React.FC<ObjectiveCreateModalProps> = ({
   parentObjectives = [],
   loading = false,
 }) => {
+  const { t } = useTranslation();
   const [form] = Form.useForm<ObjectiveFormValues>();
   const isEditing = !!initialValues?.title;
   const objType = Form.useWatch('obj_type', form);
@@ -58,42 +61,79 @@ export const ObjectiveCreateModal: React.FC<ObjectiveCreateModalProps> = ({
 
   return (
     <Modal
-      title={isEditing ? 'Edit Objective/Key Result' : 'Create Objective/Key Result'}
+      title={
+        isEditing
+          ? t('workspaceDetail.objectives.editModalTitle', 'Edit Objective/Key Result')
+          : t('workspaceDetail.objectives.createModalTitle', 'Create Objective/Key Result')
+      }
       open={open}
       onCancel={onClose}
       onOk={() => {
         void handleOk();
       }}
       confirmLoading={loading}
-      destroyOnClose
+      destroyOnHidden
       width={600}
+      okText={isEditing ? t('common.save', 'Save') : t('common.create', 'Create')}
+      cancelText={t('common.cancel', 'Cancel')}
     >
       <Form form={form} layout="vertical" className="mt-4">
         <Form.Item
           name="title"
-          label="Title"
-          rules={[{ required: true, message: 'Please enter a title' }]}
+          label={t('workspaceDetail.objectives.titleLabel', 'Title')}
+          rules={[
+            {
+              required: true,
+              message: t('workspaceDetail.objectives.titleRequired', 'Please enter a title'),
+            },
+          ]}
         >
-          <Input placeholder="E.g., Increase Q3 Revenue" />
+          <Input
+            placeholder={t(
+              'workspaceDetail.objectives.titlePlaceholder',
+              'E.g., Increase Q3 Revenue'
+            )}
+          />
         </Form.Item>
 
-        <Form.Item name="description" label="Description">
-          <Input.TextArea placeholder="Add some details about this objective..." rows={3} />
+        <Form.Item
+          name="description"
+          label={t('workspaceDetail.objectives.descriptionLabel', 'Description')}
+        >
+          <Input.TextArea
+            placeholder={t(
+              'workspaceDetail.objectives.descriptionPlaceholder',
+              'Add some details about this objective...'
+            )}
+            rows={3}
+          />
         </Form.Item>
 
         <div className="grid grid-cols-2 gap-4">
           <Form.Item
             name="obj_type"
-            label="Type"
-            rules={[{ required: true, message: 'Please select a type' }]}
+            label={t('workspaceDetail.objectives.typeLabel', 'Type')}
+            rules={[
+              {
+                required: true,
+                message: t('workspaceDetail.objectives.typeRequired', 'Please select a type'),
+              },
+            ]}
           >
             <Select>
-              <Select.Option value="objective">Objective</Select.Option>
-              <Select.Option value="key_result">Key Result</Select.Option>
+              <Select.Option value="objective">
+                {t('workspaceDetail.objectives.typeObjective', 'Objective')}
+              </Select.Option>
+              <Select.Option value="key_result">
+                {t('workspaceDetail.objectives.typeKeyResult', 'Key Result')}
+              </Select.Option>
             </Select>
           </Form.Item>
 
-          <Form.Item name="progress" label="Progress (%)">
+          <Form.Item
+            name="progress"
+            label={t('workspaceDetail.objectives.progressLabel', 'Progress (%)')}
+          >
             <Slider min={0} max={100} />
           </Form.Item>
         </div>
@@ -101,11 +141,22 @@ export const ObjectiveCreateModal: React.FC<ObjectiveCreateModalProps> = ({
         {objType === 'key_result' && (
           <Form.Item
             name="parent_id"
-            label="Parent Objective"
-            rules={[{ required: true, message: 'Please select a parent objective' }]}
+            label={t('workspaceDetail.objectives.parentObjectiveLabel', 'Parent Objective')}
+            rules={[
+              {
+                required: true,
+                message: t(
+                  'workspaceDetail.objectives.parentObjectiveRequired',
+                  'Please select a parent objective'
+                ),
+              },
+            ]}
           >
             <Select
-              placeholder="Select parent objective"
+              placeholder={t(
+                'workspaceDetail.objectives.parentObjectivePlaceholder',
+                'Select parent objective'
+              )}
               options={parentObjectives.map((obj) => ({
                 label: obj.title,
                 value: obj.id,

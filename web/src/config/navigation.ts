@@ -288,7 +288,9 @@ export function joinNavigationPaths(basePath: string, path: string): string {
   const { search } = splitSearch(path);
   const normalizedBasePath = normalizeNavigationPath(basePath);
   const relativeSegment = buildRelativeSegment(path);
-  const joinedPath = relativeSegment ? `${normalizedBasePath}${relativeSegment}` : normalizedBasePath;
+  const joinedPath = relativeSegment
+    ? `${normalizedBasePath}${relativeSegment}`
+    : normalizedBasePath;
 
   return search ? `${joinedPath}${search}` : joinedPath;
 }
@@ -551,8 +553,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     contexts: ['tenant'],
     displayRole: 'top-nav',
     relativePath: '/curated-skills',
-    buildPath: (context) =>
-      getCanonicalTenantDestinationPath(context.tenantId, '/curated-skills'),
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/curated-skills'),
   },
   {
     id: 'skill-review',
@@ -561,8 +562,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     contexts: ['tenant'],
     displayRole: 'overflow',
     relativePath: '/skill-review',
-    buildPath: (context) =>
-      getCanonicalTenantDestinationPath(context.tenantId, '/skill-review'),
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/skill-review'),
   },
   {
     id: 'subagents',
@@ -890,9 +890,7 @@ export function deriveTopNavigationItems(
  * Compatibility wrapper for existing shell consumers that still call the old
  * deriveTopNavigation API by passing the current context in the options bag.
  */
-export function deriveTopNavigation(
-  options: DeriveTopNavigationOptions
-): DerivedNavigationItem[] {
+export function deriveTopNavigation(options: DeriveTopNavigationOptions): DerivedNavigationItem[] {
   const { currentContext, ...runtimeContext } = options;
   return deriveTopNavigationItems(currentContext, runtimeContext);
 }
@@ -977,6 +975,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
       collapsible: false,
       items: [
         { id: 'pool', icon: 'memory', label: 'nav.pool', path: '/pool' },
+        { id: 'runtimes', icon: 'monitor_heart', label: 'nav.runtimes', path: '/runtimes' },
         { id: 'audit-logs', icon: 'history', label: 'nav.auditLogs', path: '/audit-logs' },
         { id: 'trust-policies', icon: 'policy', label: 'Trust Policies', path: '/trust-policies' },
         {

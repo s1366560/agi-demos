@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { getAuthToken } from '@/utils/tokenResolver';
+import { clearAuthState, getAuthToken, registerAuthStateClearer } from '@/utils/tokenResolver';
 
 describe('tokenResolver', () => {
   beforeEach(() => {
@@ -111,6 +111,27 @@ describe('tokenResolver', () => {
       expect(token).toBeNull();
     });
 
+    it('should return null when state token is not a string', () => {
+      const authStorage = JSON.stringify({
+        state: { token: 123 },
+      });
+      localStorage.setItem('memstack-auth-storage', authStorage);
+
+      const token = getAuthToken();
+      expect(token).toBeNull();
+    });
+
+    it('should not fallback to direct token when state token is invalid', () => {
+      const authStorage = JSON.stringify({
+        state: { token: null },
+        token: 'direct-token',
+      });
+      localStorage.setItem('memstack-auth-storage', authStorage);
+
+      const token = getAuthToken();
+      expect(token).toBeNull();
+    });
+
     it('should prefer state.token over direct token property in storage', () => {
       const stateToken = 'token-from-state';
       const directToken = 'token-from-direct';
@@ -159,6 +180,34 @@ describe('tokenResolver', () => {
 
       const token = getAuthToken();
       expect(token).toBe(expectedToken);
+    });
+  });
+
+  describe('clearAuthState', () => {
+    it('should clear persisted auth storage without a registered store clearer', () => {
+      localStorage.setItem(
+        'memstack-auth-storage',
+        JSON.stringify({ state: { token: 'stale-token' }, version: 0 })
+      );
+
+      clearAuthState();
+
+      expect(localStorage.getItem('memstack-auth-storage')).toBeNull();
+    });
+
+    it('should invoke a registered store clearer synchronously', () => {
+      let cleared = false;
+      const unregister = registerAuthStateClearer(() => {
+        cleared = true;
+      });
+
+      try {
+        clearAuthState();
+
+        expect(cleared).toBe(true);
+      } finally {
+        unregister();
+      }
     });
   });
 });

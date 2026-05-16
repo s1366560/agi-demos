@@ -13,12 +13,13 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useContext } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
+import { message } from 'antd';
 import {
   Plus,
   Search,
-  Filter,
   Download,
   Code,
   Info,
@@ -34,6 +35,9 @@ import {
 import { formatDateTime } from '@/utils/date';
 
 import { schemaAPI } from '../../../services/api';
+import { confirmAction } from '../../../utils/confirmAction';
+
+import type { TFunction } from 'i18next';
 
 // ============================================================================
 // Types
@@ -43,11 +47,28 @@ export interface EdgeType {
   id: string;
   name: string;
   description: string;
-  schema: Record<string, any>;
+  schema: EdgeSchema;
   status: 'ENABLED' | 'DISABLED';
   source: 'user' | 'generated';
   created_at: string;
   updated_at: string;
+}
+
+type EdgeSchemaField =
+  | string
+  | {
+      type?: string | undefined;
+      description?: string | undefined;
+      required?: boolean | undefined;
+      [key: string]: unknown;
+    };
+
+type EdgeSchema = Record<string, EdgeSchemaField>;
+
+interface EdgeFormData {
+  name: string;
+  description: string;
+  schema: EdgeSchema;
 }
 
 export interface Attribute {
@@ -56,6 +77,55 @@ export interface Attribute {
   description: string;
   required: boolean;
 }
+
+const schemaEntryToAttribute = ([name, value]: [string, EdgeSchemaField]): Attribute => {
+  if (typeof value === 'string') {
+    return { name, type: value, description: '', required: false };
+  }
+
+  return {
+    name,
+    type: typeof value.type === 'string' ? value.type : 'String',
+    description: typeof value.description === 'string' ? value.description : '',
+    required: value.required === true,
+  };
+};
+
+const schemaToAttributes = (schema: EdgeSchema): Attribute[] =>
+  Object.entries(schema).map(schemaEntryToAttribute);
+
+const normalizeEdgeSchemaField = (value: unknown): EdgeSchemaField => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as EdgeSchemaField;
+  }
+  return { type: 'String' };
+};
+
+const toEdgeSchema = (schema: Record<string, unknown> | undefined): EdgeSchema => {
+  if (!schema) return {};
+  return Object.fromEntries(
+    Object.entries(schema).map(([key, value]) => [key, normalizeEdgeSchemaField(value)])
+  );
+};
+
+const attributesToSchema = (attributes: Attribute[]): EdgeSchema => {
+  const schema: EdgeSchema = {};
+
+  attributes.forEach((attr) => {
+    if (attr.name) {
+      schema[attr.name] = {
+        type: attr.type,
+        description: attr.description,
+        required: attr.required,
+      };
+    }
+  });
+
+  return schema;
+};
 
 // ============================================================================
 // Constants
@@ -122,6 +192,17 @@ const TEXTS = {
   loading: 'Loading...',
 };
 
+type TranslationValues = Record<string, number | string>;
+
+function edgeText(
+  t: TFunction,
+  key: string,
+  defaultValue: string,
+  values: TranslationValues = {}
+): string {
+  return t(`project.schema.edgeTypeList.${key}`, { defaultValue, ...values });
+}
+
 // ============================================================================
 // Marker Symbols
 // ============================================================================
@@ -147,11 +228,7 @@ interface EdgeTypeListState {
   selectedEdgeId: string | null;
   isModalOpen: boolean;
   editingEdge: EdgeType | null;
-  formData: {
-    name: string;
-    description: string;
-    schema: Record<string, any>;
-  };
+  formData: EdgeFormData;
   attributes: Attribute[];
 }
 
@@ -162,10 +239,14 @@ interface EdgeTypeListActions {
   handleCloseModal: () => void;
   handleSave: () => void;
   handleDelete: (id: string) => void;
-  setFormData: (data: { name: string; description: string; schema: Record<string, any> }) => void;
+  setFormData: (data: EdgeFormData) => void;
   setAttributes: (attrs: Attribute[]) => void;
   addAttribute: () => void;
-  updateAttribute: (index: number, field: string, value: any) => void;
+  updateAttribute: <K extends keyof Attribute>(
+    index: number,
+    field: K,
+    value: Attribute[K]
+  ) => void;
   removeAttribute: (index: number) => void;
 }
 
@@ -198,6 +279,7 @@ interface EdgeTypeListProps {
 }
 
 const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) => {
+  const { t } = useTranslation();
   const { projectId } = useParams<{ projectId: string }>();
 
   // State
@@ -212,7 +294,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    schema: {} as Record<string, any>,
+    schema: {},
   });
   const [attributes, setAttributes] = useState<Attribute[]>([]);
 
@@ -222,15 +304,16 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     try {
       const data = await schemaAPI.listEdgeTypes(projectId);
       // Convert SchemaEdgeType to EdgeType
+      const loadedAt = new Date().toISOString();
       const edgeTypes: EdgeType[] = data.map((item) => ({
         id: item.id,
         name: item.name,
         description: item.description || '',
-        schema: {},
-        status: 'ENABLED' as const,
-        source: 'user' as const,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        schema: toEdgeSchema(item.schema ?? item.properties),
+        status: item.status === 'DISABLED' ? 'DISABLED' : 'ENABLED',
+        source: item.source === 'generated' ? 'generated' : 'user',
+        created_at: item.created_at ?? loadedAt,
+        updated_at: item.updated_at ?? item.created_at ?? loadedAt,
       }));
       setEdges(edgeTypes);
       if (edgeTypes.length > 0 && !selectedEdgeId) {
@@ -244,25 +327,19 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
   }, [projectId, selectedEdgeId]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   // Handlers
   const handleOpenModal = useCallback((edge: EdgeType | null) => {
     if (edge) {
       setEditingEdge(edge);
-      const attrs = Object.entries(edge.schema || {}).map(([key, val]: [string, any]) => ({
-        name: key,
-        type: typeof val === 'string' ? val : val.type || 'String',
-        description: typeof val === 'string' ? '' : val.description || '',
-        required: typeof val === 'string' ? false : !!val.required,
-      }));
       setFormData({
         name: edge.name,
-        description: edge.description || '',
+        description: edge.description,
         schema: edge.schema,
       });
-      setAttributes(attrs);
+      setAttributes(schemaToAttributes(edge.schema));
     } else {
       setEditingEdge(null);
       setFormData({ name: '', description: '', schema: {} });
@@ -279,20 +356,9 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
   const handleSave = useCallback(async () => {
     if (!projectId) return;
 
-    const schemaDict: Record<string, any> = {};
-    attributes.forEach((attr) => {
-      if (attr.name) {
-        schemaDict[attr.name] = {
-          type: attr.type,
-          description: attr.description,
-          required: attr.required,
-        };
-      }
-    });
-
     const payload = {
       ...formData,
-      schema: schemaDict,
+      schema: attributesToSchema(attributes),
     };
 
     try {
@@ -303,28 +369,34 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
       }
       setIsModalOpen(false);
       setEditingEdge(null);
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('Failed to save edge type:', error);
-      alert('Failed to save edge type');
+      void message.error(edgeText(t, 'saveError', 'Failed to save edge type'));
     }
-  }, [projectId, editingEdge, formData, attributes, loadData]);
+  }, [projectId, editingEdge, formData, attributes, loadData, t]);
 
   const handleDelete = useCallback(
     async (id: string) => {
-      if (!confirm(TEXTS.deleteConfirm)) return;
+      if (
+        !(await confirmAction({
+          title: edgeText(t, 'deleteConfirm', TEXTS.deleteConfirm),
+          danger: true,
+        }))
+      )
+        return;
       if (!projectId) return;
       try {
         await schemaAPI.deleteEdgeType(projectId, id);
         if (selectedEdgeId === id) {
           setSelectedEdgeId(null);
         }
-        loadData();
+        await loadData();
       } catch (error) {
         console.error('Failed to delete:', error);
       }
     },
-    [projectId, selectedEdgeId, loadData]
+    [projectId, selectedEdgeId, loadData, t]
   );
 
   const addAttribute = useCallback(() => {
@@ -332,7 +404,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
   }, [attributes]);
 
   const updateAttribute = useCallback(
-    (index: number, field: string, value: any) => {
+    <K extends keyof Attribute>(index: number, field: K, value: Attribute[K]) => {
       const newAttrs = [...attributes];
       const existing = newAttrs[index];
       if (existing) {
@@ -357,7 +429,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     return edges.filter(
       (e) =>
         e.name.toLowerCase().includes(lowerSearch) ||
-        e.description?.toLowerCase().includes(lowerSearch)
+        e.description.toLowerCase().includes(lowerSearch)
     );
   }, [edges, search]);
 
@@ -379,8 +451,12 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     setSelectedEdgeId,
     handleOpenModal,
     handleCloseModal,
-    handleSave,
-    handleDelete,
+    handleSave: () => {
+      void handleSave();
+    },
+    handleDelete: (id) => {
+      void handleDelete(id);
+    },
     setFormData,
     setAttributes,
     addAttribute,
@@ -401,10 +477,10 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
         }
       >
         <EdgeTypeList.Header />
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark p-8">
+        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark p-4 sm:p-6 lg:p-8">
           <div className="max-w-[1600px] mx-auto flex flex-col bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-border-dark overflow-hidden shadow-xl min-h-[600px]">
             <EdgeTypeList.Toolbar />
-            <div className="flex flex-1 overflow-hidden h-[600px]">
+            <div className="flex flex-1 flex-col overflow-visible lg:h-[600px] lg:flex-row lg:overflow-hidden">
               <EdgeTypeList.MasterPane edges={filteredEdges} onSelect={actions.setSelectedEdgeId} />
               <EdgeTypeList.DetailPane
                 selectedEdgeId={selectedEdgeId}
@@ -439,21 +515,23 @@ interface HeaderProps {
 }
 
 const HeaderInternal: React.FC<HeaderProps> = () => {
+  const { t } = useTranslation();
+
   return (
-    <div className="w-full flex-none pt-6 pb-4 px-8 border-b border-slate-200 dark:border-border-dark/50 bg-white dark:bg-background-dark">
+    <div className="w-full flex-none border-b border-slate-200 bg-white px-4 pb-4 pt-6 dark:border-border-dark/50 dark:bg-background-dark sm:px-6 lg:px-8">
       <div className="max-w-[1600px] mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap justify-between items-end gap-4">
           <div className="flex flex-col gap-2 max-w-2xl">
             <h1 className="text-slate-900 dark:text-white text-3xl font-black leading-tight tracking-tight">
-              {TEXTS.title}
+              {edgeText(t, 'title', TEXTS.title)}
             </h1>
             <p className="text-slate-500 dark:text-text-muted text-base font-normal">
-              {TEXTS.subtitle}
+              {edgeText(t, 'subtitle', TEXTS.subtitle)}
             </p>
           </div>
           <div className="flex gap-2">
             <span className="px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-500/20">
-              {TEXTS.systemActive}
+              {edgeText(t, 'systemActive', TEXTS.systemActive)}
             </span>
           </div>
         </div>
@@ -475,6 +553,7 @@ interface ToolbarProps {
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
+  const { t } = useTranslation();
   const contextFromHook = useEdgeTypeListContextOptional();
   const hasProps = props.onSearchChange !== undefined;
   const context = hasProps ? null : contextFromHook;
@@ -484,42 +563,51 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
   const search = props.search ?? state?.search ?? '';
   const setSearch = props.onSearchChange ?? actions?.setSearch;
   const handleCreate = props.onCreate ?? actions?.handleOpenModal;
+  const edges = state?.edges;
+
+  const handleDownload = useCallback(() => {
+    const payload = JSON.stringify(edges ?? [], null, 2);
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'edge-types-schema.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [edges]);
 
   return (
-    <div className="flex flex-wrap justify-between items-center gap-4 px-6 py-4 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-background-dark">
-      <div className="flex items-center gap-3 flex-1">
-        <div className="relative group">
+    <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-border-dark dark:bg-background-dark sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+        <div className="relative group w-full sm:w-auto">
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
             <Search className="text-slate-400 dark:text-text-muted w-5 h-5" />
           </div>
           <input
-            className="bg-white dark:bg-background-dark border border-slate-200 dark:border-border-dark text-slate-900 dark:text-white text-sm rounded-lg focus:ring-blue-600 dark:focus:ring-primary focus:border-blue-600 dark:focus:border-primary block w-64 pl-10 p-2.5 placeholder-slate-400 dark:placeholder-gray-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] focus:w-80 outline-none"
-            placeholder={TEXTS.searchPlaceholder}
+            className="block w-full rounded-lg border border-slate-200 bg-white p-2.5 pl-10 text-sm text-slate-900 outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform] placeholder-slate-400 focus:border-blue-600 focus:ring-blue-600 dark:border-border-dark dark:bg-background-dark dark:text-white dark:placeholder-gray-500 dark:focus:border-primary dark:focus:ring-primary sm:w-64 sm:focus:w-80"
+            placeholder={edgeText(t, 'searchPlaceholder', TEXTS.searchPlaceholder)}
             type="text"
             value={search}
             onChange={(e) => setSearch?.(e.target.value)}
           />
         </div>
-        <div className="h-6 w-px bg-slate-200 dark:bg-border-dark mx-2"></div>
+        <div className="mx-2 hidden h-6 w-px bg-slate-200 dark:bg-border-dark sm:block"></div>
         <button
           className="p-2 text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors"
-          title="Filter"
-        >
-          <Filter className="w-5 h-5" />
-        </button>
-        <button
-          className="p-2 text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors"
-          title="Download Schema"
+          title={edgeText(t, 'downloadSchema', 'Download Schema')}
+          aria-label={edgeText(t, 'downloadSchema', 'Download Schema')}
+          onClick={handleDownload}
+          type="button"
         >
           <Download className="w-5 h-5" />
         </button>
       </div>
       <button
         onClick={() => handleCreate?.(null)}
-        className="flex items-center justify-center gap-2 bg-blue-600 dark:bg-primary hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-blue-700 active:scale-95 dark:bg-primary sm:w-auto"
       >
         <Plus className="w-5 h-5" />
-        <span>{TEXTS.create}</span>
+        <span>{edgeText(t, 'createButton', TEXTS.create)}</span>
       </button>
     </div>
   );
@@ -535,17 +623,22 @@ interface StatusBadgeProps {
   status: string;
 }
 
-const StatusBadgeInternal: React.FC<StatusBadgeProps> = React.memo(({ status }) => (
-  <span
-    className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide border ${
-      status === 'ENABLED'
-        ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
-        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-    }`}
-  >
-    {status || 'ENABLED'}
-  </span>
-));
+const StatusBadgeInternal: React.FC<StatusBadgeProps> = React.memo(({ status }) => {
+  const { t } = useTranslation();
+  const normalizedStatus = status || 'ENABLED';
+
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide border ${
+        normalizedStatus === 'ENABLED'
+          ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+      }`}
+    >
+      {edgeText(t, `status.${normalizedStatus.toLowerCase()}`, normalizedStatus)}
+    </span>
+  );
+});
 
 StatusBadgeInternal.displayName = 'EdgeTypeList.StatusBadge';
 
@@ -557,17 +650,22 @@ interface SourceBadgeProps {
   source: string;
 }
 
-const SourceBadgeInternal: React.FC<SourceBadgeProps> = React.memo(({ source }) => (
-  <span
-    className={`px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold ${
-      source === 'generated'
-        ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20'
-        : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
-    }`}
-  >
-    {source === 'generated' ? 'AUTO' : 'USER'}
-  </span>
-));
+const SourceBadgeInternal: React.FC<SourceBadgeProps> = React.memo(({ source }) => {
+  const { t } = useTranslation();
+  const sourceKey = source === 'generated' ? 'generated' : 'user';
+
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-full text-2xs uppercase tracking-wider font-bold ${
+        sourceKey === 'generated'
+          ? 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20'
+          : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'
+      }`}
+    >
+      {edgeText(t, `source.${sourceKey}`, sourceKey === 'generated' ? 'AUTO' : 'USER')}
+    </span>
+  );
+});
 
 SourceBadgeInternal.displayName = 'EdgeTypeList.SourceBadge';
 
@@ -583,12 +681,14 @@ interface MasterPaneProps {
 
 const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(
   ({ edges, selectedEdgeId, onSelect }) => {
+    const { t } = useTranslation();
+
     if (edges.length === 0) {
       return <EdgeTypeList.Empty />;
     }
 
     return (
-      <div className="w-1/3 border-r border-slate-200 dark:border-border-dark overflow-y-auto bg-slate-50 dark:bg-background-dark">
+      <div className="max-h-72 w-full overflow-y-auto border-b border-slate-200 bg-slate-50 dark:border-border-dark dark:bg-background-dark lg:max-h-none lg:w-1/3 lg:border-b-0 lg:border-r">
         {edges.map((edge) => (
           <div
             key={edge.id}
@@ -610,21 +710,20 @@ const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(
               </div>
               {selectedEdgeId === edge.id && (
                 <span className="text-2xs uppercase tracking-wider text-blue-600 dark:text-primary font-bold bg-blue-100 dark:bg-primary/20 px-1.5 py-0.5 rounded">
-                  {TEXTS.master.active}
+                  {edgeText(t, 'masterActive', TEXTS.master.active)}
                 </span>
               )}
             </div>
             <p className="text-slate-500 dark:text-text-muted text-xs mb-3 line-clamp-2">
-              {edge.description || TEXTS.master.noDescription}
+              {edge.description || edgeText(t, 'masterNoDescription', TEXTS.master.noDescription)}
             </p>
             <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-text-muted">
               <div className="flex items-center gap-1">
                 <Code className="w-3.5 h-3.5" />
                 <span>
-                  {TEXTS.master.attributesCount.replace(
-                    '{{count}}',
-                    String(Object.keys(edge.schema || {}).length)
-                  )}
+                  {edgeText(t, 'masterAttributesCount', TEXTS.master.attributesCount, {
+                    count: Object.keys(edge.schema).length,
+                  })}
                 </span>
               </div>
             </div>
@@ -650,21 +749,22 @@ interface DetailPaneProps {
 
 const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
   ({ selectedEdgeId, edges, onEdit, onDelete }) => {
+    const { t } = useTranslation();
     const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
 
     if (!selectedEdge) {
       return (
-        <div className="flex-1 overflow-y-auto bg-white dark:bg-surface-dark p-8">
-          <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-text-muted">
+        <div className="min-w-0 flex-1 overflow-y-auto bg-white p-6 dark:bg-surface-dark sm:p-8">
+          <div className="flex min-h-64 flex-col items-center justify-center text-slate-400 dark:text-text-muted lg:h-full">
             <Share2 className="w-12 h-12 mb-4 opacity-50" />
-            <p>{TEXTS.detail.selectPrompt}</p>
+            <p>{edgeText(t, 'detailSelectPrompt', TEXTS.detail.selectPrompt)}</p>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-surface-dark p-8">
+      <div className="min-w-0 flex-1 overflow-y-auto bg-white p-6 dark:bg-surface-dark sm:p-8">
         {/* Detail Header */}
         <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-200 dark:border-border-dark">
           <div>
@@ -681,7 +781,8 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
               </div>
             </div>
             <p className="text-slate-500 dark:text-text-muted text-sm max-w-xl">
-              {selectedEdge.description || TEXTS.detail.noDescription}
+              {selectedEdge.description ||
+                edgeText(t, 'detailNoDescription', TEXTS.detail.noDescription)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -692,7 +793,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
               className="px-3 py-1.5 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-border-dark rounded bg-white dark:bg-background-dark hover:bg-slate-50 dark:hover:bg-surface-dark-alt transition-colors flex items-center gap-2"
             >
               <Trash2 className="w-4 h-4" />
-              {TEXTS.detail.delete}
+              {edgeText(t, 'detailDelete', TEXTS.detail.delete)}
             </button>
             <button
               onClick={() => {
@@ -701,7 +802,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
               className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-primary hover:bg-blue-700 rounded transition-colors flex items-center gap-2"
             >
               <Pencil className="w-4 h-4" />
-              {TEXTS.detail.edit}
+              {edgeText(t, 'detailEdit', TEXTS.detail.edit)}
             </button>
           </div>
         </div>
@@ -711,7 +812,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
               <Code className="text-blue-600 dark:text-primary w-5 h-5" />
-              {TEXTS.detail.attributesTitle}
+              {edgeText(t, 'detailAttributesTitle', TEXTS.detail.attributesTitle)}
             </h3>
             <span className="text-xs text-slate-500 dark:text-text-muted font-mono bg-slate-100 dark:bg-background-dark px-2 py-1 rounded border border-slate-200 dark:border-border-dark">
               class {selectedEdge.name}(Edge)
@@ -721,13 +822,19 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 dark:bg-background-dark text-slate-500 dark:text-text-muted border-b border-slate-200 dark:border-border-dark">
                 <tr>
-                  <th className="px-4 py-3 font-medium">{TEXTS.detail.table.name}</th>
-                  <th className="px-4 py-3 font-medium">{TEXTS.detail.table.type}</th>
-                  <th className="px-4 py-3 font-medium">{TEXTS.detail.table.description}</th>
+                  <th className="px-4 py-3 font-medium">
+                    {edgeText(t, 'detailTableName', TEXTS.detail.table.name)}
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    {edgeText(t, 'detailTableType', TEXTS.detail.table.type)}
+                  </th>
+                  <th className="px-4 py-3 font-medium">
+                    {edgeText(t, 'detailTableDescription', TEXTS.detail.table.description)}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-border-dark bg-white dark:bg-background-dark/50">
-                {Object.entries(selectedEdge.schema || {}).map(([key, val]: [string, any]) => (
+                {Object.entries(selectedEdge.schema).map(([key, val]) => (
                   <tr
                     key={key}
                     className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
@@ -736,20 +843,20 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
                       {key}
                     </td>
                     <td className="px-4 py-3 text-purple-600 dark:text-purple-400 font-mono text-xs">
-                      {typeof val === 'string' ? val : val.type}
+                      {typeof val === 'string' ? val : (val.type ?? 'String')}
                     </td>
                     <td className="px-4 py-3 text-slate-500 dark:text-text-muted text-xs">
-                      {typeof val === 'string' ? '' : val.description}
+                      {typeof val === 'string' ? '' : (val.description ?? '')}
                     </td>
                   </tr>
                 ))}
-                {Object.keys(selectedEdge.schema || {}).length === 0 && (
+                {Object.keys(selectedEdge.schema).length === 0 && (
                   <tr>
                     <td
                       colSpan={3}
                       className="px-4 py-8 text-center text-slate-500 dark:text-text-muted"
                     >
-                      {TEXTS.detail.table.empty}
+                      {edgeText(t, 'detailTableEmpty', TEXTS.detail.table.empty)}
                     </td>
                   </tr>
                 )}
@@ -763,7 +870,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
                 className="text-xs text-blue-600 dark:text-primary font-bold flex items-center gap-1 hover:text-blue-800 dark:hover:text-white transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                {TEXTS.detail.addAttribute}
+                {edgeText(t, 'detailAddAttribute', TEXTS.detail.addAttribute)}
               </button>
             </div>
           </div>
@@ -779,11 +886,15 @@ DetailPaneInternal.displayName = 'EdgeTypeList.DetailPane';
 // Empty Sub-Component
 // ============================================================================
 
-const EmptyInternal: React.FC = () => (
-  <div className="p-6 text-center text-slate-500 dark:text-text-muted text-sm">
-    {TEXTS.master.empty}
-  </div>
-);
+const EmptyInternal: React.FC = () => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="w-full border-b border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-border-dark dark:text-text-muted lg:w-1/3 lg:border-b-0 lg:border-r">
+      {edgeText(t, 'masterEmpty', TEXTS.master.empty)}
+    </div>
+  );
+};
 
 EmptyInternal.displayName = 'EdgeTypeList.Empty';
 
@@ -791,9 +902,15 @@ EmptyInternal.displayName = 'EdgeTypeList.Empty';
 // Loading Sub-Component
 // ============================================================================
 
-const LoadingInternal: React.FC = () => (
-  <div className="p-8 text-center text-slate-500 dark:text-gray-500">{TEXTS.loading}</div>
-);
+const LoadingInternal: React.FC = () => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="p-8 text-center text-slate-500 dark:text-gray-500">
+      {edgeText(t, 'loading', TEXTS.loading)}
+    </div>
+  );
+};
 
 LoadingInternal.displayName = 'EdgeTypeList.Loading';
 
@@ -810,53 +927,46 @@ interface ModalProps {
 
 const ModalInternal: React.FC<ModalProps> = React.memo(
   ({ isOpen, onClose, onSave, editingEdge }) => {
-    const [formData, setFormData] = useState({
-      name: editingEdge?.name || '',
-      description: editingEdge?.description || '',
-      schema: editingEdge?.schema || {},
+    const { t } = useTranslation();
+    const context = useEdgeTypeListContextOptional();
+    const [localFormData, setLocalFormData] = useState<EdgeFormData>({
+      name: editingEdge?.name ?? '',
+      description: editingEdge?.description ?? '',
+      schema: editingEdge?.schema ?? {},
     });
-    const [attributes, setAttributes] = useState<Attribute[]>(
-      editingEdge
-        ? Object.entries(editingEdge.schema || {}).map(([key, val]: [string, any]) => ({
-            name: key,
-            type: typeof val === 'string' ? val : val.type || 'String',
-            description: typeof val === 'string' ? '' : val.description || '',
-            required: typeof val === 'string' ? false : !!val.required,
-          }))
-        : []
+    const [localAttributes, setLocalAttributes] = useState<Attribute[]>(
+      editingEdge ? schemaToAttributes(editingEdge.schema) : []
     );
+
+    const formData = context?.state.formData ?? localFormData;
+    const attributes = context?.state.attributes ?? localAttributes;
+    const setFormData = context?.actions.setFormData ?? setLocalFormData;
+    const setAttributes = context?.actions.setAttributes ?? setLocalAttributes;
 
     // Reset form when editingEntity changes
     React.useEffect(() => {
       if (editingEdge) {
         setFormData({
           name: editingEdge.name,
-          description: editingEdge.description || '',
+          description: editingEdge.description,
           schema: editingEdge.schema,
         });
-        setAttributes(
-          Object.entries(editingEdge.schema || {}).map(([key, val]: [string, any]) => ({
-            name: key,
-            type: typeof val === 'string' ? val : val.type || 'String',
-            description: typeof val === 'string' ? '' : val.description || '',
-            required: typeof val === 'string' ? false : !!val.required,
-          }))
-        );
+        setAttributes(schemaToAttributes(editingEdge.schema));
       } else {
         setFormData({ name: '', description: '', schema: {} });
         setAttributes([]);
       }
-    }, [editingEdge]);
+    }, [editingEdge, setAttributes, setFormData]);
 
     const addAttribute = useCallback(() => {
       setAttributes([
         ...attributes,
         { name: '', type: 'String', description: '', required: false },
       ]);
-    }, [attributes]);
+    }, [attributes, setAttributes]);
 
     const updateAttribute = useCallback(
-      (index: number, field: string, value: any) => {
+      <K extends keyof Attribute>(index: number, field: K, value: Attribute[K]) => {
         const newAttrs = [...attributes];
         const existing = newAttrs[index];
         if (existing) {
@@ -864,14 +974,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
         }
         setAttributes(newAttrs);
       },
-      [attributes]
+      [attributes, setAttributes]
     );
 
     const removeAttribute = useCallback(
       (index: number) => {
         setAttributes(attributes.filter((_, i) => i !== index));
       },
-      [attributes]
+      [attributes, setAttributes]
     );
 
     if (!isOpen) return null;
@@ -896,8 +1006,10 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-none">
                   {editingEdge
-                    ? TEXTS.modal.titleEdit.replace('{{name}}', editingEdge.name)
-                    : TEXTS.modal.titleNew}
+                    ? edgeText(t, 'modalTitleEdit', TEXTS.modal.titleEdit, {
+                        name: editingEdge.name,
+                      })
+                    : edgeText(t, 'modalTitleNew', TEXTS.modal.titleNew)}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-text-muted mt-1 font-mono">
                   {editingEdge?.id || 'New ID'}
@@ -916,19 +1028,19 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
           <div className="flex-1 overflow-y-auto">
             <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
               <button className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 transition-colors bg-blue-50 dark:bg-blue-500/5">
-                {TEXTS.modal.tabAttributes}
+                {edgeText(t, 'modalTabAttributes', TEXTS.modal.tabAttributes)}
               </button>
             </div>
             <div className="p-6 flex flex-col gap-8">
               {/* Basic Info */}
               <div className="flex flex-col gap-4">
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  {TEXTS.modal.basicInfo}
+                  {edgeText(t, 'modalBasicInfo', TEXTS.modal.basicInfo)}
                 </h4>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                      {TEXTS.modal.nameLabel}
+                      {edgeText(t, 'modalNameLabel', TEXTS.modal.nameLabel)}
                     </label>
                     <input
                       className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -937,13 +1049,13 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       onChange={(e) => {
                         setFormData({ ...formData, name: e.target.value });
                       }}
-                      placeholder={TEXTS.modal.namePlaceholder}
+                      placeholder={edgeText(t, 'modalNamePlaceholder', TEXTS.modal.namePlaceholder)}
                       disabled={!!editingEdge}
                     />
                   </div>
                   <div>
                     <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                      {TEXTS.modal.descLabel}
+                      {edgeText(t, 'modalDescLabel', TEXTS.modal.descLabel)}
                     </label>
                     <input
                       className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -952,7 +1064,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       onChange={(e) => {
                         setFormData({ ...formData, description: e.target.value });
                       }}
-                      placeholder={TEXTS.modal.descPlaceholder}
+                      placeholder={edgeText(t, 'modalDescPlaceholder', TEXTS.modal.descPlaceholder)}
                     />
                   </div>
                 </div>
@@ -962,13 +1074,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
               <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    {TEXTS.modal.definedAttributes}
+                    {edgeText(t, 'modalDefinedAttributes', TEXTS.modal.definedAttributes)}
                   </h4>
                   <button
                     onClick={addAttribute}
                     className="text-blue-600 dark:text-primary text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-primary-light px-3 py-1.5 bg-blue-50 dark:bg-primary/10 rounded-lg border border-blue-200 dark:border-primary/20 transition-colors"
                   >
-                    <Plus className="w-4 h-4" /> {TEXTS.modal.addAttribute}
+                    <Plus className="w-4 h-4" />{' '}
+                    {edgeText(t, 'modalAddAttribute', TEXTS.modal.addAttribute)}
                   </button>
                 </div>
                 <div className="flex flex-col gap-4">
@@ -981,7 +1094,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                         <div className="flex items-center gap-2">
                           <FileEdit className="w-4 h-4 text-blue-600 dark:text-primary" />
                           <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wide">
-                            {TEXTS.modal.attributeTitle.replace('{{index}}', String(idx + 1))}
+                            {edgeText(t, 'modalAttributeTitle', TEXTS.modal.attributeTitle, {
+                              index: idx + 1,
+                            })}
                           </span>
                         </div>
                         <button
@@ -990,14 +1105,14 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                           }}
                           className="text-xs text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 font-medium flex items-center gap-1"
                         >
-                          {TEXTS.modal.deleteField}
+                          {edgeText(t, 'modalDeleteField', TEXTS.modal.deleteField)}
                         </button>
                       </div>
                       <div className="p-5 flex flex-col gap-6">
                         <div className="grid grid-cols-12 gap-4">
                           <div className="col-span-5">
                             <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                              {TEXTS.modal.attrNameLabel}
+                              {edgeText(t, 'modalAttrNameLabel', TEXTS.modal.attrNameLabel)}
                             </label>
                             <input
                               className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -1006,12 +1121,16 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               onChange={(e) => {
                                 updateAttribute(idx, 'name', e.target.value);
                               }}
-                              placeholder={TEXTS.modal.attrNamePlaceholder}
+                              placeholder={edgeText(
+                                t,
+                                'modalAttrNamePlaceholder',
+                                TEXTS.modal.attrNamePlaceholder
+                              )}
                             />
                           </div>
                           <div className="col-span-4">
                             <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                              {TEXTS.modal.dataTypeLabel}
+                              {edgeText(t, 'modalDataTypeLabel', TEXTS.modal.dataTypeLabel)}
                             </label>
                             <div className="relative">
                               <select
@@ -1021,13 +1140,21 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                   updateAttribute(idx, 'type', e.target.value);
                                 }}
                               >
-                                <option value="String">String</option>
-                                <option value="Integer">Integer</option>
-                                <option value="Float">Float</option>
-                                <option value="Boolean">Boolean</option>
-                                <option value="DateTime">DateTime</option>
-                                <option value="List">List</option>
-                                <option value="Dict">Dict</option>
+                                {(
+                                  [
+                                    'String',
+                                    'Integer',
+                                    'Float',
+                                    'Boolean',
+                                    'DateTime',
+                                    'List',
+                                    'Dict',
+                                  ] as const
+                                ).map((type) => (
+                                  <option key={type} value={type}>
+                                    {type}
+                                  </option>
+                                ))}
                               </select>
                               <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-slate-400 dark:text-text-muted pointer-events-none" />
                             </div>
@@ -1035,7 +1162,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                         </div>
                         <div>
                           <label className="text-2xs uppercase text-slate-500 dark:text-text-muted font-bold mb-1.5 block">
-                            {TEXTS.modal.docstringLabel}
+                            {edgeText(t, 'modalDocstringLabel', TEXTS.modal.docstringLabel)}
                           </label>
                           <input
                             className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-500 dark:text-text-muted px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-primary focus:ring-1 focus:ring-blue-600 dark:focus:ring-primary outline-none transition-colors"
@@ -1044,7 +1171,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                             onChange={(e) => {
                               updateAttribute(idx, 'description', e.target.value);
                             }}
-                            placeholder={TEXTS.modal.docstringPlaceholder}
+                            placeholder={edgeText(
+                              t,
+                              'modalDocstringPlaceholder',
+                              TEXTS.modal.docstringPlaceholder
+                            )}
                           />
                         </div>
                       </div>
@@ -1058,12 +1189,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             <div className="text-xs text-slate-500 dark:text-text-muted flex items-center gap-1">
               <History className="w-4 h-4" />
               <span>
-                {TEXTS.modal.lastSaved.replace(
-                  '{{time}}',
-                  editingEdge?.updated_at
+                {edgeText(t, 'modalLastSaved', TEXTS.modal.lastSaved, {
+                  time: editingEdge?.updated_at
                     ? formatDateTime(editingEdge.updated_at)
-                    : TEXTS.modal.neverSaved
-                )}
+                    : edgeText(t, 'modalNeverSaved', TEXTS.modal.neverSaved),
+                })}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -1071,13 +1201,13 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
               >
-                {TEXTS.modal.discard}
+                {edgeText(t, 'modalDiscard', TEXTS.modal.discard)}
               </button>
               <button
                 onClick={onSave}
                 className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
               >
-                {TEXTS.modal.save}
+                {edgeText(t, 'modalSave', TEXTS.modal.save)}
               </button>
             </div>
           </div>
@@ -1094,8 +1224,9 @@ ModalInternal.displayName = 'EdgeTypeList.Modal';
 // ============================================================================
 
 const attachMarker = <P extends object>(component: React.FC<P>, marker: symbol) => {
-  (component as any)[marker] = true;
-  return component;
+  const marked = component as React.FC<P> & Record<symbol, true>;
+  marked[marker] = true;
+  return marked;
 };
 
 // Export the compound component

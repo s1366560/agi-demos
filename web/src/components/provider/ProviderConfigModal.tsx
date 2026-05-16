@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Select, Slider, InputNumber } from 'antd';
 import {
   X,
@@ -14,7 +16,7 @@ import {
   Key,
   Brain,
   CheckCircle,
-  type LucideIcon
+  type LucideIcon,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -23,6 +25,7 @@ import { providerAPI } from '../../services/api';
 import { useProviderStore } from '../../stores/provider';
 import {
   EmbeddingConfig,
+  LLMConfigOverrides,
   ModelCatalogEntry,
   ProviderConfig,
   ProviderCreate,
@@ -47,6 +50,45 @@ const providerTypeRequiresApiKey = (type: ProviderType) =>
 
 type Step = 'provider' | 'credentials' | 'models' | 'review';
 type ProviderModels = { chat: string[]; embedding: string[]; rerank: string[] };
+type EmbeddingEncodingFormat = '' | NonNullable<EmbeddingConfig['encoding_format']>;
+type ModelTier = '' | 'small' | 'medium' | 'large';
+
+interface ProviderModalConfig extends LLMConfigOverrides {
+  rtc_app_id?: string | undefined;
+  rtc_app_key?: string | undefined;
+  volc_ak?: string | undefined;
+  volc_sk?: string | undefined;
+  speech_app_id?: string | undefined;
+  speech_access_token?: string | undefined;
+  doubao_endpoint_id?: string | undefined;
+  timeout_seconds?: number | null | undefined;
+  embedding?: EmbeddingConfig | undefined;
+  [key: string]: unknown;
+}
+
+interface ProviderFormData {
+  name: string;
+  provider_type: ProviderType;
+  api_key: string;
+  base_url: string;
+  llm_model: string;
+  llm_small_model: string;
+  embedding_model: string;
+  embedding_dimensions: string;
+  embedding_encoding_format: EmbeddingEncodingFormat;
+  embedding_user: string;
+  embedding_timeout: string;
+  embedding_provider_options_json: string;
+  reranker_model: string;
+  config: ProviderModalConfig;
+  is_active: boolean;
+  is_default: boolean;
+  use_custom_base_url: boolean;
+  pool_enabled: boolean;
+  pool_weight: number;
+  model_tier: ModelTier;
+  secondary_models: string[];
+}
 
 const PROVIDER_MODEL_PARENT: Partial<Record<ProviderType, ProviderType>> = {
   dashscope_coding: 'dashscope',
@@ -97,13 +139,63 @@ const resolveSmallLlmModel = (models?: ProviderModels | null, primaryModel = '')
   return primaryModel;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toProviderModalConfig = (value: unknown): ProviderModalConfig =>
+  isRecord(value) ? { ...value } : {};
+
+const getProviderErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+
+  if (!isRecord(error)) return fallback;
+
+  const response = error.response;
+  if (isRecord(response)) {
+    const data = response.data;
+    if (isRecord(data) && typeof data.detail === 'string') {
+      return data.detail;
+    }
+  }
+
+  return fallback;
+};
+
+const parseConfigJson = (value: string): ProviderModalConfig | null => {
+  const parsed = JSON.parse(value) as unknown;
+  return isRecord(parsed) ? { ...parsed } : null;
+};
+
+const filterModelOption = (input: string, option?: { label?: string | undefined }): boolean =>
+  (option?.label ?? '').toLowerCase().includes(input.toLowerCase());
+
+const formatCompactCount = (value: number): string => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1000) return `${String(Math.round(value / 1000))}k`;
+  return String(value);
+};
+
+const formatModelCost = (
+  inputCost: number | null | undefined,
+  outputCost: number | null | undefined
+): string => {
+  if (inputCost == null) return 'N/A';
+  const output = outputCost == null ? '?' : `$${String(outputCost)}`;
+  return `$${String(inputCost)} / ${output}`;
+};
+
+const toNullableNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
 const resolveEmbeddingConfig = (provider: ProviderConfig): EmbeddingConfig | undefined => {
   if (provider.embedding_config) {
     return provider.embedding_config;
   }
-  const legacyEmbeddingConfig = provider.config?.embedding;
-  if (legacyEmbeddingConfig && typeof legacyEmbeddingConfig === 'object') {
-    return legacyEmbeddingConfig as EmbeddingConfig;
+  const legacyEmbeddingConfig = toProviderModalConfig(provider.config).embedding;
+  if (legacyEmbeddingConfig) {
+    return legacyEmbeddingConfig;
   }
   if (provider.embedding_model) {
     return { model: provider.embedding_model };
@@ -118,6 +210,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   provider,
   initialProviderType,
 }) => {
+  const { t } = useTranslation();
   const isEditing = !!provider;
   const [currentStep, setCurrentStep] = useState<Step>('provider');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,7 +249,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     }))
   );
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ProviderFormData>({
     name: '',
     provider_type: 'openai' as ProviderType,
     api_key: '',
@@ -165,19 +258,19 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     llm_small_model: 'gpt-4o-mini',
     embedding_model: 'text-embedding-3-small',
     embedding_dimensions: '1536',
-    embedding_encoding_format: '' as '' | 'float' | 'base64',
+    embedding_encoding_format: '',
     embedding_user: '',
     embedding_timeout: '',
     embedding_provider_options_json: '{}',
     reranker_model: '',
-    config: {} as Record<string, any>,
+    config: {},
     is_active: true,
     is_default: false,
     use_custom_base_url: false,
     pool_enabled: true,
     pool_weight: 1.0,
-    model_tier: '' as '' | 'small' | 'medium' | 'large',
-    secondary_models: [] as string[],
+    model_tier: '',
+    secondary_models: [],
   });
 
   const selectedModelMeta: ModelCatalogEntry | null = useMemo(() => {
@@ -186,7 +279,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   }, [formData.llm_model, modelCatalog]);
 
   useEffect(() => {
-    fetchModelCatalog(resolveCatalogProviderType(formData.provider_type));
+    void fetchModelCatalog(resolveCatalogProviderType(formData.provider_type));
   }, [fetchModelCatalog, formData.provider_type]);
 
   const [configJsonStr, setConfigJsonStr] = useState('{}');
@@ -235,7 +328,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       const embeddingConfig = resolveEmbeddingConfig(provider);
 
       // Fetch models for the provider
-      fetchModels(provider.provider_type).then((models) => {
+      void fetchModels(provider.provider_type).then((models) => {
         if (!models) return;
         const llmCandidates = getLlmCandidates(models);
 
@@ -243,7 +336,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         const llmIsCustom = !!provider.llm_model && !llmCandidates.includes(provider.llm_model);
         const smallIsCustom =
           !!provider.llm_small_model && !llmCandidates.includes(provider.llm_small_model);
-        const embeddingModel = embeddingConfig?.model || provider.embedding_model || '';
+        const embeddingModel = embeddingConfig?.model ?? provider.embedding_model ?? '';
         const embeddingIsCustom = !!embeddingModel && !models.embedding.includes(embeddingModel);
         const rerankerIsCustom =
           !!provider.reranker_model && !models.rerank.includes(provider.reranker_model);
@@ -262,52 +355,49 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         name: provider.name,
         provider_type: provider.provider_type,
         api_key: '',
-        base_url: provider.base_url || '',
-        llm_model: provider.llm_model || '',
-        llm_small_model: provider.llm_small_model || '',
+        base_url: provider.base_url ?? '',
+        llm_model: provider.llm_model ?? '',
+        llm_small_model: provider.llm_small_model ?? '',
         embedding_model: embeddingModel,
         embedding_dimensions:
           embeddingConfig?.dimensions !== undefined ? String(embeddingConfig.dimensions) : '',
-        embedding_encoding_format: embeddingConfig?.encoding_format || '',
-        embedding_user: embeddingConfig?.user || '',
+        embedding_encoding_format: embeddingConfig?.encoding_format ?? '',
+        embedding_user: embeddingConfig?.user ?? '',
         embedding_timeout:
           embeddingConfig?.timeout !== undefined ? String(embeddingConfig.timeout) : '',
         embedding_provider_options_json: JSON.stringify(
-          embeddingConfig?.provider_options || {},
+          embeddingConfig?.provider_options ?? {},
           null,
           2
         ),
-        reranker_model: provider.reranker_model || '',
-        config: provider.config || {},
+        reranker_model: provider.reranker_model ?? '',
+        config: toProviderModalConfig(provider.config),
         is_active: provider.is_active,
         is_default: provider.is_default,
         use_custom_base_url: !!provider.base_url,
         pool_enabled: provider.pool_enabled ?? true,
         pool_weight: provider.pool_weight ?? 1.0,
-        model_tier: (provider.model_tier ?? '') as '' | 'small' | 'medium' | 'large',
+        model_tier: provider.model_tier ?? '',
         secondary_models: provider.secondary_models ?? [],
       });
-      setConfigJsonStr(JSON.stringify(provider.config || {}, null, 2));
+      setConfigJsonStr(JSON.stringify(toProviderModalConfig(provider.config), null, 2));
 
       setCurrentStep('credentials');
     } else {
       const envDetectionPromise = providerAPI
         .detectEnvKeys()
         .then((res) => {
-          if (res.detected_providers) {
-            setEnvProviders(res.detected_providers);
-            return res.detected_providers;
-          }
-          return null;
+          setEnvProviders(res.detected_providers);
+          return res.detected_providers;
         })
         .catch(() => null);
 
       // Default state for new provider
-      const defaultProvider = initialProviderType || 'openai';
+      const defaultProvider = initialProviderType ?? 'openai';
       const providerMeta = PROVIDERS.find((p) => p.value === defaultProvider);
 
       setFormData({
-        name: providerMeta?.label || '',
+        name: providerMeta?.label ?? '',
         provider_type: defaultProvider,
         api_key: '',
         base_url: '',
@@ -332,18 +422,18 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       setConfigJsonStr('{}');
 
       // Fetch models for default provider
-      fetchModels(defaultProvider).then((models) => {
+      void fetchModels(defaultProvider).then((models) => {
         if (models) {
           const primaryModel = resolvePrimaryLlmModel(models);
           setFormData((prev) => ({
             ...prev,
             llm_model: primaryModel,
             llm_small_model: resolveSmallLlmModel(models, primaryModel),
-            embedding_model: models.embedding[0] || '',
-            reranker_model: models.rerank[0] || '',
+            embedding_model: models.embedding[0] ?? '',
+            reranker_model: models.rerank[0] ?? '',
           }));
 
-          envDetectionPromise.then((envData) => {
+          void envDetectionPromise.then((envData) => {
             if (envData && envData[defaultProvider]) {
               const envValues = envData[defaultProvider];
               setFormData((prev) => {
@@ -387,12 +477,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       const newData = {
         ...prev,
         provider_type: type,
-        name: providerMeta?.label || prev.name || '',
+        name: providerMeta?.label ?? prev.name,
         llm_model: primaryModel,
         llm_small_model: resolveSmallLlmModel(models, primaryModel),
-        embedding_model: models?.embedding[0] || '',
+        embedding_model: models?.embedding[0] ?? '',
         embedding_dimensions: '1536', // Default, user can change
-        reranker_model: models?.rerank[0] || '',
+        reranker_model: models?.rerank[0] ?? '',
       };
 
       const envValues = envProviders[type];
@@ -418,7 +508,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       embedding: false,
       reranker: false,
     });
-    fetchModelCatalog(resolveCatalogProviderType(type));
+    void fetchModelCatalog(resolveCatalogProviderType(type));
     setTestResult(null);
   };
 
@@ -464,7 +554,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setError(null);
 
     try {
-      const embeddingProviderOptions = JSON.parse(formData.embedding_provider_options_json || '{}');
+      const embeddingProviderOptions = parseConfigJson(
+        formData.embedding_provider_options_json || '{}'
+      );
       const embeddingDimensions = formData.embedding_dimensions.trim()
         ? Number(formData.embedding_dimensions)
         : undefined;
@@ -488,7 +580,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       if (embeddingTimeout !== undefined) {
         embeddingConfig.timeout = embeddingTimeout;
       }
-      if (Object.keys(embeddingProviderOptions).length > 0) {
+      if (embeddingProviderOptions && Object.keys(embeddingProviderOptions).length > 0) {
         embeddingConfig.provider_options = embeddingProviderOptions;
       }
 
@@ -499,7 +591,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         delete config.embedding;
       }
 
-      if (isEditing && provider) {
+      if (provider) {
         const updateData: ProviderUpdate = {
           name: formData.name,
           provider_type: formData.provider_type,
@@ -565,8 +657,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         await providerAPI.create(createData);
       }
       onSuccess();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save provider');
+    } catch (err: unknown) {
+      setError(getProviderErrorMessage(err, 'Failed to save provider'));
     } finally {
       setIsSubmitting(false);
     }
@@ -696,11 +788,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               : 'border-slate-200 dark:border-slate-700 text-slate-400'
                         }`}
                       >
-                        {isCompleted ? (
-                          <Check size={16} />
-                        ) : (
-                          <step.icon size={16} />
-                        )}
+                        {isCompleted ? <Check size={16} /> : <step.icon size={16} />}
                       </div>
                       <div className="ml-3 hidden sm:block">
                         <p
@@ -744,7 +832,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   {PROVIDERS.map((p) => (
                     <button
                       key={p.value}
-                      onClick={() => handleProviderSelect(p.value)}
+                      onClick={() => {
+                        void handleProviderSelect(p.value);
+                      }}
                       className={`p-4 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left hover:shadow-md ${
                         formData.provider_type === p.value
                           ? 'border-primary bg-primary/5 dark:bg-primary/10'
@@ -817,12 +907,17 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           }
                         />
                         <button
-                          onClick={handleTestConnection}
+                          onClick={() => {
+                            void handleTestConnection();
+                          }}
                           disabled={isTesting || !formData.api_key}
                           className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 font-medium"
                         >
                           {isTesting ? (
-                            <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
+                            <Loader2
+                              size={18}
+                              className="animate-spin motion-reduce:animate-none"
+                            />
                           ) : (
                             'Test'
                           )}
@@ -871,8 +966,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       onChange={(e) => {
                         setConfigJsonStr(e.target.value);
                         try {
-                          const parsed = JSON.parse(e.target.value);
-                          setFormData({ ...formData, config: parsed });
+                          const parsed = parseConfigJson(e.target.value);
+                          if (parsed) {
+                            setFormData({ ...formData, config: parsed });
+                          }
                         } catch (_err) {
                           // Ignore invalid JSON while typing
                         }
@@ -917,7 +1014,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="text"
-                            value={(formData.config?.rtc_app_id as string) || ''}
+                            value={formData.config.rtc_app_id ?? ''}
                             onChange={(e) => {
                               const newConfig = { ...formData.config, rtc_app_id: e.target.value };
                               setFormData({ ...formData, config: newConfig });
@@ -933,7 +1030,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="password"
-                            value={(formData.config?.rtc_app_key as string) || ''}
+                            value={formData.config.rtc_app_key ?? ''}
                             onChange={(e) => {
                               const newConfig = { ...formData.config, rtc_app_key: e.target.value };
                               setFormData({ ...formData, config: newConfig });
@@ -949,7 +1046,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="password"
-                            value={(formData.config?.volc_ak as string) || ''}
+                            value={formData.config.volc_ak ?? ''}
                             onChange={(e) => {
                               const newConfig = { ...formData.config, volc_ak: e.target.value };
                               setFormData({ ...formData, config: newConfig });
@@ -965,7 +1062,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="password"
-                            value={(formData.config?.volc_sk as string) || ''}
+                            value={formData.config.volc_sk ?? ''}
                             onChange={(e) => {
                               const newConfig = { ...formData.config, volc_sk: e.target.value };
                               setFormData({ ...formData, config: newConfig });
@@ -981,7 +1078,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="text"
-                            value={(formData.config?.speech_app_id as string) || ''}
+                            value={formData.config.speech_app_id ?? ''}
                             onChange={(e) => {
                               const newConfig = {
                                 ...formData.config,
@@ -1000,7 +1097,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="password"
-                            value={(formData.config?.speech_access_token as string) || ''}
+                            value={formData.config.speech_access_token ?? ''}
                             onChange={(e) => {
                               const newConfig = {
                                 ...formData.config,
@@ -1019,7 +1116,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           </label>
                           <input
                             type="text"
-                            value={(formData.config?.doubao_endpoint_id as string) || ''}
+                            value={formData.config.doubao_endpoint_id ?? ''}
                             onChange={(e) => {
                               const newConfig = {
                                 ...formData.config,
@@ -1107,14 +1204,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               });
                             }}
                             className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-                            title="Use preset model"
+                            title={t('components.provider.config.usePresetModel', {
+                              defaultValue: 'Use preset model',
+                            })}
                           >
                             <List size={18} />
                           </button>
                         </div>
                       ) : (
                         <Select
-                          showSearch
+                          showSearch={{ onSearch: searchModels, filterOption: filterModelOption }}
                           value={formData.llm_model}
                           onChange={(value) => {
                             if (value === '__custom__') {
@@ -1124,15 +1223,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setFormData({ ...formData, llm_model: value });
                             }
                           }}
-                          onSearch={(val) => {
-                            searchModels(val);
-                          }}
-                          filterOption={(input, option) =>
-                            (option?.label ?? '')
-                              .toString()
-                              .toLowerCase()
-                              .includes(input.toLowerCase())
-                          }
                           options={getLlmOptions()}
                           className="w-full h-[42px] custom-ant-select"
                           disabled={isLoadingModels}
@@ -1146,39 +1236,48 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                            Model Info
+                            {t('components.provider.config.modelInfo', {
+                              defaultValue: 'Model Info',
+                            })}
                           </span>
                           {selectedModelMeta.is_deprecated && (
                             <span className="px-1.5 py-0.5 text-2xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">
-                              Deprecated
+                              {t('components.provider.config.deprecated', {
+                                defaultValue: 'Deprecated',
+                              })}
                             </span>
                           )}
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <div>
-                            <span className="text-slate-400 dark:text-slate-500">Context</span>
+                            <span className="text-slate-400 dark:text-slate-500">
+                              {t('components.provider.config.context', { defaultValue: 'Context' })}
+                            </span>
                             <div className="font-medium text-slate-700 dark:text-slate-300">
-                              {selectedModelMeta.context_length >= 1_000_000
-                                ? `${(selectedModelMeta.context_length / 1_000_000).toFixed(1)}M`
-                                : `${Math.round(selectedModelMeta.context_length / 1000)}k`}
+                              {formatCompactCount(selectedModelMeta.context_length)}
                             </div>
                           </div>
                           <div>
-                            <span className="text-slate-400 dark:text-slate-500">Max Output</span>
+                            <span className="text-slate-400 dark:text-slate-500">
+                              {t('components.provider.config.maxOutput', {
+                                defaultValue: 'Max Output',
+                              })}
+                            </span>
                             <div className="font-medium text-slate-700 dark:text-slate-300">
-                              {selectedModelMeta.max_output_tokens >= 1_000_000
-                                ? `${(selectedModelMeta.max_output_tokens / 1_000_000).toFixed(1)}M`
-                                : selectedModelMeta.max_output_tokens >= 1000
-                                  ? `${Math.round(selectedModelMeta.max_output_tokens / 1000)}k`
-                                  : selectedModelMeta.max_output_tokens}
+                              {formatCompactCount(selectedModelMeta.max_output_tokens)}
                             </div>
                           </div>
                           <div>
-                            <span className="text-slate-400 dark:text-slate-500">Cost ($/1M)</span>
+                            <span className="text-slate-400 dark:text-slate-500">
+                              {t('components.provider.config.costPerMillion', {
+                                defaultValue: 'Cost ($/1M)',
+                              })}
+                            </span>
                             <div className="font-medium text-slate-700 dark:text-slate-300">
-                              {selectedModelMeta.input_cost_per_1m != null
-                                ? `$${selectedModelMeta.input_cost_per_1m} / ${selectedModelMeta.output_cost_per_1m != null ? '$' + selectedModelMeta.output_cost_per_1m : '?'}`
-                                : 'N/A'}
+                              {formatModelCost(
+                                selectedModelMeta.input_cost_per_1m,
+                                selectedModelMeta.output_cost_per_1m
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1253,14 +1352,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             });
                           }}
                           className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                          title="Use preset model"
+                          title={t('components.provider.config.usePresetModel', {
+                            defaultValue: 'Use preset model',
+                          })}
                         >
                           <List size={18} />
                         </button>
                       </div>
                     ) : (
                       <Select
-                        showSearch
+                        showSearch={{ onSearch: searchModels, filterOption: filterModelOption }}
                         allowClear
                         value={formData.llm_small_model || undefined}
                         onChange={(value) => {
@@ -1271,15 +1372,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             setFormData({ ...formData, llm_small_model: value || '' });
                           }
                         }}
-                        onSearch={(val) => {
-                          searchModels(val);
-                        }}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '')
-                            .toString()
-                            .toLowerCase()
-                            .includes(input.toLowerCase())
-                        }
                         options={getLlmOptions()}
                         className="w-full h-[42px] custom-ant-select"
                         disabled={isLoadingModels}
@@ -1330,7 +1422,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                     onChange={(val) => {
                                       const newConfig = {
                                         ...formData.config,
-                                        temperature: val ?? undefined,
+                                        temperature: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
                                       setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1343,11 +1435,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   step={0.01}
                                   size="small"
                                   className="w-20"
-                                  value={formData.config.temperature ?? undefined}
+                                  value={formData.config.temperature ?? null}
                                   onChange={(val) => {
                                     const newConfig = {
                                       ...formData.config,
-                                      temperature: val ?? undefined,
+                                      temperature: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
                                     setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1369,11 +1461,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   ? `Max: ${selectedModelMeta.max_output_tokens.toLocaleString()}`
                                   : 'e.g. 4096'
                               }
-                              value={formData.config.max_tokens ?? undefined}
+                              value={formData.config.max_tokens ?? null}
                               onChange={(val) => {
                                 const newConfig = {
                                   ...formData.config,
-                                  max_tokens: val ?? undefined,
+                                  max_tokens: toNullableNumber(val),
                                 };
                                 setFormData({ ...formData, config: newConfig });
                                 setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1402,7 +1494,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                     onChange={(val) => {
                                       const newConfig = {
                                         ...formData.config,
-                                        top_p: val ?? undefined,
+                                        top_p: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
                                       setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1415,11 +1507,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   step={0.01}
                                   size="small"
                                   className="w-20"
-                                  value={formData.config.top_p ?? undefined}
+                                  value={formData.config.top_p ?? null}
                                   onChange={(val) => {
                                     const newConfig = {
                                       ...formData.config,
-                                      top_p: val ?? undefined,
+                                      top_p: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
                                     setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1437,11 +1529,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               size="small"
                               className="w-full"
                               placeholder="e.g. 120"
-                              value={formData.config.timeout_seconds ?? undefined}
+                              value={formData.config.timeout_seconds ?? null}
                               onChange={(val) => {
                                 const newConfig = {
                                   ...formData.config,
-                                  timeout_seconds: val ?? undefined,
+                                  timeout_seconds: toNullableNumber(val),
                                 };
                                 setFormData({ ...formData, config: newConfig });
                                 setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1470,7 +1562,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                     onChange={(val) => {
                                       const newConfig = {
                                         ...formData.config,
-                                        frequency_penalty: val ?? undefined,
+                                        frequency_penalty: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
                                       setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1483,11 +1575,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   step={0.1}
                                   size="small"
                                   className="w-20"
-                                  value={formData.config.frequency_penalty ?? undefined}
+                                  value={formData.config.frequency_penalty ?? null}
                                   onChange={(val) => {
                                     const newConfig = {
                                       ...formData.config,
-                                      frequency_penalty: val ?? undefined,
+                                      frequency_penalty: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
                                     setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1515,7 +1607,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                     onChange={(val) => {
                                       const newConfig = {
                                         ...formData.config,
-                                        presence_penalty: val ?? undefined,
+                                        presence_penalty: toNullableNumber(val),
                                       };
                                       setFormData({ ...formData, config: newConfig });
                                       setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1528,11 +1620,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                   step={0.1}
                                   size="small"
                                   className="w-20"
-                                  value={formData.config.presence_penalty ?? undefined}
+                                  value={formData.config.presence_penalty ?? null}
                                   onChange={(val) => {
                                     const newConfig = {
                                       ...formData.config,
-                                      presence_penalty: val ?? undefined,
+                                      presence_penalty: toNullableNumber(val),
                                     };
                                     setFormData({ ...formData, config: newConfig });
                                     setConfigJsonStr(JSON.stringify(newConfig, null, 2));
@@ -1554,9 +1646,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                                 className="w-full"
                                 placeholder="e.g. 42"
                                 precision={0}
-                                value={formData.config.seed ?? undefined}
+                                value={formData.config.seed ?? null}
                                 onChange={(val) => {
-                                  const newConfig = { ...formData.config, seed: val ?? undefined };
+                                  const newConfig = {
+                                    ...formData.config,
+                                    seed: toNullableNumber(val),
+                                  };
                                   setFormData({ ...formData, config: newConfig });
                                   setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                                 }}
@@ -1592,18 +1687,20 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             setUseCustomModel({ ...useCustomModel, embedding: false });
                             setFormData({
                               ...formData,
-                              embedding_model: availableModels.embedding[0] || '',
+                              embedding_model: availableModels.embedding[0] ?? '',
                             });
                           }}
                           className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                          title="Use preset model"
+                          title={t('components.provider.config.usePresetModel', {
+                            defaultValue: 'Use preset model',
+                          })}
                         >
                           <List size={18} />
                         </button>
                       </div>
                     ) : (
                       <Select
-                        showSearch
+                        showSearch={{ onSearch: searchModels, filterOption: filterModelOption }}
                         allowClear
                         value={formData.embedding_model || undefined}
                         onChange={(value) => {
@@ -1614,15 +1711,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             setFormData({ ...formData, embedding_model: value || '' });
                           }
                         }}
-                        onSearch={(val) => {
-                          searchModels(val);
-                        }}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '')
-                            .toString()
-                            .toLowerCase()
-                            .includes(input.toLowerCase())
-                        }
                         options={getEmbeddingOptions()}
                         className="w-full h-[42px] custom-ant-select"
                         disabled={isLoadingModels}
@@ -1677,14 +1765,23 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               onChange={(e) => {
                                 setFormData({
                                   ...formData,
-                                  embedding_encoding_format: e.target.value as any,
+                                  embedding_encoding_format: e.target
+                                    .value as EmbeddingEncodingFormat,
                                 });
                               }}
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                             >
-                              <option value="">Default</option>
-                              <option value="float">Float</option>
-                              <option value="base64">Base64</option>
+                              <option value="">
+                                {t('components.provider.config.default', {
+                                  defaultValue: 'Default',
+                                })}
+                              </option>
+                              <option value="float">
+                                {t('components.provider.config.float', { defaultValue: 'Float' })}
+                              </option>
+                              <option value="base64">
+                                {t('components.provider.config.base64', { defaultValue: 'Base64' })}
+                              </option>
                             </select>
                           </div>
                         </div>
@@ -1765,18 +1862,20 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             setUseCustomModel({ ...useCustomModel, reranker: false });
                             setFormData({
                               ...formData,
-                              reranker_model: availableModels.rerank[0] || '',
+                              reranker_model: availableModels.rerank[0] ?? '',
                             });
                           }}
                           className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                          title="Use preset model"
+                          title={t('components.provider.config.usePresetModel', {
+                            defaultValue: 'Use preset model',
+                          })}
                         >
                           <List size={18} />
                         </button>
                       </div>
                     ) : (
                       <Select
-                        showSearch
+                        showSearch={{ onSearch: searchModels, filterOption: filterModelOption }}
                         allowClear
                         value={formData.reranker_model || undefined}
                         onChange={(value) => {
@@ -1787,15 +1886,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             setFormData({ ...formData, reranker_model: value || '' });
                           }
                         }}
-                        onSearch={(val) => {
-                          searchModels(val);
-                        }}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '')
-                            .toString()
-                            .toLowerCase()
-                            .includes(input.toLowerCase())
-                        }
                         options={getRerankerOptions()}
                         className="w-full h-[42px] custom-ant-select"
                         disabled={isLoadingModels}
@@ -1814,9 +1904,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           Pool & Routing
                         </h4>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Controls whether this provider participates in the tenant LLM pool
-                          (load balancing + auto-routing). Turn off to silence a broken provider
-                          without disabling it entirely.
+                          Controls whether this provider participates in the tenant LLM pool (load
+                          balancing + auto-routing). Turn off to silence a broken provider without
+                          disabling it entirely.
                         </p>
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer shrink-0 ml-4">
@@ -1867,7 +1957,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           onChange={(value) => {
                             setFormData({
                               ...formData,
-                              model_tier: (value ?? '') as '' | 'small' | 'medium' | 'large',
+                              model_tier: value ?? '',
                             });
                           }}
                           allowClear
@@ -1924,7 +2014,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <div className="border-t border-slate-200 dark:border-slate-600 pt-3 space-y-2">
                     {showLlmFields && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Primary Model:</span>
+                        <span className="text-slate-500">
+                          {t('components.provider.config.primaryModel', {
+                            defaultValue: 'Primary Model:',
+                          })}
+                        </span>
                         <span
                           className={`font-medium ${
                             useCustomModel.llm
@@ -1935,7 +2029,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           {formData.llm_model}
                           {useCustomModel.llm && (
                             <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
-                              Custom
+                              {t('components.provider.config.custom', { defaultValue: 'Custom' })}
                             </span>
                           )}
                         </span>
@@ -1943,7 +2037,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     )}
                     {showLlmFields && formData.llm_small_model && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Small Model:</span>
+                        <span className="text-slate-500">
+                          {t('components.provider.config.smallModel', {
+                            defaultValue: 'Small Model:',
+                          })}
+                        </span>
                         <span
                           className={`font-medium ${
                             useCustomModel.small
@@ -1954,7 +2052,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           {formData.llm_small_model}
                           {useCustomModel.small && (
                             <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
-                              Custom
+                              {t('components.provider.config.custom', { defaultValue: 'Custom' })}
                             </span>
                           )}
                         </span>
@@ -1962,7 +2060,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     )}
                     {showEmbeddingFields && formData.embedding_model && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Embedding:</span>
+                        <span className="text-slate-500">
+                          {t('components.provider.config.embedding', {
+                            defaultValue: 'Embedding:',
+                          })}
+                        </span>
                         <span
                           className={`font-medium ${
                             useCustomModel.embedding
@@ -1973,7 +2075,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           {formData.embedding_model}
                           {useCustomModel.embedding && (
                             <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
-                              Custom
+                              {t('components.provider.config.custom', { defaultValue: 'Custom' })}
                             </span>
                           )}
                         </span>
@@ -1981,7 +2083,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     )}
                     {showRerankerFields && formData.reranker_model && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Reranker:</span>
+                        <span className="text-slate-500">
+                          {t('components.provider.config.reranker', { defaultValue: 'Reranker:' })}
+                        </span>
                         <span
                           className={`font-medium ${
                             useCustomModel.reranker
@@ -1992,88 +2096,122 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           {formData.reranker_model}
                           {useCustomModel.reranker && (
                             <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
-                              Custom
+                              {t('components.provider.config.custom', { defaultValue: 'Custom' })}
                             </span>
                           )}
                         </span>
                       </div>
                     )}
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Status:</span>
+                      <span className="text-slate-500">
+                        {t('components.provider.config.status', { defaultValue: 'Status:' })}
+                      </span>
                       <span
                         className={`font-medium ${
                           formData.is_active ? 'text-green-600' : 'text-slate-500'
                         }`}
                       >
-                        {formData.is_active ? 'Active' : 'Inactive'}
+                        {formData.is_active
+                          ? t('common.status.active')
+                          : t('common.status.inactive')}
                       </span>
                     </div>
                     {/* RTC Configuration Summary */}
                     {(formData.provider_type === 'volcengine' ||
                       formData.provider_type.startsWith('volcengine_')) &&
-                      (formData.config?.rtc_app_id ||
-                        formData.config?.volc_ak ||
-                        formData.config?.doubao_endpoint_id) && (
+                      (formData.config.rtc_app_id ||
+                        formData.config.volc_ak ||
+                        formData.config.doubao_endpoint_id) && (
                         <div className="border-t border-slate-200 dark:border-slate-600 pt-2 mt-2">
                           <div className="flex items-center gap-1.5 mb-1.5">
                             <Phone size={14} className="text-primary" />
                             <span className="text-xs font-medium text-slate-500">
-                              Voice & Video Call (RTC)
+                              {t('components.provider.config.rtcTitle', {
+                                defaultValue: 'Voice & Video Call (RTC)',
+                              })}
                             </span>
                           </div>
-                          {formData.config?.rtc_app_id && (
+                          {formData.config.rtc_app_id && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">RTC App ID:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.rtcAppId', {
+                                  defaultValue: 'RTC App ID:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
-                                {String(formData.config.rtc_app_id)}
+                                {formData.config.rtc_app_id}
                               </span>
                             </div>
                           )}
-                          {formData.config?.rtc_app_key && (
+                          {formData.config.rtc_app_key && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">RTC App Key:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.rtcAppKey', {
+                                  defaultValue: 'RTC App Key:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
                                 ********
                               </span>
                             </div>
                           )}
-                          {formData.config?.volc_ak && (
+                          {formData.config.volc_ak && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Access Key:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.accessKey', {
+                                  defaultValue: 'Access Key:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
                                 ********
                               </span>
                             </div>
                           )}
-                          {formData.config?.volc_sk && (
+                          {formData.config.volc_sk && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Secret Key:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.secretKey', {
+                                  defaultValue: 'Secret Key:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
                                 ********
                               </span>
                             </div>
                           )}
-                          {formData.config?.speech_app_id && (
+                          {formData.config.speech_app_id && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Speech App ID:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.speechAppId', {
+                                  defaultValue: 'Speech App ID:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
-                                {String(formData.config.speech_app_id)}
+                                {formData.config.speech_app_id}
                               </span>
                             </div>
                           )}
-                          {formData.config?.speech_access_token && (
+                          {formData.config.speech_access_token && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Speech Access Token:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.speechAccessToken', {
+                                  defaultValue: 'Speech Access Token:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
                                 ********
                               </span>
                             </div>
                           )}
-                          {formData.config?.doubao_endpoint_id && (
+                          {formData.config.doubao_endpoint_id && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Endpoint ID:</span>
+                              <span className="text-slate-500">
+                                {t('components.provider.config.endpointId', {
+                                  defaultValue: 'Endpoint ID:',
+                                })}
+                              </span>
                               <span className="font-medium text-slate-900 dark:text-white">
-                                {String(formData.config.doubao_endpoint_id)}
+                                {formData.config.doubao_endpoint_id}
                               </span>
                             </div>
                           )}
@@ -2111,7 +2249,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
             <div className="flex items-center gap-3">
               {currentStep === 'review' ? (
                 <button
-                  onClick={handleSubmit}
+                  onClick={() => {
+                    void handleSubmit();
+                  }}
                   disabled={isSubmitting}
                   className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >

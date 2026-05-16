@@ -381,7 +381,7 @@ export function getSubAgentSummaries(items: GroupedItem[]): SubAgentSummary[] {
     .map((item) => {
       const summary: SubAgentSummary = {
         subagentId: item.group.subagentId,
-        name: item.group.subagentName || item.group.subagentId?.slice(0, 8) || 'Unnamed',
+        name: item.group.subagentName || item.group.subagentId.slice(0, 8) || 'Unnamed',
         status: item.group.status,
         startIndex: item.startIndex,
       };

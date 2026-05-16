@@ -11,7 +11,7 @@ const makeTask = (
   id: string,
   status: TaskStatus,
   order_index: number,
-  content = `Task ${id}`,
+  content = `Task ${id}`
 ): AgentTask => ({
   id,
   conversation_id: 'c1',
@@ -62,20 +62,14 @@ describe('deriveTaskProgress', () => {
   });
 
   it('returns failed when there are failed tasks and not all completed', () => {
-    const tasks = [
-      makeTask('a', 'completed', 0),
-      makeTask('b', 'failed', 1, 'Deploy to staging'),
-    ];
+    const tasks = [makeTask('a', 'completed', 0), makeTask('b', 'failed', 1, 'Deploy to staging')];
     const result = deriveTaskProgress(tasks, false);
     expect(result.status).toBe('failed');
     expect(result.label).toBe('Deploy to staging');
   });
 
   it('returns completed when all tasks are done', () => {
-    const tasks = [
-      makeTask('a', 'completed', 0),
-      makeTask('b', 'completed', 1),
-    ];
+    const tasks = [makeTask('a', 'completed', 0), makeTask('b', 'completed', 1)];
     const result = deriveTaskProgress(tasks, false);
     expect(result.status).toBe('completed');
     expect(result.current).toBe(2);

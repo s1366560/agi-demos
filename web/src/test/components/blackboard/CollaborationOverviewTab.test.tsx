@@ -14,12 +14,7 @@ vi.mock('@/stores/workspace', () => ({
 describe('CollaborationOverviewTab', () => {
   it('marks collaboration chat overview as a hosted non-authoritative projection', () => {
     render(
-      <CollaborationOverviewTab
-        tenantId="t-1"
-        projectId="p-1"
-        workspaceId="ws-1"
-        agents={[]}
-      />
+      <CollaborationOverviewTab tenantId="t-1" projectId="p-1" workspaceId="ws-1" agents={[]} />
     );
 
     const boundaryBadge = screen.getByText('blackboard.collaborationSurfaceHint').closest('div');

@@ -11,6 +11,8 @@
 
 import React, { memo, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Trash2, Network } from 'lucide-react';
 
 export type PatternStatus = 'preferred' | 'active' | 'deprecated';
@@ -71,36 +73,32 @@ export interface PatternListProps {
    * @default 'active-only'
    */
   selectionPolicy?: PatternListSelectionPolicy | undefined;
-
-  // Legacy boolean props for backwards compatibility (deprecated)
-  /** @deprecated Use viewMode='detailed' instead */
-  showAllColumns?: boolean | undefined;
-  /** @deprecated Use selectionPolicy='all' instead */
-  allowSelectDeprecated?: boolean | undefined;
 }
 
 // Memoized status badge component
 const StatusBadge = memo(function StatusBadge({ status }: { status: PatternStatus }) {
+  const { t } = useTranslation();
+
   switch (status) {
     case 'preferred':
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
           <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-          Preferred
+          {t('agent.patternList.status.preferred', { defaultValue: 'Preferred' })}
         </span>
       );
     case 'active':
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          Active
+          {t('agent.patternList.status.active', { defaultValue: 'Active' })}
         </span>
       );
     case 'deprecated':
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-          Deprecated
+          {t('agent.patternList.status.deprecated', { defaultValue: 'Deprecated' })}
         </span>
       );
   }
@@ -146,24 +144,10 @@ export function PatternList({
   onDeprecate,
   viewMode = 'detailed',
   selectionPolicy = 'active-only',
-  // Legacy boolean props (deprecated, but supported for backwards compatibility)
-  showAllColumns,
-  allowSelectDeprecated,
 }: PatternListProps) {
-  // Support legacy boolean props for backwards compatibility
-  // If legacy props are provided, they take precedence (migration path)
-  const resolvedViewMode: PatternListViewMode =
-    showAllColumns === true ? 'detailed' : showAllColumns === false ? 'compact' : viewMode;
-
-  const resolvedSelectionPolicy: PatternListSelectionPolicy =
-    allowSelectDeprecated === true
-      ? 'all'
-      : allowSelectDeprecated === false
-        ? 'active-only'
-        : selectionPolicy;
-
-  const showUsageColumn = resolvedViewMode === 'detailed';
-  const canSelectDeprecated = resolvedSelectionPolicy === 'all';
+  const { t } = useTranslation();
+  const showUsageColumn = viewMode === 'detailed';
+  const canSelectDeprecated = selectionPolicy === 'all';
 
   // Memoize patterns with computed properties to avoid re-computing on every render
   const computedPatterns = useMemo(() => {
@@ -174,10 +158,10 @@ export function PatternList({
       isClickable: pattern.status !== 'deprecated' || canSelectDeprecated,
       rowClassName:
         pattern.id === selectedId
-          ? 'bg-primary/10 dark:bg-primary/20'
+          ? 'bg-primary/10 dark:bg-primary/20 cursor-pointer'
           : pattern.status === 'deprecated' && !canSelectDeprecated
             ? 'opacity-50 cursor-not-allowed'
-            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
+            : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50',
     }));
   }, [patterns, selectedId, canSelectDeprecated]);
 
@@ -193,89 +177,116 @@ export function PatternList({
     onDeprecate?.(patternId);
   };
 
+  const handleRowKeyDown = (event: React.KeyboardEvent, pattern: WorkflowPattern) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    handleRowClick(pattern);
+  };
+
   return (
-    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl overflow-hidden">
-      {/* Table Header */}
-      <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark text-xs font-semibold text-slate-500 uppercase tracking-wider">
-        <div className="col-span-1">Status</div>
-        <div className="col-span-4">Pattern Name</div>
-        {showUsageColumn && <div className="col-span-2">Usage</div>}
-        <div className="col-span-4">Success Rate</div>
-        <div className="col-span-1"></div>
-      </div>
-
-      {/* Table Body */}
-      <div className="divide-y divide-slate-100 dark:divide-slate-800">
-        {computedPatterns.map((pattern) => (
-          <button
-            key={pattern.id}
-            type="button"
-            onClick={() => {
-              handleRowClick(pattern);
-            }}
-            className={`w-full text-left grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer transition-colors ${pattern.rowClassName}`}
-          >
-            {/* Status */}
-            <div className="col-span-1">
-              <StatusBadge status={pattern.status} />
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-border-dark dark:bg-surface-dark">
+      <div className="min-w-[40rem]">
+        {/* Table Header */}
+        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <div className="col-span-2">
+            {t('agent.patternList.columns.status', { defaultValue: 'Status' })}
+          </div>
+          <div className="col-span-3">
+            {t('agent.patternList.columns.patternName', { defaultValue: 'Pattern Name' })}
+          </div>
+          {showUsageColumn && (
+            <div className="col-span-2">
+              {t('agent.patternList.columns.usage', { defaultValue: 'Usage' })}
             </div>
+          )}
+          <div className="col-span-4">
+            {t('agent.patternList.columns.successRate', { defaultValue: 'Success Rate' })}
+          </div>
+          <div className="col-span-1"></div>
+        </div>
 
-            {/* Name & Signature */}
-            <div className="col-span-4 min-w-0">
-              <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                {pattern.name}
-              </p>
-              <p className="text-xs text-slate-500 truncate font-mono">{pattern.signature}</p>
-            </div>
-
-            {/* Usage Count */}
-            {showUsageColumn && (
+        {/* Table Body */}
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {computedPatterns.map((pattern) => (
+            <div
+              key={pattern.id}
+              role="button"
+              tabIndex={pattern.canSelect ? 0 : -1}
+              onClick={() => {
+                handleRowClick(pattern);
+              }}
+              onKeyDown={(event) => {
+                handleRowKeyDown(event, pattern);
+              }}
+              className={`grid w-full grid-cols-12 items-center gap-4 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${pattern.rowClassName}`}
+            >
+              {/* Status */}
               <div className="col-span-2">
-                <span className="text-sm text-slate-600 dark:text-slate-400">
-                  {pattern.usageCount.toLocaleString()}
+                <StatusBadge status={pattern.status} />
+              </div>
+
+              {/* Name & Signature */}
+              <div className="col-span-4 min-w-0">
+                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                  {pattern.name}
+                </p>
+                <p className="text-xs text-slate-500 truncate font-mono">{pattern.signature}</p>
+              </div>
+
+              {/* Usage Count */}
+              {showUsageColumn && (
+                <div className="col-span-2">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
+                    {pattern.usageCount.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* Success Rate Bar */}
+              <div className="col-span-3 flex items-center gap-3">
+                <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${getSuccessRateColor(pattern.successRate)} transition-[width] duration-300`}
+                    style={{ width: `${String(pattern.successRate)}%` }}
+                  />
+                </div>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 w-12 text-right">
+                  {pattern.successRate}%
                 </span>
               </div>
-            )}
 
-            {/* Success Rate Bar */}
-            <div className="col-span-4 flex items-center gap-3">
-              <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${getSuccessRateColor(pattern.successRate)} transition-[width] duration-300`}
-                  style={{ width: `${pattern.successRate}%` }}
-                />
+              {/* Actions */}
+              <div className="col-span-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    handleDeprecateClick(e, pattern.id);
+                  }}
+                  className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-red-500 transition-colors"
+                  title={t('agent.patternList.deletePattern', { defaultValue: 'Delete pattern' })}
+                  aria-label={t('agent.patternList.deleteAria', {
+                    name: pattern.name,
+                    defaultValue: 'Delete {{name}}',
+                  })}
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300 w-12 text-right">
-                {pattern.successRate}%
-              </span>
             </div>
+          ))}
 
-            {/* Actions */}
-            <div className="col-span-1 flex justify-end">
-              <button
-                type="button"
-                onClick={(e) => {
-                  handleDeprecateClick(e, pattern.id);
-                }}
-                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-red-500 transition-colors"
-                title="Deprecate pattern"
-              >
-                <Trash2 size={18} />
-              </button>
+          {/* Empty State */}
+          {patterns.length === 0 && (
+            <div className="px-4 py-12 text-center">
+              <Network size={48} className="text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+              <p className="text-sm text-slate-500">
+                {t('agent.patternList.empty', { defaultValue: 'No patterns found' })}
+              </p>
             </div>
-          </button>
-        ))}
-
-        {/* Empty State */}
-        {patterns.length === 0 && (
-          <div className="px-4 py-12 text-center">
-            <Network
-              size={48}
-              className="text-slate-300 dark:text-slate-700 mx-auto mb-3"
-            />
-            <p className="text-sm text-slate-500">No patterns found</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -287,8 +298,6 @@ export default memo(PatternList, (prevProps, nextProps) => {
     prevProps.patterns === nextProps.patterns &&
     prevProps.selectedId === nextProps.selectedId &&
     prevProps.viewMode === nextProps.viewMode &&
-    prevProps.selectionPolicy === nextProps.selectionPolicy &&
-    prevProps.showAllColumns === nextProps.showAllColumns &&
-    prevProps.allowSelectDeprecated === nextProps.allowSelectDeprecated
+    prevProps.selectionPolicy === nextProps.selectionPolicy
   );
 });

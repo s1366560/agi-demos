@@ -1,6 +1,13 @@
 import React from 'react';
 
-import { Activity, Bot, CheckCircle, Gauge, SlidersHorizontal ,
+import { useTranslation } from 'react-i18next';
+
+import {
+  Activity,
+  Bot,
+  CheckCircle,
+  Gauge,
+  SlidersHorizontal,
   Square,
   StopCircle,
   Terminal,
@@ -18,36 +25,59 @@ import { Activity, Bot, CheckCircle, Gauge, SlidersHorizontal ,
   Loader2,
   AlertCircle,
   Globe,
-  User
+  User,
 } from 'lucide-react';
 
 import { ProviderConfig, SystemResilienceStatus } from '../../types/memory';
 
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
 
@@ -62,6 +92,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
   systemStatus,
   isLoading = false,
 }) => {
+  const { t } = useTranslation();
   const totalProviders = providers.length;
   const activeProviders = providers.filter((p) => p.is_active).length;
   const healthyProviders = providers.filter((p) => p.health_status === 'healthy').length;
@@ -69,8 +100,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
   const unhealthyProviders = providers.filter((p) => p.health_status === 'unhealthy').length;
 
   const openCircuitBreakers = systemStatus?.providers
-    ? Object.values(systemStatus.providers).filter((p) => p.circuit_breaker?.state === 'open')
-        .length
+    ? Object.values(systemStatus.providers).filter((p) => p.circuit_breaker.state === 'open').length
     : 0;
 
   const healthPercentage =
@@ -122,9 +152,13 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <Activity size={20} className="text-primary" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">System Health</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+              {t('components.provider.health.title', { defaultValue: 'System Health' })}
+            </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Real-time provider status overview
+              {t('components.provider.health.description', {
+                defaultValue: 'Real-time provider status overview',
+              })}
             </p>
           </div>
         </div>
@@ -141,7 +175,10 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
         >
           {renderDynamicIcon(getHealthIcon(), 18, getHealthColor())}
           <span className={`text-sm font-semibold ${getHealthColor()}`}>
-            {healthPercentage}% Healthy
+            {t('components.provider.health.percentHealthy', {
+              percent: healthPercentage,
+              defaultValue: '{{percent}}% Healthy',
+            })}
           </span>
         </div>
       </div>
@@ -152,7 +189,9 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
         <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Total Providers
+              {t('components.provider.health.totalProviders', {
+                defaultValue: 'Total Providers',
+              })}
             </span>
             <Bot size={18} className="text-slate-400" />
           </div>
@@ -161,7 +200,10 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
               {totalProviders}
             </span>
             <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-              {activeProviders} active
+              {t('components.provider.health.activeCount', {
+                count: activeProviders,
+                defaultValue: '{{count}} active',
+              })}
             </span>
           </div>
         </div>
@@ -170,7 +212,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
         <div className="p-4 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/20">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
-              Healthy
+              {t('components.provider.health.healthy', { defaultValue: 'Healthy' })}
             </span>
             <CheckCircle size={18} className="text-emerald-500" />
           </div>
@@ -178,7 +220,9 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
               {healthyProviders}
             </span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-500">providers</span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-500">
+              {t('components.provider.health.providers', { defaultValue: 'providers' })}
+            </span>
           </div>
         </div>
 
@@ -202,9 +246,17 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
                     : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              Issues
+              {t('components.provider.health.issues', { defaultValue: 'Issues' })}
             </span>
-            {renderDynamicIcon(unhealthyProviders > 0 ? 'error' : degradedProviders > 0 ? 'warning' : 'verified', 18, unhealthyProviders > 0 ? 'text-red-500' : degradedProviders > 0 ? 'text-amber-500' : 'text-emerald-500')}
+            {renderDynamicIcon(
+              unhealthyProviders > 0 ? 'error' : degradedProviders > 0 ? 'warning' : 'verified',
+              18,
+              unhealthyProviders > 0
+                ? 'text-red-500'
+                : degradedProviders > 0
+                  ? 'text-amber-500'
+                  : 'text-emerald-500'
+            )}
           </div>
           <div className="flex items-baseline gap-2">
             <span
@@ -220,10 +272,13 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
               {unhealthyProviders > 0
-                ? `${unhealthyProviders} down`
+                ? t('components.provider.health.downCount', {
+                    count: unhealthyProviders,
+                    defaultValue: '{{count}} down',
+                  })
                 : degradedProviders > 0
-                  ? 'degraded'
-                  : 'all clear'}
+                  ? t('common.status.degraded')
+                  : t('components.provider.health.allClear', { defaultValue: 'all clear' })}
             </span>
           </div>
         </div>
@@ -244,9 +299,15 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
                   : 'text-slate-500 dark:text-slate-400'
               }`}
             >
-              Circuit Breakers
+              {t('components.provider.health.circuitBreakers', {
+                defaultValue: 'Circuit Breakers',
+              })}
             </span>
-            {renderDynamicIcon('zap', 18, openCircuitBreakers > 0 ? 'text-amber-500' : 'text-slate-400')}
+            {renderDynamicIcon(
+              'zap',
+              18,
+              openCircuitBreakers > 0 ? 'text-amber-500' : 'text-slate-400'
+            )}
           </div>
           <div className="flex items-baseline gap-2">
             <span
@@ -259,7 +320,9 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
               {openCircuitBreakers}
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {openCircuitBreakers > 0 ? 'open' : 'all closed'}
+              {openCircuitBreakers > 0
+                ? t('components.provider.health.open', { defaultValue: 'open' })
+                : t('components.provider.health.allClosed', { defaultValue: 'all closed' })}
             </span>
           </div>
         </div>
@@ -274,10 +337,14 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             </div>
             <div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Avg Response Time
+                {t('components.provider.health.avgResponseTime', {
+                  defaultValue: 'Avg Response Time',
+                })}
               </p>
               <p className="text-lg font-bold text-slate-900 dark:text-white">
-                {avgResponseTime > 0 ? `${avgResponseTime}ms` : 'N/A'}
+                {avgResponseTime > 0
+                  ? `${String(avgResponseTime)}ms`
+                  : t('components.provider.health.notAvailable', { defaultValue: 'N/A' })}
               </p>
             </div>
           </div>
@@ -286,7 +353,9 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Active Providers
+                  {t('components.provider.health.activeProviders', {
+                    defaultValue: 'Active Providers',
+                  })}
                 </p>
                 <p className="text-lg font-bold text-slate-900 dark:text-white">
                   {Object.keys(systemStatus.providers).length}

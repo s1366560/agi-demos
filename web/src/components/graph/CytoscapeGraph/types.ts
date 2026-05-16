@@ -21,6 +21,7 @@ export interface NodeData {
   summary?: string | undefined;
   entity_type?: string | undefined;
   member_count?: number | undefined;
+  connection_count?: number | undefined;
   tenant_id?: string | undefined;
   project_id?: string | undefined;
   created_at?: string | undefined;

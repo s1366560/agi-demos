@@ -130,13 +130,13 @@ export const useDeployStore = create<DeployState>()(
         set({ isSubmitting: true, error: null });
         try {
           await deployService.markSuccess(id);
-          const { deploys } = get();
+          const { deploys, currentDeploy } = get();
           set({
             deploys: deploys.map((d) => (d.id === id ? { ...d, status: 'success' as const } : d)),
             currentDeploy:
-              get().currentDeploy?.id === id
-                ? { ...get().currentDeploy!, status: 'success' as const }
-                : get().currentDeploy,
+              currentDeploy?.id === id
+                ? { ...currentDeploy, status: 'success' as const }
+                : currentDeploy,
             isSubmitting: false,
           });
         } catch (error: unknown) {
@@ -152,13 +152,13 @@ export const useDeployStore = create<DeployState>()(
         set({ isSubmitting: true, error: null });
         try {
           await deployService.markFailed(id, message);
-          const { deploys } = get();
+          const { deploys, currentDeploy } = get();
           set({
             deploys: deploys.map((d) => (d.id === id ? { ...d, status: 'failed' as const } : d)),
             currentDeploy:
-              get().currentDeploy?.id === id
-                ? { ...get().currentDeploy!, status: 'failed' as const }
-                : get().currentDeploy,
+              currentDeploy?.id === id
+                ? { ...currentDeploy, status: 'failed' as const }
+                : currentDeploy,
             isSubmitting: false,
           });
         } catch (error: unknown) {
@@ -174,13 +174,13 @@ export const useDeployStore = create<DeployState>()(
         set({ isSubmitting: true, error: null });
         try {
           await deployService.cancel(id);
-          const { deploys } = get();
+          const { deploys, currentDeploy } = get();
           set({
             deploys: deploys.map((d) => (d.id === id ? { ...d, status: 'cancelled' as const } : d)),
             currentDeploy:
-              get().currentDeploy?.id === id
-                ? { ...get().currentDeploy!, status: 'cancelled' as const }
-                : get().currentDeploy,
+              currentDeploy?.id === id
+                ? { ...currentDeploy, status: 'cancelled' as const }
+                : currentDeploy,
             isSubmitting: false,
           });
         } catch (error: unknown) {

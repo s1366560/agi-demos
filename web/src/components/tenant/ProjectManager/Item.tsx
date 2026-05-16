@@ -56,7 +56,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
     if (onDeleteClick) {
       onDeleteClick(project, e);
     } else {
-      context.handleDeleteProject(project.id);
+      void context.handleDeleteProject(project.id);
     }
   };
 
@@ -112,7 +112,9 @@ export const Item: FC<ProjectManagerItemProps> = ({
       )}
 
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-500">
-        <span>{t('tenant.projectManager.createdAt', { date: formatDateOnly(project.created_at) })}</span>
+        <span>
+          {t('tenant.projectManager.createdAt', { date: formatDateOnly(project.created_at) })}
+        </span>
       </div>
     </div>
   );

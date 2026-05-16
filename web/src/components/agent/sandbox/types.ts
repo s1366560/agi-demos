@@ -55,7 +55,7 @@ export interface SandboxPanelToolExecution {
   id: string;
   toolName: string;
   input: Record<string, unknown>;
-  output: string | unknown;
+  output: unknown;
   timestamp: number;
   status?: 'pending' | 'running' | 'success' | 'error' | undefined;
 }

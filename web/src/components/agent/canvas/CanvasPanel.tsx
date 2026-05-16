@@ -273,6 +273,7 @@ const IsolatedPreviewFrame = memo<{
   embedUrl?: boolean | undefined;
   previewPolicy?: CanvasPreviewUrlPolicy | undefined;
 }>(({ content, title, srcUrl, pdfVerified, embedUrl = false, previewPolicy = 'strict' }) => {
+  const { t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const previewSrc = srcUrl || content.trim();
@@ -332,7 +333,9 @@ ${htmlContent}
   if (wantsPdfPreview && !canUsePdfSrc) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
-        <div className="text-slate-400">Invalid PDF preview URL</div>
+        <div className="text-slate-400">
+          {t('agent.canvas.invalidPdfPreviewUrl', { defaultValue: 'Invalid PDF preview URL' })}
+        </div>
       </div>
     );
   }
@@ -354,7 +357,9 @@ ${htmlContent}
     if (!isSafePreviewUrl(previewSrc, previewPolicy)) {
       return (
         <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
-          <div className="text-slate-400">Invalid URL</div>
+          <div className="text-slate-400">
+            {t('agent.canvas.invalidUrl', { defaultValue: 'Invalid URL' })}
+          </div>
         </div>
       );
     }
@@ -373,7 +378,7 @@ ${htmlContent}
   if (!blobUrl) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-slate-400">{t('common.loading', { defaultValue: 'Loading...' })}</div>
       </div>
     );
   }
@@ -396,6 +401,8 @@ const CanvasMediaPreview = memo<{
   mimeType: string;
   title: string;
 }>(({ src, mimeType, title }) => {
+  const { t } = useTranslation();
+
   if (mimeType.startsWith('image/')) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 overflow-auto p-4">
@@ -431,7 +438,9 @@ const CanvasMediaPreview = memo<{
           <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">{title}</div>
           <audio src={src} controls preload="metadata" style={{ width: 320 }}>
             <track kind="captions" />
-            Your browser does not support the audio element.
+            {t('components.audioPlayer.unsupported', {
+              defaultValue: 'Your browser does not support the audio element.',
+            })}
           </audio>
         </div>
       </div>
@@ -472,10 +481,14 @@ const getOfficeFileType = (mime: string, filename: string): 'docx' | 'xlsx' | 'p
 /** Download fallback UI for unsupported Office formats */
 const OfficeDownloadFallback = memo<{ src: string; title: string; message: string }>(
   ({ src, title, message }) => {
+    const { t } = useTranslation();
+
     if (!isSafePreviewUrl(src)) {
       return (
         <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-          <div className="text-sm text-slate-500 dark:text-slate-400">Invalid file URL</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400">
+            {t('agent.canvas.invalidFileUrl', { defaultValue: 'Invalid file URL' })}
+          </div>
         </div>
       );
     }
@@ -490,10 +503,11 @@ const OfficeDownloadFallback = memo<{ src: string; title: string; message: strin
             href={src}
             target="_blank"
             rel="noopener noreferrer"
+            download={title}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
           >
             <Download size={14} />
-            Download File
+            {t('agent.canvas.downloadFile', { defaultValue: 'Download File' })}
           </a>
         </div>
       </div>
@@ -504,6 +518,7 @@ OfficeDownloadFallback.displayName = 'OfficeDownloadFallback';
 
 /** Render DOCX files client-side using docx-preview */
 const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -515,13 +530,15 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
         setLoading(true);
         setError(null);
         const resp = await fetch(src);
-        if (!resp.ok) throw new Error(`Failed to fetch: ${resp.status}`);
+        if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
         const buf = await resp.arrayBuffer();
-        if (cancelled || !containerRef.current) return;
+        const getContainer = () => (cancelled ? null : containerRef.current);
+        if (!getContainer()) return;
         const { renderAsync } = await import('docx-preview');
-        if (cancelled || !containerRef.current) return;
-        containerRef.current.innerHTML = '';
-        await renderAsync(buf, containerRef.current, undefined, {
+        const container = getContainer();
+        if (!container) return;
+        container.innerHTML = '';
+        await renderAsync(buf, container, undefined, {
           className: 'docx-preview',
           inWrapper: true,
           ignoreWidth: false,
@@ -532,10 +549,16 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
           renderFootnotes: true,
           renderEndnotes: true,
         });
-        if (!cancelled) setLoading(false);
+        if (getContainer()) setLoading(false);
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to render document');
+          setError(
+            e instanceof Error
+              ? e.message
+              : t('agent.canvas.renderDocumentFailed', {
+                  defaultValue: 'Failed to render document',
+                })
+          );
           setLoading(false);
         }
       }
@@ -544,7 +567,7 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [src, t]);
 
   if (error) {
     return <OfficeDownloadFallback src={src} title={title} message={error} />;
@@ -565,6 +588,7 @@ DocxPreview.displayName = 'DocxPreview';
 
 /** Render XLSX files client-side using SheetJS */
 const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheets, setSheets] = useState<{ name: string; html: string }[]>([]);
@@ -577,26 +601,38 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
         setLoading(true);
         setError(null);
         const resp = await fetch(src);
-        if (!resp.ok) throw new Error(`Failed to fetch: ${resp.status}`);
+        if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
         const buf = await resp.arrayBuffer();
-        if (cancelled) return;
+        const shouldAbort = () => cancelled;
+        if (shouldAbort()) return;
         const XLSX = await import('xlsx');
-        if (cancelled) return;
+        if (shouldAbort()) return;
         const wb = XLSX.read(buf, { type: 'array' });
         const result = wb.SheetNames.map((name) => {
           const ws = wb.Sheets[name];
-          if (!ws) return { name, html: '<p>Empty sheet</p>' };
+          if (!ws) {
+            return {
+              name,
+              html: `<p>${t('agent.canvas.emptySheet', { defaultValue: 'Empty sheet' })}</p>`,
+            };
+          }
           const html = XLSX.utils.sheet_to_html(ws, { editable: false });
           return { name, html };
         });
-        if (!cancelled) {
+        if (!shouldAbort()) {
           setSheets(result);
           setActiveSheet(0);
           setLoading(false);
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to render spreadsheet');
+          setError(
+            e instanceof Error
+              ? e.message
+              : t('agent.canvas.renderSpreadsheetFailed', {
+                  defaultValue: 'Failed to render spreadsheet',
+                })
+          );
           setLoading(false);
         }
       }
@@ -605,7 +641,7 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [src, t]);
 
   if (error) {
     return <OfficeDownloadFallback src={src} title={title} message={error} />;
@@ -655,6 +691,7 @@ const CanvasOfficePreview = memo<{
   title: string;
   mimeType?: string;
 }>(({ src, title, mimeType }) => {
+  const { t } = useTranslation();
   const fileType = getOfficeFileType(mimeType || '', title);
 
   switch (fileType) {
@@ -667,7 +704,10 @@ const CanvasOfficePreview = memo<{
         <OfficeDownloadFallback
           src={src}
           title={title}
-          message="PowerPoint preview is not yet supported. Server-side conversion will be added in a future update."
+          message={t('agent.canvas.presentationDownloadMessage', {
+            defaultValue:
+              'Download this presentation to open it in PowerPoint, Keynote, or compatible office software.',
+          })}
         />
       );
     case 'legacy':
@@ -675,7 +715,10 @@ const CanvasOfficePreview = memo<{
         <OfficeDownloadFallback
           src={src}
           title={title}
-          message="Legacy Office format (.doc/.xls/.ppt) preview is not supported. Please convert to .docx/.xlsx/.pptx for preview."
+          message={t('agent.canvas.legacyOfficeMessage', {
+            defaultValue:
+              'Legacy Office format (.doc/.xls/.ppt) preview is not supported. Please convert to .docx/.xlsx/.pptx for preview.',
+          })}
         />
       );
   }
@@ -830,7 +873,7 @@ function parseChartModel(parsed: unknown): CanvasChartModel | null {
         toNumberArray(entry.data) ?? toNumberArray(entry.values) ?? toNumberArray(entry.y) ?? null;
       if (!values) return null;
       return {
-        label: asString(entry.label) ?? asString(entry.name) ?? `Series ${index + 1}`,
+        label: asString(entry.label) ?? asString(entry.name) ?? `Series ${String(index + 1)}`,
         values,
         color:
           asString(entry.backgroundColor) ??
@@ -911,7 +954,7 @@ function parseFormField(entry: unknown, index: number): CanvasFormField | null {
 
   const options = parseFieldOptions(entry.options ?? entry.choices ?? entry.enum);
   const type = normalizeFieldType(entry.type, options.length > 0);
-  const name = asString(entry.name) ?? asString(entry.key) ?? `field_${index + 1}`;
+  const name = asString(entry.name) ?? asString(entry.key) ?? `field_${String(index + 1)}`;
   const label = asString(entry.label) ?? asString(entry.title) ?? name;
   const placeholder = asString(entry.placeholder) ?? undefined;
   const required = entry.required === true;
@@ -1001,14 +1044,17 @@ const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
       <div className="h-64 overflow-x-auto">
         <div className="h-full inline-flex items-end gap-4 min-w-full pb-10">
           {model.labels.map((label, index) => (
-            <div key={`${label}-${index}`} className="flex flex-col items-center gap-2 min-w-13">
+            <div
+              key={`${label}-${String(index)}`}
+              className="flex flex-col items-center gap-2 min-w-13"
+            >
               <div className="h-48 flex items-end gap-1">
                 {model.datasets.map((dataset) => {
                   const value = Math.max(0, dataset.values[index] ?? 0);
-                  const height = `${Math.max(4, (value / maxValue) * 100)}%`;
+                  const height = `${String(Math.max(4, (value / maxValue) * 100))}%`;
                   return (
                     <div
-                      key={`${dataset.label}-${label}-${index}`}
+                      key={`${dataset.label}-${label}-${String(index)}`}
                       className="w-3 rounded-t transition-opacity hover:opacity-80"
                       style={{ height, backgroundColor: dataset.color }}
                       title={`${dataset.label}: ${String(value)}`}
@@ -1042,93 +1088,102 @@ const CanvasChartPreview = memo<{ model: CanvasChartModel }>(({ model }) => {
 });
 CanvasChartPreview.displayName = 'CanvasChartPreview';
 
-const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => (
-  <div className="h-full overflow-auto rounded-b-lg bg-white dark:bg-slate-900 p-4">
-    <div className="max-w-2xl space-y-4">
-      {fields.map((field) => {
-        const commonClasses =
-          'mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
-        const label = (
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            {field.label}
-            {field.required ? <span className="ml-1 text-red-500">*</span> : null}
-          </label>
-        );
+const CanvasFormPreview = memo<{ fields: CanvasFormField[] }>(({ fields }) => {
+  const { t } = useTranslation();
 
-        if (field.type === 'checkbox') {
-          return (
-            <div key={field.name} className="space-y-1">
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                <input type="checkbox" checked={Boolean(field.value)} disabled />
-                <span>
-                  {field.label}
-                  {field.required ? <span className="ml-1 text-red-500">*</span> : null}
-                </span>
-              </label>
-            </div>
+  return (
+    <div className="h-full overflow-auto rounded-b-lg bg-white dark:bg-slate-900 p-4">
+      <div className="max-w-2xl space-y-4">
+        {fields.map((field) => {
+          const commonClasses =
+            'mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200';
+          const label = (
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              {field.label}
+              {field.required ? <span className="ml-1 text-red-500">*</span> : null}
+            </label>
           );
-        }
 
-        if (field.type === 'select') {
-          const selectedValue =
+          if (field.type === 'checkbox') {
+            return (
+              <div key={field.name} className="space-y-1">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input type="checkbox" checked={Boolean(field.value)} disabled />
+                  <span>
+                    {field.label}
+                    {field.required ? <span className="ml-1 text-red-500">*</span> : null}
+                  </span>
+                </label>
+              </div>
+            );
+          }
+
+          if (field.type === 'select') {
+            const selectedValue =
+              typeof field.value === 'string' || typeof field.value === 'number'
+                ? String(field.value)
+                : '';
+            return (
+              <div key={field.name}>
+                {label}
+                <select className={commonClasses} value={selectedValue} disabled>
+                  <option value="">
+                    {field.placeholder ??
+                      t('agent.canvas.selectOption', { defaultValue: 'Select an option' })}
+                  </option>
+                  {field.options.map((option) => (
+                    <option key={`${field.name}-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          }
+
+          if (field.type === 'textarea') {
+            return (
+              <div key={field.name}>
+                {label}
+                <textarea
+                  className={commonClasses}
+                  rows={4}
+                  value={typeof field.value === 'string' ? field.value : ''}
+                  placeholder={field.placeholder}
+                  disabled
+                  readOnly
+                />
+              </div>
+            );
+          }
+
+          const inputType =
+            field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
+          const inputValue =
             typeof field.value === 'string' || typeof field.value === 'number'
               ? String(field.value)
               : '';
           return (
             <div key={field.name}>
               {label}
-              <select className={commonClasses} value={selectedValue} disabled>
-                <option value="">{field.placeholder ?? 'Select an option'}</option>
-                {field.options.map((option) => (
-                  <option key={`${field.name}-${option.value}`} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          );
-        }
-
-        if (field.type === 'textarea') {
-          return (
-            <div key={field.name}>
-              {label}
-              <textarea
+              <input
+                type={inputType}
                 className={commonClasses}
-                rows={4}
-                value={typeof field.value === 'string' ? field.value : ''}
+                value={inputValue}
                 placeholder={field.placeholder}
                 disabled
                 readOnly
               />
             </div>
           );
-        }
-
-        const inputType =
-          field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
-        const inputValue =
-          typeof field.value === 'string' || typeof field.value === 'number'
-            ? String(field.value)
-            : '';
-        return (
-          <div key={field.name}>
-            {label}
-            <input
-              type={inputType}
-              className={commonClasses}
-              value={inputValue}
-              placeholder={field.placeholder}
-              disabled
-              readOnly
-            />
-          </div>
-        );
-      })}
-      <p className="pt-1 text-2xs text-slate-400 dark:text-slate-500">Read-only form preview</p>
+        })}
+        <p className="pt-1 text-2xs text-slate-400 dark:text-slate-500">
+          {t('agent.canvas.readOnlyFormPreview', { defaultValue: 'Read-only form preview' })}
+        </p>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 CanvasFormPreview.displayName = 'CanvasFormPreview';
 
 const CanvasContent = memo<{
@@ -1136,6 +1191,7 @@ const CanvasContent = memo<{
   editMode: boolean;
   onContentChange: (content: string) => void;
 }>(({ tab, editMode, onContentChange }) => {
+  const { t } = useTranslation();
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(
     tab.type === 'markdown' ? tab.content : undefined
   );
@@ -1219,7 +1275,9 @@ const CanvasContent = memo<{
         if (!isSafeMediaUrl(previewSrc, inferredMime)) {
           return (
             <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-b-lg">
-              <div className="text-sm text-slate-500 dark:text-slate-400">Invalid media URL</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                {t('agent.canvas.invalidMediaUrl', { defaultValue: 'Invalid media URL' })}
+              </div>
             </div>
           );
         }
@@ -1231,7 +1289,9 @@ const CanvasContent = memo<{
         if (!previewUrl) {
           return (
             <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-b-lg">
-              <div className="text-sm text-slate-500 dark:text-slate-400">Invalid file URL</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                {t('agent.canvas.invalidFileUrl', { defaultValue: 'Invalid file URL' })}
+              </div>
             </div>
           );
         }
@@ -1277,7 +1337,17 @@ const CanvasContent = memo<{
           render: (value: unknown) => {
             if (value === null || value === undefined) return '-';
             if (typeof value === 'object') return JSON.stringify(value);
-            return String(value);
+            if (
+              typeof value === 'string' ||
+              typeof value === 'number' ||
+              typeof value === 'boolean'
+            ) {
+              return String(value);
+            }
+            if (typeof value === 'bigint') return value.toString();
+            if (typeof value === 'symbol') return value.description ?? value.toString();
+            if (typeof value === 'function') return '[function]';
+            return JSON.stringify(value);
           },
         }));
         return (
@@ -1353,10 +1423,12 @@ const CanvasToolbar = memo<{
           setCopied(false);
         }, 2000);
       } catch {
-        void message.warning('Failed to copy to clipboard');
+        void message.warning(
+          t('components.jitContext.copyFailed', { defaultValue: 'Failed to copy to clipboard' })
+        );
       }
     }
-  }, [tab.content]);
+  }, [tab.content, t]);
 
   const handleDownload = useCallback(() => {
     if (tab.artifactUrl) {
@@ -1390,12 +1462,16 @@ const CanvasToolbar = memo<{
         artifactUrl: result.url || tab.artifactUrl,
       });
     } catch (err: unknown) {
-      void message.error(err instanceof Error ? err.message : 'Failed to save artifact');
+      void message.error(
+        err instanceof Error
+          ? err.message
+          : t('agent.canvas.saveArtifactFailed', { defaultValue: 'Failed to save artifact' })
+      );
       console.error('CanvasPanel: save failed', err);
     } finally {
       setSaving(false);
     }
-  }, [tab, saving]);
+  }, [tab, saving, t]);
 
   const canEdit = tab.type !== 'preview';
   const canSave = tab.artifactId && tab.dirty;

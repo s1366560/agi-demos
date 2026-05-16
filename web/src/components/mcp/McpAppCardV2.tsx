@@ -20,7 +20,6 @@ import {
   Globe,
   Clock,
   FileText,
-
   CheckCircle,
   Square,
   StopCircle,
@@ -36,45 +35,82 @@ import {
   RefreshCcw,
   Settings,
   Brain,
-  Info
+  Info,
 } from 'lucide-react';
-
-import { SOURCE_STYLES, CARD_STYLES, ANIMATION_CLASSES, APP_STATUS_STYLES } from './styles';
 
 import { formatDistanceToNow } from '@/utils/date';
 
-import type { MCPApp } from '@/types/mcpApp';
+import { ANIMATION_CLASSES, APP_STATUS_STYLES, CARD_STYLES, SOURCE_STYLES } from './styles';
 
+import type { MCPApp } from '@/types/mcpApp';
 
 const renderDynamicIcon = (name: string, size: number, className: string = '') => {
   switch (name) {
-    case 'check_circle': return <CheckCircle size={size} className={className} />;
-    case 'progress_activity': return <Loader2 size={size} className={`animate-spin ${className}`} />;
-    case 'stop': return <Square size={size} className={className} />;
-    case 'stop_circle': return <StopCircle size={size} className={className} />;
-    case 'error': return <AlertCircle size={size} className={className} />;
-    case 'warning': return <AlertTriangle size={size} className={className} />;
-    case 'terminal': return <Terminal size={size} className={className} />;
-    case 'http': return <Globe size={size} className={className} />;
-    case 'cloud': return <Cloud size={size} className={className} />;
-    case 'globe': return <Globe size={size} className={className} />;
-    case 'zap': return <Zap size={size} className={className} />;
-    case 'block': return <Ban size={size} className={className} />;
-    case 'search': return <Search size={size} className={className} />;
-    case 'person': return <User size={size} className={className} />;
-    case 'auto_awesome': return <Sparkles size={size} className={className} />;
-    case 'monitor_heart': return <Activity size={size} className={className} />;
-    case 'refresh': return <RefreshCcw size={size} className={className} />;
-    case 'sync': return <RefreshCcw size={size} className={className} />;
-    case 'science': return <FlaskConical size={size} className={className} />;
-    case 'settings': return <Settings size={size} className={className} />;
-    case 'psychology': return <Brain size={size} className={className} />;
-    case 'info': return <Info size={size} className={className} />;
-    default: return <AlertCircle size={size} className={className} />;
+    case 'check_circle':
+      return <CheckCircle size={size} className={className} />;
+    case 'progress_activity':
+      return <Loader2 size={size} className={`animate-spin ${className}`} />;
+    case 'stop':
+      return <Square size={size} className={className} />;
+    case 'stop_circle':
+      return <StopCircle size={size} className={className} />;
+    case 'error':
+      return <AlertCircle size={size} className={className} />;
+    case 'warning':
+      return <AlertTriangle size={size} className={className} />;
+    case 'terminal':
+      return <Terminal size={size} className={className} />;
+    case 'http':
+      return <Globe size={size} className={className} />;
+    case 'cloud':
+      return <Cloud size={size} className={className} />;
+    case 'globe':
+      return <Globe size={size} className={className} />;
+    case 'zap':
+      return <Zap size={size} className={className} />;
+    case 'block':
+      return <Ban size={size} className={className} />;
+    case 'search':
+      return <Search size={size} className={className} />;
+    case 'person':
+      return <User size={size} className={className} />;
+    case 'auto_awesome':
+      return <Sparkles size={size} className={className} />;
+    case 'monitor_heart':
+      return <Activity size={size} className={className} />;
+    case 'refresh':
+      return <RefreshCcw size={size} className={className} />;
+    case 'sync':
+      return <RefreshCcw size={size} className={className} />;
+    case 'science':
+      return <FlaskConical size={size} className={className} />;
+    case 'settings':
+      return <Settings size={size} className={className} />;
+    case 'psychology':
+      return <Brain size={size} className={className} />;
+    case 'info':
+      return <Info size={size} className={className} />;
+    default:
+      return <AlertCircle size={size} className={className} />;
   }
 };
 
 const LOADING_TIMEOUT_MS = 30_000;
+
+const DEFAULT_APP_STATUS_STYLE = {
+  color: 'text-slate-500 dark:text-slate-400',
+  bgColor: 'bg-slate-50 dark:bg-slate-800/50',
+  borderColor: 'border-slate-200 dark:border-slate-700',
+  icon: 'block',
+  label: 'Disabled',
+} satisfies NonNullable<(typeof APP_STATUS_STYLES)[string]>;
+
+const DEFAULT_SOURCE_STYLE = {
+  bgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
+  textColor: 'text-cyan-700 dark:text-cyan-400',
+  icon: 'person',
+  label: 'User Added',
+} satisfies NonNullable<(typeof SOURCE_STYLES)[string]>;
 
 function getLifecycleText(app: MCPApp, key: string): string | undefined {
   const value = app.lifecycle_metadata?.[key];
@@ -113,10 +149,12 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
   retrying,
 }) => {
   const { t } = useTranslation();
-  const statusCfg = APP_STATUS_STYLES[app.status] ?? APP_STATUS_STYLES.disabled!;
-  const sourceCfg = SOURCE_STYLES[app.source] ?? SOURCE_STYLES.user_added!;
+  const statusCfg = APP_STATUS_STYLES[app.status] ?? DEFAULT_APP_STATUS_STYLE;
+  const sourceCfg = SOURCE_STYLES[app.source] ?? DEFAULT_SOURCE_STYLE;
+  const statusLabel = t(`mcp.appCard.status.${app.status}`, statusCfg.label);
+  const sourceLabel = t(`mcp.appCard.source.${app.source}`, sourceCfg.label);
   const isAgentDeveloped = app.source === 'agent_developed';
-  const title = app.ui_metadata?.title || app.tool_name;
+  const title = app.ui_metadata.title || app.tool_name;
   const refreshStatus = getLifecycleText(app, 'last_resource_refresh_status');
   const refreshAt = getLifecycleText(app, 'last_resource_refresh_at');
 
@@ -183,8 +221,8 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
               className="text-xs flex-shrink-0 m-0 px-2 py-0.5 rounded-full"
             >
               <span className="flex items-center gap-1">
-                {renderDynamicIcon(statusCfg.icon, 12, "")}
-                {statusCfg.label}
+                {renderDynamicIcon(statusCfg.icon, 12, '')}
+                {statusLabel}
               </span>
             </Tag>
             {serverRuntime && (
@@ -215,7 +253,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             </span>
           </div>
           <code className="text-xs text-slate-600 dark:text-slate-400 break-all font-mono block">
-            {app.ui_metadata?.resourceUri || t('mcp.appCard.noResourceUri')}
+            {app.ui_metadata.resourceUri || t('mcp.appCard.noResourceUri')}
           </code>
           {refreshStatus && (
             <div className="flex items-center gap-1 mt-1.5 text-2xs text-slate-500 dark:text-slate-400">
@@ -260,7 +298,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           <div className="mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-100 dark:border-amber-800/30">
             <div className="flex items-center gap-2">
               <AlertCircle size={12} className="text-amber-500" />
-              <p className="text-xs text-amber-700 dark:text-amber-300">{t('mcp.appCard.slowLoadHint')}</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                {t('mcp.appCard.slowLoadHint')}
+              </p>
             </div>
           </div>
         )}
@@ -270,7 +310,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           {/* Meta Info */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Source Badge */}
-            <Tooltip title={sourceCfg.label}>
+            <Tooltip title={sourceLabel}>
               <span
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${sourceCfg.bgColor} ${sourceCfg.textColor}`}
               >

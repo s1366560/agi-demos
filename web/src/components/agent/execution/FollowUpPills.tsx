@@ -4,7 +4,11 @@
  * Displays clickable suggestion pills for common follow-up queries.
  */
 
+import { useTranslation } from 'react-i18next';
+
 import { PlusCircle } from 'lucide-react';
+
+import type { TFunction } from 'i18next';
 
 export interface FollowUpPillsProps {
   /** Suggested follow-up questions */
@@ -13,6 +17,11 @@ export interface FollowUpPillsProps {
   onSuggestionClick?: ((suggestion: string) => void) | undefined;
   /** Maximum number of suggestions to show */
   maxSuggestions?: number | undefined;
+}
+
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
 }
 
 /**
@@ -33,6 +42,7 @@ export function FollowUpPills({
   onSuggestionClick,
   maxSuggestions = 4,
 }: FollowUpPillsProps) {
+  const { t } = useTranslation();
   const displaySuggestions = suggestions.slice(0, maxSuggestions);
 
   if (displaySuggestions.length === 0) {
@@ -41,7 +51,9 @@ export function FollowUpPills({
 
   return (
     <div className="w-full">
-      <p className="text-sm text-slate-500 mb-3">Suggested follow-ups:</p>
+      <p className="text-sm text-slate-500 mb-3">
+        {tFallback(t, 'agent.suggestions.label', 'Suggested follow-ups')}:
+      </p>
       <div className="flex flex-wrap gap-2">
         {displaySuggestions.map((suggestion) => (
           <button

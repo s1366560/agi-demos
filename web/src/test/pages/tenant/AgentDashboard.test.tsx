@@ -11,12 +11,12 @@ const {
   mockListTenantRuns,
   mockTimelineRun,
 } = vi.hoisted(() => ({
-    mockCanModifyConfig: vi.fn(),
-    mockGetTraceChain: vi.fn(),
-    mockGetTenantActiveRunCount: vi.fn(),
-    mockListTenantRuns: vi.fn(),
-    mockTimelineRun: { current: null as Record<string, unknown> | null },
-  }));
+  mockCanModifyConfig: vi.fn(),
+  mockGetTraceChain: vi.fn(),
+  mockGetTenantActiveRunCount: vi.fn(),
+  mockListTenantRuns: vi.fn(),
+  mockTimelineRun: { current: null as Record<string, unknown> | null },
+}));
 
 vi.mock('../../../services/agentConfigService', () => ({
   agentConfigService: {

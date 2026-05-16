@@ -19,7 +19,7 @@ import { useState, useEffect } from 'react';
 export function useMediaQuery(query: string): boolean {
   // Default to false for SSR or when matchMedia is unavailable
   const getMatches = (query: string): boolean => {
-    if (typeof window === 'undefined' || !window.matchMedia) {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return false;
     }
 
@@ -30,7 +30,7 @@ export function useMediaQuery(query: string): boolean {
 
   useEffect(() => {
     // Skip if window or matchMedia is not available (SSR)
-    if (typeof window === 'undefined' || !window.matchMedia) {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
     }
 
@@ -42,22 +42,10 @@ export function useMediaQuery(query: string): boolean {
       setMatches(event.matches);
     };
 
-    // Add event listener (try modern API first, fallback to legacy)
-    if (mediaQueryList.addEventListener) {
-      mediaQueryList.addEventListener('change', handleChange);
-      return () => {
-        mediaQueryList.removeEventListener('change', handleChange);
-      };
-    } else if (mediaQueryList.addListener) {
-      // Legacy support for older browsers
-      mediaQueryList.addListener(handleChange);
-      return () => {
-        mediaQueryList.removeListener(handleChange);
-      };
-    }
-
-    // No cleanup needed if neither API is available
-    return undefined;
+    mediaQueryList.addEventListener('change', handleChange);
+    return () => {
+      mediaQueryList.removeEventListener('change', handleChange);
+    };
   }, [query]);
 
   return matches;

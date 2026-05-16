@@ -6,6 +6,9 @@
 
 import { useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
+import { message } from 'antd';
 import { Check, Copy, Hourglass, FileDown, Share2 } from 'lucide-react';
 
 export interface ExportActionsProps {
@@ -41,20 +44,28 @@ export function ExportActions({
   showLabels = true,
   variant = 'sidebar',
 }: ExportActionsProps) {
-  const [copied, setCopied] = useState(false);
+  const { t } = useTranslation();
+  const [copiedTarget, setCopiedTarget] = useState<'content' | 'link' | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  const markCopied = (target: 'content' | 'link') => {
+    setCopiedTarget(target);
+    setTimeout(() => {
+      setCopiedTarget(null);
+    }, 2000);
+  };
 
   const handleCopy = async () => {
     if (!content) return;
 
     try {
       await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Failed to copy:', error);
+      markCopied('content');
+      void message.success(
+        t('components.exportActions.copySuccess', { defaultValue: 'Copied to clipboard' })
+      );
+    } catch {
+      void message.error(t('components.exportActions.copyFailed', { defaultValue: 'Copy failed' }));
     }
   };
 
@@ -67,7 +78,7 @@ export function ExportActions({
       const element = elementId ? document.getElementById(elementId) : document.body;
 
       if (element) {
-        html2pdf()
+        await html2pdf()
           .from(element)
           .set({
             margin: 10,
@@ -77,9 +88,17 @@ export function ExportActions({
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           })
           .save();
+      } else {
+        void message.error(
+          t('components.exportActions.exportTargetMissing', {
+            defaultValue: 'Nothing available to export',
+          })
+        );
       }
-    } catch (error) {
-      console.error('Failed to export PDF:', error);
+    } catch {
+      void message.error(
+        t('components.exportActions.exportFailed', { defaultValue: 'Failed to export PDF' })
+      );
     } finally {
       setExporting(false);
     }
@@ -91,62 +110,96 @@ export function ExportActions({
     try {
       const url = `${window.location.origin}/shared/${conversationId}`;
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Failed to share:', error);
+      markCopied('link');
+      void message.success(
+        t('components.exportActions.linkCopiedSuccess', { defaultValue: 'Link copied' })
+      );
+    } catch {
+      void message.error(
+        t('components.exportActions.shareFailed', { defaultValue: 'Failed to copy share link' })
+      );
     }
   };
 
   const buttonClass =
     variant === 'sidebar'
-      ? 'flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors w-full text-left'
-      : 'flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors';
+      ? 'flex items-center gap-2 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors w-full text-left'
+      : 'flex items-center gap-2 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors';
 
   return (
     <div className={variant === 'sidebar' ? 'space-y-1' : 'flex items-center gap-2'}>
       {/* Copy to Clipboard */}
       <button
         type="button"
-        onClick={handleCopy}
+        onClick={() => {
+          void handleCopy();
+        }}
         disabled={!content}
         className={buttonClass}
-        aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
-        title="Copy to clipboard"
+        aria-label={
+          copiedTarget === 'content'
+            ? t('components.exportActions.copiedAria', { defaultValue: 'Copied to clipboard' })
+            : t('components.exportActions.copyAria', { defaultValue: 'Copy to clipboard' })
+        }
+        title={t('components.exportActions.copyAria', { defaultValue: 'Copy to clipboard' })}
       >
-        {copied ? <Check size={18} /> : <Copy size={18} />}
-        {showLabels && <span className="text-sm font-medium">{copied ? 'Copied!' : 'Copy'}</span>}
+        {copiedTarget === 'content' ? <Check size={18} /> : <Copy size={18} />}
+        {showLabels && (
+          <span className="text-sm font-medium">
+            {copiedTarget === 'content'
+              ? t('components.exportActions.copied', { defaultValue: 'Copied!' })
+              : t('common.copy', { defaultValue: 'Copy' })}
+          </span>
+        )}
       </button>
 
       {/* Export to PDF */}
       <button
         type="button"
-        onClick={handleExportPDF}
+        onClick={() => {
+          void handleExportPDF();
+        }}
         disabled={exporting}
         className={buttonClass}
-        aria-label={exporting ? 'Exporting PDF' : 'Export as PDF'}
-        title="Export to PDF"
+        aria-label={
+          exporting
+            ? t('components.exportActions.exportingPdf', { defaultValue: 'Exporting PDF' })
+            : t('components.exportActions.exportAsPdf', { defaultValue: 'Export as PDF' })
+        }
+        title={t('components.exportActions.exportToPdf', { defaultValue: 'Export to PDF' })}
       >
         {exporting ? <Hourglass size={18} /> : <FileDown size={18} />}
         {showLabels && (
-          <span className="text-sm font-medium">{exporting ? 'Exporting...' : 'PDF'}</span>
+          <span className="text-sm font-medium">
+            {exporting
+              ? t('components.exportActions.exporting', { defaultValue: 'Exporting...' })
+              : t('components.exportActions.pdf', { defaultValue: 'PDF' })}
+          </span>
         )}
       </button>
 
       {/* Share */}
       <button
         type="button"
-        onClick={handleShare}
+        onClick={() => {
+          void handleShare();
+        }}
         disabled={!conversationId}
         className={buttonClass}
-        aria-label={copied ? 'Link copied' : 'Share conversation link'}
-        title="Share link"
+        aria-label={
+          copiedTarget === 'link'
+            ? t('components.exportActions.linkCopied', { defaultValue: 'Link copied' })
+            : t('components.exportActions.shareAria', { defaultValue: 'Share conversation link' })
+        }
+        title={t('components.exportActions.shareTitle', { defaultValue: 'Share link' })}
       >
-        {copied ? <Check size={18} /> : <Share2 size={18} />}
+        {copiedTarget === 'link' ? <Check size={18} /> : <Share2 size={18} />}
         {showLabels && (
-          <span className="text-sm font-medium">{copied ? 'Link copied!' : 'Share'}</span>
+          <span className="text-sm font-medium">
+            {copiedTarget === 'link'
+              ? t('components.exportActions.linkCopiedLabel', { defaultValue: 'Link copied!' })
+              : t('components.exportActions.share', { defaultValue: 'Share' })}
+          </span>
         )}
       </button>
     </div>

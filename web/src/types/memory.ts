@@ -19,7 +19,7 @@ export interface Entity {
   id: string;
   name: string;
   type: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
   confidence: number;
 }
 
@@ -28,7 +28,7 @@ export interface Relationship {
   source_id: string;
   target_id: string;
   type: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
   confidence: number;
 }
 
@@ -88,7 +88,7 @@ export interface Memory {
   is_public: boolean;
   status: DataStatus;
   processing_status: ProcessingStatus;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at?: string | undefined;
   task_id?: string | undefined; // Task ID for SSE progress tracking
@@ -104,7 +104,7 @@ export interface MemoryCreate {
   relationships?: Relationship[] | undefined;
   collaborators?: string[] | undefined;
   is_public?: boolean | undefined;
-  metadata?: Record<string, any> | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface MemoryUpdate {
@@ -115,7 +115,7 @@ export interface MemoryUpdate {
   relationships?: Relationship[] | undefined;
   collaborators?: string[] | undefined;
   is_public?: boolean | undefined;
-  metadata?: Record<string, any> | undefined;
+  metadata?: Record<string, unknown> | undefined;
   version: number; // Required for optimistic locking
 }
 
@@ -149,7 +149,7 @@ export interface MemoryItem {
   status: DataStatus;
   processing_status: ProcessingStatus;
   score: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at?: string | undefined;
 }
@@ -158,8 +158,8 @@ export interface MemorySearchResponse {
   results: MemoryItem[];
   total: number;
   query: string;
-  filters_applied: Record<string, any>;
-  search_metadata: Record<string, any>;
+  filters_applied: Record<string, unknown>;
+  search_metadata: Record<string, unknown>;
 }
 
 export interface MemoryListResponse {
@@ -313,7 +313,7 @@ export interface EmbeddingConfig {
   encoding_format?: 'float' | 'base64' | undefined;
   user?: string | undefined;
   timeout?: number | undefined;
-  provider_options?: Record<string, any> | undefined;
+  provider_options?: Record<string, unknown> | undefined;
 }
 
 // Circuit breaker state enum
@@ -347,7 +347,7 @@ export interface ProviderConfig {
   embedding_model?: string | undefined;
   embedding_config?: EmbeddingConfig | undefined;
   reranker_model?: string | undefined;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   is_active: boolean;
   is_enabled: boolean;
   is_default: boolean;
@@ -379,7 +379,7 @@ export interface ProviderCreate {
   embedding_model?: string | undefined;
   embedding_config?: EmbeddingConfig | undefined;
   reranker_model?: string | undefined;
-  config?: Record<string, any> | undefined;
+  config?: Record<string, unknown> | undefined;
   is_active?: boolean | undefined;
   is_enabled?: boolean | undefined;
   is_default?: boolean | undefined;
@@ -401,7 +401,7 @@ export interface ProviderUpdate {
   embedding_model?: string | undefined;
   embedding_config?: EmbeddingConfig | undefined;
   reranker_model?: string | undefined;
-  config?: Record<string, any> | undefined;
+  config?: Record<string, unknown> | undefined;
   is_active?: boolean | undefined;
   is_enabled?: boolean | undefined;
   is_default?: boolean | undefined;
@@ -552,9 +552,17 @@ export interface QueueDepth {
 
 export interface RecentTask {
   id: string;
-  task_type: string;
+  name?: string | undefined;
+  task_type?: string | undefined;
   status: string;
   created_at: string;
+  completed_at?: string | null | undefined;
+  error?: string | null | undefined;
+  worker_id?: string | null | undefined;
+  retries?: number | undefined;
+  duration?: string | null | undefined;
+  entity_id?: string | undefined;
+  entity_type?: string | undefined;
 }
 
 export interface StatusBreakdown {
@@ -562,14 +570,19 @@ export interface StatusBreakdown {
   by_status: Record<string, number>;
 }
 
-// Schema API types (placeholders)
+// Schema API types
 export interface SchemaEntityType {
   id: string;
   name: string;
   display_name?: string | undefined;
   description?: string | undefined;
+  schema?: Record<string, unknown> | undefined;
   properties?: Record<string, unknown> | undefined;
+  status?: DataStatus | undefined;
+  source?: string | undefined;
   project_id: string;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
 }
 
 export interface SchemaEdgeType {
@@ -577,9 +590,15 @@ export interface SchemaEdgeType {
   name: string;
   display_name?: string | undefined;
   description?: string | undefined;
-  source_entity_type: string;
-  target_entity_type: string;
+  schema?: Record<string, unknown> | undefined;
+  properties?: Record<string, unknown> | undefined;
+  status?: DataStatus | undefined;
+  source?: string | undefined;
+  source_entity_type?: string | undefined;
+  target_entity_type?: string | undefined;
   project_id: string;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
 }
 
 export interface EdgeMapping {

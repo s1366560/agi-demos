@@ -479,8 +479,8 @@ export const WorkspaceSettingsPanel: React.FC<{
 
           <SettingsSection
             icon={<Rocket size={16} aria-hidden />}
-            title="Delivery / CI/CD"
-            description="Sandbox-native pipeline, preview deployment, and health-check settings."
+            title={t('workspaceSettings.delivery.title')}
+            description={t('workspaceSettings.delivery.description')}
           >
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(180px,0.35fr)]">
               <div className="rounded-md border border-border-light bg-surface-muted px-3 py-3 dark:border-border-dark dark:bg-surface-dark-alt">
@@ -488,10 +488,12 @@ export const WorkspaceSettingsPanel: React.FC<{
                   <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
-                        Agent-managed contract summary
+                        {t('workspaceSettings.delivery.contractSummary')}
                       </div>
                       <span className="rounded border border-border-light bg-surface-light px-2 py-0.5 text-[11px] font-semibold uppercase text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-                        {draft.deliveryAgentManaged ? 'auto' : 'manual locked'}
+                        {draft.deliveryAgentManaged
+                          ? t('workspaceSettings.delivery.modeAuto')
+                          : t('workspaceSettings.delivery.modeManualLocked')}
                       </span>
                     </div>
                     <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
@@ -503,15 +505,19 @@ export const WorkspaceSettingsPanel: React.FC<{
                         {draft.deliveryProvider || 'sandbox_native'}
                       </span>
                       <span className="rounded border border-border-light bg-surface-light px-2 py-1 text-[11px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-                        {String(draft.deliveryServices.length)} service(s)
+                        {t('workspaceSettings.delivery.serviceCount', {
+                          count: draft.deliveryServices.length,
+                        })}
                       </span>
                       <span className="rounded border border-border-light bg-surface-light px-2 py-1 text-[11px] text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
-                        {draft.deliveryAutoDeploy ? 'auto preview' : 'pipeline only'}
+                        {draft.deliveryAutoDeploy
+                          ? t('workspaceSettings.delivery.autoPreview')
+                          : t('workspaceSettings.delivery.pipelineOnly')}
                       </span>
                     </div>
                   </div>
                   <SwitchField
-                    label="Manual lock"
+                    label={t('workspaceSettings.delivery.manualLock')}
                     checked={!draft.deliveryAgentManaged}
                     onChange={(checked) => {
                       updateDraft('deliveryAgentManaged', !checked);
@@ -519,7 +525,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   />
                 </div>
               </div>
-              <Field label="Contract source" htmlFor="workspace-delivery-contract-source">
+              <Field
+                label={t('workspaceSettings.delivery.contractSource')}
+                htmlFor="workspace-delivery-contract-source"
+              >
                 <Input
                   id="workspace-delivery-contract-source"
                   value={draft.deliveryContractSource}
@@ -532,7 +541,10 @@ export const WorkspaceSettingsPanel: React.FC<{
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
-              <Field label="Provider" htmlFor="workspace-delivery-provider">
+              <Field
+                label={t('workspaceSettings.delivery.provider')}
+                htmlFor="workspace-delivery-provider"
+              >
                 <Input
                   id="workspace-delivery-provider"
                   value={draft.deliveryProvider}
@@ -542,7 +554,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   placeholder="sandbox_native"
                 />
               </Field>
-              <Field label="Timeout seconds" htmlFor="workspace-delivery-timeout">
+              <Field
+                label={t('workspaceSettings.delivery.timeoutSeconds')}
+                htmlFor="workspace-delivery-timeout"
+              >
                 <Input
                   id="workspace-delivery-timeout"
                   type="number"
@@ -553,7 +568,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   }}
                 />
               </Field>
-              <Field label="Preview port" htmlFor="workspace-delivery-port">
+              <Field
+                label={t('workspaceSettings.delivery.previewPort')}
+                htmlFor="workspace-delivery-port"
+              >
                 <Input
                   id="workspace-delivery-port"
                   type="number"
@@ -567,7 +585,10 @@ export const WorkspaceSettingsPanel: React.FC<{
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Health URL" htmlFor="workspace-delivery-health-url">
+              <Field
+                label={t('workspaceSettings.delivery.healthUrl')}
+                htmlFor="workspace-delivery-health-url"
+              >
                 <Input
                   id="workspace-delivery-health-url"
                   value={draft.deliveryHealthUrl}
@@ -578,7 +599,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                 />
               </Field>
               <SwitchField
-                label="Auto preview deploy"
+                label={t('workspaceSettings.delivery.autoPreviewDeploy')}
                 checked={draft.deliveryAutoDeploy}
                 onChange={(checked) => {
                   updateDraft('deliveryAutoDeploy', checked);
@@ -590,10 +611,10 @@ export const WorkspaceSettingsPanel: React.FC<{
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-text-primary dark:text-text-inverse">
-                    Preview web services
+                    {t('workspaceSettings.delivery.previewServices')}
                   </div>
                   <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-                    Services run inside the project sandbox and open through the MemStack proxy.
+                    {t('workspaceSettings.delivery.previewServicesDescription')}
                   </p>
                 </div>
                 <button
@@ -602,14 +623,13 @@ export const WorkspaceSettingsPanel: React.FC<{
                   onClick={addDeliveryService}
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden />
-                  Add service
+                  {t('workspaceSettings.delivery.addService')}
                 </button>
               </div>
 
               {draft.deliveryServices.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border-light px-3 py-3 text-xs text-text-secondary dark:border-border-dark dark:text-text-muted">
-                  No explicit services. Legacy deploy command and preview port will be mapped to a
-                  default service.
+                  {t('workspaceSettings.delivery.emptyServices')}
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -634,14 +654,17 @@ export const WorkspaceSettingsPanel: React.FC<{
                           onClick={() => {
                             removeDeliveryService(index);
                           }}
-                          aria-label="Remove service"
+                          aria-label={t('workspaceSettings.delivery.removeService')}
                         >
                           <Trash2 className="h-3.5 w-3.5" aria-hidden />
                         </button>
                       </div>
 
                       <div className="grid gap-3 lg:grid-cols-4">
-                        <Field label="Service ID" htmlFor={`delivery-service-id-${String(index)}`}>
+                        <Field
+                          label={t('workspaceSettings.delivery.serviceId')}
+                          htmlFor={`delivery-service-id-${String(index)}`}
+                        >
                           <Input
                             id={`delivery-service-id-${String(index)}`}
                             value={service.service_id}
@@ -650,7 +673,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                             }}
                           />
                         </Field>
-                        <Field label="Name" htmlFor={`delivery-service-name-${String(index)}`}>
+                        <Field
+                          label={t('workspaceSettings.delivery.serviceName')}
+                          htmlFor={`delivery-service-name-${String(index)}`}
+                        >
                           <Input
                             id={`delivery-service-name-${String(index)}`}
                             value={service.name}
@@ -659,7 +685,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                             }}
                           />
                         </Field>
-                        <Field label="Port" htmlFor={`delivery-service-port-${String(index)}`}>
+                        <Field
+                          label={t('workspaceSettings.delivery.port')}
+                          htmlFor={`delivery-service-port-${String(index)}`}
+                        >
                           <Input
                             id={`delivery-service-port-${String(index)}`}
                             type="number"
@@ -674,7 +703,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                             }}
                           />
                         </Field>
-                        <Field label="Path" htmlFor={`delivery-service-path-${String(index)}`}>
+                        <Field
+                          label={t('workspaceSettings.delivery.path')}
+                          htmlFor={`delivery-service-path-${String(index)}`}
+                        >
                           <Input
                             id={`delivery-service-path-${String(index)}`}
                             value={service.path_prefix ?? '/'}
@@ -687,7 +719,7 @@ export const WorkspaceSettingsPanel: React.FC<{
 
                       <div className="mt-3 grid gap-3 lg:grid-cols-2">
                         <Field
-                          label="Start command"
+                          label={t('workspaceSettings.delivery.startCommand')}
                           htmlFor={`delivery-service-start-${String(index)}`}
                         >
                           <TextArea
@@ -702,7 +734,7 @@ export const WorkspaceSettingsPanel: React.FC<{
                           />
                         </Field>
                         <Field
-                          label="Health path"
+                          label={t('workspaceSettings.delivery.healthPath')}
                           htmlFor={`delivery-service-health-path-${String(index)}`}
                         >
                           <Input
@@ -718,7 +750,7 @@ export const WorkspaceSettingsPanel: React.FC<{
 
                       <div className="mt-3">
                         <Field
-                          label="Health command override"
+                          label={t('workspaceSettings.delivery.healthCommandOverride')}
                           htmlFor={`delivery-service-health-command-${String(index)}`}
                         >
                           <TextArea
@@ -736,14 +768,14 @@ export const WorkspaceSettingsPanel: React.FC<{
 
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <SwitchField
-                          label="Required"
+                          label={t('workspaceSettings.delivery.required')}
                           checked={service.required ?? true}
                           onChange={(checked) => {
                             updateDeliveryService(index, 'required', checked);
                           }}
                         />
                         <SwitchField
-                          label="Auto open"
+                          label={t('workspaceSettings.delivery.autoOpen')}
                           checked={service.auto_open ?? true}
                           onChange={(checked) => {
                             updateDeliveryService(index, 'auto_open', checked);
@@ -757,7 +789,10 @@ export const WorkspaceSettingsPanel: React.FC<{
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Install command" htmlFor="workspace-delivery-install">
+              <Field
+                label={t('workspaceSettings.delivery.installCommand')}
+                htmlFor="workspace-delivery-install"
+              >
                 <TextArea
                   id="workspace-delivery-install"
                   value={draft.deliveryInstallCommand}
@@ -769,7 +804,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   rows={3}
                 />
               </Field>
-              <Field label="Lint command" htmlFor="workspace-delivery-lint">
+              <Field
+                label={t('workspaceSettings.delivery.lintCommand')}
+                htmlFor="workspace-delivery-lint"
+              >
                 <TextArea
                   id="workspace-delivery-lint"
                   value={draft.deliveryLintCommand}
@@ -781,7 +819,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   rows={3}
                 />
               </Field>
-              <Field label="Test command" htmlFor="workspace-delivery-test">
+              <Field
+                label={t('workspaceSettings.delivery.testCommand')}
+                htmlFor="workspace-delivery-test"
+              >
                 <TextArea
                   id="workspace-delivery-test"
                   value={draft.deliveryTestCommand}
@@ -793,7 +834,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   rows={3}
                 />
               </Field>
-              <Field label="Build command" htmlFor="workspace-delivery-build">
+              <Field
+                label={t('workspaceSettings.delivery.buildCommand')}
+                htmlFor="workspace-delivery-build"
+              >
                 <TextArea
                   id="workspace-delivery-build"
                   value={draft.deliveryBuildCommand}
@@ -805,7 +849,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   rows={3}
                 />
               </Field>
-              <Field label="Deploy command" htmlFor="workspace-delivery-deploy">
+              <Field
+                label={t('workspaceSettings.delivery.deployCommand')}
+                htmlFor="workspace-delivery-deploy"
+              >
                 <TextArea
                   id="workspace-delivery-deploy"
                   value={draft.deliveryDeployCommand}
@@ -817,7 +864,10 @@ export const WorkspaceSettingsPanel: React.FC<{
                   rows={3}
                 />
               </Field>
-              <Field label="Health command" htmlFor="workspace-delivery-health-command">
+              <Field
+                label={t('workspaceSettings.delivery.healthCommand')}
+                htmlFor="workspace-delivery-health-command"
+              >
                 <TextArea
                   id="workspace-delivery-health-command"
                   value={draft.deliveryHealthCommand}

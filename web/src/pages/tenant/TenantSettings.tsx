@@ -1,20 +1,84 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 
-import { AlertTriangle, ArrowRight, CreditCard, Loader2, Settings, CheckCircle, AlertCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  CreditCard,
+  Loader2,
+  Settings,
+} from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
+import { useTenantStore } from '@/stores/tenant';
+
+import { tenantAPI } from '@/services/api';
+
+import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
 
-import { useTenantStore } from '../../stores/tenant';
-import { Tenant } from '../../types/memory';
+import type { Tenant } from '@/types/memory';
+
+interface TenantSettingsStats {
+  storage?: {
+    percentage?: number | undefined;
+  };
+  projects?: {
+    active?: number | undefined;
+  };
+}
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
 const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
   const { t } = useTranslation();
-  const { updateTenant, isLoading } = useTenantStore();
+  const navigate = useNavigate();
+  const { updateTenant, deleteTenant, isLoading } = useTenantStore(
+    useShallow((state) => ({
+      updateTenant: state.updateTenant,
+      deleteTenant: state.deleteTenant,
+      isLoading: state.isLoading,
+    }))
+  );
   const [name, setName] = useState(tenant.name);
   const [description, setDescription] = useState(tenant.description || '');
+  const [stats, setStats] = useState<TenantSettingsStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const fetchStats = async () => {
+      setStatsLoading(true);
+      try {
+        const response = (await tenantAPI.getStats(tenant.id)) as TenantSettingsStats;
+        if (isCurrent) {
+          setStats(response);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tenant settings stats:', error);
+        if (isCurrent) {
+          setStats(null);
+        }
+      } finally {
+        if (isCurrent) {
+          setStatsLoading(false);
+        }
+      }
+    };
+
+    void fetchStats();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [tenant.id]);
 
   const handleSave = async () => {
     setMessage(null);
@@ -30,9 +94,39 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
     }
   };
 
+  const handleDelete = async () => {
+    const confirmed = await confirmAction({
+      title: t('tenant.settings.danger.delete_confirm', { name: tenant.name }),
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setMessage(null);
+    try {
+      await deleteTenant(tenant.id);
+      void navigate('/tenant', { replace: true });
+    } catch (error) {
+      console.error('Failed to delete tenant:', error);
+      setMessage({ type: 'error', text: t('tenant.settings.danger.delete_error') });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const activeProjects = stats?.projects?.active;
+  const projectLimit = Math.max(tenant.max_projects, 0);
+  const projectUsagePercent =
+    activeProjects !== undefined && projectLimit > 0
+      ? clampPercent((activeProjects / projectLimit) * 100)
+      : 0;
+  const storageUsage = stats?.storage?.percentage;
+  const storageUsagePercent =
+    storageUsage !== undefined ? clampPercent(Math.round(storageUsage)) : null;
+  const usageUnavailable = t('tenant.settings.plan.usage_unavailable');
+
   return (
     <div className="max-w-full mx-auto flex flex-col gap-8">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
           {t('tenant.settings.title')}
@@ -40,7 +134,6 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
         <p className="text-slate-500 dark:text-slate-400 mt-1">{t('tenant.settings.subtitle')}</p>
       </div>
 
-      {/* General Settings */}
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
           <Settings size={16} className="text-primary" />
@@ -53,12 +146,12 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               {t('tenant.settings.general.name')}
             </label>
             <input
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
               type="text"
               value={name}
-              onChange={(e) => {
-                setName(e.target.value);
+              onChange={(event) => {
+                setName(event.target.value);
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
             />
           </div>
           <div>
@@ -66,40 +159,47 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               {t('tenant.settings.general.description')}
             </label>
             <textarea
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-              }}
-              rows={3}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none resize-none"
+              rows={3}
+              value={description}
+              onChange={(event) => {
+                setDescription(event.target.value);
+              }}
             />
           </div>
 
-          {message && (
+          {message ? (
             <div
-              className={`p-4 rounded-lg flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'}`}
+              className={`p-4 rounded-lg flex items-center gap-3 ${
+                message.type === 'success'
+                  ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                  : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+              }`}
+              role="status"
             >
               {message.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
               {message.text}
             </div>
-          )}
+          ) : null}
 
           <div>
             <button
-              onClick={handleSave}
-              disabled={isLoading}
               className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={isLoading}
+              type="button"
+              onClick={() => {
+                void handleSave();
+              }}
             >
-              {isLoading && (
+              {isLoading ? (
                 <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
-              )}
+              ) : null}
               {t('tenant.settings.save')}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Plan & Usage */}
       <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
           <CreditCard size={16} className="text-primary" />
@@ -118,7 +218,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                 </p>
               </div>
               <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
-                Active
+                {t('common.status.active')}
               </span>
             </div>
             <p className="text-sm text-slate-500 mb-6">
@@ -126,10 +226,13 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                 date: formatDateOnly(tenant.created_at),
               })}
             </p>
-            <button className="text-primary hover:text-primary-dark font-medium text-sm flex items-center gap-1">
-              {t('tenant.settings.plan.change')}{' '}
+            <Link
+              className="text-primary hover:text-primary-dark font-medium text-sm inline-flex items-center gap-1"
+              to="/tenant/billing"
+            >
+              {t('tenant.settings.plan.change')}
               <ArrowRight size={16} />
-            </button>
+            </Link>
           </div>
 
           <div className="flex flex-col gap-4">
@@ -142,10 +245,19 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                   <span className="text-slate-600 dark:text-slate-300">
                     {t('tenant.settings.plan.projects')}
                   </span>
-                  <span className="font-medium text-slate-900 dark:text-white">3 / 10</span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {statsLoading
+                      ? t('common.loading')
+                      : activeProjects === undefined
+                        ? usageUnavailable
+                        : `${String(activeProjects)} / ${String(projectLimit)}`}
+                  </span>
                 </div>
                 <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 w-[30%]"></div>
+                  <div
+                    className="h-full bg-blue-500"
+                    style={{ width: `${String(projectUsagePercent)}%` }}
+                  />
                 </div>
               </div>
               <div>
@@ -153,10 +265,19 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
                   <span className="text-slate-600 dark:text-slate-300">
                     {t('tenant.settings.plan.storage')}
                   </span>
-                  <span className="font-medium text-slate-900 dark:text-white">45%</span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {statsLoading
+                      ? t('common.loading')
+                      : storageUsagePercent === null
+                        ? usageUnavailable
+                        : `${String(storageUsagePercent)}%`}
+                  </span>
                 </div>
                 <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500 w-[45%]"></div>
+                  <div
+                    className="h-full bg-purple-500"
+                    style={{ width: `${String(storageUsagePercent ?? 0)}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -164,7 +285,6 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
         </div>
       </div>
 
-      {/* Danger Zone */}
       <div className="bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-200 dark:border-red-900/30 p-6 md:p-8">
         <h2 className="text-lg font-semibold text-red-700 dark:text-red-400 mb-2 flex items-center gap-2">
           <AlertTriangle size={16} />
@@ -179,8 +299,15 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
               {t('tenant.settings.danger.delete_desc')}
             </p>
           </div>
-          <button className="bg-white border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm whitespace-nowrap dark:bg-transparent dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20">
-            {t('tenant.settings.danger.delete_button')}
+          <button
+            className="bg-white border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+            disabled={isDeleting}
+            type="button"
+            onClick={() => {
+              void handleDelete();
+            }}
+          >
+            {isDeleting ? t('tenant.settings.saving') : t('tenant.settings.danger.delete_button')}
           </button>
         </div>
       </div>
@@ -189,7 +316,11 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
 };
 
 export const TenantSettings: React.FC = () => {
-  const { currentTenant } = useTenantStore();
+  const { currentTenant } = useTenantStore(
+    useShallow((state) => ({
+      currentTenant: state.currentTenant,
+    }))
+  );
 
   if (!currentTenant) return null;
 

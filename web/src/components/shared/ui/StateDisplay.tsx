@@ -16,6 +16,8 @@
  * {isEmpty && <StateDisplay.Empty title="No results" />}
  */
 
+/* eslint-disable react-refresh/only-export-components */
+
 import { memo, type FC, type ReactNode } from 'react';
 
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';

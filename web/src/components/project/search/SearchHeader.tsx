@@ -245,7 +245,11 @@ export function SearchHeader({
             onBlur={() => {
               setIsSearchFocused(false);
             }}
-            onKeyDown={(e) => e.key === 'Enter' && onSearch()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onSearch();
+              }
+            }}
             placeholder={getPlaceholder()}
             Icon={getInputIcon()}
             showVoiceButton={showVoiceButton}

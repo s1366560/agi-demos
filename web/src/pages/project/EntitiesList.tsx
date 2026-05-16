@@ -29,11 +29,21 @@
 
 import React, { useState, useEffect, useCallback, memo, Children } from 'react';
 
-
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { AlertCircle, Filter, LayoutGrid, Loader2, Network, Pointer, RefreshCw, Search, Unlink, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Filter,
+  LayoutGrid,
+  Loader2,
+  Network,
+  Pointer,
+  RefreshCw,
+  Search,
+  Unlink,
+  X,
+} from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { formatDateTime } from '@/utils/date';
@@ -117,21 +127,24 @@ function DetailMarker(_props: EntitiesListDetailProps) {
   return null;
 }
 
-// Attach symbols
-(HeaderMarker as any)[HEADER_SYMBOL] = true;
-(FiltersMarker as any)[FILTERS_SYMBOL] = true;
-(StatsMarker as any)[STATS_SYMBOL] = true;
-(ListMarker as any)[LIST_SYMBOL] = true;
-(PaginationMarker as any)[PAGINATION_SYMBOL] = true;
-(DetailMarker as any)[DETAIL_SYMBOL] = true;
+const markSubComponent = <P extends object>(
+  component: React.FC<P>,
+  marker: symbol,
+  displayName: string
+): React.FC<P> => Object.assign(component, { [marker]: true, displayName });
 
-// Set display names for testing
-(HeaderMarker as any).displayName = 'EntitiesListHeader';
-(FiltersMarker as any).displayName = 'EntitiesListFilters';
-(StatsMarker as any).displayName = 'EntitiesListStats';
-(ListMarker as any).displayName = 'EntitiesListList';
-(PaginationMarker as any).displayName = 'EntitiesListPagination';
-(DetailMarker as any).displayName = 'EntitiesListDetail';
+const hasSubComponentMarker = (child: React.ReactNode, marker: symbol): boolean => {
+  if (!React.isValidElement(child) || typeof child.type === 'string') return false;
+  const type = child.type as React.JSXElementConstructor<unknown> & Record<symbol, unknown>;
+  return type[marker] === true;
+};
+
+markSubComponent(HeaderMarker, HEADER_SYMBOL, 'EntitiesListHeader');
+markSubComponent(FiltersMarker, FILTERS_SYMBOL, 'EntitiesListFilters');
+markSubComponent(StatsMarker, STATS_SYMBOL, 'EntitiesListStats');
+markSubComponent(ListMarker, LIST_SYMBOL, 'EntitiesListList');
+markSubComponent(PaginationMarker, PAGINATION_SYMBOL, 'EntitiesListPagination');
+markSubComponent(DetailMarker, DETAIL_SYMBOL, 'EntitiesListDetail');
 
 // ========================================
 // Main Component
@@ -145,18 +158,21 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
     // Parse children to detect sub-components
     const childrenArray = Children.toArray(children);
-    const headerChild = childrenArray.find((child: any) => child?.type?.[HEADER_SYMBOL]) as any;
-    const filtersChild = childrenArray.find((child: any) => child?.type?.[FILTERS_SYMBOL]) as any;
-    const statsChild = childrenArray.find((child: any) => child?.type?.[STATS_SYMBOL]) as any;
-    const listChild = childrenArray.find((child: any) => child?.type?.[LIST_SYMBOL]) as any;
-    const paginationChild = childrenArray.find(
-      (child: any) => child?.type?.[PAGINATION_SYMBOL]
-    ) as any;
-    const detailChild = childrenArray.find((child: any) => child?.type?.[DETAIL_SYMBOL]) as any;
+    const headerChild = childrenArray.find((child) => hasSubComponentMarker(child, HEADER_SYMBOL));
+    const filtersChild = childrenArray.find((child) =>
+      hasSubComponentMarker(child, FILTERS_SYMBOL)
+    );
+    const statsChild = childrenArray.find((child) => hasSubComponentMarker(child, STATS_SYMBOL));
+    const listChild = childrenArray.find((child) => hasSubComponentMarker(child, LIST_SYMBOL));
+    const paginationChild = childrenArray.find((child) =>
+      hasSubComponentMarker(child, PAGINATION_SYMBOL)
+    );
+    const detailChild = childrenArray.find((child) => hasSubComponentMarker(child, DETAIL_SYMBOL));
 
     // Determine if using compound mode
-    const hasSubComponents =
-      headerChild || filtersChild || statsChild || listChild || paginationChild || detailChild;
+    const hasSubComponents = Boolean(
+      headerChild || filtersChild || statsChild || listChild || paginationChild || detailChild
+    );
 
     // In legacy mode, include all sections by default
     // In compound mode, only include explicitly specified sections
@@ -166,14 +182,16 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     const includeList = hasSubComponents ? !!listChild : true;
     const includePagination = hasSubComponents ? !!paginationChild : true;
     const includeDetail = hasSubComponents ? !!detailChild : true;
+    const shouldLoadEntityTypes = includeFilters;
+    const shouldLoadEntities = includeFilters || includeStats || includeList || includePagination;
 
     // State
     const [entities, setEntities] = useState<Entity[]>([]);
     const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
     const [relationships, setRelationships] = useState<Relationship[]>([]);
     const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [loadingTypes, setLoadingTypes] = useState(true);
+    const [loading, setLoading] = useState(shouldLoadEntities);
+    const [loadingTypes, setLoadingTypes] = useState(shouldLoadEntityTypes);
     const [error, setError] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [totalCount, setTotalCount] = useState(0);
@@ -248,10 +266,17 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     // Load entity types and entities in parallel
     useEffect(() => {
       const loadInitialData = async () => {
-        await Promise.all([loadEntityTypes(), loadEntities()]);
+        const loaders: Array<Promise<void>> = [];
+        if (shouldLoadEntityTypes) {
+          loaders.push(loadEntityTypes());
+        }
+        if (shouldLoadEntities) {
+          loaders.push(loadEntities());
+        }
+        await Promise.all(loaders);
       };
-      loadInitialData();
-    }, [loadEntityTypes, loadEntities]);
+      void loadInitialData();
+    }, [loadEntityTypes, loadEntities, shouldLoadEntityTypes, shouldLoadEntities]);
 
     // Filter entities by search query
     const filteredEntities = entities.filter(
@@ -264,9 +289,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     // Sort entities
     const sortedEntities = [...filteredEntities].sort((a, b) => {
       if (sortBy === 'name') {
-        const nameA = a.name ?? '';
-        const nameB = b.name ?? '';
-        return nameA.localeCompare(nameB);
+        return a.name.localeCompare(b.name);
       } else {
         const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
         const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -276,12 +299,16 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
     const handleEntityClick = (entity: Entity) => {
       setSelectedEntity(entity);
-      loadRelationships(entity.uuid);
+      void loadRelationships(entity.uuid);
     };
 
     const handleRefresh = () => {
-      loadEntities();
-      loadEntityTypes();
+      if (shouldLoadEntities) {
+        void loadEntities();
+      }
+      if (shouldLoadEntityTypes) {
+        void loadEntityTypes();
+      }
     };
 
     const handleClearFilters = () => {
@@ -310,7 +337,11 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                 disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
               >
-                {loading ? <Loader2 size={16} className="animate-spin motion-reduce:animate-none" /> : <RefreshCw size={16} />}
+                {loading ? (
+                  <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
                 {t('project.graph.entities.refresh')}
               </button>
             </div>
@@ -436,7 +467,10 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
             <div className="lg:col-span-2 space-y-4">
               {loading ? (
                 <div className="text-center py-12">
-                  <Loader2 size={32} className="text-slate-400 animate-spin motion-reduce:animate-none" />
+                  <Loader2
+                    size={32}
+                    className="text-slate-400 animate-spin motion-reduce:animate-none"
+                  />
                   <p className="text-slate-500 mt-2">{t('project.graph.entities.loading')}</p>
                 </div>
               ) : error ? (
@@ -508,7 +542,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                         {t('common.pagination.page_info', {
                           page: page + 1,
                           total: Math.ceil(totalCount / limit),
-                          defaultValue: `Page ${page + 1} of ${Math.ceil(totalCount / limit)}`,
+                          defaultValue: `Page ${String(page + 1)} of ${String(Math.ceil(totalCount / limit))}`,
                         })}
                       </span>
                       <button

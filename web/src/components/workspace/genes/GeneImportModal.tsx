@@ -8,10 +8,10 @@ import { Search } from 'lucide-react';
 
 import { geneMarketService, type GeneResponse } from '@/services/geneMarketService';
 
+import { marketplaceGeneToPayload } from './marketplaceMapper';
 import { getCategoryColor } from './utils';
 
 import type { GenePayload } from './GeneEditorModal';
-import { marketplaceGeneToPayload } from './marketplaceMapper';
 
 export interface GeneImportModalProps {
   open: boolean;
@@ -32,30 +32,27 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPage = useCallback(
-    async (nextPage: number, query: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const params: { page: number; page_size: number; search?: string; is_published?: boolean } = {
-          page: nextPage,
-          page_size: PAGE_SIZE,
-          is_published: true,
-        };
-        if (query.trim() !== '') params.search = query.trim();
-        const data = await geneMarketService.listGenes(params);
-        setItems(data.genes ?? []);
-        setTotal(data.total ?? 0);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load marketplace');
-        setItems([]);
-        setTotal(0);
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  const fetchPage = useCallback(async (nextPage: number, query: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params: { page: number; page_size: number; search?: string; is_published?: boolean } = {
+        page: nextPage,
+        page_size: PAGE_SIZE,
+        is_published: true,
+      };
+      if (query.trim() !== '') params.search = query.trim();
+      const data = await geneMarketService.listGenes(params);
+      setItems(data.genes);
+      setTotal(data.total);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load marketplace');
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -103,7 +100,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel
       width={720}
       footer={null}
       onCancel={onCancel}
-      destroyOnClose
+      destroyOnHidden
     >
       <div className="space-y-3">
         <Input
@@ -121,7 +118,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel
           onBlur={handleSearch}
         />
 
-        {error && <Alert type="error" showIcon message={error} />}
+        {error && <Alert type="error" showIcon title={error} />}
 
         <div className="min-h-[240px] max-h-[420px] overflow-y-auto rounded border border-slate-200">
           {loading ? (
@@ -175,11 +172,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel
                         )}
                       </div>
                       <div className="shrink-0 text-xs text-slate-400">
-                        {gene.download_count != null && (
-                          <span>
-                            ↓ {gene.download_count}
-                          </span>
-                        )}
+                        <span>↓ {gene.download_count}</span>
                       </div>
                     </div>
                   </button>

@@ -320,7 +320,7 @@ const ClarificationContent: React.FC<{
   );
   const [customInput, setCustomInput] = useState('');
 
-  const hasOptions = data.options && data.options.length > 0;
+  const hasOptions = data.options.length > 0;
 
   const handleSubmit = useCallback(() => {
     if (!hasOptions && data.allow_custom && customInput.trim()) {
@@ -346,7 +346,7 @@ const ClarificationContent: React.FC<{
         {hasOptions ? (
           <>
             {data.options.map((option, idx) => {
-              const optionKey = option.id || `option-${idx}`;
+              const optionKey = option.id || `option-${String(idx)}`;
               const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
               const optionLabel = getOptionLabelText(option.label) ?? option.id;
               const optionDescription = getOptionDescriptionText(option.description);
@@ -495,7 +495,7 @@ const DecisionContent: React.FC<{
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const isMultiSelect = data.selection_mode === 'multiple';
-  const hasOptions = data.options && data.options.length > 0;
+  const hasOptions = data.options.length > 0;
 
   const toggleMultiSelect = useCallback((optionId: string) => {
     setSelectedMultiple((prev) =>
@@ -554,7 +554,7 @@ const DecisionContent: React.FC<{
         {hasOptions ? (
           <>
             {data.options.map((option, idx) => {
-              const optionKey = option.id || `option-${idx}`;
+              const optionKey = option.id || `option-${String(idx)}`;
               const isSelectedSingle = isAnswered
                 ? answeredValue === option.id
                 : selected === option.id;
@@ -565,7 +565,8 @@ const DecisionContent: React.FC<{
               const optionRisks = getOptionRiskList(option.risks);
               const optionDescription = getOptionDescriptionText(option.description);
               const hasDetails =
-                !isAnswered && (option.estimated_time || option.estimated_cost || optionRisks.length);
+                !isAnswered &&
+                (option.estimated_time || option.estimated_cost || optionRisks.length);
 
               return (
                 <button
@@ -635,11 +636,11 @@ const DecisionContent: React.FC<{
                           </LazyTag>
                         )}
                         {!isOptionSelected && optionRisks.length > 0 && !isAnswered && (
-                            <LazyTag color="orange" className="text-xs">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              {t('agent.hitl.tag.has_risks', 'Has risks')}
-                            </LazyTag>
-                          )}
+                          <LazyTag color="orange" className="text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            {t('agent.hitl.tag.has_risks', 'Has risks')}
+                          </LazyTag>
+                        )}
                       </div>
                       {optionDescription ? (
                         <p
@@ -785,7 +786,7 @@ const EnvVarContent: React.FC<{
   isAnswered?: boolean | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered }) => {
   const { t } = useTranslation();
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<Record<string, string>>();
   const [saveForLater, setSaveForLater] = useState(true);
   const decodedData = useMemo(() => decodeEnvVarRequestedEventData(data), [data]);
 
@@ -815,7 +816,7 @@ const EnvVarContent: React.FC<{
 
       {!isAnswered ? (
         <Form form={form} layout="vertical" size="middle">
-          {decodedData.fields && decodedData.fields.length > 0 ? (
+          {decodedData.fields.length > 0 ? (
             decodedData.fields.map((field) => (
               <Form.Item
                 key={field.name}
@@ -897,7 +898,7 @@ const EnvVarContent: React.FC<{
             </LazyTag>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">
-            {decodedData.fields?.map((f) => f.label).join(', ') ||
+            {decodedData.fields.map((f) => f.label).join(', ') ||
               t('agent.hitl.placeholder.env_vars_fallback', 'Environment variables')}
           </p>
         </div>
@@ -1193,6 +1194,13 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
       ]
     );
 
+    const handleSubmitAction = useCallback(
+      (responseData: HITLResponseData) => {
+        void handleSubmit(responseData);
+      },
+      [handleSubmit]
+    );
+
     const icon = getHITLIcon(hitlType);
     const titleInfo = getHITLTitleKey(hitlType);
     const title = t(titleInfo.key, titleInfo.fallback);
@@ -1263,7 +1271,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
               {hitlType === 'clarification' && clarificationData && (
                 <ClarificationContent
                   data={clarificationData}
-                  onSubmit={handleSubmit}
+                  onSubmit={handleSubmitAction}
                   isSubmitting={isCurrentlySubmitting}
                   isAnswered={isAnswered}
                   answeredValue={answeredValue}
@@ -1272,7 +1280,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
               {hitlType === 'decision' && decisionData && (
                 <DecisionContent
                   data={decisionData}
-                  onSubmit={handleSubmit}
+                  onSubmit={handleSubmitAction}
                   isSubmitting={isCurrentlySubmitting}
                   isAnswered={isAnswered}
                   answeredValue={answeredValue}
@@ -1281,7 +1289,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
               {hitlType === 'env_var' && envVarData && (
                 <EnvVarContent
                   data={envVarData}
-                  onSubmit={handleSubmit}
+                  onSubmit={handleSubmitAction}
                   isSubmitting={isCurrentlySubmitting}
                   isAnswered={isAnswered}
                 />
@@ -1289,7 +1297,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
               {hitlType === 'permission' && permissionData && (
                 <PermissionContent
                   data={permissionData}
-                  onSubmit={handleSubmit}
+                  onSubmit={handleSubmitAction}
                   isSubmitting={isCurrentlySubmitting}
                   isAnswered={isAnswered}
                   answeredValue={answeredValue}

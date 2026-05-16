@@ -9,6 +9,8 @@
 
 import { memo, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { ChevronDown, ChevronRight, ExternalLink, Globe, Database, Network } from 'lucide-react';
 
 import {
@@ -20,6 +22,7 @@ import {
 } from './normalizeSources';
 
 import type { TimelineStep } from '../timeline/ExecutionTimeline';
+import type { TFunction } from 'i18next';
 
 interface MultiSourceResultsCardProps {
   steps: ReadonlyArray<TimelineStep>;
@@ -27,7 +30,15 @@ interface MultiSourceResultsCardProps {
   minSearchSteps?: number | undefined;
 }
 
-const TYPE_ICON: Record<Source['sourceType'], React.ComponentType<{ size?: number; className?: string }>> = {
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+const TYPE_ICON: Record<
+  Source['sourceType'],
+  React.ComponentType<{ size?: number; className?: string }>
+> = {
   web: Globe,
   rag: Database,
   graph: Network,
@@ -114,6 +125,7 @@ export const MultiSourceResultsCard = memo(function MultiSourceResultsCard({
   steps,
   minSearchSteps = 2,
 }: MultiSourceResultsCardProps) {
+  const { t } = useTranslation();
   const { groups, totalSources, searchStepCount } = useMemo(() => {
     const perStepLists: Array<ReadonlyArray<Source>> = [];
     let searchStepsFound = 0;
@@ -136,6 +148,14 @@ export const MultiSourceResultsCard = memo(function MultiSourceResultsCard({
   }, [steps]);
 
   if (searchStepCount < minSearchSteps || totalSources === 0) return null;
+  const callLabel =
+    searchStepCount === 1
+      ? tFallback(t, 'agent.results.multiSource.call', 'call')
+      : tFallback(t, 'agent.results.multiSource.calls', 'calls');
+  const groupLabel =
+    groups.length === 1
+      ? tFallback(t, 'agent.results.multiSource.group', 'group')
+      : tFallback(t, 'agent.results.multiSource.groups', 'groups');
 
   return (
     <div
@@ -145,11 +165,11 @@ export const MultiSourceResultsCard = memo(function MultiSourceResultsCard({
       <div className="flex items-center justify-between gap-2 bg-slate-50/70 px-3 py-2 dark:bg-slate-800/40">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-200">
           <Globe size={13} className="text-slate-500 dark:text-slate-400" />
-          <span>Aggregated sources</span>
+          <span>{tFallback(t, 'agent.results.multiSource.title', 'Aggregated sources')}</span>
         </div>
         <span className="text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
-          {totalSources} from {searchStepCount} {searchStepCount === 1 ? 'call' : 'calls'} ·{' '}
-          {groups.length} {groups.length === 1 ? 'group' : 'groups'}
+          {totalSources} {tFallback(t, 'agent.results.multiSource.from', 'from')} {searchStepCount}{' '}
+          {callLabel} · {groups.length} {groupLabel}
         </span>
       </div>
       <div>

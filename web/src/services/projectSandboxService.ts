@@ -12,7 +12,6 @@
  */
 
 import { logger } from '../utils/logger';
-import { getAuthToken } from '../utils/tokenResolver';
 
 import { httpClient } from './client/httpClient';
 import { buildDesktopWebSocketUrl, buildTerminalWebSocketUrl } from './sandboxWebSocketUtils';
@@ -157,6 +156,20 @@ export interface SandboxStats {
   uptime_seconds?: number | undefined;
   created_at?: string | undefined;
   collected_at: string;
+}
+
+/**
+ * Tenant-scoped project sandbox list response
+ */
+export interface ListProjectSandboxesResponse {
+  sandboxes: ProjectSandbox[];
+  total: number;
+}
+
+export interface ListProjectSandboxesOptions {
+  status?: ProjectSandboxStatus | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
 }
 
 /**
@@ -334,6 +347,12 @@ export interface ProjectSandboxService {
   startDesktop(projectId: string, resolution?: string): Promise<DesktopStatus>;
 
   /**
+   * Seed the scoped proxy auth cookie used by sandbox iframe and WebSocket connections.
+   * @param projectId - Project ID
+   */
+  ensureProxyAuthCookie(projectId: string): Promise<void>;
+
+  /**
    * Stop desktop service for project
    * @param projectId - Project ID
    * @returns Promise that resolves when stopped
@@ -379,6 +398,13 @@ export interface ProjectSandboxService {
     projectId: string,
     serviceId: string
   ): Promise<HttpServicePreviewSessionResponse>;
+
+  /**
+   * List project sandboxes visible in the current tenant context
+   */
+  listProjectSandboxes(
+    options?: ListProjectSandboxesOptions
+  ): Promise<ListProjectSandboxesResponse>;
 }
 
 /**
@@ -648,6 +674,10 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     return response;
   }
 
+  async ensureProxyAuthCookie(projectId: string): Promise<void> {
+    await this.api.post(`/projects/${projectId}/sandbox/proxy-auth-cookie`, {});
+  }
+
   async startDesktop(projectId: string, resolution = '1920x1080'): Promise<DesktopStatus> {
     logger.debug(`[ProjectSandboxService] Starting desktop for project: ${projectId}`);
     const response = await this.api.post<DesktopApiResponse>(
@@ -656,14 +686,14 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
       { timeout: 30000 } // 30 seconds for desktop service startup
     );
 
-    // Build proxy URL with token for authentication
-    // KasmVNC serves its own web client; proxy through API server
-    const token = getAuthToken();
+    // KasmVNC serves its own web client; proxy through API server.
+    // Browser iframe and WebSocket requests authenticate with a scoped HttpOnly cookie.
     const isRunning = response.success || response.running;
-    const proxyUrl = isRunning
-      ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/${token ? `?token=${encodeURIComponent(token)}` : ''}`
-      : null;
-    const wsUrl = isRunning ? buildDesktopWebSocketUrl(projectId, token || undefined) : null;
+    if (isRunning) {
+      await this.ensureProxyAuthCookie(projectId);
+    }
+    const proxyUrl = isRunning ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/` : null;
+    const wsUrl = isRunning ? buildDesktopWebSocketUrl(projectId) : null;
 
     return {
       running: response.success ?? response.running ?? false,
@@ -750,6 +780,15 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
       `/projects/${projectId}/sandbox/http-services/${encodeURIComponent(serviceId)}/preview-session`,
       {}
     );
+  }
+
+  async listProjectSandboxes(
+    options: ListProjectSandboxesOptions = {}
+  ): Promise<ListProjectSandboxesResponse> {
+    logger.debug('[ProjectSandboxService] Listing project sandboxes for current tenant');
+    return this.api.get<ListProjectSandboxesResponse>('/projects/sandboxes', {
+      params: options,
+    });
   }
 }
 

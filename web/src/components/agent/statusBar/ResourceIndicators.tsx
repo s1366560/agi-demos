@@ -19,14 +19,33 @@ import { ContextStatusIndicator } from '../context/ContextStatusIndicator';
 
 import type { TFunction } from 'i18next';
 
+interface TaskProgressItem {
+  status: string;
+}
+
+interface ExecutionPathDecision {
+  path: string;
+  confidence: number;
+}
+
+interface SelectionTrace {
+  final_count: number;
+  initial_count: number;
+  stages: readonly unknown[];
+}
+
+interface PolicyFiltered {
+  removed_total: number;
+}
+
 export interface ResourceIndicatorsProps {
   status: AgentStatus;
   messageCount: number;
-  tasks: any[];
+  tasks: readonly TaskProgressItem[];
   hasInsights: boolean;
-  executionPathDecision: any;
-  selectionTrace: any;
-  policyFiltered: any;
+  executionPathDecision: ExecutionPathDecision | null | undefined;
+  selectionTrace: SelectionTrace | null | undefined;
+  policyFiltered: PolicyFiltered | null | undefined;
   domainLane: string | null;
   t: TFunction;
 }
@@ -42,6 +61,12 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
   domainLane,
   t,
 }) => {
+  const completedTaskCount = tasks.filter((task) => task.status === 'completed').length;
+  const inProgressTaskCount = tasks.filter((task) => task.status === 'in_progress').length;
+  const pendingTaskCount = tasks.filter((task) => task.status === 'pending').length;
+  const executionPathLabel =
+    executionPathDecision?.path.replace(/_/g, ' ') ?? t('agent.lifecycle.insights.label');
+
   return (
     <>
       {/* Resources: Tools with detailed breakdown */}
@@ -52,9 +77,15 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
             title={
               <div className="space-y-1">
                 <div className="font-medium">{t('agent.lifecycle.stats.toolStats')}</div>
-                <div>{t('agent.lifecycle.stats.totalTools')}: {status.toolStats.total}</div>
-                <div>{t('agent.lifecycle.stats.builtinTools')}: {status.toolStats.builtin}</div>
-                <div>{t('agent.lifecycle.stats.mcpTools')}: {status.toolStats.mcp}</div>
+                <div>
+                  {t('agent.lifecycle.stats.totalTools')}: {status.toolStats.total}
+                </div>
+                <div>
+                  {t('agent.lifecycle.stats.builtinTools')}: {status.toolStats.builtin}
+                </div>
+                <div>
+                  {t('agent.lifecycle.stats.mcpTools')}: {status.toolStats.mcp}
+                </div>
               </div>
             }
           >
@@ -81,8 +112,12 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
             title={
               <div className="space-y-1">
                 <div className="font-medium">{t('agent.lifecycle.stats.skillStats')}</div>
-                <div>{t('agent.lifecycle.stats.totalSkills')}: {status.skillStats.total}</div>
-                <div>{t('agent.lifecycle.stats.loaded')}: {status.skillStats.loaded}</div>
+                <div>
+                  {t('agent.lifecycle.stats.totalSkills')}: {status.skillStats.total}
+                </div>
+                <div>
+                  {t('agent.lifecycle.stats.loaded')}: {status.skillStats.loaded}
+                </div>
               </div>
             }
           >
@@ -114,17 +149,21 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
               <div className="space-y-1">
                 <div className="font-medium">{t('agent.lifecycle.stats.taskProgress')}</div>
                 <div>
-                  {t('agent.lifecycle.stats.completed')}: {tasks.filter((task) => task.status === 'completed').length}/{tasks.length}
+                  {t('agent.lifecycle.stats.completed')}: {completedTaskCount}/{tasks.length}
                 </div>
-                <div>{t('agent.lifecycle.stats.inProgress')}: {tasks.filter((task) => task.status === 'in_progress').length}</div>
-                <div>{t('agent.lifecycle.stats.pending')}: {tasks.filter((task) => task.status === 'pending').length}</div>
+                <div>
+                  {t('agent.lifecycle.stats.inProgress')}: {inProgressTaskCount}
+                </div>
+                <div>
+                  {t('agent.lifecycle.stats.pending')}: {pendingTaskCount}
+                </div>
               </div>
             }
           >
             <div className="flex items-center gap-1 text-xs text-purple dark:text-purple-light">
               <ListTodo size={11} />
               <span className="tabular-nums">
-                {tasks.filter((task) => task.status === 'completed').length}/{tasks.length}
+                {completedTaskCount}/{tasks.length}
               </span>
             </div>
           </LazyTooltip>
@@ -142,12 +181,16 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
         <>
           <div className="w-px h-3 bg-border-separator dark:bg-border-separator-dark hidden sm:block" />
           <LazyTooltip
-            title={t('agent.lifecycle.planMode.tooltip', { mode: status.planMode.currentMode?.toUpperCase() || 'PLAN' })}
+            title={t('agent.lifecycle.planMode.tooltip', {
+              mode: status.planMode.currentMode?.toUpperCase() || 'PLAN',
+            })}
           >
             <div className="flex items-center gap-1 text-xs text-status-text-info dark:text-status-text-info-dark">
               <Zap size={11} />
               <span className="hidden sm:inline">
-                {status.planMode.currentMode === 'plan' ? t('agent.lifecycle.planMode.label') : status.planMode.currentMode}
+                {status.planMode.currentMode === 'plan'
+                  ? t('agent.lifecycle.planMode.label')
+                  : status.planMode.currentMode}
               </span>
             </div>
           </LazyTooltip>
@@ -162,16 +205,20 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
             title={
               <div className="space-y-2 max-w-xs">
                 <div className="font-medium border-b border-border-light/20 pb-1">
-                  Execution Insights
+                  {t('agent.lifecycle.insights.executionInsights')}
                 </div>
                 {executionPathDecision && (
                   <div className="flex items-start gap-2 text-xs">
                     <Route size={12} className="mt-0.5 text-status-text-info-dark flex-shrink-0" />
                     <div>
-                      <span className="font-medium">Path:</span>{' '}
+                      <span className="font-medium">{t('agent.lifecycle.insights.path')}:</span>{' '}
                       {executionPathDecision.path.replace(/_/g, ' ')} (
                       {executionPathDecision.confidence.toFixed(2)})
-                      {domainLane && <span className="ml-1 opacity-70">· lane {domainLane}</span>}
+                      {domainLane && (
+                        <span className="ml-1 opacity-70">
+                          · {t('agent.lifecycle.insights.lane', { lane: domainLane })}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -179,18 +226,28 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
                   <div className="flex items-start gap-2 text-xs">
                     <Filter size={12} className="mt-0.5 text-purple-light flex-shrink-0" />
                     <div>
-                      <span className="font-medium">Selection:</span> {selectionTrace.final_count}
-                      /{selectionTrace.initial_count} tools kept across{' '}
-                      {selectionTrace.stages.length} stages
+                      <span className="font-medium">
+                        {t('agent.lifecycle.insights.selection')}:
+                      </span>{' '}
+                      {t('agent.lifecycle.insights.selectionSummary', {
+                        final: selectionTrace.final_count,
+                        initial: selectionTrace.initial_count,
+                        stages: selectionTrace.stages.length,
+                      })}
                     </div>
                   </div>
                 )}
                 {policyFiltered && policyFiltered.removed_total > 0 && (
                   <div className="flex items-start gap-2 text-xs">
-                    <Filter size={12} className="mt-0.5 text-status-text-warning-dark flex-shrink-0" />
+                    <Filter
+                      size={12}
+                      className="mt-0.5 text-status-text-warning-dark flex-shrink-0"
+                    />
                     <div>
-                      <span className="font-medium">Policy:</span> filtered{' '}
-                      {policyFiltered.removed_total} tools
+                      <span className="font-medium">{t('agent.lifecycle.insights.policy')}:</span>{' '}
+                      {t('agent.lifecycle.insights.policySummary', {
+                        count: policyFiltered.removed_total,
+                      })}
                     </div>
                   </div>
                 )}
@@ -199,9 +256,7 @@ export const ResourceIndicators: FC<ResourceIndicatorsProps> = ({
           >
             <div className="flex items-center gap-1 text-xs text-text-muted hover:text-text-secondary dark:hover:text-text-inverse cursor-help transition-colors">
               <Route size={11} className="text-info" />
-              <span className="hidden sm:inline">
-                {executionPathDecision?.path.replace(/_/g, ' ') || 'Insights'}
-              </span>
+              <span className="hidden sm:inline">{executionPathLabel}</span>
             </div>
           </LazyTooltip>
         </>

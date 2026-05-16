@@ -17,6 +17,7 @@ import { formatDateTime } from '@/utils/date';
 
 import api from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
+import { confirmAction } from '../../utils/confirmAction';
 
 interface SupportTicket {
   id: string;
@@ -73,7 +74,7 @@ export const Support: React.FC = () => {
   }, [currentTenant]);
 
   useEffect(() => {
-    loadTickets();
+    void loadTickets();
   }, [loadTickets]);
 
   const handleSubmitTicket = async (e: React.FormEvent) => {
@@ -112,7 +113,7 @@ export const Support: React.FC = () => {
   };
 
   const handleCloseTicket = async (ticketId: string) => {
-    if (!confirm(t('project.support.tickets.close_confirm'))) return;
+    if (!(await confirmAction(t('project.support.tickets.close_confirm')))) return;
 
     try {
       await api.post(`/support/tickets/${ticketId}/close`);
@@ -281,7 +282,11 @@ export const Support: React.FC = () => {
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
             {t('project.support.create_ticket')}
           </h2>
-          <form onSubmit={handleSubmitTicket}>
+          <form
+            onSubmit={(event) => {
+              void handleSubmitTicket(event);
+            }}
+          >
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {t('project.support.form.subject')}
@@ -404,7 +409,10 @@ export const Support: React.FC = () => {
                   </div>
                   {ticket.status === 'open' && (
                     <button
-                      onClick={() => handleCloseTicket(ticket.id)}
+                      type="button"
+                      onClick={() => {
+                        void handleCloseTicket(ticket.id);
+                      }}
                       className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                     >
                       {t('project.support.tickets.close')}

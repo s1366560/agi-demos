@@ -12,7 +12,6 @@ import {
   type GeneConfigFieldValue,
   type GeneConfigValidationError,
 } from '@/types/geneConfig';
-
 import type { CyberGeneCategory } from '@/types/workspace';
 
 export interface GeneConfigFormProps {
@@ -35,6 +34,7 @@ const StringListEditor: React.FC<{
   value: string[];
   onChange: (next: string[]) => void;
 }> = ({ value, onChange }) => {
+  const { t } = useTranslation();
   const handleAdd = useCallback(() => {
     onChange([...value, '']);
   }, [onChange, value]);
@@ -42,7 +42,7 @@ const StringListEditor: React.FC<{
     <div className="space-y-2">
       {value.map((item, idx) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: order-dependent editable list
-        <div key={`item-${idx}`} className="flex items-center gap-2">
+        <div key={`item-${String(idx)}`} className="flex items-center gap-2">
           <Input
             value={item}
             onChange={(e) => {
@@ -57,7 +57,7 @@ const StringListEditor: React.FC<{
             onClick={() => {
               onChange(value.filter((_, i) => i !== idx));
             }}
-            aria-label="Remove item"
+            aria-label={t('workspaceDetail.genes.config.removeItem', 'Remove item')}
           >
             <X size={14} />
           </button>
@@ -68,7 +68,7 @@ const StringListEditor: React.FC<{
         onClick={handleAdd}
         className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
       >
-        <Plus size={12} /> Add
+        <Plus size={12} /> {t('workspaceDetail.genes.config.addItem', 'Add')}
       </button>
     </div>
   );
@@ -78,6 +78,7 @@ const KVListEditor: React.FC<{
   value: Record<string, string>;
   onChange: (next: Record<string, string>) => void;
 }> = ({ value, onChange }) => {
+  const { t } = useTranslation();
   const entries = Object.entries(value);
   const updateKey = (oldKey: string, newKey: string) => {
     if (newKey === oldKey) return;
@@ -89,16 +90,15 @@ const KVListEditor: React.FC<{
     onChange({ ...value, [key]: newValue });
   };
   const removeKey = (key: string) => {
-    const next = { ...value };
-    delete next[key];
+    const next = Object.fromEntries(entries.filter(([entryKey]) => entryKey !== key));
     onChange(next);
   };
   const addEntry = () => {
     let suffix = entries.length + 1;
-    let key = `key${suffix}`;
+    let key = `key${String(suffix)}`;
     while (key in value) {
       suffix += 1;
-      key = `key${suffix}`;
+      key = `key${String(suffix)}`;
     }
     onChange({ ...value, [key]: '' });
   };
@@ -108,7 +108,7 @@ const KVListEditor: React.FC<{
         <div key={k} className="flex items-center gap-2">
           <Input
             value={k}
-            placeholder="key"
+            placeholder={t('workspaceDetail.genes.config.keyPlaceholder', 'key')}
             className="max-w-[40%]"
             onChange={(e) => {
               updateKey(k, e.target.value);
@@ -116,7 +116,7 @@ const KVListEditor: React.FC<{
           />
           <Input
             value={v}
-            placeholder="value"
+            placeholder={t('workspaceDetail.genes.config.valuePlaceholder', 'value')}
             onChange={(e) => {
               updateValue(k, e.target.value);
             }}
@@ -127,7 +127,7 @@ const KVListEditor: React.FC<{
             onClick={() => {
               removeKey(k);
             }}
-            aria-label="Remove entry"
+            aria-label={t('workspaceDetail.genes.config.removeEntry', 'Remove entry')}
           >
             <X size={14} />
           </button>
@@ -138,7 +138,7 @@ const KVListEditor: React.FC<{
         onClick={addEntry}
         className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
       >
-        <Plus size={12} /> Add entry
+        <Plus size={12} /> {t('workspaceDetail.genes.config.addEntry', 'Add entry')}
       </button>
     </div>
   );
@@ -211,7 +211,7 @@ export const GeneConfigForm: React.FC<GeneConfigFormProps> = ({
       case 'string_list':
         return (
           <StringListEditor
-            value={Array.isArray(value) ? (value as string[]) : []}
+            value={Array.isArray(value) ? value : []}
             onChange={(next) => {
               onChange(setField(draft, field.key, next));
             }}
@@ -220,11 +220,7 @@ export const GeneConfigForm: React.FC<GeneConfigFormProps> = ({
       case 'kv_list':
         return (
           <KVListEditor
-            value={
-              value && typeof value === 'object' && !Array.isArray(value)
-                ? (value as Record<string, string>)
-                : {}
-            }
+            value={value && typeof value === 'object' && !Array.isArray(value) ? value : {}}
             onChange={(next) => {
               onChange(setField(draft, field.key, next));
             }}
@@ -242,7 +238,9 @@ export const GeneConfigForm: React.FC<GeneConfigFormProps> = ({
       {schema.fields.map((field) => {
         const err = errorByKey.get(field.key);
         const label = t(field.labelKey, field.fallbackLabel);
-        const help = field.helpKey ? t(field.helpKey, field.fallbackHelp ?? '') : field.fallbackHelp;
+        const help = field.helpKey
+          ? t(field.helpKey, field.fallbackHelp ?? '')
+          : field.fallbackHelp;
         return (
           <Form.Item
             key={field.key}
@@ -253,7 +251,9 @@ export const GeneConfigForm: React.FC<GeneConfigFormProps> = ({
               </span>
             }
             extra={help}
-            {...(err ? { validateStatus: 'error' as const, help: t(err.messageKey, err.fallbackMessage) } : {})}
+            {...(err
+              ? { validateStatus: 'error' as const, help: t(err.messageKey, err.fallbackMessage) }
+              : {})}
           >
             {renderField(field)}
           </Form.Item>

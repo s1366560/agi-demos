@@ -48,8 +48,6 @@ vi.mock('../../../../components/agent/execution/SimpleExecutionView', () => ({
   ),
 }));
 
-
-
 import { getDisplayMode } from '../../../../components/agent/execution/ExecutionTimeline';
 
 import type { TimelineStep, WorkPlan, ToolExecution } from '../../../../types/agent';

@@ -16,7 +16,6 @@ import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, mem
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
 
-
 import { Modal } from 'antd';
 import {
   Plus,
@@ -39,7 +38,6 @@ import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
 
-import { Resizer } from '@/components/agent/Resizer';
 import {
   getContextualTopNavItems,
   isContextualTopNavItemActive,
@@ -51,6 +49,8 @@ import {
   LazySelect,
   LazyInput,
 } from '@/components/ui/lazyAntd';
+
+import { Resizer } from '../agent/Resizer';
 
 import type { Conversation } from '@/types/agent';
 
@@ -80,6 +80,7 @@ const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
 const ConversationItem: React.FC<ConversationItemProps> = memo(
   ({ conversation, isActive, onSelect, onDelete, onRename, compact = false }) => {
+    const { t } = useTranslation();
     const timeAgo = React.useMemo(() => {
       try {
         return formatDistanceToNow(conversation.created_at);
@@ -101,25 +102,25 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         {
           key: 'rename',
           icon: <Edit3 size={14} />,
-          label: 'Rename',
+          label: t('agent.sidebar.rename', 'Rename'),
           onClick: () => onRename?.({} as React.MouseEvent),
         },
         {
           key: 'delete',
           icon: <Trash2 size={14} />,
-          label: 'Delete',
+          label: t('agent.sidebar.delete', 'Delete'),
           danger: true,
           onClick: (e) => {
             onDelete(e.domEvent as React.MouseEvent);
           },
         },
       ],
-      [onDelete, onRename]
+      [onDelete, onRename, t]
     );
 
     if (compact) {
       return (
-        <Tooltip title={conversation.title || 'Untitled'}>
+        <Tooltip title={conversation.title || t('agent.sidebar.untitled', 'Untitled')}>
           <button
             type="button"
             onClick={onSelect}
@@ -289,10 +290,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const currentWorkspace = useCurrentWorkspace();
   const workspaces = useWorkspaces();
 
-  const {
-    conversations,
-    hasMoreConversations,
-  } = useConversationsStore(
+  const { conversations, hasMoreConversations } = useConversationsStore(
     useShallow((state) => ({
       conversations: state.conversations,
       hasMoreConversations: state.hasMoreConversations,
@@ -304,6 +302,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const normalizedTenantId = tenantId?.trim() ?? '';
   const resolvedTenantId = normalizedTenantId || undefined;
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
+  const queryProjectId = useMemo(
+    () => new URLSearchParams(location.search).get('projectId'),
+    [location.search]
+  );
   const isProjectScopedPath = location.pathname.includes('/project/');
   const contextualProjectId = isProjectScopedPath ? currentProject?.id : undefined;
   const contextualProjectBasePath = contextualProjectId
@@ -315,7 +317,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         basePath: tenantBasePath,
         projectBasePath: contextualProjectBasePath,
         preferredWorkspaceId,
-        t: (key, fallback) => String(fallback ? t(key, fallback) : t(key)),
+        t: (key, fallback) => (fallback ? t(key, fallback) : t(key)),
         tenantId: resolvedTenantId,
         projectId: contextualProjectId,
       }),
@@ -339,20 +341,29 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   // Load projects on mount
   useEffect(() => {
     if (tenantId && projects.length === 0) {
-      listProjects(tenantId);
+      void Promise.resolve(listProjects(tenantId)).catch((error: unknown) => {
+        console.error('Failed to load projects:', error);
+      });
     }
   }, [tenantId, projects.length, listProjects]);
 
   // Set default selected project
   useEffect(() => {
-    if (!selectedProjectId && projects.length > 0) {
+    if (queryProjectId && selectedProjectId !== queryProjectId) {
+      setSelectedProjectId(queryProjectId);
+      localStorage.setItem('agent:lastProjectId', queryProjectId);
+      const project = projects.find((p) => p.id === queryProjectId);
+      if (project) {
+        setCurrentProject(project);
+      }
+    } else if (!selectedProjectId && projects.length > 0) {
       const project = currentProject || projects[0];
       if (!project) return;
       setSelectedProjectId(project.id);
       setCurrentProject(project);
       localStorage.setItem('agent:lastProjectId', project.id);
     }
-  }, [projects, currentProject, selectedProjectId, setCurrentProject]);
+  }, [projects, currentProject, selectedProjectId, setCurrentProject, queryProjectId]);
 
   // Load conversations when selected project changes
   // NOTE: Use ref pattern to avoid dependency on loadConversations function
@@ -365,7 +376,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (selectedProjectId && loadedProjectIdRef.current !== selectedProjectId) {
       loadedProjectIdRef.current = selectedProjectId;
       // Use ref to call latest function without triggering effect re-run
-      loadConversationsRef.current(selectedProjectId);
+      void Promise.resolve(loadConversationsRef.current(selectedProjectId)).catch(
+        (error: unknown) => {
+          console.error('Failed to load conversations:', error);
+        }
+      );
     }
     // ONLY depend on selectedProjectId, NOT loadConversations
   }, [selectedProjectId]);
@@ -410,7 +425,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       const target = e.currentTarget;
       const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
       if (nearBottom) {
-        loadMore();
+        void loadMore().catch((error: unknown) => {
+          console.error('Failed to load more conversations:', error);
+        });
       }
     },
     [hasMoreConversations, selectedProjectId, loadMore]
@@ -418,7 +435,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const handleSelectConversation = useCallback(
     (id: string, projectId: string) => {
-      navigate(
+      void navigate(
         buildAgentWorkspacePath({
           tenantId,
           conversationId: id,
@@ -464,7 +481,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
     // If content doesn't fill container and there are more conversations, load more
     if (!contentFillsContainer && conversations.length > 0) {
-      loadMore();
+      void loadMore().catch((error: unknown) => {
+        console.error('Failed to auto-load more conversations:', error);
+      });
     }
   }, [conversations.length, hasMoreConversations, selectedProjectId, loadMore]);
 
@@ -472,7 +491,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (!selectedProjectId) return;
     const newId = await createNewConversation(selectedProjectId);
     if (newId) {
-      navigate(
+      void navigate(
         buildAgentWorkspacePath({
           tenantId,
           conversationId: newId,
@@ -488,14 +507,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       e.stopPropagation();
       if (!selectedProjectId) return;
       Modal.confirm({
-        title: 'Delete Conversation',
-        content: 'Are you sure? This action cannot be undone.',
-        okText: 'Delete',
+        title: t('agent.sidebar.deleteTitle', 'Delete Conversation'),
+        content: t('agent.sidebar.deleteConfirm', 'Are you sure? This action cannot be undone.'),
+        okText: t('agent.sidebar.delete', 'Delete'),
+        cancelText: t('common.cancel', 'Cancel'),
         okType: 'danger',
         onOk: async () => {
           await deleteConversation(id, selectedProjectId);
           if (activeConversationId === id) {
-            navigate(
+            void navigate(
               buildAgentWorkspacePath({
                 tenantId,
                 projectId: selectedProjectId,
@@ -512,6 +532,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       deleteConversation,
       navigate,
       tenantId,
+      t,
       workspaceIdFromQuery,
     ]
   );
@@ -566,6 +587,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Get current width for render
   const currentWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
+  const conversationCountLabel = t('agent.sidebar.conversationCount', {
+    count: conversations.length,
+    defaultValue: '{{count}} conversations',
+  });
+  const conversationCountText =
+    typeof conversationCountLabel === 'string'
+      ? conversationCountLabel
+      : `${conversations.length.toString()} ${t('agent.sidebar.conversations', 'conversations')}`;
 
   return (
     <aside
@@ -590,7 +619,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             setSidebarWidth(newWidth);
             widthRef.current = newWidth;
             if (sidebarRef.current) {
-              sidebarRef.current.style.width = `${newWidth}px`;
+              sidebarRef.current.style.width = `${String(newWidth)}px`;
             }
           }}
           onResizeEnd={(finalSize) => {
@@ -599,7 +628,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
               widthRef.current = SIDEBAR_DEFAULT_WIDTH;
               if (sidebarRef.current) {
-                sidebarRef.current.style.width = `${SIDEBAR_COLLAPSED_WIDTH}px`;
+                sidebarRef.current.style.width = `${String(SIDEBAR_COLLAPSED_WIDTH)}px`;
               }
             } else {
               setCollapsed(false);
@@ -630,9 +659,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
-                Agent Workspace
+                {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
               </h2>
-              <p className="text-xs text-slate-500">{conversations.length} conversations</p>
+              <p className="text-xs text-slate-500">{conversationCountText}</p>
             </div>
           </div>
         )}
@@ -645,7 +674,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             value={selectedProjectId}
             onChange={handleProjectChange}
             className="w-full"
-            placeholder="Select a project"
+            placeholder={t('agent.sidebar.selectProject', 'Select a project')}
             disabled={projects.length === 0}
             suffixIcon={<ChevronDown size={16} />}
             options={projects.map((p) => ({
@@ -665,7 +694,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {collapsed && selectedProjectId && (
         <div className="px-2 pb-2 flex justify-center">
           <Tooltip
-            title={projects.find((p) => p.id === selectedProjectId)?.name || 'Select Project'}
+            title={
+              projects.find((p) => p.id === selectedProjectId)?.name ||
+              t('agent.sidebar.selectProjectTitle', 'Select Project')
+            }
           >
             <button
               type="button"
@@ -693,7 +725,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             rounded-xl flex items-center justify-center gap-2
           `}
         >
-          {!collapsed && <span>New Chat</span>}
+          {!collapsed && <span>{t('agent.sidebar.newChat', 'New Chat')}</span>}
         </LazyButton>
       </div>
 
@@ -718,7 +750,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                 `}
                 >
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-xs">No conversations yet</p>
+                  <p className="text-xs">
+                    {t('agent.sidebar.noConversations', 'No conversations yet')}
+                  </p>
                 </div>
               ) : (
                 enrichedConversations.map((conv) => (
@@ -775,16 +809,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       {/* Rename Modal */}
       <Modal
-        title="Rename Conversation"
+        title={t('agent.sidebar.renameTitle', 'Rename Conversation')}
         open={!!renamingConversation}
-        onOk={handleRenameSubmit}
+        onOk={() => {
+          void handleRenameSubmit();
+        }}
         onCancel={handleRenameCancel}
         confirmLoading={isRenaming}
-        okText="Rename"
-        cancelText="Cancel"
+        okText={t('agent.sidebar.rename', 'Rename')}
+        cancelText={t('common.cancel', 'Cancel')}
       >
         <LazyInput
-          placeholder="Enter conversation title"
+          placeholder={t('agent.sidebar.renamePlaceholder', 'Enter conversation title')}
           value={newTitle}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             setNewTitle(e.target.value);

@@ -4,6 +4,8 @@
 
 import React, { useState, useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Typography, Spin, Alert, Button, Tooltip, message } from 'antd';
 import { Copy, Check } from 'lucide-react';
 
@@ -73,7 +75,7 @@ function formatContent(content: string, mimeType?: string, filename?: string): s
   // Try to format JSON
   if (mimeType?.includes('json') || filename?.endsWith('.json')) {
     try {
-      const parsed = JSON.parse(content);
+      const parsed: unknown = JSON.parse(content);
       return JSON.stringify(parsed, null, 2);
     } catch {
       // Not valid JSON, return as-is
@@ -92,6 +94,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
   onLoad,
   onError,
 }) => {
+  const { t } = useTranslation();
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +112,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
 
         const response = await fetch(url);
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(`HTTP ${response.status.toString()}: ${response.statusText}`);
         }
 
         const text = await response.text();
@@ -120,7 +123,12 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
         }
       } catch (err) {
         if (!cancelled) {
-          const errMsg = err instanceof Error ? err.message : 'Failed to load content';
+          const errMsg =
+            err instanceof Error
+              ? err.message
+              : t('components.codeViewer.loadFailed', {
+                  defaultValue: 'Failed to load content',
+                });
           setError(errMsg);
           setLoading(false);
           onError?.(errMsg);
@@ -128,20 +136,26 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
       }
     };
 
-    fetchContent();
+    void fetchContent();
 
     return () => {
       cancelled = true;
     };
-  }, [url, mimeType, filename, onLoad, onError]);
+  }, [url, mimeType, filename, onLoad, onError, t]);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(content);
-    setCopied(true);
-    message.success('Copied to clipboard');
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      message.success(
+        t('components.codeViewer.copySuccess', { defaultValue: 'Copied to clipboard' })
+      );
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch {
+      void message.error(t('components.codeViewer.copyFailed', { defaultValue: 'Copy failed' }));
+    }
   };
 
   if (loading) {
@@ -153,7 +167,14 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
   }
 
   if (error) {
-    return <Alert type="error" message="Failed to load content" description={error} showIcon />;
+    return (
+      <Alert
+        type="error"
+        title={t('components.codeViewer.loadFailed', { defaultValue: 'Failed to load content' })}
+        description={error}
+        showIcon
+      />
+    );
   }
 
   // Line count for display
@@ -164,14 +185,27 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
       {!compact && (
         <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border-b border-gray-200 text-xs">
           <Text type="secondary">
-            {filename} • {language} • {lineCount} lines
+            {t('components.codeViewer.meta', {
+              defaultValue: '{{filename}} • {{language}} • {{lineCount}} lines',
+              filename,
+              language,
+              lineCount,
+            })}
           </Text>
-          <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
+          <Tooltip
+            title={
+              copied
+                ? t('components.codeViewer.copied', { defaultValue: 'Copied!' })
+                : t('components.codeViewer.copyCode', { defaultValue: 'Copy code' })
+            }
+          >
             <Button
               type="text"
               size="small"
               icon={copied ? <Check size={14} /> : <Copy size={14} />}
-              onClick={handleCopy}
+              onClick={() => {
+                void handleCopy();
+              }}
             />
           </Tooltip>
         </div>

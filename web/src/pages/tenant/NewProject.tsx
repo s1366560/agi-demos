@@ -8,6 +8,8 @@ import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
+type ProjectFormStatus = 'active' | 'paused' | 'archived';
+
 export const NewProject: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -17,7 +19,7 @@ export const NewProject: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    status: 'active' as const,
+    status: 'active' as ProjectFormStatus,
     memory_rules: {
       max_episodes: 1000,
       retention_days: 30,
@@ -44,7 +46,7 @@ export const NewProject: React.FC = () => {
         ...projectData,
         tenant_id: currentTenant.id,
       });
-      navigate(`/tenant/${currentTenant.id}/projects`);
+      void navigate(`/tenant/${currentTenant.id}/projects`);
     } catch (err) {
       console.error('Failed to create project:', err);
     }
@@ -67,7 +69,12 @@ export const NewProject: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        className="flex flex-col gap-8"
+      >
         {/* Basic Information */}
         <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
@@ -102,7 +109,7 @@ export const NewProject: React.FC = () => {
               <select
                 value={formData.status}
                 onChange={(e) => {
-                  setFormData({ ...formData, status: e.target.value as any });
+                  setFormData({ ...formData, status: e.target.value as ProjectFormStatus });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               >
@@ -313,8 +320,8 @@ export const NewProject: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
                 <div className="flex justify-between text-xs text-slate-400 mt-1">
-                  <span>Loose (0.1)</span>
-                  <span>Strict (1.0)</span>
+                  <span>{t('tenant.newProject.loose', { defaultValue: 'Loose (0.1)' })}</span>
+                  <span>{t('tenant.newProject.strict', { defaultValue: 'Strict (1.0)' })}</span>
                 </div>
               </div>
 
@@ -346,7 +353,7 @@ export const NewProject: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <Link to={`/tenant/${currentTenant?.id}/projects`}>
+          <Link to={currentTenant ? `/tenant/${currentTenant.id}/projects` : '/tenant'}>
             <button
               type="button"
               className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
@@ -359,9 +366,7 @@ export const NewProject: React.FC = () => {
             disabled={isLoading || !formData.name.trim()}
             className="px-6 py-2.5 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {isLoading && (
-              <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
-            )}
+            {isLoading && <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />}
             {t('tenant.newProject.submit')}
           </button>
         </div>

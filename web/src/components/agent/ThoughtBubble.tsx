@@ -9,11 +9,13 @@
 
 import React, { useState, memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Card, Typography, Space, Tag } from 'antd';
 import { ChevronDown, ChevronRight, Lightbulb } from 'lucide-react';
 
-
 import type { ThoughtLevel } from '../../types/agent';
+import type { TFunction } from 'i18next';
 
 const { Text } = Typography;
 
@@ -34,6 +36,11 @@ const levelConfig: Record<ThoughtLevel, { color: string; label: string; class: s
   task: { color: 'cyan', label: 'Task-level Thinking', class: 'thought-task' },
 };
 
+function tFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
 export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   thought,
   level,
@@ -41,8 +48,14 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   stepDescription,
   isThinking = false,
 }) => {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const config = levelConfig[level];
+  const ariaLabel = tFallback(t, 'agent.thoughtBubble.ariaLabel', 'Agent thinking process');
+  const configLabel =
+    level === 'work'
+      ? tFallback(t, 'agent.thoughtBubble.workLevel', 'Work-level Thinking')
+      : tFallback(t, 'agent.thoughtBubble.taskLevel', 'Task-level Thinking');
 
   // Handle empty thought
   if (!thought) {
@@ -53,12 +66,14 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
       <div
         data-testid="thought-bubble"
         className={`thought-bubble ${config.class} ${bgClass} ${borderClass} border p-2 mb-2 rounded`}
-        aria-label="Agent thinking process"
+        aria-label={ariaLabel}
       >
         <Space>
           <Lightbulb size={16} />
           <Text type="secondary" italic>
-            {isThinking ? 'Thinking...' : 'Processing...'}
+            {isThinking
+              ? tFallback(t, 'agent.thoughtBubble.thinking', 'Thinking...')
+              : tFallback(t, 'agent.thoughtBubble.processing', 'Processing...')}
           </Text>
         </Space>
       </div>
@@ -79,7 +94,7 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
       data-testid="thought-bubble"
       size="small"
       className={`thought-bubble ${config.class} ${bgClass} ${borderClass} border mb-2`}
-      aria-label="Agent thinking process"
+      aria-label={ariaLabel}
     >
       <Space orientation="vertical" size="small" className="w-full">
         {/* Header */}
@@ -87,9 +102,16 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
           <Space>
             <Lightbulb className={animationClass} data-testid="thinking-indicator" size={16} />
             <Tag color={config.color} className="m-0">
-              {config.label}
+              {configLabel}
             </Tag>
-            {stepNumber !== undefined ? <Tag color="default">Step {stepNumber + 1}</Tag> : null}
+            {stepNumber !== undefined ? (
+              <Tag color="default">
+                {t('agent.thoughtBubble.step', {
+                  defaultValue: 'Step {{step}}',
+                  step: stepNumber + 1,
+                })}
+              </Tag>
+            ) : null}
           </Space>
 
           {thought.length > 100 ? (
@@ -98,7 +120,11 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
                 setCollapsed(!collapsed);
               }}
               className="text-xs"
-              aria-label={collapsed ? 'Expand thought' : 'Collapse thought'}
+              aria-label={
+                collapsed
+                  ? tFallback(t, 'agent.thoughtBubble.expandThought', 'Expand thought')
+                  : tFallback(t, 'agent.thoughtBubble.collapseThought', 'Collapse thought')
+              }
             >
               {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
             </Typography.Link>
