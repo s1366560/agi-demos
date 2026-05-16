@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 import { message } from 'antd';
 import { Copy, Check } from 'lucide-react';
 
+import { sanitizeSvg } from '@/utils/sanitize';
+
 export const MermaidBlock = memo<{ chart: string }>(({ chart }) => {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,7 +37,7 @@ export const MermaidBlock = memo<{ chart: string }>(({ chart }) => {
 
         const { svg } = await mermaid.render(uniqueId, chart);
         if (!cancelled && containerRef.current) {
-          containerRef.current.innerHTML = svg;
+          containerRef.current.innerHTML = sanitizeSvg(svg);
           setError(null);
         }
       } catch (e) {

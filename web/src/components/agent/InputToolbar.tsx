@@ -90,6 +90,10 @@ export const InputToolbar = memo<InputToolbarProps>(
   }) => {
     const { t } = useTranslation();
     const [overflowOpen, setOverflowOpen] = useState(false);
+    const voiceCallLabel =
+      voiceCallStatus !== 'idle'
+        ? t('agent.voiceCall.endCall', { defaultValue: 'End call' })
+        : t('agent.inputBar.startVoiceCall', { defaultValue: 'Start voice call' });
 
     const overflowContent = (
       <div className="flex flex-col gap-1 p-1 min-w-50">
@@ -201,14 +205,14 @@ export const InputToolbar = memo<InputToolbarProps>(
           </LazyTooltip>
           <VoiceWaveform active={isListening} />
 
-          <LazyTooltip title={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}>
+          <LazyTooltip title={voiceCallLabel}>
             <LazyButton
               type="text"
               size="small"
               icon={voiceCallStatus !== 'idle' ? <PhoneOff size={18} /> : <Phone size={18} />}
               onClick={handleVoiceCall}
               disabled={isStreaming || disabled || isListening}
-              aria-label={voiceCallStatus !== 'idle' ? 'End voice call' : 'Start voice call'}
+              aria-label={voiceCallLabel}
               className={`
                 rounded-lg h-8 w-8 flex items-center justify-center transition-colors
                 ${

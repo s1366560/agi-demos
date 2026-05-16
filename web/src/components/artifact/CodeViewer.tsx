@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { Typography, Spin, Alert, Button, Tooltip, message } from 'antd';
 import { Copy, Check } from 'lucide-react';
 
+import { fetchArtifactResource } from '@/services/artifactService';
+
 const { Text } = Typography;
 
 export interface CodeViewerProps {
@@ -110,7 +112,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
         setLoading(true);
         setError(null);
 
-        const response = await fetch(url);
+        const response = await fetchArtifactResource(url);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status.toString()}: ${response.statusText}`);
         }

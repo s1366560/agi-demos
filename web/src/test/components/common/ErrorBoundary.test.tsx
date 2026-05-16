@@ -226,23 +226,16 @@ describe('ErrorBoundary Recovery', () => {
 
 describe('ErrorBoundary Integration', () => {
   /**
-   * Test: Works with React Router navigation
+   * Test: Navigates home without forcing a browser reload
    */
-  it('navigates to home when home button is clicked', () => {
+  it('uses history navigation when home button is clicked', () => {
     const ThrowError = () => {
       throw new Error('Navigation test error');
     };
 
     vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Mock window.location.href
-    const originalHref = window.location.href;
-    const mockLocation = { href: '' };
-    Object.defineProperty(window, 'location', {
-      value: mockLocation,
-      writable: true,
-      configurable: true,
-    });
+    const pushState = vi.spyOn(window.history, 'pushState');
+    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
 
     render(
       <ErrorBoundary>
@@ -256,14 +249,8 @@ describe('ErrorBoundary Integration', () => {
     );
     if (homeButton) {
       fireEvent.click(homeButton);
-      expect(window.location.href).toBe('/');
+      expect(pushState).toHaveBeenCalledWith(null, '', '/');
+      expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'popstate' }));
     }
-
-    // Restore original location
-    Object.defineProperty(window, 'location', {
-      value: originalHref,
-      writable: true,
-      configurable: true,
-    });
   });
 });

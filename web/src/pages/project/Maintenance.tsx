@@ -30,9 +30,12 @@ export const Maintenance: React.FC = () => {
 
   useEffect(() => {
     if (projectId) {
-      void graphService.getGraphStats(tenantId).then(setStats).catch(console.error);
+      void graphService.getGraphStats(tenantId, projectId).then(setStats).catch(console.error);
       void graphService.getEmbeddingStatus(projectId).then(setEmbeddingStatus).catch(console.error);
-      void graphService.getMaintenanceStatus().then(setMaintenanceStatus).catch(console.error);
+      void graphService
+        .getMaintenanceStatus(projectId)
+        .then(setMaintenanceStatus)
+        .catch(console.error);
     }
   }, [tenantId, projectId]);
 
@@ -40,7 +43,7 @@ export const Maintenance: React.FC = () => {
     if (!projectId) return;
     setRefreshLoading(true);
     try {
-      const res = await graphService.incrementalRefresh({});
+      const res = await graphService.incrementalRefresh({ project_id: projectId });
       // Handle both numeric and string responses for episodes_to_process
       const episodesValue: unknown = res.episodes_to_process;
       const count = typeof episodesValue === 'number' ? episodesValue : 0;
@@ -63,7 +66,7 @@ export const Maintenance: React.FC = () => {
   const handleDedupCheck = async () => {
     if (!projectId) return;
     try {
-      const res = await graphService.deduplicateEntities({ dry_run: true });
+      const res = await graphService.deduplicateEntities({ dry_run: true, project_id: projectId });
       const count = res.duplicates_found ?? 0;
       setMessage(t('project.maintenance.messages.duplicates_found', { count }));
       setMessageType('info');
@@ -78,7 +81,7 @@ export const Maintenance: React.FC = () => {
     if (!projectId) return;
     setDedupProcessing(true);
     try {
-      const res = await graphService.deduplicateEntities({ dry_run: false });
+      const res = await graphService.deduplicateEntities({ dry_run: false, project_id: projectId });
       if (res.task_id) {
         setMessage(t('project.maintenance.messages.dedup_started', { taskId: res.task_id }));
       } else if (res.message) {
@@ -87,7 +90,10 @@ export const Maintenance: React.FC = () => {
         setMessage(t('project.maintenance.messages.merge_complete'));
       }
       setMessageType('info');
-      void graphService.getMaintenanceStatus().then(setMaintenanceStatus).catch(console.error);
+      void graphService
+        .getMaintenanceStatus(projectId)
+        .then(setMaintenanceStatus)
+        .catch(console.error);
     } catch (e) {
       console.error(e);
       setMessage(t('project.maintenance.messages.dedup_merge_failed'));
@@ -100,7 +106,7 @@ export const Maintenance: React.FC = () => {
   const handleCleanCheck = async () => {
     if (!projectId) return;
     try {
-      const res = await graphService.invalidateStaleEdges({ dry_run: true });
+      const res = await graphService.invalidateStaleEdges({ dry_run: true, project_id: projectId });
       const count = res.stale_edges_found ?? 0;
       setMessage(t('project.maintenance.messages.stale_edges_found', { count }));
       setMessageType('info');
@@ -115,11 +121,17 @@ export const Maintenance: React.FC = () => {
     if (!projectId) return;
     setCleanProcessing(true);
     try {
-      const res = await graphService.invalidateStaleEdges({ dry_run: false });
+      const res = await graphService.invalidateStaleEdges({
+        dry_run: false,
+        project_id: projectId,
+      });
       const count = res.deleted ?? 0;
       setMessage(t('project.maintenance.messages.stale_edges_deleted', { count }));
       setMessageType('info');
-      void graphService.getMaintenanceStatus().then(setMaintenanceStatus).catch(console.error);
+      void graphService
+        .getMaintenanceStatus(projectId)
+        .then(setMaintenanceStatus)
+        .catch(console.error);
     } catch (e) {
       console.error(e);
       setMessage(t('project.maintenance.messages.clean_failed'));
@@ -157,7 +169,7 @@ export const Maintenance: React.FC = () => {
   const handleExport = async () => {
     if (!projectId) return;
     try {
-      const data = await graphService.exportData({ tenant_id: tenantId });
+      const data = await graphService.exportData({ tenant_id: tenantId, project_id: projectId });
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

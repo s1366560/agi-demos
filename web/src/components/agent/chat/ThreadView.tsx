@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import { MessageSquare, ChevronDown, ChevronRight, Send, Loader2 } from 'lucide-react';
 
-import { getAuthToken } from '@/utils/tokenResolver';
+import { apiFetch } from '@/services/client/urlUtils';
 
 interface ThreadReply {
   id: string;
@@ -50,18 +50,15 @@ export const ThreadView = memo<ThreadViewProps>(
     useEffect(() => {
       if (!expanded || !conversationId || !messageId) return;
       const abortController = new AbortController();
-      const token = getAuthToken();
-      const requestInit: RequestInit = { signal: abortController.signal };
-      if (token) {
-        requestInit.headers = { Authorization: `Bearer ${token}` };
-      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
       setFetchError(null);
-      fetch(
-        `/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`,
-        requestInit
-      )
+      const repliesUrl = `/agent/conversations/${encodeURIComponent(
+        conversationId
+      )}/messages/${encodeURIComponent(messageId)}/replies`;
+
+      apiFetch
+        .get(repliesUrl, { signal: abortController.signal })
         .then((res) => res.json() as Promise<unknown>)
         .then((data) => {
           if (!abortController.signal.aborted) {
@@ -73,7 +70,6 @@ export const ThreadView = memo<ThreadViewProps>(
           if (!abortController.signal.aborted) {
             const msg = err instanceof Error ? err.message : 'Failed to load thread replies';
             setFetchError(msg);
-            console.error('ThreadView: fetch replies failed', err);
             setLoading(false);
           }
         });
@@ -97,10 +93,11 @@ export const ThreadView = memo<ThreadViewProps>(
           <MessageSquare size={12} />
           <span>
             {replyCount > 0
-              ? t('agent.thread.replies', '{{count}} replies', {
+              ? t('agent.thread.replies', {
+                  defaultValue: '{{count}} replies',
                   count: replyCount,
                 })
-              : t('agent.thread.reply', 'Reply')}
+              : t('agent.thread.reply', { defaultValue: 'Reply' })}
           </span>
         </button>
 
@@ -139,8 +136,12 @@ export const ThreadView = memo<ThreadViewProps>(
                     onChange={(e) => {
                       setReplyText(e.target.value);
                     }}
-                    placeholder={t('agent.thread.replyPlaceholder', 'Write a reply...')}
-                    aria-label={t('agent.thread.replyPlaceholder', 'Write a reply...')}
+                    placeholder={t('agent.thread.replyPlaceholder', {
+                      defaultValue: 'Write a reply...',
+                    })}
+                    aria-label={t('agent.thread.replyPlaceholder', {
+                      defaultValue: 'Write a reply...',
+                    })}
                     className="flex-1 px-2.5 py-1.5 text-xs bg-transparent border border-slate-200 dark:border-slate-600 rounded-lg"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && replyText.trim()) {
@@ -158,7 +159,7 @@ export const ThreadView = memo<ThreadViewProps>(
                       }
                     }}
                     disabled={!replyText.trim()}
-                    aria-label={t('agent.thread.sendReply', 'Send reply')}
+                    aria-label={t('agent.thread.sendReply', { defaultValue: 'Send reply' })}
                     className="p-1.5 rounded-lg bg-primary text-white disabled:opacity-50 transition-colors duration-150 hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                   >
                     <Send size={12} />

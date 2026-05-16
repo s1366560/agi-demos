@@ -52,7 +52,7 @@ import {
 } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 
-import { artifactService } from '@/services/artifactService';
+import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 import { sanitizeHtml } from '@/utils/sanitize';
@@ -559,7 +559,7 @@ const DocxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
       try {
         setLoading(true);
         setError(null);
-        const resp = await fetch(src);
+        const resp = await fetchArtifactResource(src);
         if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
         const buf = await resp.arrayBuffer();
         const getContainer = () => (cancelled ? null : containerRef.current);
@@ -630,7 +630,7 @@ const XlsxPreview = memo<{ src: string; title: string }>(({ src, title }) => {
       try {
         setLoading(true);
         setError(null);
-        const resp = await fetch(src);
+        const resp = await fetchArtifactResource(src);
         if (!resp.ok) throw new Error(`Failed to fetch: ${String(resp.status)}`);
         const buf = await resp.arrayBuffer();
         const shouldAbort = () => cancelled;

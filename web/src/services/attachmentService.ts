@@ -224,15 +224,24 @@ class AttachmentServiceClass {
       purpose,
     });
 
-    const { attachmentId, totalParts } = initResponse;
+    const { attachmentId, totalParts, partSize } = initResponse;
     const parts: UploadPartResponse[] = [];
     let uploadedBytes = 0;
 
     try {
+      if (
+        !Number.isSafeInteger(totalParts) ||
+        totalParts <= 0 ||
+        !Number.isSafeInteger(partSize) ||
+        partSize <= 0
+      ) {
+        throw new Error('Invalid upload session');
+      }
+
       // Step 2: Upload each part
       for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-        const start = (partNumber - 1) * PART_SIZE;
-        const end = Math.min(start + PART_SIZE, file.size);
+        const start = (partNumber - 1) * partSize;
+        const end = Math.min(start + partSize, file.size);
         const chunk = file.slice(start, end);
 
         const partResult = await this.uploadPart(attachmentId, partNumber, chunk);
@@ -324,7 +333,7 @@ class AttachmentServiceClass {
   async abortUpload(attachmentId: string): Promise<void> {
     const formData = new FormData();
     formData.append('attachment_id', attachmentId);
-    await httpClient.post(`${HTTP_PATH}/upload/abort`, formData);
+    await httpClient.upload(`${HTTP_PATH}/upload/abort`, formData);
   }
 
   /**

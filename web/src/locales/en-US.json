@@ -5808,6 +5808,7 @@
       "templates": "Prompt templates",
       "startVoice": "Voice input",
       "stopVoice": "Stop voice input",
+      "startVoiceCall": "Start voice call",
       "modeToggle": "Toggle input mode",
       "chatMode": "Chat",
       "commandMode": "Command",

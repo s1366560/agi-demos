@@ -1,7 +1,14 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MemoryDetailModal } from '@/components/project/MemoryDetailModal';
+import { memoryService } from '@/services/memoryService';
+
+vi.mock('@/services/memoryService', () => ({
+  memoryService: {
+    updateMemory: vi.fn(),
+  },
+}));
 
 describe('MemoryDetailModal', () => {
   const mockOnClose = vi.fn();
@@ -11,6 +18,7 @@ describe('MemoryDetailModal', () => {
     content: 'Test Content',
     content_type: 'text',
     author_id: 'user1',
+    version: 1,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     project_id: 'p1',
@@ -71,5 +79,68 @@ describe('MemoryDetailModal', () => {
     fireEvent.click(downloadButton);
 
     expect(window.URL.createObjectURL).toHaveBeenCalled();
+  });
+
+  it('copies the provided canonical memory link', async () => {
+    const writeText = vi.mocked(navigator.clipboard.writeText);
+    writeText.mockResolvedValueOnce(undefined);
+
+    render(
+      <MemoryDetailModal
+        isOpen={true}
+        onClose={mockOnClose}
+        memory={mockMemory}
+        shareUrl="https://example.test/tenant/t1/project/p1/memory/1"
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('Share'));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        'https://example.test/tenant/t1/project/p1/memory/1'
+      );
+    });
+  });
+
+  it('updates the open modal without reloading the page after save', async () => {
+    const updatedMemory = {
+      ...mockMemory,
+      title: 'Updated Memory',
+      content: 'Updated Content',
+      version: 2,
+      updated_at: '2024-01-02T00:00:00Z',
+    };
+    const onUpdated = vi.fn();
+    vi.mocked(memoryService.updateMemory).mockResolvedValueOnce(updatedMemory);
+
+    render(
+      <MemoryDetailModal
+        isOpen={true}
+        onClose={mockOnClose}
+        memory={mockMemory}
+        onUpdated={onUpdated}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('Edit'));
+    fireEvent.change(screen.getByLabelText('Edit memory title'), {
+      target: { value: 'Updated Memory' },
+    });
+    fireEvent.change(screen.getByLabelText('Edit memory content'), {
+      target: { value: 'Updated Content' },
+    });
+    fireEvent.click(screen.getByTitle('Save'));
+
+    await waitFor(() => {
+      expect(memoryService.updateMemory).toHaveBeenCalledWith('1', {
+        title: 'Updated Memory',
+        content: 'Updated Content',
+        version: 1,
+      });
+      expect(onUpdated).toHaveBeenCalledWith(updatedMemory);
+    });
+    expect(screen.getByText('Updated Memory')).toBeInTheDocument();
+    expect(screen.getByText('Updated Content')).toBeInTheDocument();
   });
 });

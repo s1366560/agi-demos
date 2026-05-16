@@ -524,6 +524,7 @@ const commonTranslations: Record<string, string> = {
   'agent.inputBar.planModeHint': 'Read-only analysis. Agent will plan without making changes.',
   'agent.inputBar.attachNotSupported': 'Current model does not support file attachments',
   'agent.inputBar.advancedSettings': 'Advanced settings',
+  'agent.inputBar.startVoiceCall': 'Start voice call',
   'agent.mention.label': 'Mention an agent',
   'agent.slashCommand.noItems': 'No commands or skills available',
   'agent.slashCommand.groupCommands': 'Commands',

@@ -5831,6 +5831,7 @@
       "templates": "提示词模板",
       "startVoice": "语音输入",
       "stopVoice": "停止语音输入",
+      "startVoiceCall": "开始语音通话",
       "modeToggle": "切换输入模式",
       "chatMode": "对话",
       "commandMode": "命令",

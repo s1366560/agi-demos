@@ -397,6 +397,7 @@ describe('Agent Workspace hardening', () => {
     );
 
     expect(screen.getByRole('button', { name: /Primary Agent/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start voice call' })).toBeInTheDocument();
   });
 
   it('prevents opening AgentSwitcher when disabled', () => {

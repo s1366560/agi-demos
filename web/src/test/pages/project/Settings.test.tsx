@@ -10,29 +10,33 @@ import { render, screen } from '../../utils';
 
 // Mock useProjectStore
 vi.mock('../../../stores/project', () => ({
-  useProjectStore: () => ({
-    currentProject: {
-      id: 'project-1',
-      name: 'Test Project',
-      description: 'Test Description',
-      is_public: false,
-      tenant_id: 'tenant-1',
-      owner_id: 'user-1',
-      created_at: new Date().toISOString(),
-      memory_rules: {
-        max_episodes: 100,
-        retention_days: 365,
-        auto_refresh: true,
-        refresh_interval: 24,
+  useProjectStore: (selector?: (state: any) => unknown) => {
+    const state = {
+      currentProject: {
+        id: 'project-1',
+        name: 'Test Project',
+        description: 'Test Description',
+        is_public: false,
+        tenant_id: 'tenant-1',
+        owner_id: 'user-1',
+        created_at: new Date().toISOString(),
+        memory_rules: {
+          max_episodes: 100,
+          retention_days: 365,
+          auto_refresh: true,
+          refresh_interval: 24,
+        },
+        graph_config: {
+          max_nodes: 10000,
+          max_edges: 50000,
+          similarity_threshold: 0.8,
+          community_detection: true,
+        },
       },
-      graph_config: {
-        max_nodes: 10000,
-        max_edges: 50000,
-        similarity_threshold: 0.8,
-        community_detection: true,
-      },
-    },
-  }),
+      updateProject: vi.fn(),
+    };
+    return selector ? selector(state) : state;
+  },
 }));
 
 // Mock API

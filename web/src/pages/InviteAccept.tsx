@@ -63,50 +63,64 @@ export const InviteAccept: React.FC = () => {
   // Current URL for redirect after login
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
 
+  const verifyInvitation = useCallback(async () => {
+    await Promise.resolve();
+
+    setPageState('loading');
+    setErrorMessage(null);
+
+    if (!token) {
+      setInvitationDetails(null);
+      setPageState('invalid');
+      setErrorMessage(t('inviteAccept.errors.missingToken', 'Invitation token is missing'));
+      return;
+    }
+
+    try {
+      const response: InvitationVerifyResponse = await invitationService.verify(token);
+
+      if (!response.valid) {
+        setInvitationDetails(null);
+        setPageState('invalid');
+        setErrorMessage(t('inviteAccept.errors.invalidToken', 'This invitation is invalid'));
+        return;
+      }
+
+      // Check if invitation has expired
+      if (response.expires_at) {
+        const expiresAt = new Date(response.expires_at);
+        if (expiresAt < new Date()) {
+          setInvitationDetails(null);
+          setPageState('expired');
+          return;
+        }
+      }
+
+      setInvitationDetails({
+        email: response.email ?? '',
+        tenantId: response.tenant_id ?? '',
+        role: response.role ?? 'member',
+        expiresAt: response.expires_at ?? '',
+      });
+      setPageState('valid');
+    } catch (error) {
+      setInvitationDetails(null);
+      setPageState('error');
+      setErrorMessage(getErrorMessage(error));
+    }
+  }, [token, t]);
+
   /**
    * Verify the invitation token on mount
    */
   useEffect(() => {
-    const verifyToken = async () => {
-      if (!token) {
-        setPageState('invalid');
-        setErrorMessage(t('inviteAccept.errors.missingToken', 'Invitation token is missing'));
-        return;
-      }
-
-      try {
-        const response: InvitationVerifyResponse = await invitationService.verify(token);
-
-        if (!response.valid) {
-          setPageState('invalid');
-          setErrorMessage(t('inviteAccept.errors.invalidToken', 'This invitation is invalid'));
-          return;
-        }
-
-        // Check if invitation has expired
-        if (response.expires_at) {
-          const expiresAt = new Date(response.expires_at);
-          if (expiresAt < new Date()) {
-            setPageState('expired');
-            return;
-          }
-        }
-
-        setInvitationDetails({
-          email: response.email ?? '',
-          tenantId: response.tenant_id ?? '',
-          role: response.role ?? 'member',
-          expiresAt: response.expires_at ?? '',
-        });
-        setPageState('valid');
-      } catch (error) {
-        setPageState('error');
-        setErrorMessage(getErrorMessage(error));
-      }
+    const timeoutId = window.setTimeout(() => {
+      void verifyInvitation();
+    }, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
     };
-
-    void verifyToken();
-  }, [token, t]);
+  }, [verifyInvitation]);
 
   /**
    * Handle invitation acceptance
@@ -253,7 +267,7 @@ export const InviteAccept: React.FC = () => {
               <Button
                 key="retry"
                 onClick={() => {
-                  window.location.reload();
+                  void verifyInvitation();
                 }}
               >
                 {t('common.actions.retry', 'Retry')}

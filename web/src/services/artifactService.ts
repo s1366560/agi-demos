@@ -3,6 +3,7 @@
  */
 
 import { httpClient } from './client/httpClient';
+import { apiFetch } from './client/urlUtils';
 
 import type { Artifact, ArtifactCategory } from '../types/agent';
 
@@ -115,6 +116,23 @@ export function getArtifactDownloadUrl(artifactId: string): string {
 }
 
 /**
+ * Fetch artifact bytes/text while preserving auth for local artifact API URLs.
+ *
+ * Presigned object-store URLs must remain plain fetch requests because adding
+ * Authorization can break CORS. Local API artifact paths go through apiFetch so
+ * expired sessions clear auth state consistently.
+ */
+export async function fetchArtifactResource(
+  url: string,
+  options?: RequestInit
+): Promise<Response> {
+  if (url.startsWith('/api/v1/') || url.startsWith('/artifacts/')) {
+    return apiFetch.get(url, options);
+  }
+  return fetch(url, options);
+}
+
+/**
  * List available artifact categories
  */
 export async function listCategories(): Promise<
@@ -151,6 +169,7 @@ export const artifactService = {
   refreshUrl: refreshArtifactUrl,
   delete: deleteArtifact,
   getDownloadUrl: getArtifactDownloadUrl,
+  fetchResource: fetchArtifactResource,
   listCategories,
   updateContent: updateArtifactContent,
 };

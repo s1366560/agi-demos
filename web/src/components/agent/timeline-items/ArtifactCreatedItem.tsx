@@ -22,6 +22,7 @@ import {
 import { type CanvasContentType, useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
 import { useSandboxStore } from '../../../stores/sandbox';
+import { fetchArtifactResource } from '../../../services/artifactService';
 import { isOfficeMimeType, isOfficeExtension } from '../../../utils/filePreview';
 
 import { TimeBadge } from './shared';
@@ -165,7 +166,7 @@ export const ArtifactCreatedItem = memo(
       }
 
       try {
-        const response = await fetch(url);
+        const response = await fetchArtifactResource(url);
         if (!response.ok) {
           throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
         }

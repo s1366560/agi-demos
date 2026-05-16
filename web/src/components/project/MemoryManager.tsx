@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Brain, Search, Plus, Clock, User, Tag, AlertCircle, Eye, Trash2 } from 'lucide-react';
 
+import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateTime } from '@/utils/date';
 
@@ -23,6 +25,7 @@ type ContentTypeFilter = Memory['content_type'] | 'all';
 
 export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) => {
   const { t } = useTranslation();
+  const { projectBasePath, projectId, tenantBasePath } = useProjectBasePath();
   const { currentProject } = useProjectStore();
   const {
     memories,
@@ -429,6 +432,17 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
           setIsDetailModalOpen(false);
         }}
         memory={currentMemory}
+        onUpdated={(updatedMemory) => {
+          setCurrentMemory(updatedMemory);
+          void loadMemories();
+        }}
+        shareUrl={
+          currentMemory
+            ? `${window.location.origin}${
+                projectId ? projectBasePath : `${tenantBasePath}/project/${currentProject.id}`
+              }/memory/${currentMemory.id}`
+            : undefined
+        }
       />
     </div>
   );

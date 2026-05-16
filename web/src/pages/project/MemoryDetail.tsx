@@ -314,6 +314,9 @@ export const MemoryDetail: React.FC = () => {
                 memory.processing_status === 'PROCESSING' ||
                 memory.processing_status === 'PENDING'
               }
+              aria-label={t('project.memories.actions.reprocess', {
+                defaultValue: 'Reprocess',
+              })}
               className={`p-2 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1 ${
                 isReprocessing ||
                 memory.processing_status === 'PROCESSING' ||
@@ -321,7 +324,9 @@ export const MemoryDetail: React.FC = () => {
                   ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
                   : 'text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
               }`}
-              title={t('project.memories.actions.reprocess', 'Reprocess')}
+              title={t('project.memories.actions.reprocess', {
+                defaultValue: 'Reprocess',
+              })}
             >
               {isReprocessing ? (
                 <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
@@ -334,6 +339,7 @@ export const MemoryDetail: React.FC = () => {
               onClick={() => {
                 setEditModalOpen(true);
               }}
+              aria-label={t('common.edit', 'Edit')}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title={t('common.edit', 'Edit')}
             >
@@ -344,6 +350,7 @@ export const MemoryDetail: React.FC = () => {
               onClick={() => {
                 setDeleteModalOpen(true);
               }}
+              aria-label={t('common.delete', 'Delete')}
               className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title={t('common.delete', 'Delete')}
             >

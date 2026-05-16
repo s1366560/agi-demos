@@ -470,6 +470,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               relationship_types:
                 params.relationshipTypes.length > 0 ? params.relationshipTypes : undefined,
               limit: 50,
+              project_id: params.projectId,
             });
             break;
 
@@ -479,6 +480,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               since: params.timeRange === 'custom' ? params.customTimeRange.since : undefined,
               until: params.timeRange === 'custom' ? params.customTimeRange.until : undefined,
               limit: 50,
+              project_id: params.projectId,
             });
             break;
 
@@ -490,6 +492,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               tags: params.selectedTags.length > 0 ? params.selectedTags : undefined,
               since: params.timeRange === 'custom' ? params.customTimeRange.since : undefined,
               limit: 50,
+              project_id: params.projectId,
             });
             break;
 
@@ -643,6 +646,13 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       }
     }, [highlightNodeIds]);
 
+    const graphToggleLabel = isResultsCollapsed
+      ? t('project.search.graph.showResults', 'Show results')
+      : t('project.search.graph.expandGraph', 'Expand graph');
+    const subgraphToggleLabel = isSubgraphMode
+      ? t('project.search.graph.showFullGraph', 'Show full graph')
+      : t('project.search.graph.showResultSubgraph', 'Show result subgraph');
+
     return (
       <div className="flex h-full min-w-0 overflow-hidden bg-slate-50 font-sans text-slate-900 dark:bg-[#121520] dark:text-white">
         <main className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-[#121520]">
@@ -752,7 +762,8 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                           setIsResultsCollapsed(!isResultsCollapsed);
                         }}
                         className={`p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors ${isResultsCollapsed ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                        title={isResultsCollapsed ? 'Show Results' : 'Expand Graph'}
+                        title={graphToggleLabel}
+                        aria-label={graphToggleLabel}
                       >
                         <Maximize className="w-4 h-4" />
                       </button>
@@ -762,7 +773,8 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                             setIsSubgraphMode(!isSubgraphMode);
                           }}
                           className={`p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors ${isSubgraphMode ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                          title={isSubgraphMode ? 'Show Full Graph' : 'Show Result Subgraph'}
+                          title={subgraphToggleLabel}
+                          aria-label={subgraphToggleLabel}
                         >
                           <Network className="w-4 h-4" />
                         </button>

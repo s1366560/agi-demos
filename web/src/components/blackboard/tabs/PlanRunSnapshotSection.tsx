@@ -25,6 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 
+import { apiFetch } from '@/services/client/urlUtils';
 import { projectSandboxService } from '@/services/projectSandboxService';
 import {
   workspaceAutonomyService,
@@ -34,7 +35,6 @@ import {
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { confirmAction } from '@/utils/confirmAction';
-import { getAuthToken } from '@/utils/tokenResolver';
 
 import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
 
@@ -1383,11 +1383,6 @@ export function PlanRunSnapshotSection({
     setActionError(null);
     setActionMessage(null);
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No authentication token is available for preview access.');
-      }
-
       let launchUrl = previewUrl;
       if (projectId && serviceId) {
         const session = await projectSandboxService.createHttpServicePreviewSession(
@@ -1400,15 +1395,9 @@ export function PlanRunSnapshotSection({
       const isSandboxProxyUrl =
         launchUrl.startsWith('/api/v1/projects/') && launchUrl.includes('/sandbox/http-services/');
       if (isSandboxProxyUrl && !serviceId) {
-        const response = await fetch(launchUrl, {
+        await apiFetch.get(launchUrl, {
           credentials: 'include',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         });
-        if (!response.ok) {
-          throw new Error(`Preview authorization failed with ${String(response.status)}`);
-        }
       }
 
       if (previewWindow) {

@@ -152,6 +152,11 @@ interface ErrorFallbackProps {
  */
 function ErrorFallback({ error, onReset, showHomeButton = true }: ErrorFallbackProps) {
   const { t } = useTranslation();
+  const handleGoHome = () => {
+    onReset();
+    window.history.pushState(null, '', '/');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
 
   const buttons = [
     <Button type="primary" key="retry" onClick={onReset}>
@@ -161,7 +166,7 @@ function ErrorFallback({ error, onReset, showHomeButton = true }: ErrorFallbackP
 
   if (showHomeButton) {
     buttons.push(
-      <Button key="home" onClick={() => (window.location.href = '/')}>
+      <Button key="home" onClick={handleGoHome}>
         {t('error.home', { defaultValue: 'Go Home' })}
       </Button>
     );

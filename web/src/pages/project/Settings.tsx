@@ -22,6 +22,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { Input, Modal, message as antdMessage } from 'antd';
 import {
@@ -35,6 +36,7 @@ import {
   Power,
   RotateCcw,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import api, { projectAPI } from '../../services/api';
 import { projectSandboxService } from '../../services/projectSandboxService';
@@ -705,7 +707,13 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
   NoProject: typeof NoProject;
 } = ({ className = '' }) => {
   const { t } = useTranslation();
-  const { currentProject } = useProjectStore();
+  const navigate = useNavigate();
+  const { currentProject, updateProject } = useProjectStore(
+    useShallow((state) => ({
+      currentProject: state.currentProject,
+      updateProject: state.updateProject,
+    }))
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -753,15 +761,12 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     setMessage(null);
 
     try {
-      await projectAPI.update(currentProject.tenant_id, currentProject.id, {
+      await updateProject(currentProject.tenant_id, currentProject.id, {
         name,
         description,
         is_public: isPublic,
       });
       setMessage({ type: 'success', text: t('project.settings.saved') });
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       const fallback = t('project.settings.failed');
@@ -772,7 +777,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     } finally {
       setIsSaving(false);
     }
-  }, [currentProject, name, description, isPublic, t]);
+  }, [currentProject, updateProject, name, description, isPublic, t]);
 
   const handleSaveMemoryRules = useCallback(async () => {
     if (!currentProject) return;
@@ -842,6 +847,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     setMessage(null);
     try {
       await api.post('/maintenance/refresh/incremental', {
+        project_id: currentProject.id,
         rebuild_communities: true,
       });
       setMessage({ type: 'success', text: t('project.settings.advancedClearCacheSuccess') });
@@ -862,7 +868,9 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
 
     setMessage(null);
     try {
-      await api.post('/graph/communities/rebuild');
+      await api.post(
+        `/graph/communities/rebuild?project_id=${encodeURIComponent(currentProject.id)}`
+      );
       setMessage({ type: 'success', text: t('project.settings.advancedRebuildSuccess') });
     } catch (error) {
       console.error('Failed to rebuild communities:', error);
@@ -877,6 +885,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     try {
       const data = await api.post('/data/export', {
         tenant_id: currentProject.tenant_id,
+        project_id: currentProject.id,
         include_episodes: true,
         include_entities: true,
         include_relationships: true,
@@ -941,12 +950,12 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     try {
       await projectAPI.delete(currentProject.tenant_id, currentProject.id);
       void antdMessage.success(t('project.settings.dangerSuccess'));
-      window.location.href = '/tenant';
+      void navigate('/tenant');
     } catch (error) {
       console.error('Failed to delete project:', error);
       void antdMessage.error(t('project.settings.dangerFail'));
     }
-  }, [currentProject, t]);
+  }, [currentProject, navigate, t]);
 
   const clearMessage = useCallback(() => {
     setMessage(null);

@@ -43,7 +43,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
-import { artifactService } from '@/services/artifactService';
+import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
 import { useLocaleNumberFormat } from '@/i18n/formatters';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
@@ -1050,7 +1050,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
 
     try {
       // Fetch content from the artifact URL
-      const response = await fetch(url);
+      const response = await fetchArtifactResource(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
       }

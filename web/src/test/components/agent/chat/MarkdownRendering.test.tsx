@@ -124,6 +124,17 @@ function hello() {
       expect(image).toHaveAttribute('src', 'https://example.com/image.png');
     });
 
+    it('should render images without missing alt attributes', () => {
+      const { container } = render(
+        <AssistantMessage content='<img src="https://example.com/raw.png" />' />
+      );
+
+      const image = container.querySelector('img');
+      expect(image).toBeInTheDocument();
+      expect(image).toHaveAttribute('alt', '');
+      expect(image).toHaveAttribute('src', 'https://example.com/raw.png');
+    });
+
     it('should render inline links with text', () => {
       render(<AssistantMessage content="Visit [Google](https://google.com) for search" />);
 

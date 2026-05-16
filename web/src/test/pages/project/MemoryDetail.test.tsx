@@ -92,9 +92,14 @@ describe('MemoryDetail', () => {
     );
 
   it('copies the current detail link from the share action', async () => {
-    renderDetail();
+    const { container } = renderDetail();
 
     expect((await screen.findAllByText('Memory One')).length).toBeGreaterThan(0);
+    expect(screen.getByText('COMPLETED')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('>COMPLETED');
+    expect(screen.getByRole('button', { name: 'Reprocess' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'memory.detail.shareAria' }));
 
     await waitFor(() => {

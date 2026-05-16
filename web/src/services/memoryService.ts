@@ -30,6 +30,8 @@
 
 import { apiFetch } from './client/urlUtils';
 
+import type { Memory } from '../types/memory';
+
 /**
  * Memory update data
  *
@@ -128,9 +130,9 @@ export const memoryService = {
    * });
    * ```
    */
-  updateMemory: async (memoryId: string, updates: MemoryUpdate): Promise<unknown> => {
+  updateMemory: async (memoryId: string, updates: MemoryUpdate): Promise<Memory> => {
     const response = await apiFetch.patch(`/memories/${memoryId}`, updates);
-    return response.json();
+    return (await response.json()) as Memory;
   },
 
   /**

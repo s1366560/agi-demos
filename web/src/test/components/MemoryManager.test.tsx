@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MemoryManager } from '@/components/project/MemoryManager';
@@ -26,8 +26,12 @@ vi.mock('../../components/MemoryCreateModal', () => ({
 }));
 
 vi.mock('../../components/MemoryDetailModal', () => ({
-  MemoryDetailModal: ({ isOpen, onClose: _onClose, memory }: any) =>
-    isOpen ? <div data-testid="memory-detail-modal">{memory?.title}</div> : null,
+  MemoryDetailModal: ({ isOpen, onClose: _onClose, memory, shareUrl }: any) =>
+    isOpen ? (
+      <div data-testid="memory-detail-modal" data-share-url={shareUrl}>
+        {memory?.title}
+      </div>
+    ) : null,
 }));
 
 describe('MemoryManager', () => {
@@ -112,5 +116,48 @@ describe('MemoryManager', () => {
     render(<MemoryManager />);
     fireEvent.click(screen.getByText('New Memory'));
     expect(screen.getByTestId('memory-create-modal')).toBeInTheDocument();
+  });
+
+  it('passes the canonical project memory URL to the detail modal', async () => {
+    const writeText = vi.mocked(navigator.clipboard.writeText);
+    writeText.mockResolvedValueOnce(undefined);
+    const memories = [
+      {
+        id: '1',
+        title: 'Memory 1',
+        content: 'Content 1',
+        content_type: 'text',
+        author_id: 'user-1',
+        project_id: 'project-1',
+        tags: [],
+        entities: [],
+        relationships: [],
+        collaborators: [],
+        is_public: false,
+        metadata: {},
+        version: 1,
+        status: 'ENABLED',
+        processing_status: 'COMPLETED',
+        created_at: '2024-01-01',
+      },
+    ];
+    (useMemoryStore as any).mockReturnValue({
+      memories,
+      currentMemory: memories[0],
+      listMemories: mockListMemories,
+      setCurrentMemory: mockSetCurrentMemory,
+      deleteMemory: mockDeleteMemory,
+      isLoading: false,
+    });
+
+    render(<MemoryManager />);
+    fireEvent.click(screen.getByLabelText('View Memory 1'));
+    fireEvent.click(screen.getByTitle('Share'));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        'http://localhost:3000/tenant/project/project-1/memory/1'
+      );
+    });
   });
 });

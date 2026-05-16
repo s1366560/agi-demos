@@ -49,7 +49,13 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
   const uploadSingleFile = useCallback(
     async (file: File, tempId: string) => {
       if (!projectId) {
-        message.error(t('components.fileUpload.messages.missingProject'));
+        const errorMsg = t('components.fileUpload.messages.missingProject');
+        message.error(errorMsg);
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === tempId ? { ...a, status: 'error' as const, error: errorMsg } : a
+          )
+        );
         return;
       }
 
@@ -95,6 +101,11 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
 
   const addFiles = useCallback(
     (fileList: FileList) => {
+      if (!projectId) {
+        message.error(t('components.fileUpload.messages.missingProject'));
+        return;
+      }
+
       const files = Array.from(fileList);
 
       setAttachments((prev) => {
@@ -134,7 +145,7 @@ export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: Use
         return [...prev, ...newAttachments];
       });
     },
-    [maxFiles, maxSizeMB, generateId, uploadSingleFile, t]
+    [maxFiles, maxSizeMB, projectId, generateId, uploadSingleFile, t]
   );
 
   const removeAttachment = useCallback((id: string) => {

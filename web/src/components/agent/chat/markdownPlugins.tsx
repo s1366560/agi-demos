@@ -113,9 +113,9 @@ export const rehypePlugins = baseRehypePlugins;
  * and causes the browser to re-fetch the current page.
  */
 export const safeMarkdownComponents: Partial<Components> = {
-  img: ({ src, ...props }) => {
+  img: ({ src, alt, ...props }) => {
     if (!src) return null;
-    return <img src={src} {...props} />;
+    return <img src={src} alt={typeof alt === 'string' ? alt : ''} {...props} />;
   },
   table: ({ children, ...props }) => (
     <div className="overflow-x-auto w-full">

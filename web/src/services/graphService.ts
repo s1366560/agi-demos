@@ -402,6 +402,7 @@ export const graphService = {
     relationship_types?: string[] | undefined;
     limit?: number | undefined;
     tenant_id?: string | undefined;
+    project_id?: string | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/graph-traversal', params);
   },
@@ -420,6 +421,7 @@ export const graphService = {
     until?: string | undefined;
     limit?: number | undefined;
     tenant_id?: string | undefined;
+    project_id?: string | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/temporal', params);
   },
@@ -432,6 +434,7 @@ export const graphService = {
     limit?: number | undefined;
     offset?: number | undefined;
     tenant_id?: string | undefined;
+    project_id?: string | undefined;
   }): Promise<SearchResults & { limit: number; offset: number }> {
     return await apiClient.post<SearchResults & { limit: number; offset: number }>(
       '/search-enhanced/faceted',
@@ -446,6 +449,7 @@ export const graphService = {
   // Data Export
   async exportData(params: {
     tenant_id?: string | undefined;
+    project_id?: string | undefined;
     include_episodes?: boolean | undefined;
     include_entities?: boolean | undefined;
     include_relationships?: boolean | undefined;
@@ -454,9 +458,15 @@ export const graphService = {
     return await apiClient.post('/data/export', params);
   },
 
-  async getGraphStats(tenant_id?: string): Promise<GraphStats> {
-    const queryParams = tenant_id ? `?tenant_id=${tenant_id}` : '';
-    const response = await apiClient.get<GraphStatsApiResponse>(`/data/stats${queryParams}`);
+  async getGraphStats(tenant_id?: string, project_id?: string): Promise<GraphStats> {
+    const queryParams = new URLSearchParams();
+    if (tenant_id) queryParams.append('tenant_id', tenant_id);
+    if (project_id) queryParams.append('project_id', project_id);
+
+    const queryString = queryParams.toString();
+    const response = await apiClient.get<GraphStatsApiResponse>(
+      `/data/stats${queryString ? '?' + queryString : ''}`
+    );
     return {
       entity_count: response.entity_count ?? response.entities ?? 0,
       episodic_count: response.episodic_count ?? response.episodes ?? 0,
@@ -520,13 +530,19 @@ export const graphService = {
   },
 
   // Maintenance
-  async getMaintenanceStatus(): Promise<MaintenanceStatus> {
-    return await apiClient.get<MaintenanceStatus>('/maintenance/status');
+  async getMaintenanceStatus(project_id?: string): Promise<MaintenanceStatus> {
+    const queryParams = new URLSearchParams();
+    if (project_id) queryParams.append('project_id', project_id);
+    const queryString = queryParams.toString();
+    return await apiClient.get<MaintenanceStatus>(
+      `/maintenance/status${queryString ? '?' + queryString : ''}`
+    );
   },
 
   async incrementalRefresh(params: {
     episode_uuids?: string[] | undefined;
     rebuild_communities?: boolean | undefined;
+    project_id?: string | undefined;
   }): Promise<RefreshResult> {
     return await apiClient.post<RefreshResult>('/maintenance/refresh/incremental', params);
   },
@@ -534,6 +550,7 @@ export const graphService = {
   async deduplicateEntities(params: {
     similarity_threshold?: number | undefined;
     dry_run?: boolean | undefined;
+    project_id?: string | undefined;
   }): Promise<DeduplicateResult> {
     return await apiClient.post<DeduplicateResult>('/maintenance/deduplicate', params);
   },
@@ -541,6 +558,7 @@ export const graphService = {
   async invalidateStaleEdges(params: {
     days_since_update?: number | undefined;
     dry_run?: boolean | undefined;
+    project_id?: string | undefined;
   }): Promise<InvalidateEdgesResult> {
     return await apiClient.post<InvalidateEdgesResult>('/maintenance/invalidate-edges', params);
   },
@@ -548,6 +566,7 @@ export const graphService = {
   async optimizeGraph(params: {
     operations: string[];
     dry_run?: boolean | undefined;
+    project_id?: string | undefined;
   }): Promise<OptimizeResult> {
     return await apiClient.post<OptimizeResult>('/maintenance/optimize', params);
   },

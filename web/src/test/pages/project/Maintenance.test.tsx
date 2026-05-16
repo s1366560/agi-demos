@@ -60,6 +60,8 @@ describe('Maintenance', () => {
     render(<Maintenance />);
 
     await waitFor(() => {
+      expect(graphService.getGraphStats).toHaveBeenCalledWith(undefined, 'p1');
+      expect(graphService.getMaintenanceStatus).toHaveBeenCalledWith('p1');
       expect(screen.getByText('100')).toBeInTheDocument(); // Entities
       expect(screen.getByText('50')).toBeInTheDocument(); // Episodes
       expect(screen.getByText('5')).toBeInTheDocument(); // Communities
@@ -77,6 +79,7 @@ describe('Maintenance', () => {
     expect(screen.getByText('Refreshing...')).toBeInTheDocument();
 
     await waitFor(() => {
+      expect(graphService.incrementalRefresh).toHaveBeenCalledWith({ project_id: 'p1' });
       expect(screen.getByText('Successfully refreshed 10 episodes')).toBeInTheDocument();
     });
   });
@@ -90,6 +93,10 @@ describe('Maintenance', () => {
     fireEvent.click(checkBtn);
 
     await waitFor(() => {
+      expect(graphService.deduplicateEntities).toHaveBeenCalledWith({
+        dry_run: true,
+        project_id: 'p1',
+      });
       expect(screen.getByText('Found 5 duplicate entities')).toBeInTheDocument();
     });
   });
@@ -107,7 +114,10 @@ describe('Maintenance', () => {
     expect(screen.getByText('Deduplicating...')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(graphService.deduplicateEntities).toHaveBeenCalledWith({ dry_run: false });
+      expect(graphService.deduplicateEntities).toHaveBeenCalledWith({
+        dry_run: false,
+        project_id: 'p1',
+      });
       expect(screen.getByText('Deduplication started (Task ID: dedup-task-1)')).toBeInTheDocument();
     });
   });
@@ -120,7 +130,10 @@ describe('Maintenance', () => {
     fireEvent.click(screen.getByText('Check Stale Edges'));
 
     await waitFor(() => {
-      expect(graphService.invalidateStaleEdges).toHaveBeenCalledWith({ dry_run: true });
+      expect(graphService.invalidateStaleEdges).toHaveBeenCalledWith({
+        dry_run: true,
+        project_id: 'p1',
+      });
       expect(screen.getByText('Found 7 stale edges')).toBeInTheDocument();
     });
   });
@@ -135,7 +148,10 @@ describe('Maintenance', () => {
     expect(screen.getByText('Cleaning...')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(graphService.invalidateStaleEdges).toHaveBeenCalledWith({ dry_run: false });
+      expect(graphService.invalidateStaleEdges).toHaveBeenCalledWith({
+        dry_run: false,
+        project_id: 'p1',
+      });
       expect(screen.getByText('Deleted 3 stale edges')).toBeInTheDocument();
     });
   });
@@ -190,7 +206,10 @@ describe('Maintenance', () => {
     fireEvent.click(screen.getByText('Export'));
 
     await waitFor(() => {
-      expect(graphService.exportData).toHaveBeenCalled();
+      expect(graphService.exportData).toHaveBeenCalledWith({
+        tenant_id: undefined,
+        project_id: 'p1',
+      });
       expect(screen.getByText('Data exported successfully')).toBeInTheDocument();
     });
   });

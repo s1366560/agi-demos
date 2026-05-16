@@ -6,7 +6,11 @@
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { Modal } from 'antd';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mockNavigate = vi.hoisted(() => vi.fn());
+const mockApiPost = vi.hoisted(() => vi.fn(() => Promise.resolve({ data: {} })));
 
 // Mock lucide-react icons
 vi.mock('lucide-react', () => ({
@@ -31,6 +35,14 @@ vi.mock('react-i18next', () => ({
     },
   }),
 }));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // Mock project store
 const mockProject = {
@@ -78,7 +90,7 @@ const mockProjectAPI = {
 
 vi.mock('../../../services/api', () => ({
   default: {
-    post: vi.fn(() => Promise.resolve({ data: {} })),
+    post: mockApiPost,
   },
   projectAPI: mockProjectAPI,
 }));
@@ -95,6 +107,7 @@ vi.mock('../../../services/projectSandboxService', () => ({
 describe('ProjectSettings Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
     // Reset project mock to default
     mockState.currentProject = mockProject;
     mockState.projects = [mockProject];
@@ -504,6 +517,66 @@ describe('ProjectSettings Compound Component', () => {
         expect(onExportData).toHaveBeenCalled();
       });
     });
+
+    it('should scope advanced export to the current project', async () => {
+      const originalCreateObjectURL = window.URL.createObjectURL;
+      const originalRevokeObjectURL = window.URL.revokeObjectURL;
+      window.URL.createObjectURL = vi.fn(() => 'blob:project-export');
+      window.URL.revokeObjectURL = vi.fn();
+      const { ProjectSettings } = await import('../../../pages/project/Settings');
+
+      try {
+        render(<ProjectSettings />);
+        fireEvent.click(screen.getByText('project.settings.advancedExport'));
+
+        await waitFor(() => {
+          expect(mockApiPost).toHaveBeenCalledWith('/data/export', {
+            tenant_id: 'tenant-1',
+            project_id: 'proj-1',
+            include_episodes: true,
+            include_entities: true,
+            include_relationships: true,
+            include_communities: true,
+          });
+        });
+      } finally {
+        window.URL.createObjectURL = originalCreateObjectURL;
+        window.URL.revokeObjectURL = originalRevokeObjectURL;
+      }
+    });
+
+    it('should scope clear cache to the current project', async () => {
+      vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+        void config.onOk?.();
+        return { destroy: vi.fn(), update: vi.fn() } as ReturnType<typeof Modal.confirm>;
+      });
+      const { ProjectSettings } = await import('../../../pages/project/Settings');
+
+      render(<ProjectSettings />);
+      fireEvent.click(screen.getByText('project.settings.advancedClearCache'));
+
+      await waitFor(() => {
+        expect(mockApiPost).toHaveBeenCalledWith('/maintenance/refresh/incremental', {
+          project_id: 'proj-1',
+          rebuild_communities: true,
+        });
+      });
+    });
+
+    it('should scope community rebuild to the current project', async () => {
+      vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+        void config.onOk?.();
+        return { destroy: vi.fn(), update: vi.fn() } as ReturnType<typeof Modal.confirm>;
+      });
+      const { ProjectSettings } = await import('../../../pages/project/Settings');
+
+      render(<ProjectSettings />);
+      fireEvent.click(screen.getByText('project.settings.advancedRebuild'));
+
+      await waitFor(() => {
+        expect(mockApiPost).toHaveBeenCalledWith('/graph/communities/rebuild?project_id=proj-1');
+      });
+    });
   });
 
   // ============================================================================
@@ -554,8 +627,71 @@ describe('ProjectSettings Compound Component', () => {
       const saveButton = screen.getByText('project.settings.basicSave');
       fireEvent.click(saveButton);
       await waitFor(() => {
-        expect(mockProjectAPI.update).toHaveBeenCalled();
+        expect(mockState.updateProject).toHaveBeenCalled();
       });
+    });
+
+    it('should update project store without reloading the page', async () => {
+      const reload = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...window.location, reload },
+      });
+      const { ProjectSettings } = await import('../../../pages/project/Settings');
+
+      render(<ProjectSettings />);
+      fireEvent.click(screen.getByText('project.settings.basicSave'));
+
+      await waitFor(() => {
+        expect(mockState.updateProject).toHaveBeenCalledWith('tenant-1', 'proj-1', {
+          name: 'Test Project',
+          description: 'Test Description',
+          is_public: false,
+        });
+      });
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('should navigate to tenant page after deleting project without hard reload', async () => {
+      const originalLocation = window.location;
+      const hrefSetter = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          get href() {
+            return '';
+          },
+          set href(value: string) {
+            hrefSetter(value);
+          },
+        },
+      });
+      const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+        const content = config.content as {
+          props?: { onChange?: (event: { target: { value: string } }) => void };
+        };
+        content.props?.onChange?.({ target: { value: mockProject.name } });
+        void config.onOk?.();
+        return { destroy: vi.fn(), update: vi.fn() } as ReturnType<typeof Modal.confirm>;
+      });
+      const { ProjectSettings } = await import('../../../pages/project/Settings');
+
+      try {
+        render(<ProjectSettings />);
+        fireEvent.click(screen.getByText('project.settings.dangerDelete'));
+
+        await waitFor(() => {
+          expect(mockProjectAPI.delete).toHaveBeenCalledWith('tenant-1', 'proj-1');
+        });
+        expect(mockNavigate).toHaveBeenCalledWith('/tenant');
+        expect(hrefSetter).not.toHaveBeenCalled();
+      } finally {
+        confirmSpy.mockRestore();
+        Object.defineProperty(window, 'location', {
+          configurable: true,
+          value: originalLocation,
+        });
+      }
     });
 
     it('should save memory rules', async () => {

@@ -13,7 +13,6 @@ import {
   useLazyMessage,
 } from '@/components/ui/lazyAntd';
 
-import { useAuthStore } from '../../stores/auth';
 import {
   useDeploys,
   useCurrentDeploy,
@@ -64,9 +63,6 @@ export const DeployProgress: React.FC = () => {
       return;
     }
 
-    const token = useAuthStore.getState().token;
-    if (!token) return;
-
     const controller = new AbortController();
 
     const refreshDeploy = (context: string): void => {
@@ -77,7 +73,6 @@ export const DeployProgress: React.FC = () => {
 
     void streamDeployProgress({
       deployId,
-      token,
       signal: controller.signal,
       onEvent: (data) => {
         if (data.type === 'status') {

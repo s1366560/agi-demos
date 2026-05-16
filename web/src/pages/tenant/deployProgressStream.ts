@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '@/services/client/httpClient';
+import { apiFetch } from '@/services/client/urlUtils';
 
 export interface DeployProgressSseEvent {
   type: string;
@@ -8,7 +8,6 @@ export interface DeployProgressSseEvent {
 
 interface DeployProgressStreamOptions {
   deployId: string;
-  token: string;
   signal: AbortSignal;
   onEvent: (event: DeployProgressSseEvent) => void;
 }
@@ -49,21 +48,15 @@ export function parseDeployProgressSseEvent(rawEvent: string): DeployProgressSse
 
 export async function streamDeployProgress({
   deployId,
-  token,
   signal,
   onEvent,
 }: DeployProgressStreamOptions): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/deploys/${encodeURIComponent(deployId)}/progress`, {
+  const response = await apiFetch.get(`/deploys/${encodeURIComponent(deployId)}/progress`, {
     headers: {
       Accept: 'text/event-stream',
-      Authorization: `Bearer ${token}`,
     },
     signal,
   });
-
-  if (!response.ok) {
-    throw new Error(`Deploy progress stream failed with HTTP ${String(response.status)}`);
-  }
 
   if (!response.body) {
     throw new Error('Deploy progress stream response has no body');

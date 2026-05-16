@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -28,6 +28,8 @@ interface MemoryDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   memory: Memory | null;
+  shareUrl?: string | undefined;
+  onUpdated?: ((memory: Memory) => void) | undefined;
 }
 
 const getErrorMessage = (error: unknown): string => {
@@ -64,14 +66,28 @@ const getViewCount = (metadata: Record<string, unknown>): number => {
 export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   isOpen,
   onClose,
-  memory,
+  memory: memoryProp,
+  shareUrl,
+  onUpdated,
 }) => {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(memory?.content || '');
-  const [editedTitle, setEditedTitle] = useState(memory?.title || '');
+  const [displayMemory, setDisplayMemory] = useState<Memory | null>(memoryProp);
+  const [editedContent, setEditedContent] = useState(memoryProp?.content || '');
+  const [editedTitle, setEditedTitle] = useState(memoryProp?.title || '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayMemory(memoryProp);
+    setEditedContent(memoryProp?.content || '');
+    setEditedTitle(memoryProp?.title || '');
+    setIsEditing(false);
+    setError(null);
+  }, [memoryProp]);
+
+  const memory =
+    memoryProp && displayMemory?.id === memoryProp.id ? displayMemory : memoryProp;
 
   if (!isOpen || !memory) return null;
 
@@ -108,15 +124,17 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
     setError(null);
 
     try {
-      await memoryService.updateMemory(memory.id, {
+      const updatedMemory = await memoryService.updateMemory(memory.id, {
         title: editedTitle,
         content: editedContent,
         version: memory.version,
       });
 
+      setDisplayMemory(updatedMemory);
+      setEditedTitle(updatedMemory.title);
+      setEditedContent(updatedMemory.content);
       setIsEditing(false);
-      // Reload page or trigger refresh to show updated data
-      window.location.reload();
+      onUpdated?.(updatedMemory);
     } catch (err: unknown) {
       console.error('Failed to update memory:', err);
       const errorMessage = getErrorMessage(err);
@@ -139,11 +157,10 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   };
 
   const handleShare = async () => {
-    // For now, just copy the URL to clipboard
-    const shareUrl = `${window.location.origin}/memories/${memory.id}`;
+    const memoryShareUrl = shareUrl ?? window.location.href;
 
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(memoryShareUrl);
       void message.success(t('memory.detail.linkCopied'));
     } catch (err) {
       console.error('Failed to copy link:', err);

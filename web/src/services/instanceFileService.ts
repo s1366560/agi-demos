@@ -12,15 +12,20 @@ interface FileNode {
   children?: FileNode[];
 }
 
+const encodeFilePath = (filePath: string) =>
+  filePath.split('/').map(encodeURIComponent).join('/');
+
 export const instanceFileService = {
   listFiles: (instanceId: string) =>
     httpClient.get<{ tree: FileNode[] }>(`${BASE_URL}/${instanceId}/files`),
 
   previewFile: (instanceId: string, filePath: string) =>
-    httpClient.get<{ content: string }>(`${BASE_URL}/${instanceId}/files/${filePath}/content`),
+    httpClient.get<{ content: string }>(
+      `${BASE_URL}/${instanceId}/files/${encodeFilePath(filePath)}/content`
+    ),
 
   downloadFile: (instanceId: string, filePath: string) =>
-    httpClient.get<Blob>(`${BASE_URL}/${instanceId}/files/${filePath}/download`, {
+    httpClient.get<Blob>(`${BASE_URL}/${instanceId}/files/${encodeFilePath(filePath)}/download`, {
       responseType: 'blob',
     }),
 
@@ -37,5 +42,5 @@ export const instanceFileService = {
   },
 
   deleteFile: (instanceId: string, filePath: string) =>
-    httpClient.delete(`${BASE_URL}/${instanceId}/files/${filePath}`),
+    httpClient.delete(`${BASE_URL}/${instanceId}/files/${encodeFilePath(filePath)}`),
 };
