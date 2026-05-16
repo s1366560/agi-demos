@@ -79,10 +79,11 @@ class WorkspaceTask(Entity):
             raise ValueError("title cannot be empty")
         if not self.created_by:
             raise ValueError("created_by cannot be empty")
-        if isinstance(self.priority, int):
-            self.priority = WorkspaceTaskPriority.from_rank(self.priority)
-        elif isinstance(self.priority, str):
-            self.priority = WorkspaceTaskPriority(self.priority)
+        priority_value: WorkspaceTaskPriority | int | str = self.priority
+        if isinstance(priority_value, int):
+            self.priority = WorkspaceTaskPriority.from_rank(priority_value)
+        elif isinstance(priority_value, str):
+            self.priority = WorkspaceTaskPriority(priority_value)
 
     def get_workspace_agent_binding_id(self) -> str | None:
         value = self.metadata.get("workspace_agent_binding_id")

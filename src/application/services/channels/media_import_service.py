@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import uuid
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,21 @@ class MediaImportError(Exception):
     """Exception raised when media import fails."""
 
 
+class FeishuMediaDownloader(Protocol):
+    """Downloader contract used by media import without binding to Feishu internals."""
+
+    async def download_media(
+        self,
+        *,
+        file_key: str,
+        media_type: str,
+        message_id: str | None,
+        file_name: str | None,
+    ) -> tuple[bytes, dict[str, Any]]:
+        """Download channel media content and metadata."""
+        ...
+
+
 class MediaImportService:
     """Service for importing channel media files to workspace.
 
@@ -41,7 +56,7 @@ class MediaImportService:
     are passed as parameters to each method call.
     """
 
-    def __init__(self, feishu_downloader: Any) -> None:
+    def __init__(self, feishu_downloader: FeishuMediaDownloader) -> None:
         """Initialize the media import service.
 
         Args:

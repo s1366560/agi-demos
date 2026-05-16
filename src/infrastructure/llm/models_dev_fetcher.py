@@ -19,7 +19,7 @@ import json
 import logging
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from src.domain.llm_providers.models import ModelCapability, ModelMetadata
 
@@ -83,7 +83,7 @@ def fetch_models_dev(
     if local_path is not None:
         path = Path(local_path)
         logger.info("Reading models.dev data from local file: %s", path)
-        return json.loads(path.read_text("utf-8"))
+        return _parse_models_dev_payload(path.read_text("utf-8"))
 
     import urllib.request
 
@@ -92,7 +92,14 @@ def fetch_models_dev(
         url, headers={"User-Agent": "MemStack-ModelCatalog/1.0"}
     )
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-        return json.loads(resp.read().decode("utf-8"))
+        return _parse_models_dev_payload(resp.read().decode("utf-8"))
+
+
+def _parse_models_dev_payload(payload: str) -> dict[str, Any]:
+    parsed: object = json.loads(payload)
+    if not isinstance(parsed, dict):
+        raise ValueError("models.dev payload must be a JSON object")
+    return cast(dict[str, Any], parsed)
 
 
 def convert_to_model_metadata(

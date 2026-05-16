@@ -260,7 +260,7 @@ class SessionCommService:
 
         # Persist the conversation projection so sessions_history() returns
         # up-to-date message_count and updated_at.
-        _ = conversation.increment_message_count()
+        conversation.increment_message_count()
         await self._conversation_repo.save(conversation)
 
         return {

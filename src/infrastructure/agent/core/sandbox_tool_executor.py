@@ -10,13 +10,30 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from src.infrastructure.agent.core.tool_execution_router import ToolExecutionConfig
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
+
+
+class SandboxPortProtocol(Protocol):
+    """Minimal sandbox execution interface used by sandbox tools."""
+
+    async def call_tool(
+        self,
+        sandbox_id: str,
+        tool_name: str,
+        arguments: dict[str, object],
+    ) -> dict[str, Any]: ...
+
+
+class DependencyOrchestratorProtocol(Protocol):
+    """Minimal dependency installer interface used by sandbox tools."""
+
+    async def ensure_dependencies(self, sandbox_id: str, dependencies: list[str]) -> None: ...
 
 
 class SandboxToolExecutor:
@@ -33,9 +50,9 @@ class SandboxToolExecutor:
 
     def __init__(
         self,
-        sandbox_port: object,  # SandboxPort (avoid circular import)
+        sandbox_port: SandboxPortProtocol,
         sandbox_id: str,
-        dependency_orchestrator: object | None = None,  # DependencyOrchestrator
+        dependency_orchestrator: DependencyOrchestratorProtocol | None = None,
     ) -> None:
         self._sandbox_port = sandbox_port
         self._sandbox_id = sandbox_id

@@ -59,6 +59,9 @@ class BlackboardOutboxDispatcher:
     def is_running(self) -> bool:
         return self._running and self._task is not None and not self._task.done()
 
+    def _is_running(self) -> bool:
+        return self._running
+
     def start(self) -> None:
         if self.is_running:
             return
@@ -118,12 +121,12 @@ class BlackboardOutboxDispatcher:
 
     async def _poll_loop(self) -> None:
         try:
-            while self._running:
+            while self._is_running():
                 processed = 0
                 try:
                     processed = await self.run_once()
                 except asyncio.CancelledError:
-                    if not self._running:
+                    if not self._is_running():
                         break
                     logger.warning("blackboard outbox dispatcher cancelled mid-batch")
                 except Exception:

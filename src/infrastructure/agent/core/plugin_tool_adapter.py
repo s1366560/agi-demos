@@ -19,7 +19,7 @@ from __future__ import annotations
 import inspect as _inspect
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult
@@ -134,7 +134,7 @@ def _find_callable(tool_impl: object) -> Callable[..., Any] | None:
     for attr_name in _CALLABLE_CANDIDATES:
         fn = getattr(tool_impl, attr_name, None)
         if fn is not None and callable(fn):
-            return fn
+            return cast(Callable[..., Any], fn)
     return None
 
 

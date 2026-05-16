@@ -4,6 +4,8 @@ Aggregates all MCP-related endpoints from sub-modules.
 MCP servers provide external tools and capabilities via the Model Context Protocol.
 """
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,8 +42,11 @@ async def create_mcp_server_root(
     tenant_id: str = Depends(get_current_user_tenant),
 ) -> MCPServerResponse:
     """Create MCP server (root path alias)."""
-    return await servers.create_mcp_server(
-        server_data=server_data, request=request, db=db, tenant_id=tenant_id
+    return cast(
+        MCPServerResponse,
+        await servers.create_mcp_server(
+            server_data=server_data, request=request, db=db, tenant_id=tenant_id
+        ),
     )
 
 

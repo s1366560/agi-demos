@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+from types import SimpleNamespace
+from typing import cast
 
-from starlette.requests import Request
+from starlette.datastructures import Headers, QueryParams
+from starlette.requests import HTTPConnection, Request
+from starlette.responses import Response
 
+from src.infrastructure.adapters.primary.web.dependencies import auth_dependencies
 from src.infrastructure.adapters.primary.web.routers import project_sandbox
 
 
@@ -109,6 +114,88 @@ def test_proxy_cookie_seed_token_prefers_query_token() -> None:
     )
 
     assert project_sandbox._proxy_cookie_seed_token(request) == "ms_sk_query_token"
+
+
+async def test_proxy_auth_dependency_accepts_sandbox_proxy_cookie() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/proxy",
+            "query_string": b"",
+            "headers": [(b"cookie", b"sandbox_proxy_token=ms_sk_cookie_token")],
+        }
+    )
+
+    token = await auth_dependencies.get_api_key_from_header_query_or_cookie(
+        request, authorization=None, token=None
+    )
+
+    assert token == "ms_sk_cookie_token"
+
+
+async def test_proxy_auth_dependency_keeps_legacy_desktop_cookie_fallback() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/proxy",
+            "query_string": b"",
+            "headers": [(b"cookie", b"desktop_token=ms_sk_legacy_cookie")],
+        }
+    )
+
+    token = await auth_dependencies.get_api_key_from_header_query_or_cookie(
+        request, authorization=None, token=None
+    )
+
+    assert token == "ms_sk_legacy_cookie"
+
+
+async def test_proxy_auth_dependency_accepts_websocket_subprotocol_token() -> None:
+    connection = cast(
+        HTTPConnection,
+        SimpleNamespace(
+            headers=Headers(raw=[(b"sec-websocket-protocol", b"binary, ms_sk_ws_cookie_token")]),
+            query_params=QueryParams(""),
+            cookies={},
+        ),
+    )
+
+    token = await auth_dependencies.get_api_key_from_header_query_or_cookie(
+        connection, authorization=None, token=None
+    )
+
+    assert token == "ms_sk_ws_cookie_token"
+
+
+def test_sandbox_proxy_auth_cookie_is_scoped_to_project_sandbox_path() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "https",
+            "server": ("example.test", 443),
+            "path": "/api/v1/projects/project-1/sandbox/proxy-auth-cookie",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+    response = Response()
+
+    project_sandbox._set_sandbox_proxy_auth_cookie(
+        response,
+        request,
+        "project-1",
+        "ms_sk_cookie_token",
+    )
+
+    set_cookie = response.headers["set-cookie"]
+    assert "sandbox_proxy_token=ms_sk_cookie_token" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=strict" in set_cookie
+    assert "Secure" in set_cookie
+    assert "Path=/api/v1/projects/project-1/sandbox" in set_cookie
 
 
 def test_sandbox_exec_target_url_rewrites_bridge_ip_to_loopback() -> None:

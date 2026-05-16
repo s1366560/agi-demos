@@ -22,6 +22,7 @@ from src.configuration.di_container import DIContainer
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -152,19 +153,19 @@ async def create_skill(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid scope: {data.scope}. Must be 'tenant' or 'project'",
+                detail=_(f"Invalid scope: {data.scope}. Must be 'tenant' or 'project'"),
             ) from None
 
         if scope == SkillScope.SYSTEM:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot create system-level skills via API",
+                detail=_("Cannot create system-level skills via API"),
             )
 
         if scope == SkillScope.PROJECT and not data.project_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="project_id is required for project-scoped skills",
+                detail=_("project_id is required for project-scoped skills"),
             )
 
         container = get_container_with_db(request, db)
@@ -267,14 +268,14 @@ async def get_skill(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Verify tenant access
     if skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     return skill_to_response(skill)
@@ -298,14 +299,14 @@ async def update_skill(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Verify tenant access
     if skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Update fields
@@ -351,14 +352,14 @@ async def delete_skill(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Verify tenant access
     if skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     await repo.delete(skill_id)
@@ -385,14 +386,14 @@ async def update_skill_status(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Verify tenant access
     if skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     try:
@@ -400,7 +401,7 @@ async def update_skill_status(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status: {status_value}. Must be one of: active, disabled, deprecated",
+            detail=_(f"Invalid status: {status_value}. Must be one of: active, disabled, deprecated"),
         ) from None
 
     from datetime import datetime
@@ -510,14 +511,14 @@ async def get_skill_content(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Verify tenant access (system skills are accessible to all tenants)
     if not skill.is_system_skill and skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     return SkillContentResponse(
@@ -550,21 +551,21 @@ async def update_skill_content(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # Verify tenant access
     if skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found",
+            detail=_("Skill not found"),
         )
 
     # System skills cannot be modified
     if skill.is_system_skill:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot modify system skills. Use tenant skill config to override instead.",
+            detail=_("Cannot modify system skills. Use tenant skill config to override instead."),
         )
 
     from datetime import datetime
@@ -688,7 +689,7 @@ async def get_skill_version(
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Version {version_number} not found for skill {skill_id}",
+            detail=_(f"Version {version_number} not found for skill {skill_id}"),
         )
 
     return SkillVersionDetailResponse(
@@ -734,14 +735,14 @@ async def rollback_skill(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Skill not found: {skill_id}",
+            detail=_(f"Skill not found: {skill_id}"),
         )
 
     tenant_id = tenant["tenant_id"]
     if skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )
 
     reverse_sync = SkillReverseSync(

@@ -21,6 +21,7 @@ from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_prompt_template_repository import (
     SqlPromptTemplateRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -131,7 +132,7 @@ async def create_template(
     except Exception:
         await db.rollback()
         logger.exception("Error creating template")
-        raise HTTPException(status_code=500, detail="Failed to create template") from None
+        raise HTTPException(status_code=500, detail=_("Failed to create template")) from None
 
 
 @router.get("/templates", response_model=list[TemplateResponse])
@@ -159,7 +160,7 @@ async def list_templates(
         return [_to_response(t) for t in templates]
     except Exception:
         logger.exception("Error listing templates")
-        raise HTTPException(status_code=500, detail="Failed to list templates") from None
+        raise HTTPException(status_code=500, detail=_("Failed to list templates")) from None
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
@@ -172,7 +173,7 @@ async def get_template(
     repo = SqlPromptTemplateRepository(db)
     template = await repo.find_by_id(template_id)
     if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise HTTPException(status_code=404, detail=_("Template not found"))
     return _to_response(template)
 
 
@@ -188,9 +189,9 @@ async def update_template(
         repo = SqlPromptTemplateRepository(db)
         template = await repo.find_by_id(template_id)
         if not template:
-            raise HTTPException(status_code=404, detail="Template not found")
+            raise HTTPException(status_code=404, detail=_("Template not found"))
         if template.created_by != current_user.id and not template.is_system:
-            raise HTTPException(status_code=403, detail="Not authorized to update this template")
+            raise HTTPException(status_code=403, detail=_("Not authorized to update this template"))
         if data.title is not None:
             template.title = data.title
         if data.content is not None:
@@ -216,7 +217,7 @@ async def update_template(
     except Exception:
         await db.rollback()
         logger.exception("Error updating template")
-        raise HTTPException(status_code=500, detail="Failed to update template") from None
+        raise HTTPException(status_code=500, detail=_("Failed to update template")) from None
 
 
 @router.delete(
@@ -233,16 +234,16 @@ async def delete_template(
         repo = SqlPromptTemplateRepository(db)
         template = await repo.find_by_id(template_id)
         if not template:
-            raise HTTPException(status_code=404, detail="Template not found")
+            raise HTTPException(status_code=404, detail=_("Template not found"))
         if template.created_by != current_user.id and not template.is_system:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this template")
+            raise HTTPException(status_code=403, detail=_("Not authorized to delete this template"))
         deleted = await repo.delete(template_id)
         if not deleted:
-            raise HTTPException(status_code=404, detail="Template not found")
+            raise HTTPException(status_code=404, detail=_("Template not found"))
         await db.commit()
     except HTTPException:
         raise
     except Exception:
         await db.rollback()
         logger.exception("Error deleting template")
-        raise HTTPException(status_code=500, detail="Failed to delete template") from None
+        raise HTTPException(status_code=500, detail=_("Failed to delete template")) from None

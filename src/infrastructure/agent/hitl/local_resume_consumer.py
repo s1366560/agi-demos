@@ -16,11 +16,14 @@ import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.hitl.utils import HITLRequestRecord
 
 
 class LocalHITLResumeConsumer:
@@ -229,7 +232,7 @@ class LocalHITLResumeConsumer:
         stream_key: str,
         msg_id: str,
         request_id: str,
-        hitl_request: object,
+        hitl_request: HITLRequestRecord,
         request_status: object,
         pending_idle_ms: int | None,
     ) -> tuple[bool, bool]:

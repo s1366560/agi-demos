@@ -12,6 +12,8 @@ Provides a context object for message handlers with access to:
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -103,3 +105,26 @@ class MessageContext:
     def get_scoped_container(self) -> DIContainer:
         """Get a container scoped to the current database session."""
         return self.container.with_db(self.db)
+
+    def with_db(self, db: AsyncSession) -> MessageContext:
+        """Return an equivalent context bound to a different database session."""
+        return MessageContext(
+            websocket=self.websocket,
+            user_id=self.user_id,
+            tenant_id=self.tenant_id,
+            session_id=self.session_id,
+            db=db,
+            container=self.container,
+            session_factory=self.session_factory,
+            _connection_manager=self._connection_manager,
+        )
+
+    @asynccontextmanager
+    async def fresh_db_context(self) -> AsyncIterator[MessageContext]:
+        """Yield a context with an independent database session when possible."""
+        if self.session_factory is None:
+            yield self
+            return
+
+        async with self.session_factory() as db:
+            yield self.with_db(db)

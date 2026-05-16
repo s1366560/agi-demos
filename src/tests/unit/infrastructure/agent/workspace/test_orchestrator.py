@@ -62,6 +62,7 @@ class TestMaterializeGoalCandidate:
             "user",
             leader_agent_id="leader",
             user_query="hi",
+            preferred_language=None,
         )
 
 

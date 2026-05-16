@@ -261,7 +261,7 @@ class ContainerManager:
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, container.reload)
-            return container.status == "running"
+            return bool(container.status == "running")
         except Exception:
             return False
 

@@ -1476,11 +1476,11 @@ class ProjectAgentManager:
 
     async def _cleanup_loop(self) -> None:
         """Background task to cleanup idle agents."""
-        while self._is_running:
+        while self._cleanup_is_running():
             try:
                 await asyncio.sleep(300)  # Run every 5 minutes
 
-                if not self._is_running:
+                if not self._cleanup_is_running():
                     break
 
                 await self._cleanup_idle_agents()
@@ -1490,6 +1490,9 @@ class ProjectAgentManager:
             except Exception as e:
                 logger.error(f"ProjectAgentManager: Cleanup error: {e}")
                 await asyncio.sleep(60)  # Wait before retry
+
+    def _cleanup_is_running(self) -> bool:
+        return self._is_running
 
     async def _cleanup_idle_agents(self, idle_threshold_seconds: int = 3600) -> int:
         """

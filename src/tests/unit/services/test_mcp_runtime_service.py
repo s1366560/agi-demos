@@ -462,3 +462,50 @@ class TestMCPRuntimeService:
 
         with pytest.raises(PermissionError, match="Access denied"):
             await service.reconcile_project("proj-other", "tenant-1")
+
+    async def test_list_server_prompts_delegates_to_sandbox_manager(self):
+        server = _make_server()
+        server_repo = SimpleNamespace(get_by_id=AsyncMock(return_value=server))
+        sandbox_manager = SimpleNamespace(
+            list_prompts=AsyncMock(return_value=[{"name": "review"}]),
+        )
+        service = MCPRuntimeService(
+            server_repo=server_repo,  # type: ignore[arg-type]
+            app_repo=SimpleNamespace(),  # type: ignore[arg-type]
+            app_service=SimpleNamespace(),  # type: ignore[arg-type]
+            sandbox_manager=sandbox_manager,
+            lifecycle_event_repo=AsyncMock(),
+            project_repo=SimpleNamespace(),  # type: ignore[arg-type]
+        )
+
+        prompts = await service.list_server_prompts("srv-1", "tenant-1")
+
+        assert prompts == [{"name": "review"}]
+        sandbox_manager.list_prompts.assert_awaited_once_with(
+            project_id="proj-1",
+            server_name="demo-server",
+        )
+
+    async def test_set_server_log_level_delegates_and_records_event(self):
+        server = _make_server()
+        server_repo = SimpleNamespace(get_by_id=AsyncMock(return_value=server))
+        sandbox_manager = SimpleNamespace(set_log_level=AsyncMock(return_value=True))
+        lifecycle_event_repo = AsyncMock()
+        service = MCPRuntimeService(
+            server_repo=server_repo,  # type: ignore[arg-type]
+            app_repo=SimpleNamespace(),  # type: ignore[arg-type]
+            app_service=SimpleNamespace(),  # type: ignore[arg-type]
+            sandbox_manager=sandbox_manager,
+            lifecycle_event_repo=lifecycle_event_repo,
+            project_repo=SimpleNamespace(),  # type: ignore[arg-type]
+        )
+
+        success = await service.set_server_log_level("srv-1", "tenant-1", "debug")
+
+        assert success is True
+        sandbox_manager.set_log_level.assert_awaited_once_with(
+            project_id="proj-1",
+            server_name="demo-server",
+            level="debug",
+        )
+        lifecycle_event_repo.record_event.assert_awaited_once()

@@ -75,27 +75,39 @@ class DesktopManager:
         self.port = port
         self.host = host
 
+        self.kasmvnc_process: Optional[asyncio.subprocess.Process] = None
         self._kasmvnc_started: bool = False
 
     def _is_port_listening(self, port: int) -> bool:
         """Check if a port is listening."""
         import socket
+
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(0.5)
-            result = sock.connect_ex(('127.0.0.1', port))
+            result = sock.connect_ex(("127.0.0.1", port))
             sock.close()
             return result == 0
         except Exception:
             return False
 
+    def _is_managed_process_running(self) -> bool:
+        """Check whether the manager-owned KasmVNC process is still alive."""
+        return self.kasmvnc_process is not None and self.kasmvnc_process.returncode is None
+
     def _get_kasmvnc_pid(self) -> Optional[int]:
         """Get the PID of the KasmVNC process."""
+        if self._is_managed_process_running() and self.kasmvnc_process is not None:
+            return self.kasmvnc_process.pid
+
         try:
             import subprocess
+
             result = subprocess.run(
-                ['pgrep', '-f', 'Xkasmvnc'],
-                capture_output=True, text=True, timeout=2
+                ["pgrep", "-f", "Xkasmvnc"],
+                capture_output=True,
+                text=True,
+                timeout=2,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return int(result.stdout.strip().split()[0])
@@ -105,7 +117,7 @@ class DesktopManager:
 
     def is_running(self) -> bool:
         """Check if KasmVNC is running."""
-        return self._is_port_listening(self.port)
+        return self._is_managed_process_running() or self._is_port_listening(self.port)
 
     async def start(self) -> None:
         """
@@ -142,6 +154,7 @@ class DesktopManager:
             template_path = "/etc/kasmvnc/xstartup.template"
             if os.path.exists(template_path):
                 import shutil
+
                 shutil.copy(template_path, xstartup_path)
                 os.chmod(xstartup_path, 0o755)
 
@@ -155,13 +168,17 @@ class DesktopManager:
             env["DISPLAY"] = self.display
 
             # Start KasmVNC (single process replaces Xvfb + TigerVNC + websockify)
-            await asyncio.create_subprocess_exec(
+            self.kasmvnc_process = await asyncio.create_subprocess_exec(
                 "vncserver",
                 self.display,
-                "-geometry", self.resolution,
-                "-depth", "24",
-                "-websocketPort", str(self.port),
-                "-interface", "0.0.0.0",
+                "-geometry",
+                self.resolution,
+                "-depth",
+                "24",
+                "-websocketPort",
+                str(self.port),
+                "-interface",
+                "0.0.0.0",
                 "-disableBasicAuth",
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
@@ -178,14 +195,10 @@ class DesktopManager:
                 raise RuntimeError("KasmVNC failed to start within timeout")
 
             self._kasmvnc_started = True
-            logger.info(
-                f"KasmVNC started: {self.display} -> http://{self.host}:{self.port}"
-            )
+            logger.info(f"KasmVNC started: {self.display} -> http://{self.host}:{self.port}")
 
         except FileNotFoundError:
-            raise RuntimeError(
-                "KasmVNC not installed. Install with: apt-get install kasmvncserver"
-            )
+            raise RuntimeError("KasmVNC not installed. Install with: apt-get install kasmvncserver")
 
     async def stop(self) -> None:
         """Stop the remote desktop environment."""
@@ -193,7 +206,9 @@ class DesktopManager:
 
         try:
             process = await asyncio.create_subprocess_exec(
-                "vncserver", "-kill", self.display,
+                "vncserver",
+                "-kill",
+                self.display,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -204,9 +219,10 @@ class DesktopManager:
                 await process.wait()
         except Exception as e:
             logger.error(f"Error stopping KasmVNC: {e}")
-
-        self._kasmvnc_started = False
-        logger.info("KasmVNC desktop stopped")
+        finally:
+            self._kasmvnc_started = False
+            logger.info("KasmVNC desktop stopped")
+            self.kasmvnc_process = None
 
     async def restart(self) -> None:
         """Restart the desktop environment."""
@@ -237,7 +253,11 @@ class DesktopManager:
 
             # Use xrandr to change resolution dynamically
             process = await asyncio.create_subprocess_exec(
-                "xrandr", "--output", "default", "--mode", f"{width}x{height}",
+                "xrandr",
+                "--output",
+                "default",
+                "--mode",
+                f"{width}x{height}",
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -251,7 +271,9 @@ class DesktopManager:
             else:
                 # Try adding the mode first, then setting it
                 process = await asyncio.create_subprocess_exec(
-                    "xrandr", "-s", resolution,
+                    "xrandr",
+                    "-s",
+                    resolution,
                     env=env,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -286,6 +308,10 @@ class DesktopManager:
     def get_web_url(self) -> str:
         """Get the KasmVNC web client URL."""
         return f"http://{self.host}:{self.port}"
+
+    def get_novnc_url(self) -> str:
+        """Backward-compatible alias for callers still using the old noVNC name."""
+        return self.get_web_url()
 
     async def __aenter__(self):
         """Context manager entry - start desktop."""

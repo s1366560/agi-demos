@@ -121,97 +121,120 @@ def parse_response(data: bytes) -> dict[str, Any]:
     if len(data) < 4:
         raise ProtocolError(f"Response too short ({len(data)} bytes)")
 
+    msg_type, msg_flags, serialization, compression, payload = _split_response_frame(data)
+    result: dict[str, Any] = {
+        "is_last_package": False,
+    }
+
+    payload = _consume_optional_sequence(payload, msg_flags, result)
+    if msg_flags & 0x02:
+        result["is_last_package"] = True
+
+    payload_msg, payload_size = _extract_response_payload(msg_type, payload, result)
+    if payload_msg is not None:
+        result["payload_msg"] = _decode_payload_message(
+            payload_msg,
+            serialization,
+            compression,
+        )
+        result["payload_size"] = payload_size
+
+    if msg_type == SERVER_ERROR_RESPONSE:
+        _raise_server_error(result)
+
+    return result
+
+
+def _split_response_frame(data: bytes) -> tuple[int, int, int, int, bytes]:
+    """Return decoded header fields and payload bytes."""
     header_size = data[0] & 0x0F
     msg_type = (data[1] >> 4) & 0x0F
     msg_flags = data[1] & 0x0F
     serialization = (data[2] >> 4) & 0x0F
     compression = data[2] & 0x0F
-
-    # Everything after the header is the "payload area"
     payload = data[header_size * 4 :]
+    return msg_type, msg_flags, serialization, compression, payload
 
-    result: dict[str, Any] = {
-        "is_last_package": False,
-    }
 
-    # -- optional sequence (bit 0 of flags) --
-    if msg_flags & 0x01:
-        if len(payload) >= 4:
-            seq = int.from_bytes(payload[:4], "big", signed=True)
-            result["payload_sequence"] = seq
-            payload = payload[4:]
+def _consume_optional_sequence(
+    payload: bytes,
+    msg_flags: int,
+    result: dict[str, Any],
+) -> bytes:
+    """Extract optional sequence number from the payload area."""
+    if msg_flags & 0x01 and len(payload) >= 4:
+        result["payload_sequence"] = int.from_bytes(payload[:4], "big", signed=True)
+        return payload[4:]
+    return payload
 
-    # -- last-package flag (bit 1 of flags) --
-    if msg_flags & 0x02:
-        result["is_last_package"] = True
 
-    # -- decode payload based on message type --
-    payload_msg: bytes | None = None
-    payload_size: int = 0
-
+def _extract_response_payload(
+    msg_type: int,
+    payload: bytes,
+    result: dict[str, Any],
+) -> tuple[bytes | None, int]:
+    """Extract message-type-specific payload fields."""
     if msg_type == FULL_SERVER_RESPONSE:
-        if len(payload) >= 4:
-            payload_size = int.from_bytes(payload[:4], "big", signed=True)
-            payload_msg = payload[4:]
+        return _read_declared_payload(payload, signed=True)
 
-    elif msg_type == SERVER_ACK:
-        if len(payload) >= 4:
-            seq = int.from_bytes(payload[:4], "big", signed=True)
-            result["seq"] = seq
-            if len(payload) >= 8:
-                payload_size = int.from_bytes(
-                    payload[4:8], "big", signed=False,
-                )
-                payload_msg = payload[8:]
+    if msg_type == SERVER_ACK:
+        if len(payload) < 4:
+            return None, 0
+        result["seq"] = int.from_bytes(payload[:4], "big", signed=True)
+        return _read_declared_payload(payload[4:], signed=False)
 
-    elif msg_type == SERVER_ERROR_RESPONSE:
-        if len(payload) >= 4:
-            code = int.from_bytes(payload[:4], "big", signed=False)
-            result["code"] = code
-            if len(payload) >= 8:
-                payload_size = int.from_bytes(
-                    payload[4:8], "big", signed=False,
-                )
-                payload_msg = payload[8:]
-
-    # -- decompress and deserialize --
-    if payload_msg is not None:
-        if compression == GZIP_COMPRESSION:
-            try:
-                payload_msg = gzip.decompress(payload_msg)
-            except Exception:
-                logger.warning("GZIP decompression failed, using raw bytes")
-
-        if serialization == JSON_SERIALIZATION:
-            try:
-                result["payload_msg"] = json.loads(
-                    str(payload_msg, "utf-8"),
-                )
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                logger.error(
-                    "JSON parse failed (first 40 bytes hex): %s  error: %s",
-                    payload_msg[:40].hex() if payload_msg else "<empty>",
-                    exc,
-                )
-                result["payload_msg"] = {}
-        elif serialization != NO_SERIALIZATION:
-            result["payload_msg"] = str(payload_msg, "utf-8")
-        else:
-            result["payload_msg"] = payload_msg
-
-        result["payload_size"] = payload_size
-
-    # -- error handling --
     if msg_type == SERVER_ERROR_RESPONSE:
-        error_code = result.get("code", -1)
-        error_message = (
-            result.get("payload_msg", {})
-            if isinstance(result.get("payload_msg"), dict)
-            else {}
-        ).get("message", "unknown error")
-        logger.error("ASR server error %s: %s", error_code, error_message)
-        raise ProtocolError(
-            f"Server error (code={error_code}): {error_message}",
-        )
+        if len(payload) < 4:
+            return None, 0
+        result["code"] = int.from_bytes(payload[:4], "big", signed=False)
+        return _read_declared_payload(payload[4:], signed=False)
 
-    return result
+    return None, 0
+
+
+def _read_declared_payload(payload: bytes, *, signed: bool) -> tuple[bytes | None, int]:
+    """Read a 4-byte payload size followed by the payload body."""
+    if len(payload) < 4:
+        return None, 0
+    payload_size = int.from_bytes(payload[:4], "big", signed=signed)
+    return payload[4:], payload_size
+
+
+def _decode_payload_message(
+    payload_msg: bytes,
+    serialization: int,
+    compression: int,
+) -> object:
+    """Decompress and deserialize a server payload."""
+    if compression == GZIP_COMPRESSION:
+        try:
+            payload_msg = gzip.decompress(payload_msg)
+        except Exception:
+            logger.warning("GZIP decompression failed, using raw bytes")
+
+    if serialization == JSON_SERIALIZATION:
+        try:
+            return json.loads(str(payload_msg, "utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            logger.error(
+                "JSON parse failed (first 40 bytes hex): %s  error: %s",
+                payload_msg[:40].hex() if payload_msg else "<empty>",
+                exc,
+            )
+            return {}
+    if serialization != NO_SERIALIZATION:
+        return str(payload_msg, "utf-8")
+    return payload_msg
+
+
+def _raise_server_error(result: dict[str, Any]) -> None:
+    """Raise a ProtocolError from a parsed server error frame."""
+    error_code = result.get("code", -1)
+    payload_msg = result.get("payload_msg", {})
+    error_message = (payload_msg if isinstance(payload_msg, dict) else {}).get(
+        "message", "unknown error"
+    )
+    logger.error("ASR server error %s: %s", error_code, error_message)
+    raise ProtocolError(
+        f"Server error (code={error_code}): {error_message}",
+    )

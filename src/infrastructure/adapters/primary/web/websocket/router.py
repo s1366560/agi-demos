@@ -19,8 +19,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import orjson
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.routers.event_dispatcher import (
@@ -30,14 +29,18 @@ from src.infrastructure.adapters.primary.web.websocket._limits import (
     InboundMessageTooLarge,
     receive_json_with_limit,
 )
-from src.infrastructure.adapters.primary.web.websocket.auth import authenticate_websocket
+from src.infrastructure.adapters.primary.web.websocket.auth import (
+    authenticate_websocket,
+    extract_websocket_api_key,
+    select_websocket_auth_subprotocol,
+)
 from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
     ConnectionManager,
     get_connection_manager,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.primary.web.websocket.message_router import get_message_router
-from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -52,23 +55,14 @@ def get_container_from_app(websocket: WebSocket) -> DIContainer:
 @router.websocket("/ws")
 async def agent_websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(..., description="API key for authentication"),
+    token: str | None = Query(None, description="Legacy API key query parameter"),
     session_id: str | None = Query(None, description="Client session ID for multi-tab support"),
-    # TODO(P0-6): This DB session is bound to the connection lifetime and
-    # is shared across every message handler invocation on this socket.
-    # Two long-running handlers (e.g. agent stream + sandbox bridge) may
-    # interleave queries on the same SQLAlchemy AsyncSession, which is
-    # NOT concurrency-safe and can corrupt the session state. The proper
-    # fix is to remove this dependency and have message_router.route()
-    # open a fresh `async_session_factory()` per message inside an
-    # `async with` block, propagating the session via MessageContext.
-    db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     WebSocket endpoint for agent chat.
 
     Query Parameters:
-    - token: API key for authentication (required)
+    - token: Legacy API key query parameter (optional; WebSocket subprotocol preferred)
     - session_id: Client-generated session ID for multi-tab support
       (optional, auto-generated if not provided)
 
@@ -143,7 +137,13 @@ async def agent_websocket_endpoint(
       {type: 'conversation_created', routing_key: str, project_id: str, sequence_id: str, data: {...}}
     """
     # Authenticate
-    auth_result = await authenticate_websocket(token, db)
+    api_key = extract_websocket_api_key(websocket, token)
+    if not api_key:
+        await websocket.close(code=4001, reason="Authentication failed")
+        return
+
+    async with async_session_factory() as auth_db:
+        auth_result = await authenticate_websocket(api_key, auth_db)
     if not auth_result:
         await websocket.close(code=4001, reason="Authentication failed")
         return
@@ -159,11 +159,16 @@ async def agent_websocket_endpoint(
     message_router = get_message_router()
 
     # Connect with session_id
-    await manager.connect(user_id, session_id, websocket)
+    await manager.connect(
+        user_id,
+        session_id,
+        websocket,
+        subprotocol=select_websocket_auth_subprotocol(websocket),
+    )
 
     # Get DI container
     base_container = get_container_from_app(websocket)
-    container = base_container.with_db(db)
+    container = base_container
 
     try:
         # Send connection confirmation with session_id
@@ -178,22 +183,21 @@ async def agent_websocket_endpoint(
             }
         )
 
-        # Create message context
-        context = MessageContext(
-            websocket=websocket,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            session_id=session_id,
-            db=db,
-            container=container,
-            session_factory=async_session_factory,
-        )
-
         # Message handling loop
         while True:
             try:
                 data = await receive_json_with_limit(websocket)
-                await message_router.route(context, data)
+                async with async_session_factory() as message_db:
+                    context = MessageContext(
+                        websocket=websocket,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        db=message_db,
+                        container=container,
+                        session_factory=async_session_factory,
+                    )
+                    await message_router.route(context, data)
             except InboundMessageTooLarge as e:
                 logger.warning(
                     f"[WS] Oversized message from session {session_id[:8]}...: "

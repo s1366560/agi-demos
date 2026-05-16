@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -32,11 +32,13 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     Memory,
+    Message,
     Project,
     ToolExecutionRecord,
     User,
     UserProject,
     UserTenant,
+    WorkspaceModel,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -47,6 +49,101 @@ logger = logging.getLogger(__name__)
 class AddProjectMemberRequest(BaseModel):
     user_id: str
     role: str | None = "member"
+
+
+async def _delete_rows_referencing(
+    db: AsyncSession,
+    *,
+    target_table_name: str,
+    target_column_name: str,
+    target_ids: Any,
+    skip_tables: set[str],
+    existing_tables: set[str],
+) -> None:
+    """Delete rows with FKs pointing at a set of IDs."""
+    conditions_by_table: dict[Any, list[Any]] = {}
+    for table in Project.metadata.tables.values():
+        if table.name in skip_tables or table.name not in existing_tables:
+            continue
+        for foreign_key in table.foreign_keys:
+            if (
+                foreign_key.column.table.name == target_table_name
+                and foreign_key.column.name == target_column_name
+            ):
+                conditions_by_table.setdefault(table, []).append(foreign_key.parent.in_(target_ids))
+
+    for table in reversed(Project.metadata.sorted_tables):
+        conditions = conditions_by_table.get(table)
+        if conditions:
+            _result = await db.execute(delete(table).where(or_(*conditions)))
+
+
+async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
+    """Remove project-owned rows in dependency order before deleting a project."""
+    connection = await db.connection()
+    existing_tables = await connection.run_sync(
+        lambda sync_connection: set(inspect(sync_connection).get_table_names())
+    )
+    conversation_ids = select(Conversation.id).where(Conversation.project_id == project_id)
+    message_ids = select(Message.id).where(Message.conversation_id.in_(conversation_ids))
+    workspace_ids = select(WorkspaceModel.id).where(WorkspaceModel.project_id == project_id)
+
+    if Message.__tablename__ in existing_tables:
+        _result = await db.execute(
+            update(Message)
+            .where(Message.reply_to_id.in_(message_ids))
+            .values(reply_to_id=None)
+        )
+        await _delete_rows_referencing(
+            db,
+            target_table_name="messages",
+            target_column_name="id",
+            target_ids=message_ids,
+            skip_tables={"messages"},
+            existing_tables=existing_tables,
+        )
+        _result = await db.execute(delete(Message).where(Message.conversation_id.in_(conversation_ids)))
+
+    if Conversation.__tablename__ in existing_tables:
+        _result = await db.execute(
+            update(Conversation)
+            .where(Conversation.parent_conversation_id.in_(conversation_ids))
+            .values(parent_conversation_id=None)
+        )
+        _result = await db.execute(
+            update(Conversation)
+            .where(Conversation.fork_source_id.in_(conversation_ids))
+            .values(fork_source_id=None)
+        )
+        await _delete_rows_referencing(
+            db,
+            target_table_name="conversations",
+            target_column_name="id",
+            target_ids=conversation_ids,
+            skip_tables={"conversations", "messages"},
+            existing_tables=existing_tables,
+        )
+        _result = await db.execute(delete(Conversation).where(Conversation.project_id == project_id))
+
+    await _delete_rows_referencing(
+        db,
+        target_table_name="workspaces",
+        target_column_name="id",
+        target_ids=workspace_ids,
+        skip_tables={"workspaces", "conversations"},
+        existing_tables=existing_tables,
+    )
+    if WorkspaceModel.__tablename__ in existing_tables:
+        _result = await db.execute(delete(WorkspaceModel).where(WorkspaceModel.project_id == project_id))
+
+    await _delete_rows_referencing(
+        db,
+        target_table_name="projects",
+        target_column_name="id",
+        target_ids=[project_id],
+        skip_tables={"projects", "conversations", "messages", "workspaces"},
+        existing_tables=existing_tables,
+    )
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -77,7 +174,7 @@ async def create_project(
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="User does not have permission to create projects in this tenant",
+                detail=_("User does not have permission to create projects in this tenant"),
             )
 
         # Create project
@@ -217,13 +314,13 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
         node_stats: dict[str, int] = {}
         if graphiti_client and project_ids_in_page:
             try:
-                count_query = """
+                cypher_count_query = """
                     MATCH (n:Entity)
                     WHERE n.project_id IN $project_ids
                     RETURN n.project_id AS project_id, count(n) AS cnt
                 """
                 result = await graphiti_client.driver.execute_query(
-                    count_query, project_ids=project_ids_in_page
+                    cypher_count_query, project_ids=project_ids_in_page
                 )
                 if hasattr(result, "records") and result.records:
                     for record in result.records:
@@ -291,7 +388,7 @@ async def get_project(
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to project"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
         )
 
     # Get project
@@ -326,7 +423,7 @@ async def update_project(
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only project owner or admin can update project",
+            detail=_("Only project owner or admin can update project"),
         )
 
     # Get project
@@ -378,7 +475,7 @@ async def delete_project(
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only project owner can delete project"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only project owner can delete project")
         )
 
     # Get project
@@ -387,7 +484,8 @@ async def delete_project(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
-    await db.delete(project)
+    await _delete_project_dependents(db, project_id)
+    _result = await db.execute(delete(Project).where(Project.id == project_id))
     await db.commit()
 
 
@@ -418,7 +516,7 @@ async def add_project_member(
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only project owner or admin can add members",
+            detail=_("Only project owner or admin can add members"),
         )
 
     # Check if project exists
@@ -441,7 +539,7 @@ async def add_project_member(
     if existing_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already a member of this project",
+            detail=_("User is already a member of this project"),
         )
 
     user_project = UserProject(
@@ -482,7 +580,7 @@ async def update_project_member(
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only project owner or admin can update members",
+            detail=_("Only project owner or admin can update members"),
         )
 
     # Check if user is a member
@@ -494,13 +592,13 @@ async def update_project_member(
     user_project = result.scalar_one_or_none()
     if not user_project:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("User is not a member of this project")
         )
 
     # Cannot update owner's role
     if user_project.role == "owner":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot update project owner role"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Cannot update project owner role")
         )
 
     # Update role
@@ -534,13 +632,13 @@ async def remove_project_member(
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only project owner can remove members"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only project owner can remove members")
         )
 
     # Cannot remove owner
     if user_id == current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove project owner"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Cannot remove project owner")
         )
 
     # Remove user-project relationship
@@ -552,7 +650,7 @@ async def remove_project_member(
     user_project = result.scalar_one_or_none()
     if not user_project:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("User is not a member of this project")
         )
 
     await db.delete(user_project)
@@ -586,7 +684,7 @@ async def list_project_members(
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to project"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
         )
 
     # Get all members
@@ -691,7 +789,7 @@ async def get_project_stats(
         )
         if not user_project_result.scalar_one_or_none():
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to project"
+                status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
             )
 
         # Get project
@@ -760,7 +858,7 @@ async def get_project_stats(
     except Exception:
         logger.exception(f"Error getting project stats for {project_id}")
         raise HTTPException(
-            status_code=500, detail="An error occurred while retrieving project statistics"
+            status_code=500, detail=_("An error occurred while retrieving project statistics")
         ) from None
 
 

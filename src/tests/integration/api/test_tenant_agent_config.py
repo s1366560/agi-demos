@@ -204,17 +204,14 @@ class TestTenantAgentConfigAPI:
             json=update1,
         )
 
-        # Get config for a non-existent tenant (should return default)
+        # Get config for a non-existent tenant. Access validation runs before
+        # config defaults are materialized, so unknown tenants are rejected.
         fake_tenant_id = "99999999-9999-9999-9999-999999999999"
         response2 = await authenticated_async_client.get(
             f"/api/v1/agent/config?tenant_id={fake_tenant_id}"
         )
 
-        assert response2.status_code == 200
-        data2 = response2.json()
-
-        # Non-existent tenant should have default config, not the custom one
-        assert data2.get("llm_model") == "default"  # Default, not "gpt-4"
+        assert response2.status_code == 404
 
     async def test_config_schema_validation(
         self,

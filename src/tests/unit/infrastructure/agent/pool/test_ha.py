@@ -344,6 +344,46 @@ class TestAutoScalingService:
         assert event.target_count == 3
         assert event.success is True
 
+    async def test_scale_calls_pool_manager_backend(self):
+        """Scaling with a pool manager must invoke the real scaling backend."""
+
+        class FakePoolManager:
+            def __init__(self):
+                self.calls = []
+
+            async def scale_instances(self, instance_key, target_count):
+                self.calls.append((instance_key, target_count))
+
+        pool_manager = FakePoolManager()
+        scaling_service = AutoScalingService(pool_manager=pool_manager)
+
+        event = await scaling_service.scale(
+            instance_key="tenant:project:mode",
+            direction=ScalingDirection.UP,
+            target_count=4,
+        )
+
+        assert event.success is True
+        assert pool_manager.calls == [("tenant:project:mode", 4)]
+        assert scaling_service._current_counts["tenant:project:mode"] == 4
+
+    async def test_scale_fails_when_pool_manager_has_no_scaling_backend(self):
+        """Do not report success when a configured pool manager cannot scale."""
+        callback_events = []
+        scaling_service = AutoScalingService(pool_manager=object())
+        scaling_service.on_scale(lambda instance_key, event: callback_events.append(event))
+
+        event = await scaling_service.scale(
+            instance_key="tenant:project:mode",
+            direction=ScalingDirection.UP,
+            target_count=4,
+        )
+
+        assert event.success is False
+        assert "scale_instances" in (event.error_message or "")
+        assert "tenant:project:mode" not in scaling_service._current_counts
+        assert callback_events == []
+
     async def test_scaling_policy(self, scaling_service):
         """Test custom scaling policy."""
         custom_policy = ScalingPolicy(

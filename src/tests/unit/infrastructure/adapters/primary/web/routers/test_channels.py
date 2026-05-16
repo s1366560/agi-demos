@@ -31,6 +31,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     reload_project_plugins,
     reload_tenant_plugins,
     router,
+    test_config as route_test_config,
     to_response,
     uninstall_tenant_plugin,
     update_config,
@@ -1288,3 +1289,93 @@ class TestTenantPluginEndpoints:
 
         assert response.success is True
         runtime_manager.uninstall_plugin.assert_awaited_once_with("feishu-channel-plugin")
+
+
+class TestConfigConnectionTest:
+    """Channel config test endpoint should run plugin health checks."""
+
+    @pytest.mark.asyncio
+    async def test_test_config_marks_connected_after_successful_health_check(
+        self,
+        mock_db_session,
+        sample_channel_config,
+    ):
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        repo = MagicMock()
+        repo.get_by_id = AsyncMock(return_value=sample_channel_config)
+        repo.update_status = AsyncMock(return_value=True)
+        adapter = MagicMock()
+        adapter.connected = True
+        adapter.health_check = AsyncMock(return_value=True)
+        adapter.disconnect = AsyncMock()
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._build_channel_adapter_for_test",
+                new=AsyncMock(return_value=adapter),
+            ),
+        ):
+            response = await route_test_config(
+                config_id=sample_channel_config.id,
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response == {"success": True, "message": "Connection successful"}
+        adapter.health_check.assert_awaited_once()
+        adapter.disconnect.assert_awaited_once()
+        repo.update_status.assert_awaited_once_with(sample_channel_config.id, "connected")
+        mock_db_session.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_test_config_marks_error_when_health_check_fails(
+        self,
+        mock_db_session,
+        sample_channel_config,
+    ):
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        repo = MagicMock()
+        repo.get_by_id = AsyncMock(return_value=sample_channel_config)
+        repo.update_status = AsyncMock(return_value=True)
+        adapter = MagicMock()
+        adapter.connected = False
+        adapter.health_check = AsyncMock(return_value=False)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._build_channel_adapter_for_test",
+                new=AsyncMock(return_value=adapter),
+            ),
+        ):
+            response = await route_test_config(
+                config_id=sample_channel_config.id,
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response == {
+            "success": False,
+            "message": "Connection health check failed for feishu",
+        }
+        repo.update_status.assert_awaited_once_with(
+            sample_channel_config.id,
+            "error",
+            "Connection health check failed for feishu",
+        )
+        mock_db_session.commit.assert_awaited_once()

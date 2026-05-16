@@ -174,7 +174,10 @@ class SandboxTokenResponse(BaseModel):
     expires_in: int = Field(..., description="Seconds until token expires")
     websocket_url_hint: str = Field(
         default="",
-        description="Hint for constructing WebSocket URL with token",
+        description=(
+            "Hint for constructing the WebSocket URL without credentials. "
+            "Authenticate separately with the returned token."
+        ),
     )
 
 

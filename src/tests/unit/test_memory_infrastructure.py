@@ -338,3 +338,15 @@ class TestCachedEmbedding:
         # Should have tried Redis get and then set
         assert redis.get.call_count == 1
         assert redis.setex.call_count == 1
+
+    async def test_embed_batch_raises_on_inner_count_mismatch(self):
+        from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
+
+        inner = AsyncMock()
+        inner.embedding_dim = 2
+        inner.embed_batch = AsyncMock(return_value=[[1.0, 2.0]])
+
+        service = CachedEmbeddingService(inner, redis_client=None, model_name="test")
+
+        with pytest.raises(RuntimeError, match="returned 1 embeddings for 2 texts"):
+            await service.embed_batch(["first", "second"])

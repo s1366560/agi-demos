@@ -147,7 +147,7 @@ class MCPToolAdapter(AgentTool):
         Returns:
             True if value matches expected type
         """
-        type_mapping = {
+        type_mapping: dict[str, type[object] | tuple[type[object], ...]] = {
             "string": str,
             "number": (int, float),
             "integer": int,

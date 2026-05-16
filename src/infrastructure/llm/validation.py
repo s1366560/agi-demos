@@ -142,10 +142,11 @@ def _inject_schema_into_messages(
         role = msg.get("role") if isinstance(msg, dict) else msg.role
         if role == "system":
             content = msg.get("content") if isinstance(msg, dict) else msg.content
+            content_text = _stringify_message_content(content)
             if isinstance(msg, dict):
-                result[i] = {"role": "system", "content": (content or "") + schema_prompt}
+                result[i] = {"role": "system", "content": content_text + schema_prompt}
             else:
-                result[i] = Message(role="system", content=(content or "") + schema_prompt)
+                result[i] = Message(role="system", content=content_text + schema_prompt)
             return result
 
     # No system message found -- insert one
@@ -154,6 +155,18 @@ def _inject_schema_into_messages(
         {"role": "system", "content": f"You are a helpful assistant.{schema_prompt}"},
     )
     return result
+
+
+def _stringify_message_content(content: Any) -> str:
+    """Convert provider message content into a prompt-safe string."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    try:
+        return json.dumps(content, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return str(content)
 
 
 class StructuredOutputValidator:

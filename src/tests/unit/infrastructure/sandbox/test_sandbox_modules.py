@@ -1,7 +1,7 @@
 """Unit tests for sandbox modules (Phase 4)."""
 
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -275,6 +275,27 @@ class TestMCPConnector:
         # Should not raise
         await connector.disconnect(instance)
         assert instance.mcp_client is None
+
+    @pytest.mark.asyncio
+    async def test_connect_disconnects_client_after_timeout(self):
+        """Test timed-out connect attempts close the partially created client."""
+        from src.infrastructure.adapters.secondary.sandbox.mcp_connector import MCPConnector
+
+        connector = MCPConnector(connection_timeout=0.01)
+        instance = _create_instance(mcp_port=18765)
+        mock_client = MagicMock()
+        mock_client.connect = AsyncMock(side_effect=TimeoutError)
+        mock_client.disconnect = AsyncMock()
+
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_connector.MCPWebSocketClient",
+            return_value=mock_client,
+        ):
+            connected = await connector.connect(instance, max_retries=1)
+
+        assert connected is False
+        assert instance.mcp_client is None
+        mock_client.disconnect.assert_awaited_once()
 
 
 # ============================================================================

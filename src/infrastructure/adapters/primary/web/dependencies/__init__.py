@@ -5,6 +5,7 @@ from typing import cast
 
 from fastapi import Request
 
+from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     create_api_key,
     create_user,
@@ -79,8 +80,14 @@ def get_graph_service(request: Request) -> None:
         return None
 
 
-# Legacy alias for backward compatibility
-get_graphiti_client = get_neo4j_client
+def get_graphiti_client(request: Request) -> GraphServicePort | None:
+    """Legacy dependency returning the native graph service.
+
+    Older routes still refer to this as a Graphiti client, but the runtime graph
+    implementation is NativeGraphAdapter. It exposes the direct driver for
+    compatibility with legacy read/query routes.
+    """
+    return cast(GraphServicePort | None, get_graph_service(request))
 
 
 __all__ = [

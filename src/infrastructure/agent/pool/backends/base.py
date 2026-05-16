@@ -98,7 +98,7 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    async def execute(
+    def execute(
         self,
         instance_id: str,
         request: ChatRequest,

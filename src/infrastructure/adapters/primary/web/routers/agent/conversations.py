@@ -29,6 +29,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     ToolExecutionRecord,
     User,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     ConversationResponse,
@@ -129,7 +130,7 @@ async def create_conversation(
             exc_info=True,
             extra={"error_id": AGENT_CONVERSATION_CREATE_FAILED},
         )
-        raise HTTPException(status_code=400, detail=f"Invalid request: {e!s}") from e
+        raise HTTPException(status_code=400, detail=_(f"Invalid request: {e!s}")) from e
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
@@ -139,7 +140,7 @@ async def create_conversation(
         )
         raise HTTPException(
             status_code=500,
-            detail="A database error occurred while creating the conversation",
+            detail=_("A database error occurred while creating the conversation"),
         ) from e
     except Exception as e:
         await db.rollback()
@@ -150,7 +151,7 @@ async def create_conversation(
         )
         raise HTTPException(
             status_code=500,
-            detail="An error occurred while creating the conversation",
+            detail=_("An error occurred while creating the conversation"),
         ) from e
 
 
@@ -207,7 +208,7 @@ async def list_conversations(
 
     except Exception as e:
         logger.error(f"Error listing conversations: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list conversations: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to list conversations: {e!s}")) from e
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -233,7 +234,7 @@ async def get_conversation(
         )
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         return ConversationResponse.from_domain(conversation)
 
@@ -241,7 +242,7 @@ async def get_conversation(
         raise
     except Exception as e:
         logger.error(f"Error getting conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get conversation: {e!s}")) from e
 
 
 @router.get("/conversations/{conversation_id}/context-status")
@@ -271,7 +272,7 @@ async def get_context_status(
             user_id=current_user.id,
         )
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         # Load cached context summary from conversation meta
         adapter = container.context_summary_adapter()
@@ -308,7 +309,7 @@ async def get_context_status(
         raise
     except Exception as e:
         logger.error(f"Error getting context status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get context status: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get context status: {e!s}")) from e
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -334,7 +335,7 @@ async def delete_conversation(
         )
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         await agent_service.delete_conversation(
             conversation_id=conversation_id,
@@ -346,7 +347,7 @@ async def delete_conversation(
         raise
     except Exception as e:
         logger.error(f"Error deleting conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to delete conversation: {e!s}")) from e
 
 
 @router.patch("/conversations/{conversation_id}/title", response_model=ConversationResponse)
@@ -373,7 +374,7 @@ async def update_conversation_title(
         )
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         updated_conversation = await agent_service.update_conversation_title(
             conversation_id=conversation_id,
@@ -390,7 +391,7 @@ async def update_conversation_title(
     except Exception as e:
         logger.error(f"Error updating conversation title: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to update conversation title: {e!s}"
+            status_code=500, detail=_(f"Failed to update conversation title: {e!s}")
         ) from e
 
 
@@ -417,7 +418,7 @@ async def update_conversation_config(
             user_id=current_user.id,
         )
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         config_patch: dict[str, Any] = {}
         if data.llm_model_override is not None:
@@ -428,7 +429,7 @@ async def update_conversation_config(
             config_patch["llm_overrides"] = cleaned_overrides or None
 
         conversation.update_agent_config(config_patch)
-        await agent_service._conversation_repo.save(conversation)  # type: ignore[attr-defined]
+        await agent_service._conversation_repo.save(conversation)
         await db.commit()
 
         return ConversationResponse.from_domain(conversation)
@@ -439,7 +440,7 @@ async def update_conversation_config(
         await db.rollback()
         logger.error(f"Error updating conversation config: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to update conversation config: {e!s}"
+            status_code=500, detail=_(f"Failed to update conversation config: {e!s}")
         ) from e
 
 
@@ -474,7 +475,7 @@ async def update_conversation_mode(
             user_id=current_user.id,
         )
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         fields = data.model_fields_set
 
@@ -489,8 +490,8 @@ async def update_conversation_mode(
                     raise HTTPException(
                         status_code=422,
                         detail=(
-                            f"Invalid conversation_mode '{raw_mode}'. Must be one of: "
-                            f"{[m.value for m in ConversationMode]}"
+                            _(f"Invalid conversation_mode '{raw_mode}'. Must be one of: "
+                            f"{[m.value for m in ConversationMode]}")
                         ),
                     ) from exc
 
@@ -506,7 +507,7 @@ async def update_conversation_mode(
         await _enforce_conversation_invariants(conversation, container=container)
 
         conversation.updated_at = datetime.now(UTC)
-        await agent_service._conversation_repo.save(conversation)  # type: ignore[attr-defined]
+        await agent_service._conversation_repo.save(conversation)
         await db.commit()
 
         return ConversationResponse.from_domain(conversation)
@@ -522,7 +523,7 @@ async def update_conversation_mode(
         await db.rollback()
         logger.error(f"Error updating conversation mode: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to update conversation mode: {e!s}"
+            status_code=500, detail=_(f"Failed to update conversation mode: {e!s}")
         ) from e
 
 
@@ -558,7 +559,7 @@ async def generate_conversation_title(
         )
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         message_events = await agent_service.get_conversation_messages(
             conversation_id=conversation_id,
@@ -575,7 +576,7 @@ async def generate_conversation_title(
 
         if not first_user_message:
             raise HTTPException(
-                status_code=400, detail="No user message found to generate title from"
+                status_code=400, detail=_("No user message found to generate title from")
             )
 
         # Use DB provider config (same as ReActAgent) for title generation
@@ -593,7 +594,7 @@ async def generate_conversation_title(
         )
 
         if not updated_conversation:
-            raise HTTPException(status_code=500, detail="Failed to update conversation title")
+            raise HTTPException(status_code=500, detail=_("Failed to update conversation title"))
 
         return ConversationResponse.from_domain(updated_conversation)
 
@@ -602,7 +603,7 @@ async def generate_conversation_title(
     except Exception as e:
         logger.error(f"Error generating conversation title: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to generate conversation title: {e!s}"
+            status_code=500, detail=_(f"Failed to generate conversation title: {e!s}")
         ) from e
 
 
@@ -631,7 +632,7 @@ async def generate_summary(
             user_id=current_user.id,
         )
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         message_events = await agent_service.get_conversation_messages(
             conversation_id=conversation_id,
@@ -650,7 +651,7 @@ async def generate_summary(
         if not messages_text.strip():
             raise HTTPException(
                 status_code=400,
-                detail="No messages found to generate summary from",
+                detail=_("No messages found to generate summary from"),
             )
 
         title_llm = await agent_service.get_title_llm()
@@ -687,7 +688,7 @@ async def generate_summary(
         logger.error(f"Error generating conversation summary: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate conversation summary: {e!s}",
+            detail=_(f"Failed to generate conversation summary: {e!s}"),
         ) from e
 
 
@@ -702,7 +703,7 @@ async def fork_conversation(
     try:
         original = await db.get(ConversationModel, conversation_id)
         if not original:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         new_id = str(uuid.uuid4())
         new_conv = ConversationModel(
@@ -756,7 +757,7 @@ async def fork_conversation(
         logger.error(f"Error forking conversation: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fork conversation: {e!s}",
+            detail=_(f"Failed to fork conversation: {e!s}"),
         ) from e
 
 
@@ -772,7 +773,7 @@ async def edit_message(
     try:
         msg = await db.get(MessageModel, message_id)
         if not msg or msg.conversation_id != conversation_id:
-            raise HTTPException(status_code=404, detail="Message not found")
+            raise HTTPException(status_code=404, detail=_("Message not found"))
 
         if msg.original_content is None:
             msg.original_content = msg.content
@@ -795,7 +796,7 @@ async def edit_message(
         logger.error(f"Error editing message: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to edit message: {e!s}",
+            detail=_(f"Failed to edit message: {e!s}"),
         ) from e
 
 
@@ -814,10 +815,10 @@ async def request_tool_undo(
     try:
         exec_record = await db.get(ToolExecutionRecord, execution_id)
         if not exec_record:
-            raise HTTPException(status_code=404, detail="Tool execution not found")
+            raise HTTPException(status_code=404, detail=_("Tool execution not found"))
 
         if exec_record.conversation_id != conversation_id:
-            raise HTTPException(status_code=404, detail="Tool execution not found")
+            raise HTTPException(status_code=404, detail=_("Tool execution not found"))
 
         undo_msg = MessageModel(
             id=str(uuid.uuid4()),
@@ -845,5 +846,5 @@ async def request_tool_undo(
         logger.error(f"Error requesting tool undo: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to request tool undo: {e!s}",
+            detail=_(f"Failed to request tool undo: {e!s}"),
         ) from e

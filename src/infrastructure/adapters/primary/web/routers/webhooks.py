@@ -45,7 +45,7 @@ async def feishu_workspace_message(request: Request) -> JSONResponse:
     )
 
     try:
-        from memstack_agent.plugins.feishu.plugin import (  # type: ignore[import-not-found]
+        from memstack_agent.plugins.feishu.plugin import (  # pyright: ignore[reportMissingImports]
             handle_message_event,
         )
 

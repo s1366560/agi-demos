@@ -24,6 +24,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,23 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
         return _sandbox_adapter
 
 
+async def shutdown_sandbox_adapter_singleton() -> None:
+    """Close the sandbox adapter singleton without terminating containers."""
+    global _sandbox_adapter, _sandbox_orchestrator, _sync_pending
+
+    with _singleton_lock:
+        adapter = _sandbox_adapter
+        _sandbox_adapter = None
+        _sandbox_orchestrator = None
+        _sync_pending = False
+
+    if adapter is None:
+        return
+
+    await adapter.close()
+    logger.info("Sandbox adapter singleton closed")
+
+
 async def ensure_sandbox_sync() -> None:
     """Ensure sandbox adapter is synced with existing Docker containers.
 
@@ -110,9 +128,9 @@ def get_sandbox_token_service() -> SandboxTokenService:
             from src.configuration.config import get_settings
 
             settings = get_settings()
-            # Use JWT secret as the token signing key
+            # Use the application secret as the token signing key.
             _sandbox_token_service = SandboxTokenService(
-                secret_key=settings.jwt_secret,  # type: ignore[attr-defined]
+                secret_key=settings.secret_key,
                 token_ttl=300,  # 5 minutes default
             )
         return _sandbox_token_service
@@ -217,7 +235,7 @@ async def assert_caller_owns_project(
     Superusers bypass the membership check.
     """
     if not project_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing project_id")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Missing project_id"))
     if user.is_superuser:
         return
 
@@ -234,7 +252,7 @@ async def assert_caller_owns_project(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to sandbox resource",
+            detail=_("Access denied to sandbox resource"),
         )
 
 
@@ -258,7 +276,7 @@ async def assert_caller_owns_sandbox(
     if instance is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sandbox not found: {sandbox_id}",
+            detail=_(f"Sandbox not found: {sandbox_id}"),
         )
 
     project_id_attr = getattr(instance, "project_id", None)

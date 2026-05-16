@@ -125,7 +125,7 @@ class LifecycleMixin:
         self._tool_policy_layers = normalize_policy_layers(
             {"policy_layers": dict(tool_policy_layers or {})}
         )
-        self._last_tool_selection_trace = ()
+        self._last_tool_selection_trace: tuple[Any, ...] = ()
 
     def _init_memory_hooks(
         self: _LifecycleAgent,
@@ -146,9 +146,9 @@ class LifecycleMixin:
         }
         self._stream_memory_context = None
         self._stream_context_result = None
-        self._stream_messages = []
+        self._stream_messages: list[dict[str, Any]] = []
         self._stream_cached_summary = None
-        self._stream_tools_to_use = []
+        self._stream_tools_to_use: list[ToolDefinition] = []
         self._stream_final_content = ""
         self._stream_success = False
 
@@ -347,7 +347,7 @@ class LifecycleMixin:
             redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
             terminal_retention_seconds=subagent_terminal_retention_seconds,
         )
-        self._subagent_session_tasks = {}
+        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
 
     def _init_orchestrators(self: _LifecycleAgent) -> None:
         """Initialize orchestrators for modular components."""

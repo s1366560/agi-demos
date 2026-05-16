@@ -64,6 +64,9 @@ class WorkspacePlanOutboxWorker:
         """Return whether the background poll task is currently alive."""
         return self._running and self._task is not None and not self._task.done()
 
+    def _is_running(self) -> bool:
+        return self._running
+
     def start(self) -> None:
         """Start the polling loop."""
         if self.is_running:
@@ -104,11 +107,11 @@ class WorkspacePlanOutboxWorker:
 
     async def _poll_loop(self) -> None:
         try:
-            while self._running:
+            while self._is_running():
                 try:
                     _ = await self.run_once()
                 except asyncio.CancelledError:
-                    if not self._running:
+                    if not self._is_running():
                         break
                     logger.warning(
                         "workspace plan outbox job cancelled; poll loop will continue",
@@ -124,6 +127,7 @@ class WorkspacePlanOutboxWorker:
             self._running = False
 
     async def _process_claimed(self, outbox_id: str) -> None:
+        cancelled_during_processing = False
         try:
             async with self._session_factory() as session:
                 repo = SqlWorkspacePlanOutboxRepository(session)
@@ -147,32 +151,68 @@ class WorkspacePlanOutboxWorker:
                         await self._publish_outbox_update(payload)
                     return
 
-                lease_renewal_task = asyncio.create_task(
-                    self._renew_processing_lease_until_done(outbox_id),
-                    name=f"{self._worker_id}:renew:{outbox_id}",
+                cancelled_during_processing = await self._run_handler_with_lease(
+                    outbox_id,
+                    item,
+                    session,
+                    handler,
                 )
-                try:
-                    await handler(item, session)
-                finally:
-                    _ = lease_renewal_task.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await lease_renewal_task
-                marked = await repo.mark_completed(outbox_id, lease_owner=self._worker_id)
-                payload = _outbox_update_payload(item, "outbox_completed") if marked else None
-                await session.commit()
-                if payload is not None:
-                    await self._publish_outbox_update(payload)
-        except asyncio.CancelledError:
-            with contextlib.suppress(Exception):
-                await asyncio.shield(
-                    self._release_claim_cleanly(
-                        outbox_id,
-                        "workspace plan outbox processing cancelled",
+                if cancelled_during_processing:
+                    # Do not let CancelledError escape through the session
+                    # context manager. SQLite in-memory tests can otherwise
+                    # invalidate the only connection during rollback and lose
+                    # the schema before the release/retry check runs.
+                    pass
+                else:
+                    marked = await repo.mark_completed(outbox_id, lease_owner=self._worker_id)
+                    payload = _outbox_update_payload(item, "outbox_completed") if marked else None
+                    await session.commit()
+                    if payload is not None:
+                        await self._publish_outbox_update(payload)
+            if cancelled_during_processing:
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(
+                        self._release_claim_cleanly(
+                            outbox_id,
+                            "workspace plan outbox processing cancelled",
+                        )
                     )
-                )
+                raise asyncio.CancelledError
+        except asyncio.CancelledError:
+            if not cancelled_during_processing:
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(
+                        self._release_claim_cleanly(
+                            outbox_id,
+                            "workspace plan outbox processing cancelled",
+                        )
+                    )
             raise
         except Exception as exc:
             await self._mark_failed_cleanly(outbox_id, str(exc))
+
+    async def _run_handler_with_lease(
+        self,
+        outbox_id: str,
+        item: WorkspacePlanOutboxModel,
+        session: AsyncSession,
+        handler: WorkspacePlanOutboxHandler,
+    ) -> bool:
+        lease_renewal_task = asyncio.create_task(
+            self._renew_processing_lease_until_done(outbox_id),
+            name=f"{self._worker_id}:renew:{outbox_id}",
+        )
+        try:
+            await handler(item, session)
+            return False
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await session.rollback()
+            return True
+        finally:
+            _ = lease_renewal_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await lease_renewal_task
 
     async def _mark_failed_cleanly(self, outbox_id: str, error_message: str) -> None:
         payload: dict[str, Any] | None = None

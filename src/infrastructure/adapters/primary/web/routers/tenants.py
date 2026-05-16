@@ -1,6 +1,6 @@
 """Tenant management API endpoints."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -30,6 +30,78 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
+
+
+def _coerce_history_day(value: object) -> date:
+    """Normalize SQL date extraction results across PostgreSQL and SQLite."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
+async def _build_memory_usage_history(
+    db: AsyncSession,
+    tenant_id: str,
+    *,
+    storage_limit: int,
+    days: int = 30,
+) -> list[dict[str, Any]]:
+    """Return cumulative tenant memory usage for the trailing window."""
+    today = datetime.now(UTC).date()
+    start_date = today - timedelta(days=days - 1)
+    start_at = datetime.combine(start_date, time.min, tzinfo=UTC)
+
+    initial_usage_result = await db.execute(
+        refresh_select_statement(
+            select(func.coalesce(func.sum(func.length(Memory.content)), 0))
+            .join(Project, Memory.project_id == Project.id)
+            .where(and_(Project.tenant_id == tenant_id, Memory.created_at < start_at))
+        )
+    )
+    running_total = int(initial_usage_result.scalar() or 0)
+
+    history_day = func.date(Memory.created_at).label("history_day")
+    daily_usage_result = await db.execute(
+        refresh_select_statement(
+            select(
+                history_day,
+                func.coalesce(func.sum(func.length(Memory.content)), 0).label("daily_added"),
+                func.count(Memory.id).label("memory_count"),
+            )
+            .join(Project, Memory.project_id == Project.id)
+            .where(and_(Project.tenant_id == tenant_id, Memory.created_at >= start_at))
+            .group_by(history_day)
+            .order_by(history_day)
+        )
+    )
+
+    daily_usage = {
+        _coerce_history_day(row.history_day): {
+            "daily_added": int(row.daily_added or 0),
+            "memory_count": int(row.memory_count or 0),
+        }
+        for row in daily_usage_result
+    }
+
+    history: list[dict[str, Any]] = []
+    safe_limit = max(storage_limit, 1)
+    for offset in range(days):
+        day = start_date + timedelta(days=offset)
+        day_usage = daily_usage.get(day, {"daily_added": 0, "memory_count": 0})
+        running_total += day_usage["daily_added"]
+        history.append(
+            {
+                "date": day.isoformat(),
+                "used": running_total,
+                "daily_added": day_usage["daily_added"],
+                "memory_count": day_usage["memory_count"],
+                "percentage": round((running_total / safe_limit) * 100, 1),
+            }
+        )
+
+    return history
 
 
 class AddMemberRequest(BaseModel):
@@ -87,7 +159,9 @@ async def list_tenants(
     """List tenants for the current user."""
     # Get tenant IDs user has access to
     user_tenants_result = await db.execute(
-        refresh_select_statement(select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id))
+        refresh_select_statement(
+            select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id)
+        )
     )
     tenant_ids = [row[0] for row in user_tenants_result.fetchall()]
 
@@ -138,19 +212,25 @@ async def get_tenant(
 ) -> TenantResponse:
     """Get tenant by ID or slug."""
     result = await db.execute(
-        refresh_select_statement(select(Tenant).where(or_(Tenant.id == tenant_id, Tenant.slug == tenant_id)))
+        refresh_select_statement(
+            select(Tenant).where(or_(Tenant.id == tenant_id, Tenant.slug == tenant_id))
+        )
     )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
 
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant.id)
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant.id)
+            )
+        )
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant"))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant")
+        )
 
     return TenantResponse.from_orm(tenant)
 
@@ -165,12 +245,14 @@ async def update_tenant(
     """Update tenant."""
     # Check if user is owner
     result = await db.execute(
-        refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
+        refresh_select_statement(
+            select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id))
+        )
     )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only tenant owner can update tenant"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can update tenant")
         )
 
     # Update fields
@@ -193,12 +275,14 @@ async def delete_tenant(
     """Delete tenant."""
     # Check if user is owner
     result = await db.execute(
-        refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
+        refresh_select_statement(
+            select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id))
+        )
     )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only tenant owner can delete tenant"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can delete tenant")
         )
 
     await db.delete(tenant)
@@ -218,17 +302,21 @@ async def add_tenant_member(
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
     # Existence-first with invalid id 422
-    result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
     # Permission check
     owner_check = await db.execute(
-        refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
+        refresh_select_statement(
+            select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id))
+        )
     )
     if not owner_check.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only tenant owner can add members"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can add members")
         )
 
     # Check if user exists
@@ -238,14 +326,16 @@ async def add_tenant_member(
 
     # Check if user is already member
     existing_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            and_(UserTenant.user_id == user_id, UserTenant.tenant_id == tenant_id)
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == user_id, UserTenant.tenant_id == tenant_id)
+            )
+        )
     )
     if existing_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already a member of this tenant",
+            detail=_("User is already a member of this tenant"),
         )
 
     # Create user-tenant relationship
@@ -274,34 +364,42 @@ async def add_tenant_member_json(
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
     # Existence-first with invalid id 422
-    result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
     # Permission check
     owner_check = await db.execute(
-        refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
+        refresh_select_statement(
+            select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id))
+        )
     )
     if not owner_check.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only tenant owner can add members"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can add members")
         )
 
     # Check if user exists
-    user_result = await db.execute(refresh_select_statement(select(User).where(User.id == body.user_id)))
+    user_result = await db.execute(
+        refresh_select_statement(select(User).where(User.id == body.user_id))
+    )
     if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
 
     # Check if user is already member
     existing_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            and_(UserTenant.user_id == body.user_id, UserTenant.tenant_id == tenant_id)
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == body.user_id, UserTenant.tenant_id == tenant_id)
+            )
+        )
     )
     if existing_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already a member of this tenant",
+            detail=_("User is already a member of this tenant"),
         )
 
     user_tenant = UserTenant(
@@ -326,35 +424,41 @@ async def remove_tenant_member(
 ) -> None:
     """Remove member from tenant."""
     # Existence-first with invalid id 422
-    result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
     # Permission check
     owner_check = await db.execute(
-        refresh_select_statement(select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id)))
+        refresh_select_statement(
+            select(Tenant).where(and_(Tenant.id == tenant_id, Tenant.owner_id == current_user.id))
+        )
     )
     if not owner_check.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only tenant owner can remove members"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Only tenant owner can remove members")
         )
 
     # Cannot remove owner
     if user_id == current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove tenant owner"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=_("Cannot remove tenant owner")
         )
 
     # Remove user-tenant relationship
     result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            and_(UserTenant.user_id == user_id, UserTenant.tenant_id == tenant_id)
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == user_id, UserTenant.tenant_id == tenant_id)
+            )
+        )
     )
     user_tenant = result.scalar_one_or_none()
     if not user_tenant:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this tenant"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("User is not a member of this tenant")
         )
 
     await db.delete(user_tenant)
@@ -371,23 +475,31 @@ async def list_tenant_members(
     """List tenant members."""
     # Check if user has access to tenant
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id)
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id)
+            )
+        )
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant"))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant")
+        )
     # Existence check
-    result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
 
     # Get all members
     result = await db.execute(
-        refresh_select_statement(select(UserTenant, User)
-        .join(User, UserTenant.user_id == User.id)
-        .where(UserTenant.tenant_id == tenant_id))
+        refresh_select_statement(
+            select(UserTenant, User)
+            .join(User, UserTenant.user_id == User.id)
+            .where(UserTenant.tenant_id == tenant_id)
+        )
     )
     members = []
     for user_tenant, user in result.fetchall():
@@ -414,52 +526,68 @@ async def get_tenant_stats(
     """Get tenant statistics for the overview dashboard."""
     # Check access
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id)
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id)
+            )
+        )
     )
     if not user_tenant_result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant"))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant")
+        )
 
     # Get tenant details
-    tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    tenant_result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = tenant_result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail=_("Tenant not found"))
 
     # Get active projects count
-    projects_result = await db.execute(refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id)))
+    projects_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id))
+    )
     projects = projects_result.scalars().all()
     active_projects_count = len(projects)
 
     # Get team members count
     members_result = await db.execute(
-        refresh_select_statement(select(func.count(UserTenant.id)).where(UserTenant.tenant_id == tenant_id))
+        refresh_select_statement(
+            select(func.count(UserTenant.id)).where(UserTenant.tenant_id == tenant_id)
+        )
     )
     team_members_count = members_result.scalar()
 
     # Calculate storage used (sum of memory content length)
     storage_result = await db.execute(
-        refresh_select_statement(select(func.sum(func.length(Memory.content)))
-        .join(Project, Memory.project_id == Project.id)
-        .where(Project.tenant_id == tenant_id))
+        refresh_select_statement(
+            select(func.sum(func.length(Memory.content)))
+            .join(Project, Memory.project_id == Project.id)
+            .where(Project.tenant_id == tenant_id)
+        )
     )
     storage_used = storage_result.scalar() or 0
 
     # New projects this week
     one_week_ago = datetime.now(UTC) - timedelta(days=7)
     new_projects_result = await db.execute(
-        refresh_select_statement(select(func.count(Project.id)).where(
-            and_(Project.tenant_id == tenant_id, Project.created_at >= one_week_ago)
-        ))
+        refresh_select_statement(
+            select(func.count(Project.id)).where(
+                and_(Project.tenant_id == tenant_id, Project.created_at >= one_week_ago)
+            )
+        )
     )
     new_projects_this_week = new_projects_result.scalar() or 0
 
     # New members this week
     new_members_result = await db.execute(
-        refresh_select_statement(select(func.count(UserTenant.id)).where(
-            and_(UserTenant.tenant_id == tenant_id, UserTenant.created_at >= one_week_ago)
-        ))
+        refresh_select_statement(
+            select(func.count(UserTenant.id)).where(
+                and_(UserTenant.tenant_id == tenant_id, UserTenant.created_at >= one_week_ago)
+            )
+        )
     )
     new_members_this_week = new_members_result.scalar() or 0
 
@@ -467,13 +595,17 @@ async def get_tenant_stats(
     active_projects_list = []
     for project in projects[:5]:  # Top 5 projects
         # Get owner name
-        owner_result = await db.execute(refresh_select_statement(select(User).where(User.id == project.owner_id)))
+        owner_result = await db.execute(
+            refresh_select_statement(select(User).where(User.id == project.owner_id))
+        )
         owner = owner_result.scalar_one_or_none()
         owner_name = owner.full_name if owner else "Unknown"
 
         # Get memory consumption for this project
         proj_storage_result = await db.execute(
-            refresh_select_statement(select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id))
+            refresh_select_statement(
+                select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id)
+            )
         )
         proj_storage = proj_storage_result.scalar() or 0
 
@@ -491,25 +623,22 @@ async def get_tenant_stats(
                 "name": project.name,
                 "owner": owner_name,
                 "memory_consumed": storage_str,
-                "status": "Active",  # Could rely on project.updated_at
+                "status": None,
             }
         )
 
-    # Memory usage history (simplified: daily creation count/size for last 30 days)
-    # This is a bit complex for SQL, so we might skip or approximate.
-    # For now, let's just return a placeholder or calculate real data if efficient.
-    # We'll use a placeholder for history as it requires time-series aggregation.
-    memory_usage_history: list[Any] = []
-    # Placeholder: mock trend based on real total?
-    # Or just empty list if no data.
+    storage_limit = tenant.max_storage or 1024 * 1024 * 1024
+    memory_usage_history = await _build_memory_usage_history(
+        db,
+        tenant_id,
+        storage_limit=storage_limit,
+    )
 
     return {
         "storage": {
-            "total": tenant.max_storage or 1024 * 1024 * 1024,  # Default 1GB
+            "total": storage_limit,
             "used": storage_used,
-            "percentage": round(
-                (storage_used / (tenant.max_storage or 1024 * 1024 * 1024)) * 100, 1
-            ),
+            "percentage": round((storage_used / max(storage_limit, 1)) * 100, 1),
         },
         "projects": {
             "active": active_projects_count,
@@ -520,12 +649,12 @@ async def get_tenant_stats(
             "total": team_members_count,
             "new_added": new_members_this_week,
         },
-        "memory_history": memory_usage_history,  # Empty for now, or could implement daily aggregation
+        "memory_history": memory_usage_history,
         "tenant_info": {
             "organization_id": f"#TEN-{tenant.id[:5].upper()}",
             "plan": tenant.plan or "Free",
-            "region": "US-East",  # Hardcoded or from config
-            "next_billing_date": (datetime.now() + timedelta(days=30)).strftime("%b %d, %Y"),
+            "region": None,
+            "next_billing_date": None,
         },
     }
 
@@ -547,10 +676,12 @@ async def get_tenant_analytics(
     """
     # Verify user belongs to tenant
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            UserTenant.user_id == current_user.id,
-            UserTenant.tenant_id == tenant_id,
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
     )
     if not user_tenant_result.scalar_one_or_none():
         raise HTTPException(status_code=403, detail=_("Access denied to this tenant"))
@@ -561,7 +692,9 @@ async def get_tenant_analytics(
     _start_date = datetime.now(UTC) - timedelta(days=days)
 
     # Get projects for this tenant
-    projects_result = await db.execute(refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id)))
+    projects_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id))
+    )
     projects = projects_result.scalars().all()
 
     # Calculate per-project storage
@@ -569,7 +702,9 @@ async def get_tenant_analytics(
     for project in projects:
         # Sum memory content lengths as proxy for storage
         storage_result = await db.execute(
-            refresh_select_statement(select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id))
+            refresh_select_statement(
+                select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id)
+            )
         )
         storage_bytes = storage_result.scalar() or 0
         project_storage.append(
@@ -602,7 +737,9 @@ async def get_tenant_analytics(
 async def _get_memory_count(db: AsyncSession, project_id: str) -> int:
     """Get memory count for a project."""
     result = await db.execute(
-        refresh_select_statement(select(func.count()).select_from(Memory).where(Memory.project_id == project_id))
+        refresh_select_statement(
+            select(func.count()).select_from(Memory).where(Memory.project_id == project_id)
+        )
     )
     return result.scalar() or 0
 
@@ -618,14 +755,16 @@ async def _get_memory_growth_by_day(
 
     # Query memory counts grouped by date
     result = await db.execute(
-        refresh_select_statement(select(
-            func.date(Memory.created_at).label("date"),
-            func.count().label("count"),
+        refresh_select_statement(
+            select(
+                func.date(Memory.created_at).label("date"),
+                func.count().label("count"),
+            )
+            .where(Memory.project_id.in_(project_ids))
+            .where(Memory.created_at >= _start_date)
+            .group_by(func.date(Memory.created_at))
+            .order_by(func.date(Memory.created_at))
         )
-        .where(Memory.project_id.in_(project_ids))
-        .where(Memory.created_at >= _start_date)
-        .group_by(func.date(Memory.created_at))
-        .order_by(func.date(Memory.created_at)))
     )
 
     # Format for chart
@@ -665,14 +804,16 @@ async def list_gene_policies(
     db: AsyncSession = Depends(get_db),
 ) -> list[GenePolicyResponse]:
     result = await db.execute(
-        refresh_select_statement(select(OrgGenePolicyModel)
-        .where(
-            and_(
-                OrgGenePolicyModel.tenant_id == tenant_id,
-                OrgGenePolicyModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(OrgGenePolicyModel)
+            .where(
+                and_(
+                    OrgGenePolicyModel.tenant_id == tenant_id,
+                    OrgGenePolicyModel.deleted_at.is_(None),
+                )
             )
+            .order_by(OrgGenePolicyModel.policy_key)
         )
-        .order_by(OrgGenePolicyModel.policy_key))
     )
     rows = result.scalars().all()
     return [
@@ -698,13 +839,15 @@ async def upsert_gene_policy(
     db: AsyncSession = Depends(get_db),
 ) -> GenePolicyResponse:
     result = await db.execute(
-        refresh_select_statement(select(OrgGenePolicyModel).where(
-            and_(
-                OrgGenePolicyModel.tenant_id == tenant_id,
-                OrgGenePolicyModel.policy_key == policy_key,
-                OrgGenePolicyModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(OrgGenePolicyModel).where(
+                and_(
+                    OrgGenePolicyModel.tenant_id == tenant_id,
+                    OrgGenePolicyModel.policy_key == policy_key,
+                    OrgGenePolicyModel.deleted_at.is_(None),
+                )
             )
-        ))
+        )
     )
     existing = result.scalar_one_or_none()
     now = datetime.now(UTC)
@@ -746,13 +889,15 @@ async def delete_gene_policy(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     result = await db.execute(
-        refresh_select_statement(select(OrgGenePolicyModel).where(
-            and_(
-                OrgGenePolicyModel.tenant_id == tenant_id,
-                OrgGenePolicyModel.policy_key == policy_key,
-                OrgGenePolicyModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(OrgGenePolicyModel).where(
+                and_(
+                    OrgGenePolicyModel.tenant_id == tenant_id,
+                    OrgGenePolicyModel.policy_key == policy_key,
+                    OrgGenePolicyModel.deleted_at.is_(None),
+                )
             )
-        ))
+        )
     )
     existing = result.scalar_one_or_none()
     if not existing:
@@ -813,12 +958,14 @@ async def list_registries(
     db: AsyncSession = Depends(get_db),
 ) -> list[RegistryResponse]:
     result = await db.execute(
-        refresh_select_statement(select(RegistryConfigModel).where(
-            and_(
-                RegistryConfigModel.tenant_id == tenant_id,
-                RegistryConfigModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(RegistryConfigModel).where(
+                and_(
+                    RegistryConfigModel.tenant_id == tenant_id,
+                    RegistryConfigModel.deleted_at.is_(None),
+                )
             )
-        ))
+        )
     )
     rows = result.scalars().all()
     return [_registry_to_response(r) for r in rows]
@@ -856,13 +1003,15 @@ async def update_registry(
     db: AsyncSession = Depends(get_db),
 ) -> RegistryResponse:
     result = await db.execute(
-        refresh_select_statement(select(RegistryConfigModel).where(
-            and_(
-                RegistryConfigModel.id == registry_id,
-                RegistryConfigModel.tenant_id == tenant_id,
-                RegistryConfigModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(RegistryConfigModel).where(
+                and_(
+                    RegistryConfigModel.id == registry_id,
+                    RegistryConfigModel.tenant_id == tenant_id,
+                    RegistryConfigModel.deleted_at.is_(None),
+                )
             )
-        ))
+        )
     )
     existing = result.scalar_one_or_none()
     if not existing:
@@ -889,13 +1038,15 @@ async def delete_registry(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     result = await db.execute(
-        refresh_select_statement(select(RegistryConfigModel).where(
-            and_(
-                RegistryConfigModel.id == registry_id,
-                RegistryConfigModel.tenant_id == tenant_id,
-                RegistryConfigModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(RegistryConfigModel).where(
+                and_(
+                    RegistryConfigModel.id == registry_id,
+                    RegistryConfigModel.tenant_id == tenant_id,
+                    RegistryConfigModel.deleted_at.is_(None),
+                )
             )
-        ))
+        )
     )
     existing = result.scalar_one_or_none()
     if not existing:
@@ -918,13 +1069,15 @@ async def test_registry_connection(
     db: AsyncSession = Depends(get_db),
 ) -> TestConnectionResponse:
     result = await db.execute(
-        refresh_select_statement(select(RegistryConfigModel).where(
-            and_(
-                RegistryConfigModel.id == registry_id,
-                RegistryConfigModel.tenant_id == tenant_id,
-                RegistryConfigModel.deleted_at.is_(None),
+        refresh_select_statement(
+            select(RegistryConfigModel).where(
+                and_(
+                    RegistryConfigModel.id == registry_id,
+                    RegistryConfigModel.tenant_id == tenant_id,
+                    RegistryConfigModel.deleted_at.is_(None),
+                )
             )
-        ))
+        )
     )
     existing = result.scalar_one_or_none()
     if not existing:

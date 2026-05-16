@@ -560,7 +560,7 @@ class ReActAgent(
         query: str,
         conversation_context: list[dict[str, str]] | None = None,
     ) -> SubAgentMatch:
-        """Async match placeholder for future broker-backed selection.
+        """Async compatibility wrapper for broker-owned subagent selection.
 
         Args:
             query: User query.

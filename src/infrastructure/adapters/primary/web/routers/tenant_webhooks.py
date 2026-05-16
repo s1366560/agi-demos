@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.utils import get_container_with_db
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/tenant-webhooks", tags=["Webhooks"])
 
@@ -59,7 +61,7 @@ async def create_webhook(
         is_active=body.is_active,
     )
     await db.commit()
-    return webhook
+    return cast(WebhookResponse, webhook)
 
 
 @router.get("/{tenant_id}", response_model=list[WebhookResponse])
@@ -68,11 +70,11 @@ async def list_webhooks(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> WebhookResponse:
+) -> list[WebhookResponse]:
     container = get_container_with_db(request, db)
     service = container.webhook_service()
 
-    return await service.list_webhooks(tenant_id)
+    return cast(list[WebhookResponse], await service.list_webhooks(tenant_id))
 
 
 @router.put("/{webhook_id}", response_model=WebhookResponse)
@@ -95,7 +97,7 @@ async def update_webhook(
             is_active=body.is_active,
         )
         await db.commit()
-        return webhook
+        return cast(WebhookResponse, webhook)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -112,6 +114,6 @@ async def delete_webhook(
 
     deleted = await service.delete_webhook(webhook_id)
     if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Webhook not found"))
     await db.commit()
     return None

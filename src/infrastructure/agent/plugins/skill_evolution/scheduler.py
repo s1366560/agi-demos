@@ -105,12 +105,15 @@ class EvolutionScheduler:
             tenant_id=tenant_id, project_id=project_id
         )
 
+    def _is_running(self) -> bool:
+        return self._running
+
     async def _loop(self) -> None:
         interval = self._config.evolution_interval_minutes * 60
-        while self._running:
+        while self._is_running():
             try:
                 await asyncio.sleep(interval)
-                if not self._running:
+                if not self._is_running():
                     break
                 logger.info("Evolution cycle triggered — discovering tenants")
                 tenant_ids = await self._discover_tenants()

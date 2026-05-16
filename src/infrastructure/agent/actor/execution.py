@@ -458,9 +458,16 @@ def _init_continue_time_gen(
     return EventTimeGenerator(state.last_event_time_us, state.last_event_counter)
 
 
+def _coerce_event_int(value: object, default: int = 0) -> int:
+    try:
+        return int(cast(Any, value))
+    except (TypeError, ValueError):
+        return default
+
+
 def _build_hitl_context(
     state: HITLAgentState,
-    response_data: dict[str, Any],
+    response_data: object,
 ) -> list[dict[str, Any]]:
     """Build conversation context with HITL tool result appended."""
     conversation_context = list(state.messages)
@@ -483,7 +490,7 @@ def _build_hitl_context(
 def _validate_hitl_resume_request(
     *,
     state: HITLAgentState,
-    response_data: dict[str, Any],
+    response_data: object,
     tenant_id: str | None,
     project_id: str | None,
     conversation_id: str | None,
@@ -828,7 +835,7 @@ async def handle_hitl_pending(
 async def continue_project_chat(
     agent: ProjectReActAgent,
     request_id: str,
-    response_data: dict[str, Any],
+    response_data: object,
     *,
     lease_owner: str | None = None,
     tenant_id: str | None = None,
@@ -845,7 +852,7 @@ async def continue_project_chat(
 
     logger.info(
         f"[ActorExecution] Continuing chat: request_id={request_id}, "
-        f"response_keys={list(response_data.keys()) if response_data else 'None'}"
+        f"response_keys={list(response_data.keys()) if isinstance(response_data, dict) else 'None'}"
     )
 
     state = await _load_hitl_state(state_store, request_id)
@@ -1144,8 +1151,8 @@ def _prepare_event_for_persistence(
         if event_type not in _SKIP_PERSIST_EVENT_TYPES:
             raw_event_data = normalized_event.get("data", {})
             event_data = dict(raw_event_data)
-            evt_time_us = int(normalized_event.get("event_time_us", 0))
-            evt_counter = int(normalized_event.get("event_counter", 0))
+            evt_time_us = _coerce_event_int(normalized_event.get("event_time_us", 0))
+            evt_counter = _coerce_event_int(normalized_event.get("event_counter", 0))
 
             if event_type == "text_end":
                 full_text = str(event_data.get("full_text", "")).strip()
@@ -1526,11 +1533,13 @@ async def _record_child_result_history(
             ),
             None,
         )
+        terminal_metadata = existing_terminal_message.metadata if existing_terminal_message else None
+        terminal_metadata = terminal_metadata or {}
         terminal_message_matches = (
             existing_terminal_message is not None
             and existing_terminal_message.content == content
-            and bool(existing_terminal_message.metadata.get("success")) is success
-            and existing_terminal_message.metadata.get("error_message") == error_message
+            and bool(terminal_metadata.get("success")) is success
+            and terminal_metadata.get("error_message") == error_message
         )
         if not terminal_message_matches:
             await message_bus.send_message(
@@ -1683,10 +1692,12 @@ async def _publish_announce_via_service(
 # ---------------------------------------------------------------------------
 
 
-def _format_clarification_response(response_data: dict[str, Any]) -> str:
+def _format_clarification_response(response_data: object) -> str:
     """Format clarification HITL response."""
     if isinstance(response_data, str):
         return f"User clarification: {response_data}"
+    if not isinstance(response_data, dict):
+        return "User provided clarification (no specific selection)"
     selected = (
         response_data.get("selected_option_id")
         or response_data.get("selected_options")
@@ -1702,10 +1713,12 @@ def _format_clarification_response(response_data: dict[str, Any]) -> str:
     return "User provided clarification (no specific selection)"
 
 
-def _format_decision_response(response_data: dict[str, Any]) -> str:
+def _format_decision_response(response_data: object) -> str:
     """Format decision HITL response."""
     if isinstance(response_data, str):
         return f"User decision: {response_data}"
+    if not isinstance(response_data, dict):
+        return "User made a decision (no specific selection)"
     selected = response_data.get("selected_option_id") or response_data.get("decision")
     custom = response_data.get("custom_input") or response_data.get("decision")
     if custom:
@@ -1715,21 +1728,25 @@ def _format_decision_response(response_data: dict[str, Any]) -> str:
     return "User made a decision (no specific selection)"
 
 
-def _format_env_var_response(response_data: dict[str, Any]) -> str:
+def _format_env_var_response(response_data: object) -> str:
     """Format env_var HITL response."""
     if isinstance(response_data, str):
         return f"User provided environment variables: {response_data}"
+    if not isinstance(response_data, dict):
+        return "User provided environment variable values"
     values = response_data.get("values", {})
-    provided_vars = list(values.keys()) if values else []
+    provided_vars = list(values.keys()) if isinstance(values, dict) else []
     if provided_vars:
         return f"User provided environment variables: {', '.join(provided_vars)}"
     return "User provided environment variable values"
 
 
-def _format_permission_response(response_data: dict[str, Any]) -> str:
+def _format_permission_response(response_data: object) -> str:
     """Format permission HITL response."""
     if isinstance(response_data, str):
         return f"User permission response: {response_data}"
+    if not isinstance(response_data, dict):
+        return "User denied permission"
     granted = response_data.get("granted")
     if granted is None:
         granted = response_data.get("action") == "allow"
@@ -1749,11 +1766,13 @@ _HITL_FORMATTERS: dict[str, Any] = {
 
 def _format_hitl_response_as_tool_result(
     hitl_type: str,
-    response_data: dict[str, Any],
+    response_data: object,
 ) -> str:
     """Format HITL response data as a tool result content string."""
     if isinstance(response_data, str):
         return f"User responded to {hitl_type} request: {response_data}"
+    if not isinstance(response_data, dict):
+        return f"User responded to {hitl_type} request"
     if response_data.get("cancelled") or response_data.get("timeout"):
         return f"User did not complete {hitl_type} request"
     formatter = _HITL_FORMATTERS.get(hitl_type)

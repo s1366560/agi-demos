@@ -303,9 +303,10 @@ class AutoBroker:
                 raw = fn.get("arguments")
                 if isinstance(raw, str):
                     try:
-                        return json.loads(raw)
+                        parsed = json.loads(raw)
                     except json.JSONDecodeError:
                         return None
+                    return parsed if isinstance(parsed, dict) else None
                 if isinstance(raw, dict):
                     return raw
         return None

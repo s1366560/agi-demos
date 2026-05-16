@@ -98,10 +98,9 @@ class AuthService:
         if stored_key.expires_at and stored_key.expires_at < datetime.now(UTC):
             raise ValueError("API key has expired")
 
-        # NOTE: last_used_at update is intentionally skipped here to avoid
-        # row-level lock contention on the api_keys table during high concurrency.
-        # If tracking is needed, implement async/background update via Redis or message queue.
-        # See: https://github.com/your-repo/issues/XXX for background task implementation
+        last_used_at = datetime.now(UTC)
+        await self._api_key_repo.update_last_used(stored_key.id, last_used_at)
+        stored_key.last_used_at = last_used_at
 
         return stored_key
 

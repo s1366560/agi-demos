@@ -20,7 +20,7 @@ content or task title.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, SupportsInt
 
 from src.application.services.agent.termination_service import TerminationContext
 from src.domain.model.agent.conversation.termination import BudgetCounters
@@ -41,8 +41,10 @@ _BUDGET_META_KEYS: tuple[str, ...] = ("max_turns", "max_usd", "max_wall_seconds"
 def _coerce_int(raw: object) -> int | None:
     if raw is None:
         return None
+    if not isinstance(raw, str | bytes | bytearray | SupportsInt):
+        return None
     try:
-        value = int(raw)  # type: ignore[arg-type]
+        value = int(raw)
     except (TypeError, ValueError):
         return None
     return value if value > 0 else None

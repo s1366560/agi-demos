@@ -12,6 +12,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import SupportTicket, User
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/support", tags=["support"])
 
@@ -106,7 +107,7 @@ async def get_support_ticket(
     ticket = result.scalar_one_or_none()
 
     if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
+        raise HTTPException(status_code=404, detail=_("Ticket not found"))
 
     return {
         "id": ticket.id,
@@ -138,7 +139,7 @@ async def update_support_ticket(
     ticket = result.scalar_one_or_none()
 
     if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
+        raise HTTPException(status_code=404, detail=_("Ticket not found"))
 
     # Update allowed fields
     if "subject" in update_data:
@@ -179,7 +180,7 @@ async def close_support_ticket(
     ticket = result.scalar_one_or_none()
 
     if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
+        raise HTTPException(status_code=404, detail=_("Ticket not found"))
 
     ticket.status = "closed"
     ticket.resolved_at = datetime.now(UTC)

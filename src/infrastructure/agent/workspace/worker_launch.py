@@ -50,10 +50,13 @@ from src.infrastructure.agent.workspace.code_context import (
     load_workspace_code_context,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    ACTIVE_EXECUTION_ROOT,
+    ATTEMPT_WORKTREE,
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
     PREFERRED_LANGUAGE,
     ROOT_GOAL_TASK_ID,
+    WORKTREE_SETUP,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
@@ -304,9 +307,7 @@ def _preferred_language_from_metadata(metadata: Mapping[str, Any] | None) -> str
     return value if isinstance(value, str) and value in {"en-US", "zh-CN"} else None
 
 
-async def _user_preferred_language(
-    db: AsyncSession, user_id: str | None
-) -> str | None:
+async def _user_preferred_language(db: AsyncSession, user_id: str | None) -> str | None:
     """Look up the stored preferred_language for a user. Returns None on any failure."""
     if not isinstance(user_id, str) or not user_id:
         return None
@@ -319,9 +320,7 @@ async def _user_preferred_language(
         from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 
         result = await db.execute(
-            refresh_select_statement(
-                select(DBUser.preferred_language).where(DBUser.id == user_id)
-            )
+            refresh_select_statement(select(DBUser.preferred_language).where(DBUser.id == user_id))
         )
         value = result.scalar_one_or_none()
         if isinstance(value, str) and value in {"en-US", "zh-CN"}:
@@ -553,6 +552,86 @@ def _has_workspace_root_override(rendered_extra: str) -> bool:
     return any(marker in rendered_extra for marker in _WORKSPACE_ROOT_OVERRIDE_MARKERS)
 
 
+def _attempt_worktree_payload(
+    attempt_worktree_context: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(attempt_worktree_context, Mapping):
+        return None
+    payload = dict(attempt_worktree_context)
+    if not payload:
+        return None
+    return payload
+
+
+def _attempt_worktree_active_root(
+    attempt_worktree_context: Mapping[str, Any] | None,
+) -> str | None:
+    payload = _attempt_worktree_payload(attempt_worktree_context)
+    if payload is None:
+        return None
+    for key in ("active_root", "worktree_path"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return posixpath.normpath(value.strip().rstrip("/"))
+    return None
+
+
+def _attempt_worktree_setup_payload(
+    attempt_worktree_context: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    payload = _attempt_worktree_payload(attempt_worktree_context)
+    if payload is None:
+        return None
+    setup: dict[str, Any] = {
+        "status": payload.get("setup_status"),
+        "reason": payload.get("setup_reason"),
+        "output": payload.get("setup_output"),
+        "worktree_path": payload.get("worktree_path"),
+        "branch_name": payload.get("branch_name"),
+        "base_ref": payload.get("base_ref"),
+        "attempt_id": payload.get("attempt_id"),
+    }
+    return {key: value for key, value in setup.items() if value is not None}
+
+
+def _apply_attempt_worktree_runtime_context(
+    context: dict[str, Any],
+    *,
+    code_context: WorkspaceCodeContext | None,
+    attempt_worktree_context: Mapping[str, Any] | None,
+) -> None:
+    attempt_worktree_payload = _attempt_worktree_payload(attempt_worktree_context)
+    active_execution_root = _attempt_worktree_active_root(attempt_worktree_payload)
+    if attempt_worktree_payload is not None:
+        context[ATTEMPT_WORKTREE] = attempt_worktree_payload
+        if setup_payload := _attempt_worktree_setup_payload(attempt_worktree_payload):
+            context[WORKTREE_SETUP] = setup_payload
+    if not active_execution_root:
+        return
+
+    context[ACTIVE_EXECUTION_ROOT] = active_execution_root
+    sandbox_code_root = (
+        code_context.sandbox_code_root
+        if code_context is not None and code_context.sandbox_code_root
+        else None
+    )
+    if (
+        sandbox_code_root is not None
+        and posixpath.normpath(sandbox_code_root) == active_execution_root
+    ):
+        return
+    context["workspace_root_override"] = {
+        "source": ATTEMPT_WORKTREE,
+        "rule": (
+            "active_execution_root is the worker's authoritative execution root. "
+            "All file tool paths, bash working directories, git operations, test "
+            "outputs, generated artifacts, and temp scripts must stay under that "
+            "root unless the task explicitly names another path. Treat "
+            "code_context.sandbox_code_root as a baseline checkout only."
+        ),
+    }
+
+
 def _build_worker_system_context(
     *,
     workspace_id: str,
@@ -563,6 +642,7 @@ def _build_worker_system_context(
     code_context: WorkspaceCodeContext | None = None,
     preferred_language: str | None = None,
     plan_node_metadata: Mapping[str, Any] | None = None,
+    attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build system-level workspace context for a launched worker session."""
     binding = _workspace_binding_metadata(
@@ -776,11 +856,20 @@ def _build_worker_system_context(
             code_context_payload["warnings"] = list(code_context.warnings)
         context["code_context"] = code_context_payload
 
+    _apply_attempt_worktree_runtime_context(
+        context,
+        code_context=code_context,
+        attempt_worktree_context=attempt_worktree_context,
+    )
+
     if extra_instructions:
         rendered_extra = _render_workspace_placeholders(extra_instructions.strip(), code_context)
         if rendered_extra:
             context["additional_instructions"] = rendered_extra
-            if _has_workspace_root_override(rendered_extra):
+            if (
+                _has_workspace_root_override(rendered_extra)
+                and "workspace_root_override" not in context
+            ):
                 context["workspace_root_override"] = {
                     "source": "additional_instructions",
                     "rule": (
@@ -988,6 +1077,7 @@ def _build_worker_brief(
     extra_instructions: str | None = None,
     code_context: WorkspaceCodeContext | None = None,
     plan_node_metadata: Mapping[str, Any] | None = None,
+    attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> str:
     """Compose the visible task brief for the worker agent.
 
@@ -1010,7 +1100,7 @@ def _build_worker_brief(
         else ""
     )
     should_surface_workspace_root = _has_workspace_root_override(rendered_extra)
-    active_worktree_path = (
+    active_worktree_path = _attempt_worktree_active_root(attempt_worktree_context) or (
         _extract_rendered_worktree_path(rendered_extra) if should_surface_workspace_root else None
     )
 
@@ -1481,6 +1571,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     reuse_conversation_id: str | None = None,
     repair_brief_prompt: str | None = None,
     preferred_language: str | None = None,
+    attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Open or reuse a worker conversation and stream the task brief.
 
@@ -1619,9 +1710,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                                 root_metadata
                             )
             if resolved_preferred_language is None:
-                resolved_preferred_language = await _user_preferred_language(
-                    db, task.created_by
-                )
+                resolved_preferred_language = await _user_preferred_language(db, task.created_by)
             workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
             plan_node_metadata = await _load_plan_node_metadata_for_task(db, task)
             code_context_evaluation = evaluate_workspace_code_context(
@@ -1945,6 +2034,13 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     "launch_state": "bound",
                 }
                 metadata_patch["code_context"] = _code_context_metadata(code_context)
+                attempt_worktree_payload = _attempt_worktree_payload(attempt_worktree_context)
+                if attempt_worktree_payload is not None:
+                    metadata_patch[ATTEMPT_WORKTREE] = attempt_worktree_payload
+                    if setup_payload := _attempt_worktree_setup_payload(attempt_worktree_payload):
+                        metadata_patch[WORKTREE_SETUP] = setup_payload
+                    if active_root := _attempt_worktree_active_root(attempt_worktree_payload):
+                        metadata_patch[ACTIVE_EXECUTION_ROOT] = active_root
                 verification_integrity = _workspace_verification_integrity_context(
                     task.metadata,
                     plan_node_metadata,
@@ -2023,6 +2119,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         ),
         code_context=code_context,
         plan_node_metadata=plan_node_metadata,
+        attempt_worktree_context=attempt_worktree_context,
     )
     app_model_context = _build_worker_system_context(
         workspace_id=workspace_id,
@@ -2033,6 +2130,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         code_context=code_context,
         preferred_language=resolved_preferred_language,
         plan_node_metadata=plan_node_metadata,
+        attempt_worktree_context=attempt_worktree_context,
     )
     final_content = ""
     accumulated_text = ""
@@ -2552,6 +2650,7 @@ def schedule_worker_session(
     reuse_conversation_id: str | None = None,
     repair_brief_prompt: str | None = None,
     preferred_language: str | None = None,
+    attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> None:
     """Fire-and-forget scheduler for ``launch_worker_session``.
 
@@ -2576,6 +2675,7 @@ def schedule_worker_session(
                     reuse_conversation_id=reuse_conversation_id,
                     repair_brief_prompt=repair_brief_prompt,
                     preferred_language=preferred_language,
+                    attempt_worktree_context=attempt_worktree_context,
                 )
             )
         except Exception:
@@ -2602,6 +2702,7 @@ def schedule_worker_session(
             reuse_conversation_id=reuse_conversation_id,
             repair_brief_prompt=repair_brief_prompt,
             preferred_language=preferred_language,
+            attempt_worktree_context=attempt_worktree_context,
         )
     )
     _background_tasks.add(bg)

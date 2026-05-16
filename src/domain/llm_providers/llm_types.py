@@ -266,10 +266,9 @@ class LLMClient(ABC):
         )
 
         # Extract content from response
-        if isinstance(response, dict):
-            content = response.get("content", "")
-        else:
-            content = str(response)
+        content = response.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
 
         return ChatResponse(content=content)
 

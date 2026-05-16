@@ -357,7 +357,8 @@ class ChannelEventBridge:
                 "feishu", "cardkit_streaming"
             ).CardKitStreamingManager
             mgr = CardKitStreamingManager(cast(Any, adapter))
-            return await mgr.add_hitl_buttons(card_state, elements)
+            added = await mgr.add_hitl_buttons(card_state, elements)
+            return cast(bool, added)
         except Exception as e:
             logger.warning(f"[EventBridge] Unified HITL failed: {e}")
             return False

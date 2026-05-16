@@ -330,8 +330,8 @@ def _detect_verification(events: list[TraceEvent]) -> tuple[VerificationSignal, 
             if any(kw in cmd for kw in VERIFICATION_CMD_KEYWORDS):
                 pending_command[ev.tool_name or ""] = ev.summary[:120]
         elif ev.kind is TraceEventKind.TOOL_RESULT:
-            cmd = pending_command.pop(ev.tool_name or "", None)
-            if cmd is None:
+            cmd = pending_command.pop(ev.tool_name or "", "")
+            if not cmd:
                 continue
             signals.append(
                 VerificationSignal(

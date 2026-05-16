@@ -121,8 +121,8 @@ async def create_native_graph_adapter(
         neo4j_client=neo4j_client,
         llm_client=llm_client,
         embedding_service=embedding_service,
-        enable_reflexion=False,  # Temporarily disabled for testing
-        reflexion_max_iterations=2,
+        enable_reflexion=settings.graph_reflexion_enabled,
+        reflexion_max_iterations=settings.graph_reflexion_max_iterations,
         auto_clear_embeddings=settings.auto_clear_mismatched_embeddings,
     )
 

@@ -23,6 +23,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as ConversationModel,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ async def switch_mode(
         await db.commit()
 
         if cast(CursorResult[Any], result).rowcount == 0:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         logger.info(
             f"Conversation {request_body.conversation_id} switched to "
@@ -90,7 +91,7 @@ async def switch_mode(
         raise
     except Exception as e:
         logger.error(f"Error switching mode: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to switch mode: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to switch mode: {e!s}")) from e
 
 
 @router.get("/mode/{conversation_id}")
@@ -110,7 +111,7 @@ async def get_mode(
         mode = result.scalar_one_or_none()
 
         if mode is None:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         return ConversationModeResponse(
             conversation_id=conversation_id,
@@ -121,7 +122,7 @@ async def get_mode(
         raise
     except Exception as e:
         logger.error(f"Error getting mode: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get mode: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get mode: {e!s}")) from e
 
 
 # === Task List Schemas ===
@@ -186,4 +187,4 @@ async def get_tasks(
 
     except Exception as e:
         logger.error(f"Error getting tasks: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get tasks: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get tasks: {e!s}")) from e

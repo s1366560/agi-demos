@@ -17,7 +17,7 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
-from src.domain.model.workspace_plan import Plan, TaskExecution, TaskIntent
+from src.domain.model.workspace_plan import Plan, PlanStatus, TaskExecution, TaskIntent
 from src.domain.ports.repositories.agent_repository import ToolExecutionRecordRepository
 from src.domain.ports.repositories.workspace.workspace_member_repository import (
     WorkspaceMemberRepository,
@@ -33,6 +33,10 @@ from src.domain.ports.repositories.workspace.workspace_task_session_attempt_repo
 
 def _empty_rows() -> list[dict[str, Any]]:
     return []
+
+
+def _empty_mapping() -> dict[str, Any]:
+    return {}
 
 
 class WorkspacePlanOutboxDiagnosticsRepository(Protocol):
@@ -69,6 +73,12 @@ class WorkspaceExecutionDiagnostics:
     pending_adjudications: list[dict[str, Any]] = field(default_factory=_empty_rows)
     evidence_gaps: list[dict[str, Any]] = field(default_factory=_empty_rows)
     recent_tool_failures: list[dict[str, Any]] = field(default_factory=_empty_rows)
+    controller_state: dict[str, Any] = field(default_factory=_empty_mapping)
+    retry_queue: list[dict[str, Any]] = field(default_factory=_empty_rows)
+    active_attempts: list[dict[str, Any]] = field(default_factory=_empty_rows)
+    last_reconciliation: dict[str, Any] = field(default_factory=_empty_mapping)
+    completion_gate: dict[str, Any] = field(default_factory=_empty_mapping)
+    blocked_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +92,12 @@ class WorkspaceExecutionDiagnostics:
             "pending_adjudications": self.pending_adjudications,
             "evidence_gaps": self.evidence_gaps,
             "recent_tool_failures": self.recent_tool_failures,
+            "controller_state": self.controller_state,
+            "retry_queue": self.retry_queue,
+            "active_attempts": self.active_attempts,
+            "last_reconciliation": self.last_reconciliation,
+            "completion_gate": self.completion_gate,
+            "blocked_reason": self.blocked_reason,
         }
 
 
@@ -100,6 +116,11 @@ class WorkspaceExecutionDiagnosticsService:
         WorkspaceTaskStatus.REPORTED,
         WorkspaceTaskStatus.ADJUDICATING,
         WorkspaceTaskStatus.DONE,
+    }
+    _ACTIVE_RUN_ATTEMPT_STATUSES: ClassVar[set[WorkspaceTaskSessionAttemptStatus]] = {
+        WorkspaceTaskSessionAttemptStatus.PENDING,
+        WorkspaceTaskSessionAttemptStatus.RUNNING,
+        WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
     }
 
     def __init__(
@@ -155,6 +176,7 @@ class WorkspaceExecutionDiagnosticsService:
         pending_adjudications: list[dict[str, Any]] = []
         evidence_gaps: list[dict[str, Any]] = []
         recent_tool_failures: list[dict[str, Any]] = []
+        active_attempts: list[dict[str, Any]] = []
 
         for task in tasks:
             attempts = await self._attempt_repo.find_by_workspace_task_id(
@@ -163,6 +185,7 @@ class WorkspaceExecutionDiagnosticsService:
                 offset=0,
             )
             attempt_status_counts.update(attempt.status.value for attempt in attempts)
+            active_attempts.extend(self._active_attempt_rows(task, attempts))
 
             latest_attempt = attempts[0] if attempts else None
             tool_records = await self._load_tool_records(
@@ -185,13 +208,22 @@ class WorkspaceExecutionDiagnosticsService:
 
         blockers.extend(await self._outbox_blocker_rows(workspace.id))
         blockers.extend(await self._plan_blocker_rows(workspace.id, active_plan=active_plan))
+        retry_queue = await self._retry_queue_rows(workspace.id)
+        completion_gate = self._completion_gate(
+            active_plan=active_plan,
+            retry_queue=retry_queue,
+            active_attempts=active_attempts,
+            evidence_gaps=evidence_gaps,
+        )
+        blocked_reason = self._blocked_reason(completion_gate=completion_gate, blockers=blockers)
+        generated_at = datetime.now(UTC)
         recent_tool_failures.sort(
             key=lambda item: str(item.get("completed_at") or ""), reverse=True
         )
 
         return WorkspaceExecutionDiagnostics(
             workspace_id=workspace.id,
-            generated_at=datetime.now(UTC),
+            generated_at=generated_at,
             task_status_counts=dict(task_status_counts),
             attempt_status_counts=dict(attempt_status_counts),
             tool_status_counts=dict(tool_status_counts),
@@ -200,6 +232,22 @@ class WorkspaceExecutionDiagnosticsService:
             pending_adjudications=pending_adjudications,
             evidence_gaps=evidence_gaps,
             recent_tool_failures=recent_tool_failures[:10],
+            controller_state=self._controller_state(
+                workspace_id=workspace.id,
+                active_plan=active_plan,
+                retry_queue=retry_queue,
+                active_attempts=active_attempts,
+                completion_gate=completion_gate,
+            ),
+            retry_queue=retry_queue,
+            active_attempts=active_attempts,
+            last_reconciliation=self._last_reconciliation(
+                workspace_id=workspace.id,
+                active_plan=active_plan,
+                generated_at=generated_at,
+            ),
+            completion_gate=completion_gate,
+            blocked_reason=blocked_reason,
         )
 
     async def _load_tool_records(
@@ -299,6 +347,28 @@ class WorkspaceExecutionDiagnosticsService:
                         }
                     )
         return rows
+
+    def _active_attempt_rows(
+        self,
+        task: WorkspaceTask,
+        attempts: list[WorkspaceTaskSessionAttempt],
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "attempt_id": attempt.id,
+                "task_id": task.id,
+                "title": task.title,
+                "status": attempt.status.value,
+                "conversation_id": attempt.conversation_id,
+                "worker_agent_id": attempt.worker_agent_id,
+                "leader_agent_id": attempt.leader_agent_id,
+                "attempt_number": attempt.attempt_number,
+                "created_at": attempt.created_at.isoformat() if attempt.created_at else None,
+                "updated_at": attempt.updated_at.isoformat() if attempt.updated_at else None,
+            }
+            for attempt in attempts
+            if attempt.status in self._ACTIVE_RUN_ATTEMPT_STATUSES
+        ]
 
     def _should_report_tool_failures_as_blockers(
         self,
@@ -479,6 +549,119 @@ class WorkspaceExecutionDiagnosticsService:
                     continue
                 rows.append(row)
         return rows
+
+    async def _retry_queue_rows(self, workspace_id: str) -> list[dict[str, Any]]:
+        if self._workspace_plan_outbox_repo is None:
+            return []
+        items = await self._workspace_plan_outbox_repo.list_by_workspace(
+            workspace_id,
+            limit=50,
+        )
+        rows: list[dict[str, Any]] = []
+        for item in items:
+            status = getattr(item, "status", None)
+            if status not in {"pending", "failed", "processing", "dead_letter"}:
+                continue
+            rows.append(
+                {
+                    "outbox_id": getattr(item, "id", None),
+                    "plan_id": getattr(item, "plan_id", None),
+                    "workspace_id": getattr(item, "workspace_id", None),
+                    "event_type": getattr(item, "event_type", None),
+                    "status": status,
+                    "attempt_count": getattr(item, "attempt_count", None),
+                    "max_attempts": getattr(item, "max_attempts", None),
+                    "lease_owner": getattr(item, "lease_owner", None),
+                    "lease_expires_at": self._datetime_iso(getattr(item, "lease_expires_at", None)),
+                    "next_attempt_at": self._datetime_iso(getattr(item, "next_attempt_at", None)),
+                    "last_error": getattr(item, "last_error", None),
+                    **self._outbox_context(item),
+                }
+            )
+        return rows
+
+    def _controller_state(
+        self,
+        *,
+        workspace_id: str,
+        active_plan: Plan | None,
+        retry_queue: list[dict[str, Any]],
+        active_attempts: list[dict[str, Any]],
+        completion_gate: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "workspace_id": workspace_id,
+            "plan_id": active_plan.id if active_plan is not None else None,
+            "plan_status": active_plan.status.value if active_plan is not None else None,
+            "phase": "blocked" if completion_gate.get("blocked_reasons") else "observed",
+            "retry_queue_count": len(retry_queue),
+            "active_attempt_count": len(active_attempts),
+            "completion_allowed": bool(completion_gate.get("allowed")),
+        }
+
+    def _last_reconciliation(
+        self,
+        *,
+        workspace_id: str,
+        active_plan: Plan | None,
+        generated_at: datetime,
+    ) -> dict[str, Any]:
+        return {
+            "workspace_id": workspace_id,
+            "plan_id": active_plan.id if active_plan is not None else None,
+            "observed_at": generated_at.isoformat(),
+            "plan_updated_at": (
+                active_plan.updated_at.isoformat()
+                if active_plan is not None and active_plan.updated_at is not None
+                else None
+            ),
+        }
+
+    def _completion_gate(
+        self,
+        *,
+        active_plan: Plan | None,
+        retry_queue: list[dict[str, Any]],
+        active_attempts: list[dict[str, Any]],
+        evidence_gaps: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        checks = {
+            "plan_completed": active_plan is not None
+            and active_plan.status is PlanStatus.COMPLETED,
+            "no_active_retry_outbox": not retry_queue,
+            "no_running_attempts": not active_attempts,
+            "evidence_satisfied": not evidence_gaps,
+        }
+        blocked_reasons: list[str] = []
+        if active_plan is None:
+            blocked_reasons.append("no active plan")
+        elif not checks["plan_completed"]:
+            blocked_reasons.append(f"plan status is {active_plan.status.value}")
+        if retry_queue:
+            blocked_reasons.append("active or retryable outbox items remain")
+        if active_attempts:
+            blocked_reasons.append("running workspace task attempts remain")
+        if evidence_gaps:
+            blocked_reasons.append("required acceptance criteria lack verifier evidence")
+        return {
+            "allowed": all(checks.values()),
+            "checks": checks,
+            "blocked_reasons": blocked_reasons,
+        }
+
+    @staticmethod
+    def _blocked_reason(
+        *,
+        completion_gate: dict[str, Any],
+        blockers: list[dict[str, Any]],
+    ) -> str | None:
+        if blockers:
+            reason = blockers[0].get("reason") or blockers[0].get("type")
+            return str(reason) if reason else None
+        reasons = completion_gate.get("blocked_reasons")
+        if isinstance(reasons, list) and reasons:
+            return str(reasons[0])
+        return None
 
     def _outbox_blocker_superseded(
         self,

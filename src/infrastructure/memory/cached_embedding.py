@@ -135,7 +135,7 @@ class CachedEmbeddingService:
         batch_size: int = 100,
     ) -> list[list[float]]:
         """Batch embed with per-item caching."""
-        results: list[list[float]] = []
+        results: list[list[float] | None] = []
         uncached_indices: list[int] = []
         uncached_texts: list[str] = []
 
@@ -153,7 +153,7 @@ class CachedEmbeddingService:
                 results.append(cached)
                 self._stats["l2_hits"] += 1
                 continue
-            results.append([])  # placeholder
+            results.append(None)
             uncached_indices.append(i)
             uncached_texts.append(text)
 
@@ -161,13 +161,19 @@ class CachedEmbeddingService:
         if uncached_texts:
             self._stats["misses"] += len(uncached_texts)
             embeddings = await self._inner.embed_batch(uncached_texts, batch_size=batch_size)
-            for idx, embedding in zip(uncached_indices, embeddings, strict=False):
+            if len(embeddings) != len(uncached_indices):
+                message = (
+                    f"Embedding batch returned {len(embeddings)} embeddings for "
+                    f"{len(uncached_indices)} texts"
+                )
+                raise RuntimeError(message)
+            for idx, embedding in zip(uncached_indices, embeddings, strict=True):
                 results[idx] = embedding
                 key = self._cache_key(texts[idx])
                 self._l1_put(key, embedding)
                 await self._l2_put(key, embedding)
 
-        return results
+        return cast(list[list[float]], results)
 
     async def embed_batch_safe(
         self,
@@ -180,14 +186,9 @@ class CachedEmbeddingService:
         failed to embed, rather than raising.
         """
         try:
-            return [
-                list(e) for e in
-                await self.embed_batch(texts, batch_size=batch_size)
-            ]
+            return [list(e) for e in await self.embed_batch(texts, batch_size=batch_size)]
         except Exception as e:
-            logger.warning(
-                "Batch embedding failed, returning all None: %s", e
-            )
+            logger.warning("Batch embedding failed, returning all None: %s", e)
             return [None] * len(texts)
 
     def get_stats(self) -> dict[str, int]:

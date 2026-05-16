@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 def get_topology_service(request: Request, db: AsyncSession = Depends(get_db)) -> TopologyService:
     """Resolve topology service from request-scoped DI container."""
     container = request.app.state.container.with_db(db)
-    return container.topology_service()
+    return cast(TopologyService, container.topology_service())
 
 
 class TopologyNodeCreate(BaseModel):

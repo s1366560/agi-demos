@@ -17,6 +17,7 @@ from src.configuration.di_container import DIContainer
 from src.domain.model.agent.tenant_skill_config import TenantSkillAction, TenantSkillConfig
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -144,7 +145,7 @@ async def get_tenant_skill_config(
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No configuration found for system skill: {system_skill_name}",
+            detail=_(f"No configuration found for system skill: {system_skill_name}"),
         )
 
     return config_to_response(config)
@@ -222,12 +223,12 @@ async def override_system_skill(
         if not override_skill:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Override skill not found: {data.override_skill_id}",
+                detail=_(f"Override skill not found: {data.override_skill_id}"),
             )
         if override_skill.tenant_id != tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Override skill must belong to your tenant",
+                detail=_("Override skill must belong to your tenant"),
             )
 
         # Check if config already exists
@@ -286,7 +287,7 @@ async def enable_system_skill(
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No configuration found for system skill: {data.system_skill_name}",
+            detail=_(f"No configuration found for system skill: {data.system_skill_name}"),
         )
 
     await repo.delete_by_tenant_and_skill(tenant_id, data.system_skill_name)
@@ -315,7 +316,7 @@ async def delete_tenant_skill_config(
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No configuration found for system skill: {system_skill_name}",
+            detail=_(f"No configuration found for system skill: {system_skill_name}"),
         )
 
     await repo.delete(existing.id)

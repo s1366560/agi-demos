@@ -12,6 +12,7 @@ from src.domain.model.agent.execution.execution_plan import (
     ExecutionPlanStatus,
     ExecutionStep,
     ExecutionStepStatus,
+    PlanSnapshot,
 )
 from src.domain.model.agent.execution.reflection_result import (
     AdjustmentType,
@@ -34,6 +35,7 @@ __all__ = [
     "ExecutionStatus",
     "ExecutionStep",
     "ExecutionStepStatus",
+    "PlanSnapshot",
     "ReflectionAssessment",
     "ReflectionResult",
     "StepAdjustment",

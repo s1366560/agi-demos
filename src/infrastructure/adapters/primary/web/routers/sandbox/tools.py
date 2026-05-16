@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     ListToolsResponse,
@@ -48,7 +49,7 @@ async def connect_mcp(
         success = await adapter.connect_mcp(sandbox_id)
 
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to connect MCP client")
+            raise HTTPException(status_code=500, detail=_("Failed to connect MCP client"))
 
         return {"status": "connected", "sandbox_id": sandbox_id}
 

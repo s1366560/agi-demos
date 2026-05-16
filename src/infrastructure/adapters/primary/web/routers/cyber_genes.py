@@ -22,6 +22,7 @@ from src.infrastructure.adapters.primary.web.routers.agent.utils import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
     prefix=("/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/genes"),
@@ -44,12 +45,12 @@ def _validate_config_json(config_json: str | None) -> None:
     except json.JSONDecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"config_json is not valid JSON: {exc.msg}",
+            detail=_(f"config_json is not valid JSON: {exc.msg}"),
         ) from exc
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="config_json must be a JSON object",
+            detail=_("config_json must be a JSON object"),
         )
 
 
@@ -146,7 +147,7 @@ async def get_gene(
     if gene is None or gene.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Gene not found",
+            detail=_("Gene not found"),
         )
     return _to_response(gene)
 
@@ -168,7 +169,7 @@ async def update_gene(
     if gene is None or gene.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Gene not found",
+            detail=_("Gene not found"),
         )
     if payload.name is not None:
         gene.name = payload.name
@@ -208,7 +209,7 @@ async def delete_gene(
     if gene is None or gene.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Gene not found",
+            detail=_("Gene not found"),
         )
     await repo.delete(gene_id)
     await db.commit()

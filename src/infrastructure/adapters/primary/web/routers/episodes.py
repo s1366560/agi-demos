@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from src.domain.model.memory.episode import Episode, SourceType
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
@@ -17,6 +18,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_workflow_engine,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -162,46 +164,52 @@ async def create_episode(
                 workflow_id=workflow_id,
             )
         else:
-            # Synchronous mode: Process immediately (old behavior)
-            # SOLUTION 1: Save and restore driver state to avoid global state mutation
-            original_driver = graphiti_client.driver
-            original_database = graphiti_client.driver._database
-
+            # Synchronous mode: Process through the native graph service.
             try:
-                result = await graphiti_client.add_episode(
-                    group_id=group_id,
-                    name=episode.name,
-                    episode_body=episode.content,  # Graphiti expects 'episode_body' not 'content'
-                    source_description=episode.source_description or "text",
-                    reference_time=datetime.now(UTC),  # Required parameter
-                )
+                source_type = SourceType(episode.episode_type or SourceType.TEXT.value)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=_("Unsupported episode_type")) from exc
 
-                episode_uuid = result.episode.uuid if result.episode else str(uuid4())
+            graph_episode = Episode(
+                id=episode_uuid,
+                name=episode.name,
+                content=episode.content,
+                source_type=source_type,
+                valid_at=datetime.now(UTC),
+                metadata=episode.metadata or {},
+                tenant_id=episode.tenant_id,
+                project_id=episode.project_id,
+                user_id=episode.user_id or str(current_user.id),
+            )
+            result = await graphiti_client.add_episode(graph_episode)
+            result_id = getattr(result, "id", None)
+            legacy_episode = getattr(result, "episode", None)
+            legacy_id = getattr(legacy_episode, "uuid", None) if legacy_episode else None
+            episode_uuid = (
+                result_id
+                if isinstance(result_id, str)
+                else legacy_id
+                if isinstance(legacy_id, str)
+                else episode_uuid
+            )
 
-                logger.info(f"Episode created by user {current_user.id}: {episode_uuid}")
+            logger.info(f"Episode created by user {current_user.id}: {episode_uuid}")
 
-                return EpisodeResponse(
-                    id=episode_uuid,
-                    name=episode.name,
-                    content=episode.content,
-                    status="processing",
-                    message="Episode queued for ingestion",
-                    created_at=datetime.now(UTC).isoformat(),
-                )
-            finally:
-                # CRITICAL: Always restore original driver state
-                # This prevents add_episode's internal driver switching from affecting global client
-                graphiti_client.driver = original_driver
-                graphiti_client.clients.driver = original_driver
-                if graphiti_client.driver._database != original_database:
-                    logger.info(
-                        f"Restored driver database from '{graphiti_client.driver._database}' to '{original_database}'"
-                    )
-                    graphiti_client.driver._database = original_database
+            return EpisodeResponse(
+                id=episode_uuid,
+                name=episode.name,
+                content=episode.content,
+                status="processing",
+                message="Episode queued for ingestion",
+                created_at=datetime.now(UTC).isoformat(),
+            )
 
     except Exception as e:
         logger.error(f"Failed to create episode: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create episode: {e!s}") from e
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to create episode: {error}").format(error=str(e)),
+        ) from e
 
 
 @router.get("/by-name/{episode_name}", response_model=EpisodeDetail)
@@ -222,7 +230,7 @@ async def get_episode(
         result = await graphiti_client.driver.execute_query(query, name=episode_name)
 
         if not result.records:
-            raise HTTPException(status_code=404, detail="Episode not found")
+            raise HTTPException(status_code=404, detail=_("Episode not found"))
 
         props = result.records[0]["props"]
 
@@ -353,7 +361,7 @@ async def delete_episode(
         deleted = result.records[0]["deleted"] if result.records else 0
 
         if deleted == 0:
-            raise HTTPException(status_code=404, detail="Episode not found")
+            raise HTTPException(status_code=404, detail=_("Episode not found"))
 
         return {"status": "success", "message": f"Episode '{episode_name}' deleted successfully"}
 
@@ -377,4 +385,7 @@ async def health_check(
         await graphiti_client.driver.execute_query("RETURN 1 as test")
         return {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {e!s}") from e
+        raise HTTPException(
+            status_code=503,
+            detail=_("Service unhealthy: {error}").format(error=str(e)),
+        ) from e

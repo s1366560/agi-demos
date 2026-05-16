@@ -65,7 +65,7 @@ _MAX_PROGRESS_STATUS = {"in_progress", "blocked", "done", "needs_review"}
 _HITL_CATEGORIES = {"blocking_human_only", "preference", "informational"}
 
 
-def _require_non_empty(value: str, field: str) -> str | ToolResult:
+def _require_non_empty(value: object, field: str) -> str | ToolResult:
     """Validate that a string field is non-empty and trim to max length."""
     if not isinstance(value, str):
         return ToolResult(output=f"{field} must be a string.", is_error=True)

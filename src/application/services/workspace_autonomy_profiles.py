@@ -223,8 +223,7 @@ def resolve_workspace_type(
 def _tuple_override(value: Any) -> tuple[str, ...]:  # noqa: ANN401
     if not isinstance(value, Sequence) or isinstance(value, str):
         return ()
-    items = cast(Sequence[Any], value)
-    return tuple(str(item) for item in items if str(item))
+    return tuple(str(item) for item in value if str(item))
 
 
 def _bool_override(value: Any, fallback: bool) -> bool:  # noqa: ANN401
@@ -387,7 +386,7 @@ def evaluate_completion_evidence(
     artifacts_raw = evidence.get("artifacts")
     artifacts = []
     if isinstance(artifacts_raw, list):
-        artifacts = [str(item) for item in cast(list[Any], artifacts_raw) if item]
+        artifacts = [str(item) for item in artifacts_raw if item]
     accepted = accepted_artifacts_for_profile(artifacts, profile)
     grade = str(evidence.get("verification_grade") or "fail")
 
@@ -435,7 +434,7 @@ def evaluate_completion_evidence(
         verifications_raw = evidence.get("verifications")
         verifications = []
         if isinstance(verifications_raw, list):
-            verifications = [str(item) for item in cast(list[Any], verifications_raw) if item]
+            verifications = [str(item) for item in verifications_raw if item]
         if not _has_software_test_evidence(
             artifacts=rooted_artifacts,
             verifications=verifications,

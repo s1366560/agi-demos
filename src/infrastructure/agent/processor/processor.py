@@ -504,7 +504,7 @@ class SessionProcessor:
                     diagnostic.message,
                 )
             self._merge_hook_instructions(result.payload)
-            return result.payload
+            return cast(dict[str, Any], result.payload)
         except Exception:
             logger.warning("Plugin hook %r failed", hook_name, exc_info=True)
             return effective_payload
@@ -561,8 +561,6 @@ class SessionProcessor:
         Returns ``True`` if the block was newly appended, ``False`` if the
         input was empty or already present.
         """
-        if not isinstance(text, str):
-            return False
         cleaned = text.strip()
         if not cleaned:
             return False
@@ -723,6 +721,14 @@ class SessionProcessor:
             or runtime_context.get(WORKSPACE_TOOL_MODE_KEY) == WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
         )
 
+    def _has_seen_task_events(self) -> bool:
+        return bool(self._saw_task_events)
+
+    def _pop_permission_asked_event(self) -> ProcessorEvent | None:
+        event = self._permission_asked_event
+        self._permission_asked_event = None
+        return event
+
     async def _evaluate_workspace_replan_no_tool_result(
         self,
         session_id: str,
@@ -747,7 +753,7 @@ class SessionProcessor:
             events.append(AgentStatusEvent(status="workspace_replan_protocol_recovery"))
             async for evt in self._run_workspace_replan_protocol_recovery(session_id):
                 events.append(evt)
-            if self._saw_task_events:
+            if self._has_seen_task_events():
                 self._no_progress_steps = 0
                 self._reset_tool_usage_reminder_streak()
                 self._pending_completion_status = "goal_achieved:workspace_replan_dispatched"
@@ -1143,10 +1149,11 @@ class SessionProcessor:
             return None
 
         try:
-            new_tools = self._tool_provider()
-            if new_tools is None:  # pyright: ignore[reportUnnecessaryComparison]
+            new_tools_result = cast(object, self._tool_provider())
+            if new_tools_result is None:
                 logger.warning("[Processor] tool_provider returned None, skipping refresh")
                 return None
+            new_tools = cast(list[ToolDefinition], new_tools_result)
 
             new_tools_map = {t.name: t for t in new_tools}
 
@@ -3064,6 +3071,7 @@ class SessionProcessor:
                 _lctx.get("user_id", ""),
             )
             try:
+                assert _tool_inst is not None  # guaranteed by the direct context guard
                 assert _runtime_ctx is not None  # guaranteed by the if/elif above
                 result = await _tool_inst.execute(_runtime_ctx, **arguments)
             except Exception as e:
@@ -4085,9 +4093,9 @@ class SessionProcessor:
             tool_def,
         )
         # Yield permission-asked event if one was generated
-        if self._permission_asked_event is not None:
-            yield self._permission_asked_event
-            self._permission_asked_event = None
+        permission_asked_event = self._pop_permission_asked_event()
+        if permission_asked_event is not None:
+            yield permission_asked_event
         if perm_result is not None:
             async for ev in perm_result:
                 yield ev

@@ -87,7 +87,7 @@ class TestMCPToolError:
         )
 
         user_msg = error.get_user_message()
-        assert "无法连接" in user_msg or "connection" in user_msg.lower()
+        assert "无法连接" in user_msg or "connect" in user_msg.lower()
 
     def test_get_user_message_timeout_error(self):
         """Test user message for timeout error."""
@@ -99,7 +99,7 @@ class TestMCPToolError:
         )
 
         user_msg = error.get_user_message()
-        assert "timeout" in user_msg.lower() or "超时" in user_msg
+        assert "timeout" in user_msg.lower() or "timed out" in user_msg.lower() or "超时" in user_msg
 
     def test_get_user_message_parameter_error(self):
         """Test user message for parameter error."""
@@ -715,7 +715,7 @@ class TestDurationAwareTimeoutClassification:
         msg = error.get_user_message()
         assert "bash" in msg
         assert "600.0s" in msg
-        assert "超时" in msg
+        assert "timeout" in msg.lower() or "timed out" in msg.lower() or "超时" in msg
 
     def test_command_output_with_timeout_word_not_misclassified(self):
         """Real-world scenario: command outputs 'timeout' but ran quickly."""

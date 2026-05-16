@@ -50,7 +50,12 @@ from ..workspace.runtime_role_contract import (
     WORKSPACE_TOOL_MODE_KEY,
     WORKSPACE_TURN_TYPE_KEY,
 )
-from ..workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
+from ..workspace.workspace_metadata_keys import (
+    ACTIVE_EXECUTION_ROOT,
+    ATTEMPT_WORKTREE,
+    PREFERRED_LANGUAGE,
+    WORKTREE_SETUP,
+)
 
 # Runtime imports (not TYPE_CHECKING) — used to construct values inside ``stream``.
 from .processor import ToolDefinition
@@ -85,6 +90,15 @@ def _workspace_runtime_forwarded_fields(payload: Mapping[str, Any]) -> dict[str,
     root_override = payload.get("workspace_root_override")
     if isinstance(root_override, Mapping):
         forwarded["workspace_root_override"] = dict(root_override)
+    attempt_worktree = payload.get(ATTEMPT_WORKTREE)
+    if isinstance(attempt_worktree, Mapping):
+        forwarded[ATTEMPT_WORKTREE] = dict(attempt_worktree)
+    active_execution_root = payload.get(ACTIVE_EXECUTION_ROOT)
+    if isinstance(active_execution_root, str) and active_execution_root.strip():
+        forwarded[ACTIVE_EXECUTION_ROOT] = active_execution_root
+    worktree_setup = payload.get(WORKTREE_SETUP)
+    if isinstance(worktree_setup, Mapping):
+        forwarded[WORKTREE_SETUP] = dict(worktree_setup)
     verification_integrity = payload.get("workspace_verification_integrity")
     if isinstance(verification_integrity, Mapping):
         forwarded["workspace_verification_integrity"] = dict(verification_integrity)
@@ -422,8 +436,7 @@ class StreamMixin:
                     dict[str, Any],
                     AgentThoughtEvent(
                         content=(
-                            f"Forced skill '{forced_skill_name}' not found; "
-                            "ignoring slash command."
+                            f"Forced skill '{forced_skill_name}' not found; ignoring slash command."
                         ),
                     ).to_event_dict(),
                 )
@@ -610,20 +623,20 @@ class StreamMixin:
                 (stage for stage in trace_data if stage["stage"] == "semantic_ranker_stage"),
                 None,
             )
+            semantic_explain = semantic_stage.get("explain") if semantic_stage else None
             tool_budget_value = (
-                semantic_stage.get("explain", {}).get("max_tools") if semantic_stage else None  # type: ignore[attr-defined]
+                semantic_explain.get("max_tools") if isinstance(semantic_explain, Mapping) else None
             )
             tool_budget = (
                 int(tool_budget_value)
                 if isinstance(tool_budget_value, (int, float))
                 else self._tool_selection_max_tools
             )
-            budget_exceeded_stages = [
-                stage["stage"]
-                for stage in trace_data
-                if isinstance(stage.get("explain"), dict)
-                and stage["explain"].get("budget_exceeded")  # type: ignore[attr-defined]
-            ]
+            budget_exceeded_stages: list[str] = []
+            for stage in trace_data:
+                explain = stage.get("explain")
+                if isinstance(explain, Mapping) and explain.get("budget_exceeded"):
+                    budget_exceeded_stages.append(str(stage["stage"]))
             yield cast(
                 dict[str, Any],
                 AgentSelectionTraceEvent(
@@ -1229,7 +1242,7 @@ class StreamMixin:
         tools_to_use: list[ToolDefinition],
     ) -> list[ToolDefinition]:
         """Build and append all SubAgent tool definitions to tools list."""
-        return self._tool_builder.build_subagent_tool_definitions(
+        definitions = self._tool_builder.build_subagent_tool_definitions(
             subagent_map=subagent_map,
             subagent_descriptions=subagent_descriptions,
             enabled_subagents=enabled_subagents,
@@ -1239,6 +1252,7 @@ class StreamMixin:
             conversation_id=conversation_id,
             tools_to_use=tools_to_use,
         )
+        return cast(list[ToolDefinition], definitions)
 
     async def stream(  # noqa: PLR0913, PLR0912, PLR0915
         self: _StreamAgent,
@@ -1355,6 +1369,7 @@ class StreamMixin:
             if isinstance(workspace_runtime_payload, Mapping)
             else None
         ) or self._workspace_binding_from_text(processed_user_message)
+        workspace_root_task: Any
         if project_id and tenant_id and user_id:
             from src.infrastructure.agent.workspace.orchestrator import (
                 WorkspaceAutonomyOrchestrator,

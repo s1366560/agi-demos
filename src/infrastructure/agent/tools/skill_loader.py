@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.agent.skill import Skill
 from src.infrastructure.agent.tools.context import ToolContext
@@ -139,13 +139,14 @@ async def _load_available_skills(
     deps: _SkillLoaderDeps,
 ) -> list[Skill]:
     """Load Tier 1 skill metadata from the skill service."""
-    return await deps.skill_service.list_available_skills(
+    skills: object = await deps.skill_service.list_available_skills(
         tenant_id=deps.tenant_id,
         project_id=deps.project_id,
         tier=1,
         agent_mode=deps.agent_mode,
         skip_database=True,
     )
+    return cast(list[Skill], skills)
 
 
 def _format_skill_content(

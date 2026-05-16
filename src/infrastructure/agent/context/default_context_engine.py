@@ -152,7 +152,7 @@ class DefaultContextEngine:
     async def after_turn(
         self,
         conversation: Conversation,
-        turn_result: Any,
+        turn_result: object,
     ) -> None:
         """No-op hook -- extensible in subclasses."""
 

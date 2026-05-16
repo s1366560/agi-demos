@@ -214,7 +214,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
             stmt = stmt.where(DBTemplate.category == category)
 
         result = await self._session.execute(refresh_select_statement(stmt))
-        return result.scalar_one()
+        return int(result.scalar_one())
 
     async def list_categories(self, tenant_id: str) -> list[str]:
         DBTemplate = self._get_model()

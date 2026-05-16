@@ -203,7 +203,7 @@ class SkillEvolutionRepository:
         )
         result = await self._session.execute(stmt)
         await self._session.flush()
-        return result.rowcount or 0  # type: ignore[attr-defined,return-value]
+        return int(getattr(result, "rowcount", 0) or 0)
 
     # -- jobs -----------------------------------------------------------
 

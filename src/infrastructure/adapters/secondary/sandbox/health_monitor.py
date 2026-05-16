@@ -13,11 +13,11 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from src.infrastructure.adapters.secondary.sandbox.local_sandbox_adapter import LocalSandboxAdapter
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -224,8 +224,12 @@ class EnhancedHealthMonitor:
         self._last_health_results = TTLCache(default_ttl_seconds=600.0, max_size=1000)
 
         # Callbacks for state changes
-        self._on_unhealthy_callbacks: list[Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]] = []
-        self._on_recovered_callbacks: list[Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]] = []
+        self._on_unhealthy_callbacks: list[
+            Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]
+        ] = []
+        self._on_recovered_callbacks: list[
+            Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]
+        ] = []
         self._on_terminated_callbacks: list[Callable[[str], Coroutine[Any, Any, Any]]] = []
 
         # Track sandboxes currently being recovered (prevent concurrent recovery)
@@ -246,7 +250,9 @@ class EnhancedHealthMonitor:
         self._on_recovered_callbacks.append(callback)
         return self
 
-    def on_terminated(self, callback: Callable[[str], Coroutine[Any, Any, Any]]) -> "EnhancedHealthMonitor":
+    def on_terminated(
+        self, callback: Callable[[str], Coroutine[Any, Any, Any]]
+    ) -> "EnhancedHealthMonitor":
         """Register callback for when a sandbox is terminated."""
         self._on_terminated_callbacks.append(callback)
         return self
@@ -462,6 +468,54 @@ class EnhancedHealthMonitor:
         if self._auto_recover:
             await self._attempt_recovery(sandbox_id, result)
 
+    async def _mark_recovered(self, sandbox_id: str, result: HealthCheckResult) -> None:
+        """Mark a sandbox as recovered and notify listeners."""
+        result.recovery_attempted = True
+        result.recovery_succeeded = True
+
+        await self._recovery_attempts.delete(sandbox_id)
+
+        for callback in self._on_recovered_callbacks:
+            try:
+                await callback(sandbox_id, result)
+            except Exception as e:
+                logger.error(f"Error in recovered callback: {e}")
+
+    async def _attempt_container_rebuild_recovery(
+        self,
+        sandbox_id: str,
+        result: HealthCheckResult,
+    ) -> bool:
+        """Recover a stopped/missing container through the adapter rebuild path."""
+        assert self._adapter is not None
+        last_rebuild = await self._rebuild_timestamps.get(sandbox_id)
+        if last_rebuild and (time.time() - last_rebuild) < 30:
+            logger.debug(f"Rebuild cooldown active for {sandbox_id}")
+            return False
+
+        await self._rebuild_timestamps.set(sandbox_id, time.time())
+        result.recovery_attempted = True
+
+        try:
+            raw_ensure_healthy = getattr(self._adapter, "_ensure_sandbox_healthy", None)
+            if not callable(raw_ensure_healthy):
+                logger.warning(
+                    f"Container not running for {sandbox_id}, "
+                    "but adapter does not expose sandbox rebuild recovery"
+                )
+                return False
+
+            ensure_healthy = cast(Callable[[str], Awaitable[bool]], raw_ensure_healthy)
+            if not await ensure_healthy(sandbox_id):
+                return False
+
+            logger.info(f"Recovery succeeded for {sandbox_id} (container rebuild)")
+            await self._mark_recovered(sandbox_id, result)
+            return True
+        except Exception as e:
+            logger.error(f"Rebuild failed for {sandbox_id}: {e}")
+            return False
+
     async def _attempt_recovery(self, sandbox_id: str, result: HealthCheckResult) -> bool:
         """
         Attempt to recover an unhealthy sandbox.
@@ -509,42 +563,16 @@ class EnhancedHealthMonitor:
                     connected = await self._adapter.connect_mcp(sandbox_id, timeout=30)
                     if connected:
                         logger.info(f"Recovery succeeded for {sandbox_id} (MCP reconnect)")
-                        result.recovery_attempted = True
-                        result.recovery_succeeded = True
-
-                        # Reset recovery attempts on success
-                        await self._recovery_attempts.delete(sandbox_id)
-
-                        # Notify callbacks
-                        for callback in self._on_recovered_callbacks:
-                            try:
-                                await callback(sandbox_id, result)
-                            except Exception as e:
-                                logger.error(f"Error in recovered callback: {e}")
-
+                        await self._mark_recovered(sandbox_id, result)
                         return True
                 except Exception as e:
                     logger.warning(f"MCP reconnect failed for {sandbox_id}: {e}")
 
-            # If container not running, try rebuild
-            if not result.container_running and hasattr(self._adapter, "_rebuild_sandbox"):
-                # Check rebuild cooldown
-                last_rebuild = await self._rebuild_timestamps.get(sandbox_id)
-                if last_rebuild and (time.time() - last_rebuild) < 30:
-                    logger.debug(f"Rebuild cooldown active for {sandbox_id}")
-                    return False
-
-                await self._rebuild_timestamps.set(sandbox_id, time.time())
-
-                try:
-                    # This would need the project_path which we might not have
-                    # For now, just log and return false
-                    logger.warning(
-                        f"Container not running for {sandbox_id}, "
-                        "rebuild would be needed but not implemented in monitor"
-                    )
-                except Exception as e:
-                    logger.error(f"Rebuild failed for {sandbox_id}: {e}")
+            # If container is not running, delegate to the adapter's existing
+            # health/rebuild path so monitor recovery does not need container
+            # construction details.
+            if not result.container_running:
+                return await self._attempt_container_rebuild_recovery(sandbox_id, result)
 
             result.recovery_attempted = True
             result.recovery_succeeded = False

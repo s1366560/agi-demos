@@ -26,6 +26,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/schema", tags=["schema"])
 
@@ -47,7 +48,7 @@ async def verify_project_access(
 
     if not user_project:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to project"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
         )
     return user_project
 
@@ -85,7 +86,7 @@ async def create_entity_type(
         ))
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Entity type with this name already exists")
+        raise HTTPException(status_code=400, detail=_("Entity type with this name already exists"))
 
     entity_type = EntityType(
         id=str(uuid4()),
@@ -111,7 +112,7 @@ async def update_entity_type(
     await verify_project_access(project_id, current_user, db)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Entity type not found")
+        raise HTTPException(status_code=404, detail=_("Entity type not found"))
 
     if entity_data.description is not None:
         entity_type.description = entity_data.description
@@ -133,7 +134,7 @@ async def delete_entity_type(
     await verify_project_access(project_id, current_user, db)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Entity type not found")
+        raise HTTPException(status_code=404, detail=_("Entity type not found"))
 
     await db.delete(entity_type)
     await db.commit()
@@ -169,7 +170,7 @@ async def create_edge_type(
         ))
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Edge type with this name already exists")
+        raise HTTPException(status_code=400, detail=_("Edge type with this name already exists"))
 
     edge_type = EdgeType(
         id=str(uuid4()),
@@ -195,7 +196,7 @@ async def update_edge_type(
     await verify_project_access(project_id, current_user, db)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Edge type not found")
+        raise HTTPException(status_code=404, detail=_("Edge type not found"))
 
     if edge_data.description is not None:
         edge_type.description = edge_data.description
@@ -217,7 +218,7 @@ async def delete_edge_type(
     await verify_project_access(project_id, current_user, db)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Edge type not found")
+        raise HTTPException(status_code=404, detail=_("Edge type not found"))
 
     await db.delete(edge_type)
     await db.commit()
@@ -259,7 +260,7 @@ async def create_edge_map(
         ))
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="This mapping already exists")
+        raise HTTPException(status_code=400, detail=_("This mapping already exists"))
 
     edge_map = EdgeTypeMap(
         id=str(uuid4()),
@@ -284,7 +285,7 @@ async def delete_edge_map(
     await verify_project_access(project_id, current_user, db)
     edge_map = await db.get(EdgeTypeMap, map_id)
     if not edge_map or edge_map.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Mapping not found")
+        raise HTTPException(status_code=404, detail=_("Mapping not found"))
 
     await db.delete(edge_map)
     await db.commit()

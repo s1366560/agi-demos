@@ -30,6 +30,8 @@ TOOL_STOP = "mcp_server_stop"
 TOOL_LIST = "mcp_server_list"
 TOOL_DISCOVER = "mcp_server_discover_tools"
 TOOL_CALL = "mcp_server_call_tool"
+TOOL_LIST_PROMPTS = "mcp_server_list_prompts"
+TOOL_SET_LOG_LEVEL = "mcp_server_set_log_level"
 
 # Timeouts (seconds) - override via env MCP_INSTALL_TIMEOUT, etc.
 MCP_INSTALL_TIMEOUT = float(os.environ.get("MCP_INSTALL_TIMEOUT", "120"))
@@ -249,8 +251,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             tools = self._parse_tool_result(result)
             if not isinstance(tools, list):
                 return default
-            tools_list = cast(list[dict[str, Any]], tools)
-            for tool in tools_list:
+            for tool in tools:
                 if not isinstance(tool, dict):
                     continue
                 if tool.get("name") == tool_name:
@@ -322,6 +323,47 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         except Exception as e:
             logger.warning(f"list_resources failed: {e}")
             return []
+
+    async def list_prompts(
+        self,
+        project_id: str,
+        server_name: str,
+    ) -> list[dict[str, Any]]:
+        """List prompts exposed by a managed MCP server in the sandbox."""
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_LIST_PROMPTS,
+                arguments={"name": server_name},
+                timeout=15.0,
+            )
+            prompts = self._parse_tool_result(result)
+            if isinstance(prompts, list):
+                return [p for p in prompts if isinstance(p, dict)]
+            return []
+        except Exception as e:
+            logger.warning(f"Failed to list MCP prompts for '{server_name}': {e}")
+            return []
+
+    async def set_log_level(
+        self,
+        project_id: str,
+        server_name: str,
+        level: str,
+    ) -> bool:
+        """Set the MCP logging level for a managed server in the sandbox."""
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_SET_LOG_LEVEL,
+                arguments={"name": server_name, "level": level},
+                timeout=15.0,
+            )
+            payload = self._parse_tool_result(result)
+            return isinstance(payload, dict) and payload.get("success") is True
+        except Exception as e:
+            logger.warning(f"Failed to set MCP log level for '{server_name}': {e}")
+            return False
 
     @override
     async def test_connection(

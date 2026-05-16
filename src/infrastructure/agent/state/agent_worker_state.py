@@ -88,6 +88,7 @@ __all__ = [  # noqa: RUF022
     "get_custom_tool_diagnostics",
     "get_hitl_response_listener",
     "get_mcp_sandbox_adapter",
+    "shutdown_mcp_sandbox_adapter",
     # MCP Tools
     "get_mcp_tools_from_cache",
     # Graph service
@@ -247,6 +248,21 @@ def get_mcp_sandbox_adapter() -> Any | None:
         The MCPSandboxAdapter instance or None if not initialized
     """
     return _mcp_sandbox_adapter
+
+
+async def shutdown_mcp_sandbox_adapter() -> None:
+    """Close and clear the global MCP sandbox adapter used by local agent runtime."""
+    global _mcp_sandbox_adapter
+
+    adapter = _mcp_sandbox_adapter
+    _mcp_sandbox_adapter = None
+    if adapter is None:
+        return
+
+    close = getattr(adapter, "close", None)
+    if close is not None:
+        await close()
+    logger.info("Agent Worker: MCP Sandbox Adapter closed")
 
 
 def set_agent_orchestrator(orchestrator: Any) -> None:
@@ -812,15 +828,15 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
         _ = workspace_submit_verification_judgment_tool
         _ = workspace_submit_iteration_review_tool
         _ = workspace_submit_agent_decision_tool
+        fallback_tools = {
+            WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME: workspace_submit_planning_contract_tool,
+            WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME: workspace_submit_verification_judgment_tool,
+            WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME: workspace_submit_iteration_review_tool,
+            WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME: workspace_submit_agent_decision_tool,
+        }
         registry = get_registered_tools()
-        for tool_name in (
-            WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
-            WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
-            WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
-            WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME,
-        ):
-            if tool_name in registry:
-                tools[tool_name] = registry[tool_name]
+        for tool_name, fallback_tool in fallback_tools.items():
+            tools[tool_name] = registry.get(tool_name, fallback_tool)
     except Exception as e:
         logger.warning("Agent Worker: Failed to add workspace plan contract tools: %s", e)
 
@@ -1889,7 +1905,7 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
     if _mcp_sandbox_adapter is None:
         return False
 
-    container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)  # type: ignore[union-attr]
+    container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
     if not container_exists:
         active = getattr(_mcp_sandbox_adapter, "_active_sandboxes", {})
         active.pop(project_sandbox_id, None)
@@ -1900,16 +1916,16 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
         return False
 
     # Sync from Docker to ensure adapter has the container in its cache
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
+    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
         logger.info(
             f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
             f"to adapter's internal state"
         )
-        await _mcp_sandbox_adapter.sync_from_docker()  # type: ignore[union-attr]
+        await _mcp_sandbox_adapter.sync_from_docker()
 
     # Verify adapter state after sync. ``container_exists`` above is a real
     # Docker check, so stale in-memory entries cannot mask a removed container.
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
+    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
         logger.warning(
             f"[AgentWorker] Sandbox {project_sandbox_id} exists in Docker but "
             f"could not be synced into adapter state."
@@ -3362,7 +3378,6 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         async def delete(self, skill_id: str) -> bool:
             return False
 
-        @override
         async def find_matching_skills(
             self,
             tenant_id: str,
@@ -3372,7 +3387,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         ) -> list[Skill]:
             return []
 
-        async def increment_usage(self, skill_id: str, success: bool = True) -> None:  # type: ignore[override]
+        async def increment_usage(self, skill_id: str, success: bool = True) -> None:
             pass
 
         async def count_by_tenant(self, tenant_id: str, status: SkillStatus | None = None) -> int:  # type: ignore[override]

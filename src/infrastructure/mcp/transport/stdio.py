@@ -103,7 +103,7 @@ class StdioTransport(BaseTransport):
         }
 
         result = await self._send_request("initialize", init_params)
-        if result is None:  # type: ignore[reportUnnecessaryComparison]  # defensive guard
+        if result is None:  # pyright: ignore[reportUnnecessaryComparison]
             raise MCPTransportError("Initialization failed: no response from server")
         logger.info(f"MCP server initialized: {result.get('serverInfo', {})}")
 

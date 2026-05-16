@@ -10,7 +10,7 @@ hooks that integrate with the SessionProcessor's turn cycle.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from src.domain.model.agent.assembled_context import AssembledContext
@@ -92,7 +92,7 @@ class ContextEnginePort(Protocol):
     async def after_turn(
         self,
         conversation: Conversation,
-        turn_result: Any,
+        turn_result: object,
     ) -> None:
         """Post-turn hook for bookkeeping after a complete ReAct turn.
 

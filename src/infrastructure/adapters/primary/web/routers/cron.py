@@ -31,6 +31,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
 from src.infrastructure.adapters.secondary.persistence.database import (
     get_db,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ async def create_cron_job(
     project_svc = container.project_service()
     project = await project_svc.get_project(project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=_("Project not found"))
 
     job = await svc.create_job(
         project_id=project_id,
@@ -141,7 +142,7 @@ async def get_cron_job(
     svc = _container(db).cron_job_service()
     job = await svc.get_job(job_id)
     if job is None or job.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Cron job not found")
+        raise HTTPException(status_code=404, detail=_("Cron job not found"))
     return cron_job_to_response(job)
 
 
@@ -159,7 +160,7 @@ async def update_cron_job(
     # Verify ownership
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Cron job not found")
+        raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     schedule = schedule_config_to_domain(body.schedule) if body.schedule is not None else None
     payload = payload_config_to_domain(body.payload) if body.payload is not None else None
@@ -214,7 +215,7 @@ async def delete_cron_job(
 
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Cron job not found")
+        raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     await svc.delete_job(job_id)
     await db.commit()
@@ -240,7 +241,7 @@ async def toggle_cron_job(
 
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Cron job not found")
+        raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     job = await svc.toggle_job(job_id, enabled=enabled)
     await db.commit()
@@ -281,7 +282,7 @@ async def trigger_manual_run(
 
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Cron job not found")
+        raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     conversation_id_override = body.conversation_id if body else None
     await svc.trigger_manual_run(job_id, conversation_id=conversation_id_override)
@@ -308,7 +309,7 @@ async def list_cron_job_runs(
     # Verify the job belongs to this project
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Cron job not found")
+        raise HTTPException(status_code=404, detail=_("Cron job not found"))
 
     runs = await svc.list_runs(job_id, limit=limit, offset=offset)
     total = await svc.count_runs(job_id)

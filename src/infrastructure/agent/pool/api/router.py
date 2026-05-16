@@ -25,6 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from starlette.responses import PlainTextResponse
 
+from src.infrastructure.i18n import gettext as _
+
 from ..integration.session_adapter import get_global_adapter
 from ..manager import AgentPoolManager
 from ..metrics import get_metrics_collector
@@ -141,7 +143,7 @@ async def _get_pool_manager() -> AgentPoolManager:
 
     raise HTTPException(
         status_code=503,
-        detail="Agent pool manager not available. Enable pool with AGENT_POOL_ENABLED=true",
+        detail=_("Agent pool manager not available. Enable pool with AGENT_POOL_ENABLED=true"),
     )
 
 
@@ -291,7 +293,7 @@ async def _get_instance(
     """获取实例详情."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
 
     return _build_instance_info(instance_key, instance)
 
@@ -303,7 +305,7 @@ async def _pause_instance(
     """暂停实例."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
 
     try:
         await instance.pause()
@@ -323,7 +325,7 @@ async def _resume_instance(
     """恢复实例."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
 
     try:
         await instance.resume()
@@ -344,7 +346,7 @@ async def _terminate_instance(
     """终止实例."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
 
     try:
         # 解析 instance_key
@@ -377,7 +379,7 @@ async def _set_project_tier(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid tier: {request.tier}. Must be one of: hot, warm, cold",
+            detail=_(f"Invalid tier: {request.tier}. Must be one of: hot, warm, cold"),
         ) from None
 
     # 获取当前分级

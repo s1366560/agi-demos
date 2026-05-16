@@ -19,6 +19,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     PatternsListResponse,
@@ -55,7 +56,7 @@ async def list_patterns(
     try:
         # Verify tenant access
         if user_tenant_id != tenant_id and not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail="Access denied to tenant patterns")
+            raise HTTPException(status_code=403, detail=_("Access denied to tenant patterns"))
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -109,7 +110,7 @@ async def list_patterns(
         raise
     except Exception as e:
         logger.error(f"Error listing patterns: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list patterns: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to list patterns: {e!s}")) from e
 
 
 @router.get("/workflows/patterns/{pattern_id}", response_model=WorkflowPatternResponse)
@@ -127,7 +128,7 @@ async def get_pattern(
     try:
         # Verify tenant access
         if user_tenant_id != tenant_id and not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail="Access denied to tenant patterns")
+            raise HTTPException(status_code=403, detail=_("Access denied to tenant patterns"))
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -136,11 +137,11 @@ async def get_pattern(
         pattern = await pattern_repo.get_by_id(pattern_id)
 
         if not pattern:
-            raise HTTPException(status_code=404, detail="Pattern not found")
+            raise HTTPException(status_code=404, detail=_("Pattern not found"))
 
         # Verify pattern belongs to the tenant
         if pattern.tenant_id != tenant_id:
-            raise HTTPException(status_code=404, detail="Pattern not found")
+            raise HTTPException(status_code=404, detail=_("Pattern not found"))
 
         return WorkflowPatternResponse(
             id=pattern.id,
@@ -169,7 +170,7 @@ async def get_pattern(
         raise
     except Exception as e:
         logger.error(f"Error getting pattern: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get pattern: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get pattern: {e!s}")) from e
 
 
 @router.delete("/workflows/patterns/{pattern_id}", status_code=200)
@@ -185,7 +186,7 @@ async def delete_pattern(
     try:
         # Verify admin access
         if not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail="Admin access required")
+            raise HTTPException(status_code=403, detail=_("Admin access required"))
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -194,7 +195,7 @@ async def delete_pattern(
         # Check if pattern exists
         pattern = await pattern_repo.get_by_id(pattern_id)
         if not pattern:
-            raise HTTPException(status_code=404, detail="Pattern not found")
+            raise HTTPException(status_code=404, detail=_("Pattern not found"))
 
         # Delete pattern
         await pattern_repo.delete(pattern_id)
@@ -205,7 +206,7 @@ async def delete_pattern(
         raise
     except Exception as e:
         logger.error(f"Error deleting pattern: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete pattern: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to delete pattern: {e!s}")) from e
 
 
 @router.post("/workflows/patterns/reset", response_model=ResetPatternsResponse)
@@ -221,7 +222,7 @@ async def reset_patterns(
     try:
         # Verify admin access
         if not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail="Admin access required")
+            raise HTTPException(status_code=403, detail=_("Admin access required"))
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -245,4 +246,4 @@ async def reset_patterns(
         raise
     except Exception as e:
         logger.error(f"Error resetting patterns: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to reset patterns: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to reset patterns: {e!s}")) from e

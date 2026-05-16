@@ -20,6 +20,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as DBConversation,
     UserTenant as DBUserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .access import (
     _get_user_id,
@@ -76,7 +77,7 @@ def parse_statuses(status_csv: str | None) -> list[SubAgentRunStatus] | None:
         except ValueError as err:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid status filter value: {s}",
+                detail=_(f"Invalid status filter value: {s}"),
             ) from err
     return statuses or None
 
@@ -98,7 +99,7 @@ async def _get_accessible_conversation(
     """Require access to a conversation before returning it."""
     conversation = await _get_conversation(db, conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+        raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
 
     current_user_id = _get_user_id(current_user)
     if conversation.user_id == current_user_id:
@@ -108,7 +109,7 @@ async def _get_accessible_conversation(
             if exc.status_code == 403:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Conversation {conversation_id} not found",
+                    detail=_(f"Conversation {conversation_id} not found"),
                 ) from exc
             raise
         return conversation
@@ -116,7 +117,7 @@ async def _get_accessible_conversation(
     if await has_tenant_admin_access(db, current_user, conversation.tenant_id):
         return conversation
 
-    raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+    raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
 
 
 async def _list_accessible_tenant_conversation_ids(
@@ -424,7 +425,7 @@ async def get_run(
         if run is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Run {run_id} not found in conversation {conversation.id}",
+                detail=_(f"Run {run_id} not found in conversation {conversation.id}"),
             )
         return run_to_response(run)
     except HTTPException:

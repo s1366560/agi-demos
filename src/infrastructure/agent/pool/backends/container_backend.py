@@ -306,7 +306,7 @@ class ContainerBackend(Backend):
                 instances.append(instance)
         return instances
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         instance_id: str,
         request: ChatRequest,
@@ -526,10 +526,10 @@ class ContainerBackend(Backend):
 
         raise TimeoutError(f"Container not ready after {timeout}s: {container_info.container_id}")
 
-    async def _get_grpc_client(self, instance_id: str) -> object:
+    async def _get_grpc_client(self, instance_id: str) -> "_HttpFallbackClient":
         """Get or create gRPC client for instance."""
         if instance_id in self._grpc_clients:
-            return cast(None, self._grpc_clients[instance_id])
+            return cast(_HttpFallbackClient, self._grpc_clients[instance_id])
 
         container_info = self._containers[instance_id]
 

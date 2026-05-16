@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -473,7 +473,7 @@ async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Sa
                 "is_healthy": sandbox_info.is_healthy,
             },
         )
-        return sandbox_info
+        return cast("SandboxInfo", sandbox_info)
 
     except Exception as e:
         logger.warning(
@@ -526,7 +526,7 @@ async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> 
                     "is_healthy": sandbox_info.is_healthy,
                 },
             )
-        return sandbox_info
+        return cast("SandboxInfo", sandbox_info)
 
     except Exception as e:
         logger.warning(

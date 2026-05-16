@@ -142,7 +142,12 @@ class TestListAvailableModelsTool:
 
         assert result.is_error is False
         assert payload["provider"]["catalog_provider"] == "openai"
-        assert payload["models"] == ["doubao-1.5-pro-32k-250115", "gpt-4o", "gpt-4o-mini"]
+        assert payload["models"] == [
+            "auto",
+            "doubao-1.5-pro-32k-250115",
+            "gpt-4o",
+            "gpt-4o-mini",
+        ]
         provider_types = {entry["provider_type"] for entry in payload["providers"]}
         assert provider_types == {"openai", "volcengine"}
 
@@ -210,8 +215,10 @@ class TestListAvailableModelsTool:
         assert result.is_error is False
         assert catalog.last_provider == "openai"
         assert isinstance(payload["models"], list)
-        assert payload["models"][0]["name"] == "gpt-4o"
-        assert payload["models"][0]["provider"] == "openai"
+        assert payload["models"][0]["name"] == "auto"
+        assert payload["models"][0]["is_virtual"] is True
+        assert payload["models"][1]["name"] == "gpt-4o"
+        assert payload["models"][1]["provider"] == "openai"
 
     async def test_returns_error_when_tenant_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         catalog = _FakeCatalog([_make_model("gpt-4o", provider="openai")])

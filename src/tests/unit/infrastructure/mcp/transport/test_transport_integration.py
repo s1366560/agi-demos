@@ -6,6 +6,7 @@ from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp.transport.base import MCPTransportError
 from src.infrastructure.mcp.transport.factory import TransportFactory
 from src.infrastructure.mcp.transport.http import HTTPTransport
+from src.infrastructure.mcp.transport.sse import SSETransport
 from src.infrastructure.mcp.transport.stdio import StdioTransport
 from src.infrastructure.mcp.transport.websocket import WebSocketTransport
 
@@ -38,6 +39,17 @@ class TestTransportFactoryIntegration:
         transport = TransportFactory().create(config)
 
         assert isinstance(transport, HTTPTransport)
+
+    def test_factory_creates_sse_transport(self):
+        """Test factory creates SSETransport for SSE type."""
+        config = TransportConfig(
+            transport_type=TransportType.SSE,
+            url="http://localhost:8080/mcp",
+        )
+
+        transport = TransportFactory().create(config)
+
+        assert isinstance(transport, SSETransport)
 
     def test_factory_creates_websocket_transport(self):
         """Test factory creates WebSocketTransport for WEBSOCKET type."""

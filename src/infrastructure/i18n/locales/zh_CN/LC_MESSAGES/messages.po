@@ -96,6 +96,10 @@ msgstr "默认项目"
 msgid "Default project for {owner}"
 msgstr "{owner} 的默认项目"
 
+#: src/infrastructure/adapters/primary/web/routers/auth.py:138
+msgid "Incorrect username or password"
+msgstr "用户名或密码不正确"
+
 #: src/infrastructure/adapters/primary/web/routers/auth.py:263
 msgid "API key not found"
 msgstr "未找到该 API 密钥"
@@ -260,4 +264,3 @@ msgstr "邮箱或密码错误"
 #: src/tests/unit/infrastructure/i18n/test_i18n.py:68
 msgid "__definitely_not_in_catalog__"
 msgstr ""
-

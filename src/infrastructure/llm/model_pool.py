@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Protocol, cast
 
 from src.domain.llm_providers.models import OperationType, ProviderConfig
 from src.infrastructure.llm.model_catalog import (
@@ -35,6 +35,20 @@ from src.infrastructure.llm.model_catalog import (
 logger = logging.getLogger(__name__)
 
 ModelTier = Literal["small", "medium", "large"]
+
+
+class _ProviderResolution(Protocol):
+    async def resolve_provider(
+        self,
+        tenant_id: str | None,
+        operation: OperationType,
+    ) -> ProviderConfig: ...
+
+    async def list_pool_providers(
+        self,
+        tenant_id: str | None,
+        operation: OperationType,
+    ) -> list[ProviderConfig]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -109,7 +123,7 @@ class ModelPoolService:
             )
 
             resolution_service = get_provider_resolution_service()
-        self._resolution = resolution_service
+        self._resolution = cast(_ProviderResolution, resolution_service)
         self._catalog = catalog or get_model_catalog_service()
         self._cache: dict[str, tuple[list[ProviderConfig], float]] = {}
 
@@ -172,7 +186,7 @@ class ModelPoolService:
             logger.warning(
                 "Resolution service lacks list_pool_providers; degrading to single resolve"
             )
-            single = await self._resolution.resolve_provider(  # type: ignore[union-attr]
+            single = await self._resolution.resolve_provider(
                 tenant_id,
                 OperationType.LLM,
             )
@@ -237,7 +251,7 @@ class ModelPoolService:
         if tier is None:
             declared = provider.model_tier
             if declared in ("small", "medium", "large"):
-                tier = declared  # type: ignore[assignment]
+                tier = declared
 
         supports_vision = False
         if meta is not None:

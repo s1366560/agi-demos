@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import Depends, HTTPException
 
+from src.infrastructure.i18n import gettext as _
+
 
 @dataclass
 class FeatureDefinition:
@@ -64,5 +66,5 @@ def require_feature(feature_id: str) -> Any:  # noqa: ANN401
     def dependency() -> None:
         gate = get_feature_gate()
         if not gate.is_enabled(feature_id):
-            raise HTTPException(status_code=403, detail=f"Feature '{feature_id}' is not available in {gate.edition} edition")
+            raise HTTPException(status_code=403, detail=_(f"Feature '{feature_id}' is not available in {gate.edition} edition"))
     return Depends(dependency)

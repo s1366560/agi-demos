@@ -128,6 +128,7 @@ class InfraContainer:
             default_memory_limit=settings.sandbox_memory_limit,
             default_cpu_limit=settings.sandbox_cpu_limit,
             workspace_base=settings.sandbox_workspace_base,
+            redis_client=self._redis_client,
         )
         return self._sandbox_adapter_instance
 

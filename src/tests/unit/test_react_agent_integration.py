@@ -37,6 +37,32 @@ def _make_react_agent(**kwargs):
     return ReActAgent(**defaults)
 
 
+def _make_processor_mock() -> MagicMock:
+    processor = MagicMock()
+    processor.add_runtime_guidance = AsyncMock()
+    return processor
+
+
+def _make_runtime_profile(**overrides):
+    from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+    from src.infrastructure.agent.core.react_agent import AgentRuntimeProfile
+
+    defaults = {
+        "selected_agent": None,
+        "available_skills": [],
+        "allow_tools": [],
+        "deny_tools": [],
+        "tenant_agent_config": TenantAgentConfig.create_default("tenant-1"),
+        "agent_definition_prompt": "",
+        "effective_model": "test-model",
+        "effective_temperature": 0.2,
+        "effective_max_tokens": 1024,
+        "effective_max_steps": 4,
+    }
+    defaults.update(overrides)
+    return AgentRuntimeProfile(**defaults)
+
+
 @pytest.mark.unit
 class TestReActAgentGraphServiceInit:
     """Test ReActAgent initialization with graph_service."""
@@ -541,16 +567,8 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_build_runtime_profile",
-                return_value=SimpleNamespace(
+                return_value=_make_runtime_profile(
                     available_skills=[MagicMock()],
-                    allow_tools=[],
-                    deny_tools=[],
-                    tenant_agent_config=SimpleNamespace(runtime_hooks=[]),
-                    agent_definition_prompt="",
-                    effective_model="test-model",
-                    effective_temperature=0.2,
-                    effective_max_tokens=1024,
-                    effective_max_steps=4,
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
@@ -579,7 +597,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_processor_factory",
-                new=SimpleNamespace(create_for_main=lambda **kwargs: MagicMock()),
+                new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
             ),
         ):
             agent._stream_messages = [{"role": "system", "content": "system"}]
@@ -629,7 +647,7 @@ class TestReActAgentWorkspaceDelegation:
 
         def _capture_processor(**kwargs):
             captured["config"] = kwargs["config"]
-            return MagicMock()
+            return _make_processor_mock()
 
         with (
             patch(
@@ -653,16 +671,8 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_build_runtime_profile",
-                return_value=SimpleNamespace(
+                return_value=_make_runtime_profile(
                     available_skills=[MagicMock()],
-                    allow_tools=[],
-                    deny_tools=[],
-                    tenant_agent_config=SimpleNamespace(runtime_hooks=[]),
-                    agent_definition_prompt="",
-                    effective_model="test-model",
-                    effective_temperature=0.2,
-                    effective_max_tokens=1024,
-                    effective_max_steps=4,
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
@@ -768,7 +778,7 @@ class TestReActAgentWorkspaceDelegation:
 
         def _capture_processor(**kwargs):
             captured["config"] = kwargs["config"]
-            return MagicMock()
+            return _make_processor_mock()
 
         with (
             patch(
@@ -792,16 +802,8 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_build_runtime_profile",
-                return_value=SimpleNamespace(
+                return_value=_make_runtime_profile(
                     available_skills=[MagicMock()],
-                    allow_tools=[],
-                    deny_tools=[],
-                    tenant_agent_config=SimpleNamespace(runtime_hooks=[]),
-                    agent_definition_prompt="",
-                    effective_model="test-model",
-                    effective_temperature=0.2,
-                    effective_max_tokens=1024,
-                    effective_max_steps=4,
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
@@ -911,7 +913,7 @@ class TestReActAgentWorkspaceDelegation:
         def _capture_processor(**kwargs):
             captured["config"] = kwargs["config"]
             captured["tools"] = kwargs["tools"]
-            return MagicMock()
+            return _make_processor_mock()
 
         with (
             patch(
@@ -1034,6 +1036,11 @@ class TestReActAgentWorkspaceDelegation:
                 "priority": 5,
             }
         )
+        from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+
+        tenant_config = TenantAgentConfig.create_default("tenant-1").update_runtime_hooks(
+            [runtime_hook]
+        )
 
         async def _empty_async_gen(*args, **kwargs):
             if False:
@@ -1066,17 +1073,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_build_runtime_profile",
-                return_value=SimpleNamespace(
-                    available_skills=[],
-                    allow_tools=[],
-                    deny_tools=[],
-                    tenant_agent_config=SimpleNamespace(runtime_hooks=[runtime_hook]),
-                    agent_definition_prompt="",
-                    effective_model="test-model",
-                    effective_temperature=0.2,
-                    effective_max_tokens=1024,
-                    effective_max_steps=4,
-                ),
+                return_value=_make_runtime_profile(tenant_agent_config=tenant_config),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
             patch.object(agent, "_stream_match_skill", return_value=iter(())),
@@ -1095,7 +1092,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_processor_factory",
-                new=SimpleNamespace(create_for_main=lambda **kwargs: MagicMock()),
+                new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
             ),
         ):
             agent._stream_messages = [{"role": "system", "content": "system"}]
@@ -1161,16 +1158,8 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_build_runtime_profile",
-                return_value=SimpleNamespace(
+                return_value=_make_runtime_profile(
                     available_skills=[],
-                    allow_tools=[],
-                    deny_tools=[],
-                    tenant_agent_config=SimpleNamespace(runtime_hooks=[]),
-                    agent_definition_prompt="",
-                    effective_model="test-model",
-                    effective_temperature=0.2,
-                    effective_max_tokens=1024,
-                    effective_max_steps=4,
                 ),
             ),
             patch.object(agent, "_build_runtime_workspace_manager", return_value=None),
@@ -1190,7 +1179,7 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(
                 agent,
                 "_processor_factory",
-                new=SimpleNamespace(create_for_main=lambda **kwargs: MagicMock()),
+                new=SimpleNamespace(create_for_main=lambda **kwargs: _make_processor_mock()),
             ),
         ):
             agent._stream_memory_context = "stale memory"

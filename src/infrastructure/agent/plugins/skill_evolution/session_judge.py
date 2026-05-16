@@ -103,7 +103,7 @@ class SessionJudge:
         ]
 
         response = await llm_client.generate(
-            messages=messages,  # type: ignore[arg-type]
+            messages=messages,
             max_tokens=1024,
         )
 

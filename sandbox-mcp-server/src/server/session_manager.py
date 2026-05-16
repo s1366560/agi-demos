@@ -162,7 +162,7 @@ class SessionManager:
             terminal_port=terminal_status.port,
             desktop_port=desktop_status.port,
             terminal_pid=terminal_status.pid,
-            desktop_pid=desktop_status.xvfb_pid,
+            desktop_pid=desktop_status.kasmvnc_pid,
         )
 
     def get_terminal_info(self) -> dict:
@@ -193,10 +193,10 @@ class SessionManager:
             "enabled": self.desktop_enabled,
             "running": status.running,
             "port": status.port,
-            "url": self.desktop_manager.get_novnc_url(),
+            "url": self.desktop_manager.get_web_url(),
             "display": self.desktop_manager.display,
             "resolution": self.desktop_manager.resolution,
-            "pid": status.xvfb_pid,
+            "pid": status.kasmvnc_pid,
         }
 
     async def __aenter__(self):

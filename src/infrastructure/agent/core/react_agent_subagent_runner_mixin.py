@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from src.domain.model.agent.subagent import SubAgent
 
@@ -135,7 +135,7 @@ class SubAgentRunnerMixin:
 
     def _get_subagent_observability_stats(self: _RunnerAgent) -> dict[str, int]:
         """Return subagent lifecycle observability counters."""
-        return self._session_runner.get_subagent_observability_stats()
+        return cast(dict[str, int], self._session_runner.get_subagent_observability_stats())
 
     def _runner_resolve_overrides(
         self: _RunnerAgent,
@@ -148,7 +148,7 @@ class SubAgentRunnerMixin:
         normalized_cleanup: str,
     ) -> tuple[str | None, str | None, float]:
         """Resolve model/thinking overrides."""
-        return self._session_runner.runner_resolve_overrides(
+        return cast(tuple[str | None, str | None, float], self._session_runner.runner_resolve_overrides(
             conversation_id=conversation_id,
             run_id=run_id,
             requested_model=requested_model,
@@ -156,7 +156,7 @@ class SubAgentRunnerMixin:
             normalized_spawn_mode=normalized_spawn_mode,
             thread_requested=thread_requested,
             normalized_cleanup=normalized_cleanup,
-        )
+        ))
 
     def _runner_mark_completion(
         self: _RunnerAgent,
@@ -313,7 +313,7 @@ class SubAgentRunnerMixin:
         thinking_override: str | None,
     ) -> tuple[str, int | None, int | None, bool, str | None]:
         """Consume subagent events and extract completion results."""
-        return await self._session_runner.runner_consume_and_extract(
+        result = await self._session_runner.runner_consume_and_extract(
             subagent=subagent,
             user_message=user_message,
             conversation_context=conversation_context,
@@ -324,6 +324,7 @@ class SubAgentRunnerMixin:
             model_override=model_override,
             thinking_override=thinking_override,
         )
+        return cast(tuple[str, int | None, int | None, bool, str | None], result)
 
     async def _launch_subagent_session(  # noqa: PLR0913
         self: _RunnerAgent,
@@ -376,11 +377,11 @@ class SubAgentRunnerMixin:
         event: dict[str, Any],
     ) -> tuple[list[dict[str, Any]], int]:
         """Append announce event while enforcing bounded history size."""
-        return self._session_runner.append_capped_announce_event(
+        return cast(tuple[list[dict[str, Any]], int], self._session_runner.append_capped_announce_event(
             events,
             dropped_count,
             event,
-        )
+        ))
 
     @classmethod
     def _build_subagent_completion_payload(
@@ -441,7 +442,8 @@ class SubAgentRunnerMixin:
 
     async def _cancel_subagent_session(self: _RunnerAgent, run_id: str) -> bool:
         """Cancel a detached SubAgent session by run_id."""
-        return await self._session_runner.cancel_subagent_session(run_id)
+        cancelled = await self._session_runner.cancel_subagent_session(run_id)
+        return cast(bool, cancelled)
 
     @staticmethod
     def _topological_sort_subtasks(

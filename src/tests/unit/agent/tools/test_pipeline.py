@@ -129,6 +129,31 @@ class TestToolPipeline:
         assert len(events) == 1
         assert events[0].type == "denied"
 
+    async def test_prehook_ask_uses_permission_manager(self) -> None:
+        hooks = ToolHookRegistry()
+
+        async def ask_hook(tn: str, args: dict, ctx: ToolContext) -> HookResult:
+            return HookResult(decision=HookDecision.ASK, reason="needs approval")
+
+        hooks.register_before(ask_hook)
+        pm = MagicMock()
+        pm.ask = AsyncMock(return_value="approve")
+        ctx = _make_ctx()
+        ctx.ask = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        pipeline = _make_pipeline(permission_manager=pm, hooks=hooks)
+        tool = FakeTool(name="write_file", permission="edit")
+
+        events = await _collect_events(pipeline, tool, {"path": "a.txt"}, ctx)
+
+        assert [event.type for event in events][:2] == ["permission_asked", "started"]
+        pm.ask.assert_awaited_once_with(
+            permission="edit",
+            patterns=["write_file"],
+            session_id="s",
+            metadata={"tool": "write_file", "input": {"path": "a.txt"}, "source": "pre_hook"},
+        )
+        ctx.ask.assert_not_awaited()
+
     async def test_doom_loop_detection(self) -> None:
         dd = MagicMock()
         dd.should_intervene = MagicMock(return_value=True)

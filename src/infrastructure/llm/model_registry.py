@@ -128,18 +128,24 @@ def get_model_limits(
     # Try catalog first, fall back to static dicts
     meta = _get_catalog_metadata(bare)
     if meta is not None:
-        max_out = meta.max_output_tokens
-        ctx = meta.context_length or _DEFAULT_CONTEXT_WINDOW
-        max_in = meta.max_input_tokens
+        max_out: int | None = meta.max_output_tokens
+        ctx: int = meta.context_length or _DEFAULT_CONTEXT_WINDOW
+        max_in: int | None = meta.max_input_tokens
     else:
         max_out = _MODEL_MAX_OUTPUT_TOKENS.get(bare)
         ctx = _MODEL_CONTEXT_WINDOW.get(bare, _DEFAULT_CONTEXT_WINDOW)
         max_in = _MODEL_MAX_INPUT_TOKENS.get(bare)
 
     if provider_config_overrides:
-        max_out = provider_config_overrides.get("max_output_tokens", max_out)
-        ctx = provider_config_overrides.get("context_window", ctx)
-        max_in = provider_config_overrides.get("max_input_tokens", max_in)
+        override_max_out = provider_config_overrides.get("max_output_tokens")
+        if isinstance(override_max_out, int):
+            max_out = override_max_out
+        override_context = provider_config_overrides.get("context_window")
+        if isinstance(override_context, int):
+            ctx = override_context
+        override_max_in = provider_config_overrides.get("max_input_tokens")
+        if isinstance(override_max_in, int):
+            max_in = override_max_in
 
     return ModelLimits(
         max_output_tokens=max_out,

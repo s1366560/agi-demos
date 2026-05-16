@@ -23,6 +23,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -160,7 +161,7 @@ async def get_template(
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
+            detail=_("Template not found"),
         )
 
     return InstanceTemplateResponse.model_validate(template, from_attributes=True)
@@ -326,7 +327,7 @@ async def clone_template(
         if not source:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Source template not found",
+                detail=_("Source template not found"),
             )
 
         slug = data.new_name.lower().replace(" ", "-")
@@ -343,7 +344,7 @@ async def clone_template(
 
         source_items = await service.list_template_items(template_id)
         for item in source_items:
-            _ = await service.add_template_item(
+            _created_item = await service.add_template_item(
                 template_id=cloned.id,
                 item_type=item.item_type,
                 item_slug=item.item_slug,

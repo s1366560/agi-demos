@@ -21,9 +21,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class ScalingPoolManager(Protocol):
+    """Pool manager capability required to apply replica-count changes."""
+
+    async def scale_instances(self, instance_key: str, target_count: int) -> None:
+        """Scale the instance group to the requested count."""
 
 
 class ScalingDirection(str, Enum):
@@ -488,10 +496,13 @@ class AutoScalingService:
     ) -> None:
         """Execute the scaling action."""
         logger.info(
-            f"Executing scaling: {instance_key}, "
-            f"direction={event.direction.value}, "
-            f"target={event.target_count}"
+            "Executing scaling: %s, direction=%s, target=%d",
+            instance_key,
+            event.direction.value,
+            event.target_count,
         )
+
+        await self._apply_pool_manager_scaling(instance_key, event)
 
         # Update state
         if event.direction == ScalingDirection.UP:
@@ -501,23 +512,38 @@ class AutoScalingService:
 
         self._current_counts[instance_key] = event.target_count
 
-        # Execute via pool manager if available
-        # Note: Current architecture doesn't support replica count,
-        # but this is prepared for future container-based scaling
-        if self._pool_manager:
-            # For now, just log - actual scaling will be implemented
-            # when container backend supports replicas
-            logger.info(
-                f"Scaling {instance_key} to {event.target_count} instances "
-                f"(reason: {event.reason.value})"
-            )
-
         # Notify callbacks
         for callback in self._on_scale_callbacks:
             try:
                 await callback(instance_key, event)
             except Exception as e:
                 logger.error(f"Scale callback error: {e}")
+
+    async def _apply_pool_manager_scaling(
+        self,
+        instance_key: str,
+        event: ScalingEvent,
+    ) -> None:
+        """Apply scaling to the configured pool backend when one is present."""
+        if self._pool_manager is None:
+            logger.info(
+                "No pool manager configured; recording in-memory scaling state for %s",
+                instance_key,
+            )
+            return
+
+        if not isinstance(self._pool_manager, ScalingPoolManager):
+            raise NotImplementedError(
+                "Auto-scaling requires pool_manager.scale_instances(instance_key, target_count)"
+            )
+
+        await self._pool_manager.scale_instances(instance_key, event.target_count)
+        logger.info(
+            "Scaled %s to %d instances (reason: %s)",
+            instance_key,
+            event.target_count,
+            event.reason.value,
+        )
 
     def _record_event(self, event: ScalingEvent) -> None:
         """Record scaling event."""

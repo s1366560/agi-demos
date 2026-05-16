@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, cast
@@ -52,10 +53,10 @@ from src.configuration.config import get_settings
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_current_user_from_header_or_query,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+    get_api_key_from_header,
     get_current_user_from_desktop_proxy,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -64,6 +65,7 @@ from src.infrastructure.adapters.secondary.persistence.models import User, UserP
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,8 @@ _PREVIEW_SESSION_QUERY_PARAM = "ms_preview_session"
 _PREVIEW_HOST_SUFFIX_ENV = "WORKSPACE_HTTP_PREVIEW_HOST_SUFFIX"
 _PREVIEW_SCHEME_ENV = "WORKSPACE_HTTP_PREVIEW_SCHEME"
 _PREVIEW_SESSION_TTL_ENV = "WORKSPACE_HTTP_PREVIEW_SESSION_TTL_SECONDS"
+_SANDBOX_PROXY_TOKEN_COOKIE_NAME = "sandbox_proxy_token"
+_SANDBOX_PROXY_AUTH_COOKIE_MAX_AGE_SECONDS = 3600
 
 
 # ============================================================================
@@ -98,8 +102,26 @@ async def verify_project_access(
     if not result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to project",
+            detail=_("Access denied to project"),
         )
+
+
+def _set_sandbox_proxy_auth_cookie(
+    response: Response,
+    request: Request,
+    project_id: str,
+    api_key: str,
+) -> None:
+    """Seed a scoped auth cookie for browser iframe and WebSocket proxy requests."""
+    response.set_cookie(
+        key=_SANDBOX_PROXY_TOKEN_COOKIE_NAME,
+        value=api_key,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",
+        max_age=_SANDBOX_PROXY_AUTH_COOKIE_MAX_AGE_SECONDS,
+        path=f"/api/v1/projects/{project_id}/sandbox",
+    )
 
 
 # ============================================================================
@@ -315,6 +337,13 @@ class HttpServicePreviewSessionResponse(BaseModel):
     expires_in_seconds: int
 
 
+class SandboxProxyAuthCookieResponse(BaseModel):
+    """Response after seeding the sandbox proxy authentication cookie."""
+
+    success: bool
+    expires_in_seconds: int
+
+
 class HttpServiceProxyInfo(BaseModel):
     """Internal HTTP service registry record."""
 
@@ -492,11 +521,11 @@ def _normalize_http_service_id(service_id: str | None) -> str:
     if service_id:
         normalized = service_id.strip()
         if not normalized:
-            raise HTTPException(status_code=400, detail="service_id cannot be empty")
+            raise HTTPException(status_code=400, detail=_("service_id cannot be empty"))
         if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", normalized):
             raise HTTPException(
                 status_code=400,
-                detail="service_id contains invalid characters",
+                detail=_("service_id contains invalid characters"),
             )
         return normalized
     return f"http-{uuid4().hex[:12]}"
@@ -516,7 +545,7 @@ def _validate_external_http_url(url: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(
             status_code=400,
-            detail="external_url must be a valid http/https URL",
+            detail=_("external_url must be a valid http/https URL"),
         )
     return url.strip()
 
@@ -690,7 +719,7 @@ async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: 
     """Resolve Docker bridge IP for a sandbox container."""
     docker_client = getattr(adapter, "_docker", None)
     if docker_client is None:
-        raise HTTPException(status_code=500, detail="Sandbox adapter Docker client unavailable")
+        raise HTTPException(status_code=500, detail=_("Sandbox adapter Docker client unavailable"))
 
     try:
         loop = asyncio.get_running_loop()
@@ -711,7 +740,7 @@ async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: 
 
     raise HTTPException(
         status_code=503,
-        detail=f"Unable to resolve sandbox network address for {sandbox_id}",
+        detail=_(f"Unable to resolve sandbox network address for {sandbox_id}"),
     )
 
 
@@ -1262,10 +1291,31 @@ async def get_project_sandbox(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=f"No sandbox found for project {project_id}. Use POST to create one.",
+            detail=_(f"No sandbox found for project {project_id}. Use POST to create one."),
         )
 
     return ProjectSandboxResponse.from_info(info)
+
+
+@router.post(
+    "/{project_id}/sandbox/proxy-auth-cookie",
+    response_model=SandboxProxyAuthCookieResponse,
+)
+async def seed_project_sandbox_proxy_auth_cookie(
+    project_id: str,
+    request: Request,
+    response: Response,
+    api_key: str = Depends(get_api_key_from_header),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SandboxProxyAuthCookieResponse:
+    """Seed a scoped HttpOnly cookie for sandbox iframe and WebSocket proxy auth."""
+    await verify_project_access(project_id, current_user, db)
+    _set_sandbox_proxy_auth_cookie(response, request, project_id, api_key)
+    return SandboxProxyAuthCookieResponse(
+        success=True,
+        expires_in_seconds=_SANDBOX_PROXY_AUTH_COOKIE_MAX_AGE_SECONDS,
+    )
 
 
 @router.post("/{project_id}/sandbox", response_model=ProjectSandboxResponse)
@@ -1293,7 +1343,7 @@ async def ensure_project_sandbox(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid profile: {request.profile}. Use: lite, standard, full",
+                detail=_(f"Invalid profile: {request.profile}. Use: lite, standard, full"),
             ) from None
 
     try:
@@ -1345,7 +1395,7 @@ async def ensure_project_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to ensure sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create sandbox: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to create sandbox: {e!s}")) from e
 
 
 @router.get("/{project_id}/sandbox/health", response_model=HealthCheckResponse)
@@ -1365,7 +1415,7 @@ async def check_project_sandbox_health(
         if not info:
             raise HTTPException(
                 status_code=404,
-                detail=f"No sandbox found for project {project_id}",
+                detail=_(f"No sandbox found for project {project_id}"),
             )
 
         return HealthCheckResponse(
@@ -1380,7 +1430,7 @@ async def check_project_sandbox_health(
         raise
     except Exception as e:
         logger.error(f"Health check failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Health check failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Health check failed: {e!s}")) from e
 
 
 @router.get("/{project_id}/sandbox/stats", response_model=SandboxStatsResponse)
@@ -1403,7 +1453,7 @@ async def get_project_sandbox_stats(
         if not info:
             raise HTTPException(
                 status_code=404,
-                detail=f"No sandbox found for project {project_id}",
+                detail=_(f"No sandbox found for project {project_id}"),
             )
 
         # Get stats from the adapter (pass project_id as fallback for container lookup)
@@ -1442,7 +1492,7 @@ async def get_project_sandbox_stats(
         raise
     except Exception as e:
         logger.error(f"Failed to get sandbox stats for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Stats query failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Stats query failed: {e!s}")) from e
 
 
 @router.post("/{project_id}/sandbox/execute", response_model=ExecuteToolResponse)
@@ -1476,7 +1526,7 @@ async def execute_tool_in_project_sandbox(
 
     except Exception as e:
         logger.error(f"Tool execution failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Execution failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Execution failed: {e!s}")) from e
 
 
 @router.post("/{project_id}/sandbox/restart", response_model=SandboxActionResponse)
@@ -1537,7 +1587,7 @@ async def restart_project_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to restart sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Restart failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Restart failed: {e!s}")) from e
 
 
 @router.delete("/{project_id}/sandbox", response_model=SandboxActionResponse)
@@ -1557,7 +1607,7 @@ async def terminate_project_sandbox(
         if not success:
             raise HTTPException(
                 status_code=404,
-                detail=f"No sandbox found for project {project_id}",
+                detail=_(f"No sandbox found for project {project_id}"),
             )
 
         # Publish event via Redis Stream (for SSE subscribers)
@@ -1600,7 +1650,7 @@ async def terminate_project_sandbox(
         raise
     except Exception as e:
         logger.error(f"Failed to terminate sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Termination failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Termination failed: {e!s}")) from e
 
 
 @router.get("/{project_id}/sandbox/sync", response_model=ProjectSandboxResponse)
@@ -1622,7 +1672,7 @@ async def sync_project_sandbox_status(
 
     except Exception as e:
         logger.error(f"Failed to sync sandbox status for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Sync failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Sync failed: {e!s}")) from e
 
 
 # ============================================================================
@@ -1648,7 +1698,7 @@ async def list_project_sandboxes(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid status: {status}",
+                detail=_(f"Invalid status: {status}"),
             ) from None
 
     sandboxes = await service.list_project_sandboxes(
@@ -1678,7 +1728,7 @@ async def cleanup_stale_sandboxes(
     if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privileges required",
+            detail=_("Admin privileges required"),
         )
 
     terminated = await service.cleanup_stale_sandboxes(
@@ -1732,7 +1782,7 @@ async def start_project_desktop(
 
     except Exception as e:
         logger.error(f"Failed to start desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to start desktop: {e!s}")) from e
 
 
 @router.delete("/{project_id}/sandbox/desktop")
@@ -1748,7 +1798,7 @@ async def stop_project_desktop(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=f"No sandbox found for project {project_id}",
+            detail=_(f"No sandbox found for project {project_id}"),
         )
 
     try:
@@ -1757,7 +1807,7 @@ async def stop_project_desktop(
 
     except Exception as e:
         logger.error(f"Failed to stop desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to stop desktop: {e!s}")) from e
 
 
 @router.post("/{project_id}/sandbox/terminal")
@@ -1789,7 +1839,7 @@ async def start_project_terminal(
 
     except Exception as e:
         logger.error(f"Failed to start terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to start terminal: {e!s}")) from e
 
 
 @router.delete("/{project_id}/sandbox/terminal")
@@ -1805,7 +1855,7 @@ async def stop_project_terminal(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=f"No sandbox found for project {project_id}",
+            detail=_(f"No sandbox found for project {project_id}"),
         )
 
     try:
@@ -1814,7 +1864,7 @@ async def stop_project_terminal(
 
     except Exception as e:
         logger.error(f"Failed to stop terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to stop terminal: {e!s}")) from e
 
 
 # ============================================================================
@@ -1851,7 +1901,7 @@ async def register_project_http_service(
             if request.internal_port is None:
                 raise HTTPException(
                     status_code=400,
-                    detail="internal_port is required for sandbox_internal services",
+                    detail=_("internal_port is required for sandbox_internal services"),
                 )
 
             info = await service.ensure_sandbox_running(project_id=project_id, tenant_id=tenant_id)
@@ -1867,7 +1917,7 @@ async def register_project_http_service(
             if not request.external_url:
                 raise HTTPException(
                     status_code=400,
-                    detail="external_url is required for external_url services",
+                    detail=_("external_url is required for external_url services"),
                 )
             service_url = _validate_external_http_url(request.external_url)
             preview_url = service_url
@@ -2032,7 +2082,7 @@ async def create_project_http_service_preview_session(
     if not service_info:
         raise HTTPException(
             status_code=404,
-            detail=f"HTTP service {service_id} not found for project {project_id}",
+            detail=_(f"HTTP service {service_id} not found for project {project_id}"),
         )
 
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
@@ -2071,7 +2121,7 @@ async def stop_project_http_service(
     if not removed:
         raise HTTPException(
             status_code=404,
-            detail=f"HTTP service {service_id} not found for project {project_id}",
+            detail=_(f"HTTP service {service_id} not found for project {project_id}"),
         )
 
     removed.status = "stopped"
@@ -2449,13 +2499,13 @@ async def proxy_project_http_service(
     if not service_info:
         raise HTTPException(
             status_code=404,
-            detail=f"HTTP service {service_id} not found for project {project_id}",
+            detail=_(f"HTTP service {service_id} not found for project {project_id}"),
         )
 
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
         raise HTTPException(
             status_code=400,
-            detail="HTTP proxy is only available for sandbox_internal services",
+            detail=_("HTTP proxy is only available for sandbox_internal services"),
         )
 
     import httpx
@@ -2468,6 +2518,7 @@ async def proxy_project_http_service(
     try:
         body = await request.body()
         headers = _filter_proxy_headers(request.headers)
+        upstream_headers: Mapping[str, str]
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=2.0),
@@ -2529,6 +2580,7 @@ async def proxy_project_http_service(
             )
 
         if cookie_seed_token:
+            _set_sandbox_proxy_auth_cookie(response_obj, request, project_id, cookie_seed_token)
             response_obj.set_cookie(
                 key="desktop_token",
                 value=cookie_seed_token,
@@ -2554,7 +2606,7 @@ async def proxy_project_http_service(
         )
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to connect to HTTP service {service_id}: {error_detail}",
+            detail=_(f"Failed to connect to HTTP service {service_id}: {error_detail}"),
         ) from e
 
 
@@ -2658,19 +2710,19 @@ async def proxy_project_http_service_preview_host(
     """
     route = _parse_http_preview_host(request.headers.get("host", ""))
     if not route:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail=_("Not found"))
     project_id, service_label = route
 
     service_info = await _get_http_service_by_preview_label(project_id, service_label, redis_client)
     if not service_info:
         raise HTTPException(
             status_code=404,
-            detail=f"HTTP service {service_label} not found for project {project_id}",
+            detail=_(f"HTTP service {service_label} not found for project {project_id}"),
         )
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
         raise HTTPException(
             status_code=400,
-            detail="HTTP preview host is only available for sandbox_internal services",
+            detail=_("HTTP preview host is only available for sandbox_internal services"),
         )
 
     query_token = request.query_params.get(_PREVIEW_SESSION_QUERY_PARAM)
@@ -2681,7 +2733,7 @@ async def proxy_project_http_service_preview_host(
         service_id=service_info.service_id,
     )
     if not session:
-        raise HTTPException(status_code=401, detail="Preview session is missing or expired")
+        raise HTTPException(status_code=401, detail=_("Preview session is missing or expired"))
 
     if query_token:
         response = RedirectResponse(_clean_preview_session_url(str(request.url)), status_code=302)
@@ -2708,6 +2760,7 @@ async def proxy_project_http_service_preview_host(
     try:
         body = await request.body()
         headers = _filter_proxy_headers(request.headers)
+        upstream_headers: Mapping[str, str]
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=2.0),
@@ -2775,7 +2828,7 @@ async def proxy_project_http_service_preview_host(
         )
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to connect to HTTP service {service_info.service_id}: {error_detail}",
+            detail=_(f"Failed to connect to HTTP service {service_info.service_id}: {error_detail}"),
         ) from e
 
 
@@ -2877,13 +2930,13 @@ async def proxy_project_desktop(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=f"No sandbox found for project {project_id}",
+            detail=_(f"No sandbox found for project {project_id}"),
         )
 
     if not info.desktop_url:
         raise HTTPException(
             status_code=503,
-            detail=f"Desktop service is not running for project {project_id}",
+            detail=_(f"Desktop service is not running for project {project_id}"),
         )
 
     # Build target URL from the desktop service URL
@@ -2929,6 +2982,7 @@ async def proxy_project_desktop(
             # Set auth cookie on initial request (when token in query param)
             # so subsequent asset requests (CSS/JS/SVG) are authenticated
             if token_param:
+                _set_sandbox_proxy_auth_cookie(response_obj, request, project_id, token_param)
                 response_obj.set_cookie(
                     key="desktop_token",
                     value=token_param,
@@ -2944,7 +2998,7 @@ async def proxy_project_desktop(
         logger.error(f"Failed to proxy desktop request to {target_url}: {error_detail}")
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to connect to desktop service at {target_url}: {error_detail}",
+            detail=_(f"Failed to connect to desktop service at {target_url}: {error_detail}"),
         ) from e
 
 
@@ -2952,7 +3006,7 @@ async def proxy_project_desktop(
 async def proxy_project_desktop_websocket(
     websocket: WebSocket,
     project_id: str,
-    current_user: User = Depends(get_current_user_from_header_or_query),
+    current_user: User = Depends(get_current_user_from_desktop_proxy),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox desktop (KasmVNC).
@@ -3014,7 +3068,7 @@ async def proxy_project_terminal_websocket(
     websocket: WebSocket,
     project_id: str,
     session_id: str | None = None,
-    current_user: User = Depends(get_current_user_from_header_or_query),
+    current_user: User = Depends(get_current_user_from_desktop_proxy),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox terminal service.
@@ -3101,7 +3155,7 @@ async def proxy_project_terminal_websocket(
 async def proxy_project_mcp_websocket(
     websocket: WebSocket,
     project_id: str,
-    current_user: User = Depends(get_current_user_from_header_or_query),
+    current_user: User = Depends(get_current_user_from_desktop_proxy),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox MCP server.

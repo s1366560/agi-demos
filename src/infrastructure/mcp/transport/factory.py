@@ -122,16 +122,15 @@ class TransportFactory:
 
         # Import and register built-in transports
         from src.infrastructure.mcp.transport.http import HTTPTransport
+        from src.infrastructure.mcp.transport.sse import SSETransport
         from src.infrastructure.mcp.transport.stdio import StdioTransport
         from src.infrastructure.mcp.transport.websocket import WebSocketTransport
 
         self.register(TransportType.LOCAL, StdioTransport)
         self.register(TransportType.STDIO, StdioTransport)
         self.register(TransportType.HTTP, HTTPTransport)
+        self.register(TransportType.SSE, SSETransport)
         self.register(TransportType.WEBSOCKET, WebSocketTransport)
-
-        # SSE uses the existing implementation from agent/mcp/client.py
-        # Will be added when extracted
 
     def get_supported_types(self) -> list[str]:
         """Get list of supported transport type strings."""

@@ -22,6 +22,14 @@ class _StubTask:
         self.cancelled = True
 
 
+class _AcceptingWebSocket:
+    def __init__(self) -> None:
+        self.accepted_subprotocol: str | None = None
+
+    async def accept(self, *, subprotocol: str | None = None) -> None:
+        self.accepted_subprotocol = subprotocol
+
+
 def _make_task_with_bridge_message_id(message_id: str) -> _StubTask:
     task = _StubTask(done=False)
     task._bridge_message_id = message_id  # type: ignore[attr-defined]
@@ -30,6 +38,23 @@ def _make_task_with_bridge_message_id(message_id: str) -> _StubTask:
 
 def _task_factory(task: _StubTask) -> Callable[[], _StubTask]:
     return lambda: task
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_accepts_selected_subprotocol() -> None:
+    manager = ConnectionManager()
+    websocket = _AcceptingWebSocket()
+
+    await manager.connect(
+        "user-1",
+        "session-1",
+        websocket,  # type: ignore[arg-type]
+        subprotocol="memstack.auth",
+    )
+
+    assert websocket.accepted_subprotocol == "memstack.auth"
+    assert manager.active_connections["session-1"] is websocket
 
 
 @pytest.mark.unit

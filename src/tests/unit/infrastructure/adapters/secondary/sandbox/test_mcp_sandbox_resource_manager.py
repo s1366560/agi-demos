@@ -5,11 +5,13 @@ TDD: Tests written first (RED phase).
 
 import asyncio
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
+from src.infrastructure.adapters.secondary.sandbox import mcp_sandbox_adapter as adapter_mod
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
     MCPSandboxInstance,
@@ -107,6 +109,35 @@ class TestSandboxConcurrencyLimit:
 
         assert adapter.has_pending_requests() is True
 
+    def test_rebuild_config_injects_platform_validation_environment(
+        self,
+        adapter,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Rebuilt containers should keep platform token validation credentials."""
+        monkeypatch.setattr(
+            adapter_mod,
+            "get_settings",
+            lambda: SimpleNamespace(
+                sandbox_platform_url="http://platform",
+                sandbox_service_token="service-secret",
+                sandbox_pip_cache_enabled=False,
+            ),
+        )
+
+        config = SandboxConfig(image="sandbox-mcp-server:latest")
+        container_config = adapter._build_rebuild_container_config(
+            sandbox_id="sandbox-1",
+            config=config,
+            old_ports=[8765, 6080, 7681],
+            project_path="/tmp/workspace",
+            labels={},
+        )
+
+        environment = container_config["environment"]
+        assert environment["MEMSTACK_PLATFORM_URL"] == "http://platform"
+        assert environment["MEMSTACK_PLATFORM_SERVICE_TOKEN"] == "service-secret"
+
     @pytest.mark.asyncio
     async def test_process_pending_queue_creates_sandbox_when_slot_available(self, adapter):
         """Test that process_pending_queue creates sandbox when slot opens."""
@@ -131,6 +162,36 @@ class TestSandboxConcurrencyLimit:
             tenant_id="test-tenant",
         )
         assert len(adapter._pending_queue) == 0
+
+
+class TestSandboxAdapterClose:
+    """Test process-local sandbox adapter cleanup."""
+
+    @pytest.mark.asyncio
+    async def test_close_disconnects_mcp_clients_without_removing_sandboxes(self):
+        """Close should release websocket resources but keep recoverable sandbox state."""
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"
+        ):
+            adapter = MCPSandboxAdapter()
+
+        mock_client = Mock()
+        mock_client.disconnect = AsyncMock()
+        adapter._active_sandboxes["test-1"] = Mock(
+            id="test-1",
+            status=SandboxStatus.RUNNING,
+            mcp_client=mock_client,
+        )
+        adapter._cleanup_task = asyncio.create_task(asyncio.sleep(60))
+        adapter._health_check_task = asyncio.create_task(asyncio.sleep(60))
+
+        await adapter.close()
+
+        mock_client.disconnect.assert_awaited_once()
+        assert "test-1" in adapter._active_sandboxes
+        assert adapter._active_sandboxes["test-1"].mcp_client is None
+        assert adapter._cleanup_task is None
+        assert adapter._health_check_task is None
 
 
 class TestSandboxAutoCleanup:

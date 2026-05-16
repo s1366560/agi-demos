@@ -256,7 +256,7 @@ class OnDemandBackend(Backend):
         """
         return list(self._instances.values())
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         instance_id: str,
         request: ChatRequest,

@@ -10,7 +10,10 @@ from src.infrastructure.adapters.secondary.persistence.models import AgentDefini
 from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
     SqlAgentRegistryRepository,
 )
-from src.infrastructure.agent.sisyphus.builtin_agent import build_builtin_sisyphus_agent
+from src.infrastructure.agent.sisyphus.builtin_agent import (
+    build_builtin_sisyphus_agent,
+    list_builtin_agents,
+)
 
 
 def _build_custom_agent(agent_id: str, name: str, tenant_id: str):
@@ -57,22 +60,20 @@ class TestSqlAgentRegistryRepository:
         repo._to_domain = MagicMock(  # type: ignore[method-assign]
             side_effect=[
                 _build_custom_agent("custom-1", "custom-one", "tenant-1"),
-                _build_custom_agent("custom-1", "custom-one", "tenant-1"),
                 _build_custom_agent("custom-2", "custom-two", "tenant-1"),
             ]
         )
+        builtin_ids = [agent.id for agent in list_builtin_agents(tenant_id="tenant-1")]
 
-        first_result = MagicMock()
-        first_result.scalars.return_value.all.return_value = ["row-1"]
-        second_result = MagicMock()
-        second_result.scalars.return_value.all.return_value = ["row-1", "row-2"]
-        repo._session.execute.side_effect = [first_result, second_result]
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = ["row-1", "row-2"]
+        repo._session.execute.return_value = result
 
         first_page = await repo.list_by_tenant("tenant-1", limit=2, offset=0)
-        second_page = await repo.list_by_tenant("tenant-1", limit=2, offset=1)
+        database_page = await repo.list_by_tenant("tenant-1", limit=2, offset=len(builtin_ids))
 
-        assert [agent.id for agent in first_page] == ["builtin:sisyphus", "custom-1"]
-        assert [agent.id for agent in second_page] == ["custom-1", "custom-2"]
+        assert [agent.id for agent in first_page] == builtin_ids[:2]
+        assert [agent.id for agent in database_page] == ["custom-1", "custom-2"]
 
     @pytest.mark.asyncio
     async def test_list_by_project_prefers_builtin_when_legacy_db_name_collides(self) -> None:
@@ -89,7 +90,11 @@ class TestSqlAgentRegistryRepository:
 
         agents = await repo.list_by_project("proj-1", tenant_id="tenant-1")
 
-        assert [agent.id for agent in agents] == ["builtin:sisyphus", "custom-1"]
+        builtin_ids = [
+            agent.id
+            for agent in list_builtin_agents(tenant_id="tenant-1", project_id="proj-1")
+        ]
+        assert [agent.id for agent in agents] == [*builtin_ids, "custom-1"]
 
     @pytest.mark.asyncio
     async def test_get_by_id_refreshes_existing_identity_map_rows(

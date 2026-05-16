@@ -118,8 +118,11 @@ class ProviderAdapterRegistry:
 
         # Build LLMConfig if not provided
         if llm_config is None:
+            model_name = provider_config.llm_model
+            if model_name is None:
+                raise ValueError("llm_model is required to create an LLM adapter")
             llm_config = LLMConfig(
-                model=provider_config.llm_model,
+                model=model_name,
                 temperature=provider_config.temperature,  # type: ignore[attr-defined]
             )
 

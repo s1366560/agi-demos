@@ -8,7 +8,7 @@ This model represents a pre-generated plan for complex query execution.
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, NoReturn
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -34,6 +34,29 @@ class ExecutionPlanStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlanSnapshot:
+    """Immutable snapshot of an execution plan for rollback or audit."""
+
+    snapshot_id: str
+    plan_id: str
+    name: str
+    description: str | None
+    plan_state: dict[str, Any]
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert snapshot to dictionary for serialization."""
+        return {
+            "snapshot_id": self.snapshot_id,
+            "plan_id": self.plan_id,
+            "name": self.name,
+            "description": self.description,
+            "plan_state": self.plan_state,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 @dataclass(frozen=True)
@@ -283,12 +306,16 @@ class ExecutionPlan(Entity):
                 return step
         return None
 
-    def create_snapshot(self, name: str, description: str | None = None) -> NoReturn:
-        """Create a snapshot of current plan state for rollback.
-
-        Note: Plan snapshot system is being refactored.
-        """
-        raise NotImplementedError("Plan snapshot system is being refactored")
+    def create_snapshot(self, name: str, description: str | None = None) -> "ExecutionPlan":
+        """Create a snapshot of current plan state for rollback."""
+        snapshot = PlanSnapshot(
+            snapshot_id=Entity.generate_id(),
+            plan_id=self.id,
+            name=name,
+            description=description,
+            plan_state=self.to_dict(),
+        )
+        return replace(self, snapshot=snapshot)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert plan to dictionary for serialization."""

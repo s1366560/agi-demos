@@ -18,7 +18,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
 
@@ -179,6 +179,7 @@ class LocalSandboxAdapter(SandboxPort):
         tenant_id: str,
         local_config: LocalSandboxConfig,
         auth_token: str | None = None,
+        sandbox_id: str | None = None,
     ) -> LocalSandboxConnection:
         """
         Connect to a local sandbox via tunnel URL.
@@ -195,7 +196,7 @@ class LocalSandboxAdapter(SandboxPort):
         Raises:
             ConnectionError: If connection fails
         """
-        sandbox_id = f"local-{project_id}-{uuid4().hex[:8]}"
+        sandbox_id = sandbox_id or f"local-{project_id}-{uuid4().hex[:8]}"
 
         # Get the WebSocket URL
         ws_url = local_config.get_websocket_url()
@@ -424,12 +425,59 @@ class LocalSandboxAdapter(SandboxPort):
 
         Note: For local sandboxes, the sandbox is already running on user's machine.
         This method connects to it rather than creating a new container.
-
-        For actual sandbox creation, use connect_to_local_sandbox() directly.
         """
-        raise NotImplementedError(
-            "LocalSandboxAdapter does not create sandboxes. "
-            "Use connect_to_local_sandbox() to connect to an existing local sandbox."
+        local_config = self._local_config_from_sandbox_config(
+            project_path=project_path,
+            config=config,
+        )
+        connection = await self.connect_to_local_sandbox(
+            project_id=project_id or "default",
+            tenant_id=tenant_id or "default",
+            local_config=local_config,
+            auth_token=local_config.auth_token,
+            sandbox_id=sandbox_id,
+        )
+        instance = await self.get_sandbox(connection.sandbox_id)
+        assert instance is not None
+        return instance
+
+    @staticmethod
+    def _local_config_from_sandbox_config(
+        *,
+        project_path: str,
+        config: SandboxConfig | None,
+    ) -> LocalSandboxConfig:
+        environment = config.environment if config is not None else {}
+
+        def first_value(*keys: str) -> str | None:
+            for key in keys:
+                value = environment.get(key)
+                if value:
+                    return value
+            return None
+
+        port_raw = first_value("LOCAL_SANDBOX_PORT", "SANDBOX_LOCAL_PORT", "port")
+        port = int(port_raw) if port_raw else 8765
+        return LocalSandboxConfig(
+            workspace_path=first_value(
+                "LOCAL_SANDBOX_WORKSPACE_PATH",
+                "SANDBOX_LOCAL_WORKSPACE_PATH",
+                "workspace_path",
+            )
+            or project_path,
+            tunnel_url=first_value(
+                "LOCAL_SANDBOX_TUNNEL_URL",
+                "SANDBOX_LOCAL_TUNNEL_URL",
+                "SANDBOX_TUNNEL_URL",
+                "tunnel_url",
+            ),
+            host=first_value("LOCAL_SANDBOX_HOST", "SANDBOX_LOCAL_HOST", "host") or "localhost",
+            port=port,
+            auth_token=first_value(
+                "LOCAL_SANDBOX_AUTH_TOKEN",
+                "SANDBOX_LOCAL_AUTH_TOKEN",
+                "auth_token",
+            ),
         )
 
     async def get_sandbox(self, sandbox_id: str) -> SandboxInstance | None:
@@ -467,6 +515,24 @@ class LocalSandboxAdapter(SandboxPort):
         del self._connections[sandbox_id]
         logger.info(f"Disconnected from local sandbox {sandbox_id}")
         return True
+
+    async def cleanup_expired(
+        self,
+        max_age_seconds: int = 3600,
+    ) -> int:
+        """Clean up non-running local connections older than max_age_seconds."""
+        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
+        expired_ids = [
+            conn.sandbox_id
+            for conn in self._connections.values()
+            if conn.created_at < cutoff and conn.status != SandboxStatus.RUNNING
+        ]
+
+        cleaned = 0
+        for sandbox_id in expired_ids:
+            if await self.terminate_sandbox(sandbox_id):
+                cleaned += 1
+        return cleaned
 
     async def execute_code(
         self,
@@ -649,7 +715,73 @@ class LocalSandboxAdapter(SandboxPort):
             logger.error(f"Error writing file to local sandbox: {e}")
             return False
 
+    async def call_tool(
+        self,
+        sandbox_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        timeout: float = 60.0,
+        max_retries: int = 2,
+    ) -> dict[str, Any]:
+        """Call an MCP tool on a connected local sandbox."""
+        del max_retries
+        conn = self._connections.get(sandbox_id)
+        if not conn or not conn.client:
+            return {
+                "isError": True,
+                "content": [{"type": "text", "text": "Sandbox not connected"}],
+            }
+
+        try:
+            result = await asyncio.wait_for(
+                conn.client.call_tool(tool_name, arguments),
+                timeout=timeout,
+            )
+            conn.last_activity_at = datetime.now(UTC)
+            return cast(dict[str, Any], result)
+        except TimeoutError:
+            return {
+                "isError": True,
+                "content": [{"type": "text", "text": f"Tool timed out after {timeout:.1f}s"}],
+            }
+        except Exception as e:
+            logger.error(f"Error calling local sandbox tool {tool_name}: {e}")
+            return {
+                "isError": True,
+                "content": [{"type": "text", "text": str(e)}],
+            }
+
     # --- Local Sandbox Specific Methods ---
+
+    async def connect_mcp(self, sandbox_id: str, timeout: float | None = None) -> bool:
+        """Compatibility hook for lifecycle service; local sandboxes connect on create."""
+        del timeout
+        return self.is_connected(sandbox_id)
+
+    async def disconnect_mcp(self, sandbox_id: str) -> None:
+        """Disconnect the local MCP client without deleting the connection record."""
+        conn = self._connections.get(sandbox_id)
+        if not conn or not conn.client:
+            return
+        with contextlib.suppress(Exception):
+            await conn.client.disconnect()
+        conn.client = None
+        conn.status = SandboxStatus.STOPPED
+
+    async def container_exists(self, sandbox_id: str) -> bool:
+        """Return whether the local sandbox connection is currently running."""
+        return self.is_connected(sandbox_id)
+
+    async def cleanup_project_containers(self, project_id: str) -> int:
+        """Disconnect all local sandbox connections for a project."""
+        sandbox_ids = [
+            conn.sandbox_id for conn in self._connections.values() if conn.project_id == project_id
+        ]
+        cleaned = 0
+        for sandbox_id in sandbox_ids:
+            if await self.terminate_sandbox(sandbox_id):
+                cleaned += 1
+        return cleaned
 
     def get_connection(self, sandbox_id: str) -> LocalSandboxConnection | None:
         """Get a local sandbox connection by ID."""

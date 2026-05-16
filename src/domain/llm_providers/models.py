@@ -415,7 +415,7 @@ class ProviderConfigBase(BaseModel):
 
     # Pool / load-balancer routing -----------------------------------------
     pool_weight: float = Field(
-        1.0,
+        default=1.0,
         ge=0.0,
         description=(
             "Relative weight in the tenant model pool. Higher = more traffic "
@@ -423,7 +423,7 @@ class ProviderConfigBase(BaseModel):
         ),
     )
     pool_enabled: bool = Field(
-        True,
+        default=True,
         description=(
             "Whether this provider participates in the tenant LLM pool used "
             "by load-balancing / auto-routing. is_active stays the master "
@@ -431,7 +431,7 @@ class ProviderConfigBase(BaseModel):
         ),
     )
     model_tier: Literal["small", "medium", "large"] | None = Field(
-        None,
+        default=None,
         description=(
             "Optional capability tier hint. The auto-broker uses it to map a "
             "task verdict (complexity=small|medium|large) onto candidates."
@@ -503,7 +503,7 @@ class ProviderConfigUpdate(BaseModel):
     is_enabled: bool | None = None
     allowed_models: list[str] | None = None
     blocked_models: list[str] | None = None
-    pool_weight: float | None = Field(None, ge=0.0)
+    pool_weight: float | None = Field(default=None, ge=0.0)
     pool_enabled: bool | None = None
     model_tier: Literal["small", "medium", "large"] | None = None
     secondary_models: list[str] | None = None

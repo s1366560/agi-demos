@@ -23,6 +23,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_smtp_config_repository import (
     SqlSmtpConfigRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ async def delete_smtp_config(
     service = _build_service(db)
     config = await service.get_config(tenant_id)
     if config is None:
-        raise HTTPException(status_code=404, detail="SMTP config not found")
+        raise HTTPException(status_code=404, detail=_("SMTP config not found"))
     await service.delete_config(config.id)
     await db.commit()
 
@@ -120,6 +121,6 @@ async def test_smtp_config(
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"SMTP test failed: {exc}",
+            detail=_(f"SMTP test failed: {exc}"),
         ) from exc
     return {"message": "Test email sent successfully"}

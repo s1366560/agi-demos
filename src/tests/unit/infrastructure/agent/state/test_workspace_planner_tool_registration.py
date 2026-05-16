@@ -26,6 +26,7 @@ async def test_get_or_create_tools_exposes_planner_contract_without_agent_orches
         return None
 
     monkeypatch.setattr(agent_worker_state, "_get_or_create_builtin_tools", _empty_builtin_tools)
+    monkeypatch.setattr("src.infrastructure.agent.tools.define.get_registered_tools", dict)
     for name in (
         "_add_sandbox_tools",
         "_add_skill_loader_tool",

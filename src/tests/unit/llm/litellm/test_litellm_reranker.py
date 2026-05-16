@@ -11,7 +11,10 @@ from uuid import uuid4
 import pytest
 
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
-from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
+from src.infrastructure.llm.litellm.litellm_reranker import (
+    LiteLLMReranker,
+    LiteLLMRerankerConfig,
+)
 from src.infrastructure.llm.provider_credentials import NO_API_KEY_SENTINEL
 
 
@@ -268,6 +271,18 @@ class TestLiteLLMReranker:
 
         assert reranker._model == "kimi-rerank-1"
         assert reranker._get_litellm_model_name() == "openai/kimi-rerank-1"
+
+    def test_config_object_reranker_model_prefix(self):
+        """Lightweight reranker config should prefix models without provider_config state."""
+        reranker = LiteLLMReranker(
+            config=LiteLLMRerankerConfig(
+                provider_type=ProviderType.ZAI,
+                model="glm-4-flash",
+                api_key="sk-test-api-key",
+            )
+        )
+
+        assert reranker._get_litellm_model_name() == "zai/glm-4-flash"
 
     @pytest.mark.asyncio
     async def test_ollama_without_api_key_uses_default_base_url(self):

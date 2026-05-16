@@ -8,7 +8,7 @@ completion) remain swappable per call site.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from src.application.services.reflection_service import ReflectionService
 from src.domain.ports.repositories.friction_ledger import FrictionLedger
@@ -88,7 +88,10 @@ def build_litellm_reflector(litellm_client: Any) -> LLMReflector:  # noqa: ANN40
         response_format: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         del response_format  # not supported by LiteLLMClient.generate
-        return await litellm_client.generate(messages=messages)
+        result: object = await litellm_client.generate(messages=messages)
+        if isinstance(result, dict):
+            return cast(dict[str, Any], result)
+        return {"content": str(result)}
 
     return LLMReflector(completion=_completion)
 

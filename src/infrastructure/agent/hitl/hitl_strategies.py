@@ -7,6 +7,7 @@ Strategy pattern implementations for handling different HITL request types
 import logging
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from src.domain.model.agent.hitl_types import (
@@ -61,7 +62,7 @@ class HITLTypeStrategy(ABC):
     @abstractmethod
     def extract_response_value(
         self,
-        response_data: dict[str, Any],
+        response_data: object,
     ) -> Any:
         """Extract the usable response value from response data."""
 
@@ -142,7 +143,7 @@ class ClarificationStrategy(HITLTypeStrategy):
             default_value=sanitized_default_value,
         )
 
-    def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: object) -> Any:
         if isinstance(response_data, str):
             return sanitize_hitl_text(response_data) or ""
         if not isinstance(response_data, dict):
@@ -168,6 +169,75 @@ class ClarificationStrategy(HITLTypeStrategy):
         return ""
 
 
+def _decision_type_from_request_data(request_data: dict[str, Any]) -> DecisionType:
+    """Resolve the decision type from legacy and current request fields."""
+    selection_mode = request_data.get("selection_mode", "single")
+    if selection_mode == "multiple":
+        return DecisionType("multi_choice")
+    return DecisionType(request_data.get("decision_type", "single_choice"))
+
+
+def _decision_option_risk_level(option: dict[str, Any]) -> RiskLevel | None:
+    """Parse an optional risk level from a decision option."""
+    if not option.get("risk_level"):
+        return None
+    try:
+        return RiskLevel(option["risk_level"])
+    except ValueError:
+        return None
+
+
+def _sanitize_decision_option_risks(raw_risks: object) -> list[str]:
+    """Sanitize optional decision option risk descriptions."""
+    if not isinstance(raw_risks, list):
+        return []
+
+    sanitized_risks: list[str] = []
+    for raw_risk in raw_risks:
+        sanitized_risk = sanitize_hitl_text(raw_risk)
+        if sanitized_risk is not None:
+            sanitized_risks.append(sanitized_risk)
+    return sanitized_risks
+
+
+def _decision_option_from_mapping(
+    option: dict[str, Any],
+    fallback_index: int,
+) -> DecisionOption | None:
+    """Build a decision option from a mapping payload."""
+    label = sanitize_hitl_text(option.get("label", ""))
+    if label is None:
+        return None
+
+    option_id = str(option.get("id", str(fallback_index))).strip() or str(fallback_index)
+    return DecisionOption(
+        id=option_id,
+        label=label,
+        description=sanitize_hitl_text(option.get("description")),
+        recommended=option.get("recommended", False),
+        risk_level=_decision_option_risk_level(option),
+        estimated_time=sanitize_hitl_text(option.get("estimated_time")),
+        estimated_cost=sanitize_hitl_text(option.get("estimated_cost")),
+        risks=_sanitize_decision_option_risks(option.get("risks", [])),
+    )
+
+
+def _parse_decision_options(options_data: Iterable[Any]) -> list[DecisionOption]:
+    """Parse decision options while preserving legacy string-option support."""
+    options: list[DecisionOption] = []
+    for option_data in options_data:
+        if isinstance(option_data, dict):
+            option = _decision_option_from_mapping(option_data, len(options))
+            if option is not None:
+                options.append(option)
+            continue
+        if isinstance(option_data, str):
+            label = sanitize_hitl_text(option_data)
+            if label is not None:
+                options.append(DecisionOption(id=str(len(options)), label=label))
+    return options
+
+
 class DecisionStrategy(HITLTypeStrategy):
     """Strategy for decision requests."""
 
@@ -186,55 +256,8 @@ class DecisionStrategy(HITLTypeStrategy):
     ) -> HITLRequest:
         question = sanitize_hitl_text(request_data.get("question", "")) or ""
         options_data = request_data.get("options", []) or []
-        decision_type_str = request_data.get("decision_type", "single_choice")
-        selection_mode = request_data.get("selection_mode", "single")
-        if selection_mode == "multiple":
-            decision_type = DecisionType("multi_choice")
-        else:
-            decision_type = DecisionType(decision_type_str)
-
-        options: list[DecisionOption] = []
-        for opt in options_data:
-            if isinstance(opt, dict):
-                risk_level = None
-                if opt.get("risk_level"):
-                    try:
-                        risk_level = RiskLevel(opt["risk_level"])
-                    except ValueError:
-                        risk_level = None
-                label = sanitize_hitl_text(opt.get("label", ""))
-                if label is None:
-                    continue
-                sanitized_risks: list[str] = []
-                raw_risks = opt.get("risks", [])
-                if isinstance(raw_risks, list):
-                    for raw_risk in raw_risks:
-                        sanitized_risk = sanitize_hitl_text(raw_risk)
-                        if sanitized_risk is not None:
-                            sanitized_risks.append(sanitized_risk)
-
-                options.append(
-                    DecisionOption(
-                        id=str(opt.get("id", str(len(options)))).strip() or str(len(options)),
-                        label=label,
-                        description=sanitize_hitl_text(opt.get("description")),
-                        recommended=opt.get("recommended", False),
-                        risk_level=risk_level,
-                        estimated_time=sanitize_hitl_text(opt.get("estimated_time")),
-                        estimated_cost=sanitize_hitl_text(opt.get("estimated_cost")),
-                        risks=sanitized_risks,
-                    )
-                )
-            elif isinstance(opt, str):
-                label = sanitize_hitl_text(opt)
-                if label is None:
-                    continue
-                options.append(
-                    DecisionOption(
-                        id=str(len(options)),
-                        label=label,
-                    )
-                )
+        decision_type = _decision_type_from_request_data(request_data)
+        options = _parse_decision_options(options_data)
 
         # Auto-enable allow_custom when options are empty
         allow_custom = request_data.get("allow_custom", False)
@@ -258,7 +281,7 @@ class DecisionStrategy(HITLTypeStrategy):
             max_selections=request_data.get("max_selections"),
         )
 
-    def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: object) -> Any:
         if isinstance(response_data, str):
             return sanitize_hitl_text(response_data) or ""
         if not isinstance(response_data, dict):
@@ -369,10 +392,12 @@ class EnvVarStrategy(HITLTypeStrategy):
             allow_save=request_data.get("allow_save", True),
         )
 
-    def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: object) -> Any:
         if isinstance(response_data, str):
             return response_data
-        return response_data.get("values", response_data)
+        if isinstance(response_data, Mapping):
+            return response_data.get("values", response_data)
+        return response_data
 
     def get_default_response(self, request: HITLRequest) -> Any:
         return {}
@@ -423,9 +448,11 @@ class PermissionStrategy(HITLTypeStrategy):
             context=sanitize_hitl_context(request_data.get("context", {})),
         )
 
-    def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: object) -> Any:
         if isinstance(response_data, str):
             return response_data in ("allow", "allow_always")
+        if not isinstance(response_data, Mapping):
+            return False
         action = response_data.get("action", "deny")
         if isinstance(action, str) and action in {
             permission.value for permission in PermissionAction
@@ -506,7 +533,7 @@ class A2UIActionStrategy(HITLTypeStrategy):
             ),
         )
 
-    def extract_response_value(self, response_data: dict[str, Any]) -> Any:
+    def extract_response_value(self, response_data: object) -> Any:
         """Extract the action details from the frontend response.
 
         Expected shape from A2UISurfaceRenderer:

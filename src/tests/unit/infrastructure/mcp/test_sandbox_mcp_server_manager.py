@@ -180,6 +180,40 @@ class TestSandboxMCPServerManager:
         assert servers[1].name == "server2"
         assert servers[1].status == "stopped"
 
+    async def test_list_prompts_calls_sandbox_management_tool(self):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.return_value = self._tool_result(
+            [{"name": "review", "description": "Review code"}]
+        )
+
+        prompts = await mgr.list_prompts(project_id="proj-1", server_name="test-server")
+
+        assert prompts == [{"name": "review", "description": "Review code"}]
+        resource.execute_tool.assert_awaited_once_with(
+            project_id="proj-1",
+            tool_name="mcp_server_list_prompts",
+            arguments={"name": "test-server"},
+            timeout=15.0,
+        )
+
+    async def test_set_log_level_calls_sandbox_management_tool(self):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.return_value = self._tool_result({"success": True, "level": "debug"})
+
+        result = await mgr.set_log_level(
+            project_id="proj-1",
+            server_name="test-server",
+            level="debug",
+        )
+
+        assert result is True
+        resource.execute_tool.assert_awaited_once_with(
+            project_id="proj-1",
+            tool_name="mcp_server_set_log_level",
+            arguments={"name": "test-server", "level": "debug"},
+            timeout=15.0,
+        )
+
     async def test_parse_tool_result_json(self):
         mgr, _ = self._make_manager()
         result = mgr._parse_tool_result({"content": [{"type": "text", "text": '{"key": "value"}'}]})

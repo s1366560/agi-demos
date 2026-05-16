@@ -44,6 +44,7 @@ class TestSqlToolCompositionRepositoryCreate:
         result = await v2_composition_repo.save(composition)
 
         assert result.id == "comp-test-1"
+        assert result.tenant_id == "tenant-1"
         assert result.name == "test_composition"
 
     @pytest.mark.asyncio
@@ -135,6 +136,51 @@ class TestSqlToolCompositionRepositoryFind:
         assert result.id == "comp-name-1"
 
     @pytest.mark.asyncio
+    async def test_get_by_name_scopes_by_tenant(
+        self, v2_composition_repo: SqlToolCompositionRepository
+    ):
+        """Test getting a composition by name respects tenant scope."""
+        from src.domain.model.agent import ToolComposition
+
+        await v2_composition_repo.save(
+            ToolComposition(
+                id="comp-name-tenant-a",
+                tenant_id="tenant-a",
+                name="shared_name",
+                description="Tenant A",
+                project_id=None,
+                tools=["search"],
+                execution_template={},
+                success_count=0,
+                failure_count=0,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await v2_composition_repo.save(
+            ToolComposition(
+                id="comp-name-tenant-b",
+                tenant_id="tenant-b",
+                name="shared_name",
+                description="Tenant B",
+                project_id=None,
+                tools=["search"],
+                execution_template={},
+                success_count=0,
+                failure_count=0,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+
+        result = await v2_composition_repo.get_by_name("shared_name", tenant_id="tenant-b")
+
+        assert result is not None
+        assert result.id == "comp-name-tenant-b"
+
+    @pytest.mark.asyncio
     async def test_list_by_tools(self, v2_composition_repo: SqlToolCompositionRepository):
         """Test listing compositions that use specific tools."""
         from src.domain.model.agent import ToolComposition
@@ -195,6 +241,50 @@ class TestSqlToolCompositionRepositoryFind:
         assert len(results) == 2
 
     @pytest.mark.asyncio
+    async def test_list_by_tools_scopes_by_tenant(
+        self, v2_composition_repo: SqlToolCompositionRepository
+    ):
+        """Test listing compositions by tools respects tenant scope."""
+        from src.domain.model.agent import ToolComposition
+
+        await v2_composition_repo.save(
+            ToolComposition(
+                id="comp-tenant-tools-a",
+                tenant_id="tenant-a",
+                name="tenant_a_search",
+                description="Tenant A search",
+                project_id=None,
+                tools=["search"],
+                execution_template={},
+                success_count=0,
+                failure_count=0,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await v2_composition_repo.save(
+            ToolComposition(
+                id="comp-tenant-tools-b",
+                tenant_id="tenant-b",
+                name="tenant_b_search",
+                description="Tenant B search",
+                project_id=None,
+                tools=["search"],
+                execution_template={},
+                success_count=0,
+                failure_count=0,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+
+        results = await v2_composition_repo.list_by_tools(["search"], tenant_id="tenant-a")
+
+        assert [composition.id for composition in results] == ["comp-tenant-tools-a"]
+
+    @pytest.mark.asyncio
     async def test_list_all(self, v2_composition_repo: SqlToolCompositionRepository):
         """Test listing all compositions."""
         from src.domain.model.agent import ToolComposition
@@ -220,6 +310,39 @@ class TestSqlToolCompositionRepositoryFind:
         assert len(results) == 3
         # Should be ordered by usage_count desc
         assert results[0].usage_count >= results[1].usage_count
+
+    @pytest.mark.asyncio
+    async def test_to_domain_skips_empty_tools_without_dummy(
+        self, v2_db_session: AsyncSession, v2_composition_repo: SqlToolCompositionRepository
+    ):
+        """Test invalid empty tool lists are not converted with a fake dummy tool."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ToolComposition as DBToolComposition,
+        )
+
+        v2_db_session.add(
+            DBToolComposition(
+                id="comp-empty-tools",
+                tenant_id="tenant-1",
+                name="empty_tools",
+                description="Invalid empty tools",
+                tools=[],
+                execution_template={},
+                success_count=0,
+                failure_count=0,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await v2_db_session.flush()
+
+        result = await v2_composition_repo.get_by_id(
+            "comp-empty-tools",
+            tenant_id="tenant-1",
+        )
+
+        assert result is None
 
 
 class TestSqlToolCompositionRepositoryUpdateUsage:

@@ -89,7 +89,7 @@ class WorkspaceManifest:
             workspace_path: Absolute path to the workspace root directory.
         """
         manifest_path = Path(workspace_path) / MANIFEST_FILENAME
-        _ = manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
         data = self._to_dict()
         _ = manifest_path.write_text(

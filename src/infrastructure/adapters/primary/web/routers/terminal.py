@@ -27,6 +27,7 @@ from src.infrastructure.adapters.secondary.sandbox.terminal_proxy import (
     TerminalSession,
     get_terminal_proxy,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ async def create_terminal_session(
     # Verify sandbox exists
     sandbox = await adapter.get_sandbox(sandbox_id)
     if not sandbox:
-        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
+        raise HTTPException(status_code=404, detail=_(f"Sandbox not found: {sandbox_id}"))
 
     # Get container ID (sandbox_id is the container name)
     container_id = sandbox_id
@@ -147,7 +148,7 @@ async def create_terminal_session(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to create terminal session: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create terminal session") from e
+        raise HTTPException(status_code=500, detail=_("Failed to create terminal session")) from e
 
     # Emit terminal_started event
     if event_publisher:
@@ -214,7 +215,7 @@ async def close_terminal_session(
 
     session = proxy.get_session(session_id)
     if not session or session.container_id != sandbox_id:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail=_("Session not found"))
 
     success = await proxy.close_session(session_id)
 

@@ -7,6 +7,7 @@ into machine-readable denial contracts consumed by the agent_send tool.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -92,6 +93,10 @@ class SendDenied:
         }
 
 
+DenialPredicate = Callable[[str], bool]
+DenialRule = tuple[SendDeniedCode, DenialPredicate, list[str] | None]
+
+
 def _build_denial(
     *,
     code: SendDeniedCode,
@@ -173,7 +178,7 @@ def denial_code_from_error(
     """
     msg: str = exc.args[0] if exc.args else ""
 
-    for code, predicate, payload_allowlist in [
+    rules: list[DenialRule] = [
         (SendDeniedCode.SENDER_NOT_FOUND, lambda text: "Sender agent not found" in text, None),
         (SendDeniedCode.SENDER_DISABLED, lambda text: "Sender agent is disabled" in text, None),
         (
@@ -224,7 +229,8 @@ def denial_code_from_error(
             lambda text: "No active session found for agent" in text and "in project" in text,
             None,
         ),
-    ]:
+    ]
+    for code, predicate, payload_allowlist in rules:
         if predicate(msg):
             return _build_denial(
                 code=code,

@@ -13,6 +13,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_graphiti_client,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -148,15 +149,8 @@ async def export_data(
         return data
 
     except Exception as e:
-        logger.error(f"Failed to export data: {e}")
-        return {
-            "exported_at": datetime.now(UTC).isoformat(),
-            "tenant_id": tenant_id,
-            "episodes": [],
-            "entities": [],
-            "relationships": [],
-            "communities": [],
-        }
+        logger.exception("Failed to export data")
+        raise HTTPException(status_code=500, detail=_("Failed to export data")) from e
 
 
 @router.get("/stats")

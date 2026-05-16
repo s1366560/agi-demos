@@ -138,13 +138,20 @@ class MCPConnectionPool:
             if not connected:
                 raise ConnectionError(f"Failed to connect to {self._url}")
             return client
+        except asyncio.CancelledError:
+            await self._discard_failed_new_connection(client)
+            raise
         except Exception as e:
-            # If connection fails, release the semaphore and decrement count
-            self._semaphore.release()
-            async with self._lock:
-                self._created_count -= 1
-            await self._global_limiter.release(self._url)
+            await self._discard_failed_new_connection(client)
             raise ConnectionError(f"Failed to create connection: {e}") from e
+
+    async def _discard_failed_new_connection(self, client: MCPWebSocketClient) -> None:
+        """Release pool accounting for a newly created connection that failed."""
+        await client.disconnect()
+        self._semaphore.release()
+        async with self._lock:
+            self._created_count -= 1
+        await self._global_limiter.release(self._url)
 
     async def return_connection(self, client: MCPWebSocketClient) -> None:
         """Return a connection to the pool for reuse.

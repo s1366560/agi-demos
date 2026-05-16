@@ -52,6 +52,10 @@ EXTERNAL_ISSUE_KEYWORDS = (
     "connection error",
     "timed out",
     "invalid response object",
+    "notfounderror",
+    "invalidendpointormodel.notfound",
+    "does not exist or you do not have access",
+    "404",
 )
 
 

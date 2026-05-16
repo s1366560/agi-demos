@@ -113,7 +113,9 @@ class TestCompactContextStrategy:
     async def test_signals_compaction(self) -> None:
         """Should signal compaction with retry."""
         # Arrange
-        messages: list[dict[str, object]] = [{"role": "user", "content": f"msg-{i}"} for i in range(10)]
+        messages: list[dict[str, object]] = [
+            {"role": "user", "content": f"msg-{i}"} for i in range(10)
+        ]
         ctx = _make_context(
             error_type=ErrorType.LLM_CONTEXT_OVERFLOW,
             messages=messages,
@@ -156,8 +158,8 @@ class TestProviderFailoverStrategy:
         assert action.recovered is False
         assert action.should_retry is False
 
-    async def test_failover_to_provider(self) -> None:
-        """Should signal failover to a specific provider."""
+    async def test_configured_fallbacks_do_not_fake_switch(self) -> None:
+        """Should not claim failover when the strategy cannot switch providers."""
         # Arrange
         strategy = ProviderFailoverStrategy(
             fallback_providers=["openai", "anthropic"],
@@ -171,12 +173,12 @@ class TestProviderFailoverStrategy:
         action = await strategy.execute(ctx)
 
         # Assert
-        assert action.recovered is True
-        assert action.should_retry is True
-        assert "openai" in action.message
+        assert action.recovered is False
+        assert action.should_retry is False
+        assert "session recovery cannot switch providers" in action.message
 
-    async def test_failover_round_robin(self) -> None:
-        """Should round-robin through fallback providers."""
+    async def test_does_not_round_robin_without_real_failover_executor(self) -> None:
+        """Should avoid rotating provider names without applying a real failover."""
         # Arrange
         strategy = ProviderFailoverStrategy(
             fallback_providers=["openai", "anthropic"],
@@ -190,8 +192,9 @@ class TestProviderFailoverStrategy:
         action = await strategy.execute(ctx)
 
         # Assert
-        assert action.recovered is True
-        assert "anthropic" in action.message
+        assert action.recovered is False
+        assert action.should_retry is False
+        assert "anthropic" not in action.message
 
 
 @pytest.mark.unit

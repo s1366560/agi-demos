@@ -286,7 +286,7 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
             )
 
         except Exception as e:
-            logger.warning(f"[AgentMessageBus] Failed to parse message {msg_id}: {e}")
+            logger.warning("[AgentMessageBus] Failed to parse message %s: %s", msg_id, e)
             return None
 
 

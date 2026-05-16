@@ -555,7 +555,7 @@ class TaskExecutionSessionMonitor:
         incidents: list[TaskExecutionIncident] = []
         conversation_id = _conversation_id(task, attempt)
         error_event = _latest_error_event(events)
-        if _is_agent_initialization_failure(error_event):
+        if error_event is not None and _is_agent_initialization_failure(error_event):
             incidents.append(
                 TaskExecutionIncident(
                     type="agent_initialization_failed",

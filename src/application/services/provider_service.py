@@ -258,14 +258,6 @@ class ProviderService:
         normalized_provider_type = self._normalize_provider_type(provider_type)
         base_url = provider.base_url
 
-        # Providers that cannot be health-checked via HTTP
-        degraded_providers = {
-            "bedrock": "Bedrock health check not implemented, will be validated during usage",
-            "vertex": "Vertex AI health check not implemented, will be validated during usage",
-        }
-        if normalized_provider_type in degraded_providers:
-            return "degraded", degraded_providers[normalized_provider_type]
-
         # Providers with standard GET /models + Bearer auth
         bearer_providers: dict[str, str] = {
             "openai": "https://api.openai.com/v1",
@@ -311,6 +303,10 @@ class ProviderService:
         provider: ProviderConfig,
     ) -> tuple[str, str | None]:
         """Check providers with non-standard health check patterns."""
+        if provider_type == "bedrock":
+            return await self._check_bedrock_provider(api_key, provider)
+        if provider_type == "vertex":
+            return await self._check_vertex_provider(client, base_url, api_key, provider)
         if provider_type == "azure_openai" and not base_url:
             return "unhealthy", "Azure OpenAI requires a custom base URL"
         check_spec = self._build_special_check_spec(provider_type, base_url, api_key, provider)
@@ -360,6 +356,70 @@ class ProviderService:
             model = provider.llm_model or "gemini-pro"
             path_template = path_template.format(model=model)
         return f"{api_base}{path_template}", headers
+
+    @staticmethod
+    async def _check_bedrock_provider(
+        api_key: str,
+        provider: ProviderConfig,
+    ) -> tuple[str, str | None]:
+        """Check AWS Bedrock by listing foundation models with configured AWS credentials."""
+        config = provider.config or {}
+        secret_key = config.get("aws_secret_access_key") or config.get("secret_access_key")
+        if not secret_key:
+            return "unhealthy", "Bedrock health check requires aws_secret_access_key in config"
+
+        import aioboto3
+
+        region = str(
+            config.get("region_name")
+            or config.get("region")
+            or config.get("aws_region")
+            or "us-east-1"
+        )
+        session_token = config.get("aws_session_token") or config.get("session_token")
+        session_kwargs: dict[str, str] = {
+            "aws_access_key_id": api_key,
+            "aws_secret_access_key": str(secret_key),
+            "region_name": region,
+        }
+        if session_token:
+            session_kwargs["aws_session_token"] = str(session_token)
+
+        session = aioboto3.Session(**session_kwargs)
+        async with cast(Any, session.client("bedrock")) as bedrock_client:
+            await bedrock_client.list_foundation_models()
+        return "healthy", None
+
+    async def _check_vertex_provider(
+        self,
+        client: "httpx.AsyncClient",
+        base_url: str | None,
+        api_key: str,
+        provider: ProviderConfig,
+    ) -> tuple[str, str | None]:
+        """Check Vertex AI Model Garden with an OAuth access token."""
+        config = provider.config or {}
+        project_id = config.get("project_id") or config.get("project")
+        if not project_id:
+            return "unhealthy", "Vertex AI health check requires project_id in config"
+
+        access_token = config.get("access_token") or config.get("oauth_token")
+        if not access_token and api_key.startswith("ya29."):
+            access_token = api_key
+        if not access_token:
+            return "unhealthy", "Vertex AI health check requires an OAuth access_token in config"
+
+        location = str(config.get("location") or config.get("region") or "us-central1")
+        api_base = (base_url or f"https://{location}-aiplatform.googleapis.com/v1").rstrip("/")
+        url = (
+            f"{api_base}/projects/{project_id}/locations/{location}"
+            "/publishers/google/models"
+        )
+        return await self._http_health_check(
+            client,
+            url=url,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
 
     @staticmethod
     async def _http_health_check(

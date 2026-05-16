@@ -17,6 +17,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/tenants", tags=["billing"])
 
@@ -40,7 +41,7 @@ async def get_billing_info(
     user_tenant = user_tenant_result.scalar_one_or_none()
 
     if not user_tenant or user_tenant.role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Optional tenant info; fall back to defaults if not present
     tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
@@ -78,7 +79,7 @@ async def get_billing_info(
     if not tenant and not projects and not invoices:
         any_tenant = await db.execute(refresh_select_statement(select(func.count(Tenant.id))))
         if (any_tenant.scalar() or 0) == 0:
-            raise HTTPException(status_code=404, detail="Tenant not found")
+            raise HTTPException(status_code=404, detail=_("Tenant not found"))
 
     return {
         "tenant": {
@@ -86,7 +87,7 @@ async def get_billing_info(
             "name": None if not tenant else tenant.name,
             "plan": ("free" if not tenant else getattr(tenant, "plan", "free")),
             "storage_limit": (
-                10737418240 if not tenant else getattr(tenant, "storage_limit", 10737418240)
+                10737418240 if not tenant else getattr(tenant, "max_storage", 10737418240)
             ),
         },
         "usage": {
@@ -131,7 +132,7 @@ async def list_invoices(
     user_tenant = user_tenant_result.scalar_one_or_none()
 
     if not user_tenant or user_tenant.role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Optional existence; invoices can be listed by tenant_id regardless
     # Get invoices
@@ -178,7 +179,7 @@ async def upgrade_plan(
     user_tenant = user_tenant_result.scalar_one_or_none()
 
     if not user_tenant or user_tenant.role != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can upgrade plan")
+        raise HTTPException(status_code=403, detail=_("Only owner can upgrade plan"))
 
     # Existence after permission; allow auto-create only if system has tenants
     tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
@@ -187,7 +188,7 @@ async def upgrade_plan(
         # Check whether any tenant exists; if none, treat as not found
         any_tenant = await db.execute(refresh_select_statement(select(func.count(Tenant.id))))
         if (any_tenant.scalar() or 0) == 0:
-            raise HTTPException(status_code=404, detail="Tenant not found")
+            raise HTTPException(status_code=404, detail=_("Tenant not found"))
         # Auto-create minimal tenant record
         tenant = Tenant(
             id=tenant_id,
@@ -205,11 +206,11 @@ async def upgrade_plan(
 
     # Set limits based on plan
     if new_plan == "free":
-        tenant.storage_limit = 10 * 1024 * 1024 * 1024  # type: ignore[attr-defined]  # 10GB
+        tenant.max_storage = 10 * 1024 * 1024 * 1024  # 10GB
     elif new_plan == "pro":
-        tenant.storage_limit = 100 * 1024 * 1024 * 1024  # type: ignore[attr-defined]  # 100GB
+        tenant.max_storage = 100 * 1024 * 1024 * 1024  # 100GB
     elif new_plan == "enterprise":
-        tenant.storage_limit = 1024 * 1024 * 1024 * 1024  # type: ignore[attr-defined]  # 1TB
+        tenant.max_storage = 1024 * 1024 * 1024 * 1024  # 1TB
 
     await db.commit()
     await db.refresh(tenant)
@@ -220,6 +221,6 @@ async def upgrade_plan(
             "id": tenant.id,
             "name": tenant.name,
             "plan": getattr(tenant, "plan", "free"),
-            "storage_limit": getattr(tenant, "storage_limit", 10737418240),
+            "storage_limit": getattr(tenant, "max_storage", 10737418240),
         },
     }

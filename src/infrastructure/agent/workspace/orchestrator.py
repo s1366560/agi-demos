@@ -15,6 +15,7 @@ future migrations can swap implementations without touching callers.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
@@ -23,6 +24,12 @@ from src.domain.model.workspace.workspace_task import (
 )
 
 from . import workspace_goal_runtime as _runtime
+
+if TYPE_CHECKING:
+    from src.application.services.workspace_task_command_service import WorkspaceTaskCommandService
+    from src.domain.ports.repositories.workspace.workspace_task_repository import (
+        WorkspaceTaskRepository,
+    )
 
 
 @dataclass(frozen=True)
@@ -132,8 +139,8 @@ class WorkspaceAutonomyOrchestrator:
         workspace_id: str,
         actor_user_id: str,
         root_task: WorkspaceTask,
-        task_repo: _runtime.SqlWorkspaceTaskRepository,
-        command_service: _runtime.WorkspaceTaskCommandService,
+        task_repo: WorkspaceTaskRepository,
+        command_service: WorkspaceTaskCommandService,
         leader_agent_id: str | None,
     ) -> WorkspaceTask | None:
         """Forward to :func:`workspace_goal_runtime.auto_complete_ready_root`."""
@@ -141,7 +148,7 @@ class WorkspaceAutonomyOrchestrator:
             workspace_id=workspace_id,
             actor_user_id=actor_user_id,
             root_task=root_task,
-            task_repo=task_repo,
+            task_repo=cast(Any, task_repo),
             command_service=command_service,
             leader_agent_id=leader_agent_id,
         )

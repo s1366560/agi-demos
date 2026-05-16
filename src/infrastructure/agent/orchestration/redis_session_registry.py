@@ -78,7 +78,7 @@ class RedisAgentSessionRegistry:
         try:
             pipe = self._redis.pipeline()
             pipe.setex(key, self._ttl, self._serialize(session))
-            pipe.sadd(index_key, compound)  # type: ignore[arg-type]
+            pipe.sadd(index_key, compound)
             await pipe.execute()
 
             logger.debug(
@@ -110,7 +110,7 @@ class RedisAgentSessionRegistry:
 
             pipe = self._redis.pipeline()
             pipe.delete(key)
-            pipe.srem(index_key, compound)  # type: ignore[arg-type]
+            pipe.srem(index_key, compound)
             await pipe.execute()
 
             return session

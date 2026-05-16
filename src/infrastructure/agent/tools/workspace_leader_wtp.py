@@ -32,9 +32,9 @@ from src.domain.events.agent_events import AgentMessageSentEvent
 from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpValidationError, WtpVerb
 from src.infrastructure.agent.orchestration.orchestrator import (
     AgentOrchestrator,
-    SendDenied,
     SendResult,
 )
+from src.infrastructure.agent.orchestration.send_denied import SendDenied
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult

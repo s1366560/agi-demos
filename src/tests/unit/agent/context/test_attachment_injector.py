@@ -156,7 +156,7 @@ class TestBuildAttachmentContext:
             )
         ]
         result = injector.build_attachment_context(metadata)
-        assert "沙箱路径" in result
+        assert "沙箱路径" in result or "Sandbox path" in result
         assert "cat" in result or "bash" in result
 
 

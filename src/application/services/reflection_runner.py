@@ -99,16 +99,21 @@ class ReflectionRunner:
         return await service.reflect_window(project_id)
 
     async def _loop(self) -> None:
-        while self._running:
+        while True:
+            if not self._is_running():
+                break
             try:
                 await asyncio.sleep(self._interval)
-                if not self._running:
+                if not self._is_running():
                     break
                 await self._sweep_once()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("ReflectionRunner sweep failed")
+
+    def _is_running(self) -> bool:
+        return self._running
 
     async def _sweep_once(self) -> None:
         try:

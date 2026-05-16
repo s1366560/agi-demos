@@ -172,6 +172,8 @@ def strip_heartbeat_token(
     stripped_normalized_text, stripped_normalized_did = _strip_token_at_edges(trimmed_normalized)
 
     # Pick whichever actually stripped and has content
+    picked_text: str
+    picked_did: bool
     if stripped_original_did and stripped_original_text:
         picked_text, picked_did = stripped_original_text, stripped_original_did
     else:

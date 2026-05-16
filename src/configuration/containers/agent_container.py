@@ -641,6 +641,22 @@ class AgentContainer:
             context_loader=self.context_loader(),
         )
 
+    def _conversation_agent_service(self, llm: LLMClient) -> AgentService:
+        """Get AgentService for conversation-only operations.
+
+        Conversation CRUD endpoints are hot paths in the UI and e2e suite. They
+        should not configure execution tools or sandbox adapters, which are only
+        required once a chat run starts.
+        """
+        return AgentService(
+            conversation_repository=self.conversation_repository(),
+            execution_repository=self.agent_execution_repository(),
+            graph_service=self._graph_service,
+            llm=llm,
+            neo4j_client=None,
+            redis_client=self._redis_client,
+        )
+
     # === Agent Orchestrators ===
 
     def event_converter(self) -> Any:
@@ -800,15 +816,15 @@ class AgentContainer:
 
     def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:
         """Get CreateConversationUseCase with dependencies injected."""
-        return CreateConversationUseCase(self.agent_service(llm))
+        return CreateConversationUseCase(self._conversation_agent_service(llm))
 
     def list_conversations_use_case(self, llm: LLMClient) -> ListConversationsUseCase:
         """Get ListConversationsUseCase with dependencies injected."""
-        return ListConversationsUseCase(self.agent_service(llm))
+        return ListConversationsUseCase(self._conversation_agent_service(llm))
 
     def get_conversation_use_case(self, llm: LLMClient) -> GetConversationUseCase:
         """Get GetConversationUseCase with dependencies injected."""
-        return GetConversationUseCase(self.agent_service(llm))
+        return GetConversationUseCase(self._conversation_agent_service(llm))
 
     def chat_use_case(self, llm: LLMClient) -> ChatUseCase:
         """Get ChatUseCase with dependencies injected."""
@@ -819,9 +835,10 @@ class AgentContainer:
     def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
         """Get ExecuteStepUseCase with dependencies injected.
 
-        NOTE: ExecuteStepUseCase is a placeholder (raises NotImplementedError).
         Tools are configured via module-level configure_*() functions for the
-        main ReAct agent system; this use case just needs valid DI wiring.
+        main ReAct agent system. This use case currently receives an empty
+        explicit tool registry and falls back to LLM execution for free-form
+        steps.
         """
         from src.infrastructure.agent.tools.desktop_tool import (
             configure_desktop,
@@ -850,7 +867,7 @@ class AgentContainer:
 
         configure_handoff(graph_orchestrator=self.graph_orchestrator())
 
-        # Pass empty tools dict; ExecuteStepUseCase is a placeholder
+        # Decorator-based tools are configured globally above.
         tools: dict[str, AgentToolBase] = {}
 
         return ExecuteStepUseCase(

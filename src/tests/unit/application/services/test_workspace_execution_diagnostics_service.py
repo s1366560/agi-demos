@@ -700,6 +700,56 @@ async def test_get_diagnostics_reports_outbox_blockers() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_get_diagnostics_includes_controller_run_fields() -> None:
+    running_task = _task(
+        "task-current",
+        "Current task",
+        WorkspaceTaskStatus.IN_PROGRESS,
+        metadata={"task_role": "execution_task"},
+    )
+    attempts = {
+        "task-current": [
+            _attempt(
+                "attempt-current",
+                "task-current",
+                WorkspaceTaskSessionAttemptStatus.RUNNING,
+                conversation_id="conversation-1",
+            )
+        ]
+    }
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[running_task],
+        attempts_by_task=attempts,
+        outbox_items=[
+            _OutboxItem(
+                id="outbox-pending",
+                workspace_id="workspace-1",
+                plan_id="plan-1",
+                event_type="supervisor_tick",
+                status="pending",
+                payload_json={"node_id": "node-current"},
+            )
+        ],
+        plan=_plan_with_current_task("task-current"),
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    assert diagnostics.controller_state["plan_id"] == "plan-1"
+    assert diagnostics.retry_queue[0]["outbox_id"] == "outbox-pending"
+    assert diagnostics.active_attempts[0]["attempt_id"] == "attempt-current"
+    assert diagnostics.completion_gate["allowed"] is False
+    assert diagnostics.blocked_reason == "plan status is active"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_diagnostics_suppresses_outbox_blocker_after_later_success() -> None:
     now = datetime.now(UTC)
 

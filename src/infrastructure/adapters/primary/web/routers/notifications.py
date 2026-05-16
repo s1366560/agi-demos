@@ -13,6 +13,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Notification, User
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ async def mark_notification_read(
     notification = result.scalar_one_or_none()
 
     if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise HTTPException(status_code=404, detail=_("Notification not found"))
 
     notification.is_read = True
     await db.commit()
@@ -127,7 +128,7 @@ async def delete_notification(
     notification = result.scalar_one_or_none()
 
     if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise HTTPException(status_code=404, detail=_("Notification not found"))
 
     await db.delete(notification)
     await db.commit()

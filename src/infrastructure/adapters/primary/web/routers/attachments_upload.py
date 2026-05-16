@@ -7,7 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -31,13 +31,14 @@ from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
     SqlAttachmentRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/attachments", tags=["attachments"])
 
 # Cached storage service (stateless, can be reused)
-_storage_service = None
+_storage_service: StorageServicePort | None = None
 
 
 def _get_storage_service() -> StorageServicePort:
@@ -47,7 +48,7 @@ def _get_storage_service() -> StorageServicePort:
         from src.configuration.di_container import DIContainer
 
         container = DIContainer()
-        _storage_service = container.storage_service()
+        _storage_service = cast(StorageServicePort, container.storage_service())
     return _storage_service
 
 
@@ -160,7 +161,7 @@ def _parse_purpose(purpose: str) -> AttachmentPurpose:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid purpose: {purpose}. Must be one of: llm_context, sandbox_input, both",
+            detail=_(f"Invalid purpose: {purpose}. Must be one of: llm_context, sandbox_input, both"),
         ) from None
 
 
@@ -204,7 +205,7 @@ async def initiate_multipart_upload(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to initiate multipart upload: {e}")
-        raise HTTPException(status_code=500, detail="Failed to initiate upload") from e
+        raise HTTPException(status_code=500, detail=_("Failed to initiate upload")) from e
 
 
 @router.post("/upload/part", response_model=UploadPartResponse)
@@ -239,7 +240,7 @@ async def upload_part(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to upload part: {e}")
-        raise HTTPException(status_code=500, detail="Failed to upload part") from e
+        raise HTTPException(status_code=500, detail=_("Failed to upload part")) from e
 
 
 @router.post("/upload/complete", response_model=AttachmentResponse)
@@ -275,7 +276,7 @@ async def complete_multipart_upload(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to complete multipart upload: {e}")
-        raise HTTPException(status_code=500, detail="Failed to complete upload") from e
+        raise HTTPException(status_code=500, detail=_("Failed to complete upload")) from e
 
 
 @router.post("/upload/abort")
@@ -293,7 +294,7 @@ async def abort_multipart_upload(
         success = await attachment_service.abort_multipart_upload(attachment_id)
 
         if not success:
-            raise HTTPException(status_code=404, detail="Attachment not found")
+            raise HTTPException(status_code=404, detail=_("Attachment not found"))
 
         return {"success": True, "message": "Upload aborted"}
 
@@ -301,7 +302,7 @@ async def abort_multipart_upload(
         raise
     except Exception as e:
         logger.error(f"Failed to abort multipart upload: {e}")
-        raise HTTPException(status_code=500, detail="Failed to abort upload") from e
+        raise HTTPException(status_code=500, detail=_("Failed to abort upload")) from e
 
 
 @router.post("/upload/simple", response_model=AttachmentResponse)
@@ -341,7 +342,7 @@ async def upload_simple(
         import traceback
 
         logger.error(f"Failed to upload file: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="Failed to upload file") from e
+        raise HTTPException(status_code=500, detail=_("Failed to upload file")) from e
 
 
 @router.get("", response_model=AttachmentListResponse)
@@ -357,7 +358,7 @@ async def list_attachments(
     try:
         status_enum = AttachmentStatus(status) if status else None
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
+        raise HTTPException(status_code=400, detail=_(f"Invalid status: {status}")) from None
 
     attachments = await attachment_service.get_by_conversation(
         conversation_id=conversation_id,
@@ -382,7 +383,7 @@ async def get_attachment(
     attachment = await attachment_service.get(attachment_id)
 
     if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
+        raise HTTPException(status_code=404, detail=_("Attachment not found"))
 
     return _attachment_to_response(attachment)
 
@@ -399,7 +400,7 @@ async def download_attachment(
     url = await attachment_service.get_download_url(attachment_id)
 
     if not url:
-        raise HTTPException(status_code=404, detail="Attachment not found or not ready")
+        raise HTTPException(status_code=404, detail=_("Attachment not found or not ready"))
 
     return RedirectResponse(url=url, status_code=302)
 
@@ -416,6 +417,6 @@ async def delete_attachment(
     success = await attachment_service.delete(attachment_id)
 
     if not success:
-        raise HTTPException(status_code=404, detail="Attachment not found")
+        raise HTTPException(status_code=404, detail=_("Attachment not found"))
 
     return {"success": True, "message": "Attachment deleted"}

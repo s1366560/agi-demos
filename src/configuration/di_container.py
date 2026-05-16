@@ -6,7 +6,7 @@ the exact same public interface for all callers.
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -203,6 +203,8 @@ class DIContainer:
         self._redis_client = redis_client
         self._session_factory = session_factory
         self._settings = get_settings()
+        self._reflection_runner: Any | None = None
+        self._workspace_v2_orchestrator: Any | None = None
 
         # Create sub-containers
         self._auth = AuthContainer(db=db)
@@ -454,7 +456,7 @@ class DIContainer:
         caller (FastAPI lifespan); ``start()`` must be invoked once the
         event loop is running.
         """
-        existing = getattr(self, "_reflection_runner", None)
+        existing = self._reflection_runner
         if existing is not None:
             return existing
 
@@ -492,15 +494,16 @@ class DIContainer:
                 )
                 return None
 
+            active_session_factory = session_factory
             container_self = self
 
             class _SessionScopedReflection:
                 async def reflect_window(self, pid: str) -> list[Any]:
-                    async with session_factory() as session:
+                    async with active_session_factory() as session:
                         service = await container_self.reflection_service(pid, session=session)
                         verdicts = await service.reflect_window(pid)
                         await session.commit()
-                        return verdicts
+                        return cast(list[Any], verdicts)
 
             return _SessionScopedReflection()
 
@@ -527,7 +530,7 @@ class DIContainer:
             service_factory=_service_for,
             completion_emitter=_emit_completion,
         )
-        self._reflection_runner = runner  # type: ignore[attr-defined]
+        self._reflection_runner = runner
         return runner
 
     # === Project Container delegates ===
@@ -577,7 +580,7 @@ class DIContainer:
 
     def workspace_orchestrator(self) -> Any:
         """Singleton lazy-built Workspace V2 orchestrator (multi-agent L5)."""
-        existing = getattr(self, "_workspace_v2_orchestrator", None)
+        existing = self._workspace_v2_orchestrator
         if existing is not None:
             return existing
         if self._db is not None:
@@ -588,7 +591,7 @@ class DIContainer:
             from src.infrastructure.agent.workspace_plan import build_default_orchestrator
 
             existing = build_default_orchestrator()
-        self._workspace_v2_orchestrator = existing  # type: ignore[attr-defined]
+        self._workspace_v2_orchestrator = existing
         return existing
 
     def topology_repository(self) -> TopologyRepository:

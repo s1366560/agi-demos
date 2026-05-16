@@ -366,7 +366,7 @@ class LiteLLMReranker(BaseReranker):
     def _get_litellm_model_name(self) -> str:
         """Get model name in LiteLLM format."""
         model = self._model
-        provider_type = self._provider_config.provider_type.value if not isinstance(self._provider_config, LiteLLMRerankerConfig) else self._provider_type.value
+        provider_type = self._provider_type.value if self._provider_type is not None else ""
         prefix = _RERANKER_PROVIDER_PREFIXES.get(provider_type)
         if prefix and not model.startswith(f"{prefix}/"):
             return f"{prefix}/{model}"
@@ -421,15 +421,12 @@ Ensure:
             cleaned = "\n".join(lines).strip()
         return cleaned
 
-    def _normalize_scores(
-        self, scores: list, expected_count: int
-    ) -> tuple[list[float], bool]:
+    def _normalize_scores(self, scores: list, expected_count: int) -> tuple[list[float], bool]:
         """Normalize and validate scores list."""
         padded = False
         if len(scores) != expected_count:
             logger.warning(
-                f"Expected {expected_count} scores, got {len(scores)}. "
-                "Padding or truncating..."
+                f"Expected {expected_count} scores, got {len(scores)}. Padding or truncating..."
             )
             while len(scores) < expected_count:
                 scores.append(0.5)

@@ -154,17 +154,16 @@ class CompositionMixin:
         project_id: str,
     ) -> str:
         """Search for relevant memories to inject into SubAgent context."""
-        return await self._session_runner.fetch_memory_context(
-            user_message,
-            project_id,
-        )
+        context = await self._session_runner.fetch_memory_context(user_message, project_id)
+        return cast(str, context)
 
     def _subagent_filter_tools(
         self: _CompositionAgent,
         subagent: SubAgent,
     ) -> tuple[list[ToolDefinition], set[str]]:
         """Filter tools for SubAgent permissions and return mutable collections."""
-        return self._tool_builder.filter_tools(subagent)
+        filtered = self._tool_builder.filter_tools(subagent)
+        return cast("tuple[list[ToolDefinition], set[str]]", filtered)
 
     def _subagent_inject_nested_tools(
         self: _CompositionAgent,
@@ -208,7 +207,7 @@ class CompositionMixin:
         Callable[..., Coroutine[Any, Any, bool]],
     ]:
         """Build nested delegate, spawn and cancel callbacks."""
-        return self._tool_builder.build_nested_subagent_callbacks(
+        callbacks = self._tool_builder.build_nested_subagent_callbacks(
             nested_map=nested_map,
             conversation_context=conversation_context,
             project_id=project_id,
@@ -216,6 +215,14 @@ class CompositionMixin:
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
+        )
+        return cast(
+            tuple[
+                Callable[..., Coroutine[Any, Any, str]],
+                Callable[..., Coroutine[Any, Any, str]],
+                Callable[..., Coroutine[Any, Any, bool]],
+            ],
+            callbacks,
         )
 
     def _append_nested_session_tools(

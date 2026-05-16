@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 # Singleton manager instance, created on first use
 _manager: Optional[MCPServerManager] = None
+VALID_LOG_LEVELS = {
+    "debug",
+    "info",
+    "notice",
+    "warning",
+    "error",
+    "critical",
+    "alert",
+    "emergency",
+}
 
 
 def _get_manager(workspace_dir: str = "/workspace") -> MCPServerManager:
@@ -246,6 +256,61 @@ async def execute_mcp_server_call_tool(
         }
 
 
+async def execute_mcp_server_list_prompts(
+    name: str,
+    _workspace_dir: str = "/workspace",
+    **kwargs,
+) -> Dict[str, Any]:
+    """List prompts exposed by a managed MCP server."""
+    try:
+        manager = _get_manager(_workspace_dir)
+        prompts = await manager.list_prompts(name)
+        return {
+            "content": [{"type": "text", "text": json.dumps(prompts, indent=2)}],
+            "isError": False,
+        }
+    except Exception as e:
+        logger.error(f"Error listing prompts for '{name}': {e}", exc_info=True)
+        return {
+            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "isError": True,
+        }
+
+
+async def execute_mcp_server_set_log_level(
+    name: str,
+    level: str,
+    _workspace_dir: str = "/workspace",
+    **kwargs,
+) -> Dict[str, Any]:
+    """Set the logging level on a managed MCP server."""
+    normalized_level = level.strip().lower()
+    if normalized_level not in VALID_LOG_LEVELS:
+        return {
+            "content": [
+                {"type": "text", "text": f"Invalid MCP logging level: {normalized_level}"}
+            ],
+            "isError": True,
+        }
+
+    try:
+        manager = _get_manager(_workspace_dir)
+        success = await manager.set_log_level(name, normalized_level)
+        payload = {"success": success, "level": normalized_level}
+        if not success:
+            payload["error"] = f"Failed to set log level for {name}"
+        return {
+            "content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
+            "isError": not success,
+        }
+    except Exception as e:
+        logger.error(f"Error setting log level for '{name}': {e}", exc_info=True)
+        return {
+            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "isError": True,
+        }
+
+
 # -- Tool factory functions --
 
 
@@ -381,4 +446,47 @@ def create_mcp_server_call_tool_tool() -> MCPTool:
             "required": ["server_name", "tool_name"],
         },
         handler=execute_mcp_server_call_tool,
+    )
+
+
+def create_mcp_server_list_prompts_tool() -> MCPTool:
+    """Create the mcp_server_list_prompts tool."""
+    return MCPTool(
+        name="mcp_server_list_prompts",
+        description="List prompts exposed by a managed MCP server.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Server name to list prompts from",
+                },
+            },
+            "required": ["name"],
+        },
+        handler=execute_mcp_server_list_prompts,
+    )
+
+
+def create_mcp_server_set_log_level_tool() -> MCPTool:
+    """Create the mcp_server_set_log_level tool."""
+    return MCPTool(
+        name="mcp_server_set_log_level",
+        description="Set the logging level on a managed MCP server.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Server name",
+                },
+                "level": {
+                    "type": "string",
+                    "description": "MCP logging level",
+                    "enum": sorted(VALID_LOG_LEVELS),
+                },
+            },
+            "required": ["name", "level"],
+        },
+        handler=execute_mcp_server_set_log_level,
     )

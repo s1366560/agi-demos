@@ -38,6 +38,7 @@ from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +235,7 @@ async def get_objective(
     if obj is None or obj.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Objective not found",
+            detail=_("Objective not found"),
         )
     return _to_response(obj)
 
@@ -256,7 +257,7 @@ async def update_objective(
     if obj is None or obj.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Objective not found",
+            detail=_("Objective not found"),
         )
     if payload.title is not None:
         obj.title = payload.title
@@ -293,7 +294,7 @@ async def delete_objective(
     if obj is None or obj.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Objective not found",
+            detail=_("Objective not found"),
         )
     await repo.delete(objective_id)
     await db.commit()
@@ -324,7 +325,7 @@ async def project_objective_to_task(
     if objective is None or objective.workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Objective not found",
+            detail=_("Objective not found"),
         )
 
     try:

@@ -52,6 +52,7 @@ from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .utils import get_container_with_db
 
@@ -143,11 +144,11 @@ async def _load_conversation_and_project(
 
     conversation = await conv_repo.find_by_id(conversation_id)
     if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
     project = await project_repo.find_by_id(conversation.project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=_("Project not found"))
     return conv_repo, conversation, project
 
 
@@ -188,10 +189,10 @@ def _assert_write_permission(
     ):
         raise HTTPException(
             status_code=403,
-            detail="Only the conversation owner can modify the roster via this endpoint.",
+            detail=_("Only the conversation owner can modify the roster via this endpoint."),
         )
 
-    raise HTTPException(status_code=403, detail="Forbidden")
+    raise HTTPException(status_code=403, detail=_("Forbidden"))
 
 
 async def _roster_response(
@@ -292,7 +293,7 @@ async def list_participants(
         conversation.user_id != current_user.id
         and getattr(project, "owner_id", None) != current_user.id
     ):
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=403, detail=_("Forbidden"))
     return await _roster_response(
         conversation,
         _resolve_effective_mode(conversation, project),
@@ -499,7 +500,7 @@ async def list_mention_candidates(
         conversation.user_id != current_user.id
         and getattr(project, "owner_id", None) != current_user.id
     ):
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=403, detail=_("Forbidden"))
 
     container = get_container_with_db(request, db)
     resolver = WorkspaceMentionCandidatesResolver(container.workspace_agent_repository())

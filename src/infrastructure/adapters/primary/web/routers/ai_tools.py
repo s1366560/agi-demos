@@ -1,21 +1,28 @@
 """AI tools API routes."""
 
 import logging
-from typing import Any
+from collections.abc import Mapping
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# Use Cases & DI Container
+from src.configuration.factories import create_llm_client
+from src.domain.llm_providers.llm_types import LLMClient
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graphiti_client,
+    get_db,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.models import User, UserTenant
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
+
+LLM_CLIENT_UNAVAILABLE_DETAIL = "LLM client not available. Please check configuration."
 
 
 # --- Schemas ---
@@ -41,30 +48,48 @@ class TitleResponse(BaseModel):
 # --- Endpoints ---
 
 
+async def get_ai_tools_llm_client(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> LLMClient:
+    """Resolve the tenant-bound LLM client used by lightweight AI endpoints."""
+    tenant_id = getattr(current_user, "tenant_id", None)
+    if not isinstance(tenant_id, str) or not tenant_id.strip():
+        result = await db.execute(
+            refresh_select_statement(
+                select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1)
+            )
+        )
+        tenant_id = result.scalar_one_or_none()
+
+    llm_client = cast(
+        LLMClient | None,
+        await create_llm_client(tenant_id if isinstance(tenant_id, str) else None),
+    )
+    if llm_client is None:
+        raise HTTPException(status_code=501, detail=LLM_CLIENT_UNAVAILABLE_DETAIL)
+    return llm_client
+
+
+def _extract_llm_content(response: object) -> str:
+    if isinstance(response, str):
+        return response
+    if isinstance(response, Mapping):
+        content = cast(Mapping[str, object], response).get("content")
+        if isinstance(content, str):
+            return content
+    raise ValueError("LLM response did not include text content")
+
+
 @router.post("/optimize", response_model=OptimizeResponse)
 async def optimize_content(
     request: OptimizeRequest,
-    current_user: User = Depends(get_current_user),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    llm_client: LLMClient = Depends(get_ai_tools_llm_client),
 ) -> OptimizeResponse:
     """
     Optimize content using AI.
     """
     try:
-        # Get LLM client from graphiti
-        # Note: This assumes graphiti_client has an llm_client property
-        llm_client = getattr(graphiti_client, "llm_client", None)
-
-        if not llm_client:
-            # Fallback: try to get it from the client attribute
-            client = getattr(graphiti_client, "client", None)
-            llm_client = getattr(client, "llm_client", None) if client else None
-
-        if not llm_client:
-            raise HTTPException(
-                status_code=501, detail="LLM client not available. Please check configuration."
-            )
-
         prompt = f"""
         You are an intelligent writing assistant.
         Please rewrite the following text according to these instructions: {request.instruction}
@@ -75,11 +100,9 @@ async def optimize_content(
         Output ONLY the rewritten text. Do not include any explanations or conversational filler.
         """
 
-        response = await llm_client.generate_response(
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = await llm_client.generate(messages=[{"role": "user", "content": prompt}])
 
-        return OptimizeResponse(content=response.strip())
+        return OptimizeResponse(content=_extract_llm_content(response).strip())
 
     except HTTPException:
         raise
@@ -91,25 +114,12 @@ async def optimize_content(
 @router.post("/generate-title", response_model=TitleResponse)
 async def generate_title(
     request: TitleRequest,
-    current_user: User = Depends(get_current_user),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    llm_client: LLMClient = Depends(get_ai_tools_llm_client),
 ) -> TitleResponse:
     """
     Generate a title for the content using AI.
     """
     try:
-        # Get LLM client from graphiti
-        llm_client = getattr(graphiti_client, "llm_client", None)
-
-        if not llm_client:
-            client = getattr(graphiti_client, "client", None)
-            llm_client = getattr(client, "llm_client", None) if client else None
-
-        if not llm_client:
-            raise HTTPException(
-                status_code=501, detail="LLM client not available. Please check configuration."
-            )
-
         # Truncate content if too long
         content_preview = request.content[:1000] if len(request.content) > 1000 else request.content
 
@@ -122,12 +132,10 @@ async def generate_title(
         Output ONLY the title. Do not use quotes.
         """
 
-        response = await llm_client.generate_response(
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = await llm_client.generate(messages=[{"role": "user", "content": prompt}])
 
         # Cleanup quotes if present
-        title = response.strip().strip('"').strip("'")
+        title = _extract_llm_content(response).strip().strip('"').strip("'")
 
         return TitleResponse(title=title)
 

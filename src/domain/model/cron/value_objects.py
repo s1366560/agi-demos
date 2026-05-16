@@ -91,8 +91,6 @@ def _normalize_schedule_config(
             raise ValueError(msg)
         return {"run_at": run_at.strip()}
 
-    return raw
-
 
 @dataclass(frozen=True, kw_only=True)
 class CronSchedule(ValueObject):

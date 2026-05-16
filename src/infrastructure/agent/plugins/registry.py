@@ -1060,7 +1060,7 @@ class AgentPluginRegistry:
                 )
                 continue
             try:
-                produced = factory(context)
+                produced: object = factory(context)
                 if inspect.isawaitable(produced):
                     produced = await produced
                 if not isinstance(produced, dict):
@@ -1130,7 +1130,7 @@ class AgentPluginRegistry:
                 )
                 continue
             try:
-                produced = factory(context)
+                produced: object = factory(context)
                 if inspect.isawaitable(produced):
                     produced = await produced
                 if not isinstance(produced, list):

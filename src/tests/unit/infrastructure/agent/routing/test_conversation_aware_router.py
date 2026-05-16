@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.domain.exceptions import InvariantViolation
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
 from src.domain.model.agent.conversation.message import Message, MessageRole, MessageType
@@ -211,7 +212,7 @@ async def test_autonomous_mode_requires_coordinator_in_roster(
     assert agent == "coord"
 
 
-async def test_autonomous_mode_with_stale_coordinator_falls_through(
+async def test_autonomous_mode_with_stale_coordinator_raises_invariant(
     inner_router: AsyncMock, conv_repo: AsyncMock
 ) -> None:
     conv_repo.find_by_id.return_value = _conv(
@@ -221,10 +222,10 @@ async def test_autonomous_mode_with_stale_coordinator_falls_through(
     )
     router = ConversationAwareRouter(inner=inner_router, conversation_repository=conv_repo)
 
-    agent = await router.resolve_agent(_msg(), _ctx())
+    with pytest.raises(InvariantViolation, match="no valid coordinator"):
+        await router.resolve_agent(_msg(), _ctx())
 
-    assert agent == "binding-agent"
-    inner_router.resolve_agent.assert_awaited_once()
+    inner_router.resolve_agent.assert_not_called()
 
 
 async def test_register_binding_delegates(inner_router: AsyncMock, conv_repo: AsyncMock) -> None:

@@ -268,11 +268,12 @@ class ProviderResolutionService:
     @staticmethod
     def _is_operation_type_compatible(provider_type: str, operation_type: OperationType) -> bool:
         """Check provider type compatibility with requested operation type."""
-        if operation_type == OperationType.LLM:
+        operation_value = operation_type.value
+        if operation_value == OperationType.LLM.value:
             return not (provider_type.endswith("_embedding") or provider_type.endswith("_reranker"))
-        if operation_type == OperationType.EMBEDDING:
+        if operation_value == OperationType.EMBEDDING.value:
             return not provider_type.endswith("_reranker")
-        if operation_type == OperationType.RERANK:
+        if operation_value == OperationType.RERANK.value:
             return not provider_type.endswith("_embedding")
         return True
 

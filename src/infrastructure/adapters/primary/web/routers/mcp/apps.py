@@ -19,6 +19,7 @@ from src.application.services.mcp_app_service import MCPAppService
 from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     MCPAppResourceResponse,
@@ -56,10 +57,13 @@ async def _get_cached_tool_visibility(
             if time.monotonic() < expiry:
                 return vis
 
-    vis = await mcp_manager.get_tool_visibility(
-        project_id=project_id,
-        server_name=server_name,
-        tool_name=tool_name,
+    vis = cast(
+        list[str],
+        await mcp_manager.get_tool_visibility(
+            project_id=project_id,
+            server_name=server_name,
+            tool_name=tool_name,
+        ),
     )
     async with _TOOL_VISIBILITY_LOCK:
         if len(_TOOL_VISIBILITY_CACHE) >= 1000:
@@ -108,13 +112,13 @@ def _get_mcp_app_service(request: Request, db: AsyncSession) -> MCPAppService:
 async def _get_mcp_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
     """Get MCP runtime service from DI container (H2 fix)."""
     container = request.app.state.container.with_db(db)
-    return container.mcp_runtime_service()
+    return cast(MCPRuntimeService, container.mcp_runtime_service())
 
 
 def _validate_tenant(app: MCPApp, tenant_id: str) -> None:
     """Ensure app belongs to the requesting tenant."""
     if app.tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail="MCP App not found")
+        raise HTTPException(status_code=404, detail=_("MCP App not found"))
 
 
 # === Endpoints ===
@@ -239,7 +243,7 @@ async def get_mcp_app(
     service = _get_mcp_app_service(request, db)
     app = await service.get_app(app_id)
     if not app:
-        raise HTTPException(status_code=404, detail="MCP App not found")
+        raise HTTPException(status_code=404, detail=_("MCP App not found"))
     _validate_tenant(app, tenant_id)
 
     return MCPAppResponse(
@@ -276,13 +280,13 @@ async def get_mcp_app_resource(
     service = _get_mcp_app_service(request, db)
     app = await service.get_app(app_id)
     if not app:
-        raise HTTPException(status_code=404, detail="MCP App not found")
+        raise HTTPException(status_code=404, detail=_("MCP App not found"))
     _validate_tenant(app, tenant_id)
 
     if not app.resource:
         raise HTTPException(
             status_code=404,
-            detail="Resource not yet resolved. Call POST /refresh first.",
+            detail=_("Resource not yet resolved. Call POST /refresh first."),
         )
 
     return MCPAppResourceResponse(
@@ -311,7 +315,7 @@ async def proxy_tool_call(
     service = _get_mcp_app_service(request, db)
     app = await service.get_app(app_id)
     if not app:
-        raise HTTPException(status_code=404, detail="MCP App not found")
+        raise HTTPException(status_code=404, detail=_("MCP App not found"))
     _validate_tenant(app, tenant_id)
 
     try:
@@ -379,7 +383,7 @@ async def delete_mcp_app(
     except Exception as e:
         await db.rollback()
         logger.exception("Delete app failed: app=%s", app_id)
-        raise HTTPException(status_code=500, detail="Failed to delete app") from e
+        raise HTTPException(status_code=500, detail=_("Failed to delete app")) from e
 
 
 @router.post("/{app_id}/refresh", response_model=MCPAppResponse)
@@ -424,7 +428,7 @@ async def refresh_mcp_app_resource(
     except Exception as e:
         await db.rollback()
         logger.exception("Resource refresh failed: app=%s", app_id)
-        raise HTTPException(status_code=500, detail="Failed to refresh resource") from e
+        raise HTTPException(status_code=500, detail=_("Failed to refresh resource")) from e
 
 
 # === Standard MCP Resource/Tool Proxy ===
@@ -517,16 +521,16 @@ async def _retry_resource_after_reinstall(
                 transport_config=transport_config,
             )
             return await read_fn()
-        raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
+        raise HTTPException(status_code=404, detail=_(f"Resource not found: {body.uri}"))
     except HTTPException:
         raise
     except TimeoutError:
         logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
-        raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}") from None
+        raise HTTPException(status_code=404, detail=_(f"Resource not found: {body.uri}")) from None
     except Exception as reinstall_err:
         logger.warning("resources/read reinstall failed for '%s': %s", server_name, reinstall_err)
         raise HTTPException(
-            status_code=404, detail=f"Resource not found: {body.uri}"
+            status_code=404, detail=_(f"Resource not found: {body.uri}")
         ) from reinstall_err
 
 
@@ -539,7 +543,7 @@ def _extract_html_from_result(result: Any, uri: str) -> str:
                 error_text = item.get("text", "")
                 break
         logger.warning("resources/read proxy error: %s", error_text)
-        raise HTTPException(status_code=404, detail=f"Resource not found: {uri}")
+        raise HTTPException(status_code=404, detail=_(f"Resource not found: {uri}"))
 
     html_content = None
     for item in result.content:
@@ -551,7 +555,7 @@ def _extract_html_from_result(result: Any, uri: str) -> str:
                 html_content = item.get("text", "")
 
     if not html_content:
-        raise HTTPException(status_code=404, detail=f"No content found for resource: {uri}")
+        raise HTTPException(status_code=404, detail=_(f"No content found for resource: {uri}"))
     return cast(str, html_content)
 
 
@@ -596,7 +600,7 @@ async def proxy_resource_read(
         if not server_name:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot determine server name from URI: {body.uri}. Provide server_name parameter.",
+                detail=_(f"Cannot determine server name from URI: {body.uri}. Provide server_name parameter."),
             )
 
         container = get_container_with_db(request, db)
@@ -650,7 +654,7 @@ async def proxy_resource_read(
     except Exception as e:
         logger.error("resources/read proxy failed: uri=%s, err=%s", body.uri, e)
         raise HTTPException(
-            status_code=502, detail=f"Failed to read resource from MCP server: {e!s}"
+            status_code=502, detail=_(f"Failed to read resource from MCP server: {e!s}")
         ) from e
 
 
@@ -691,5 +695,5 @@ async def proxy_resource_list(
     except Exception as e:
         logger.error("resources/list proxy failed: err=%s", e)
         raise HTTPException(
-            status_code=502, detail=f"Failed to list resources from MCP server: {e!s}"
+            status_code=502, detail=_(f"Failed to list resources from MCP server: {e!s}")
         ) from e

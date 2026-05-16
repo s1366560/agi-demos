@@ -9,9 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
+    Conversation,
     Memory,
+    Message,
     Project,
     Tenant,
+    ToolExecutionRecord,
     User,
     UserProject,
 )
@@ -294,6 +298,93 @@ class TestDeleteProjectEndpoint:
 
         # Note: Memories might be orphaned or cascade deleted
         # This depends on database configuration
+
+    async def test_delete_project_with_conversation_history(
+        self,
+        authenticated_async_client: AsyncClient,
+        db: AsyncSession,
+        test_tenant_db: "Tenant",
+        test_user: User,
+    ):
+        """Deleting a project removes conversation timeline rows first."""
+        # Arrange - create project with persisted conversation history
+        from uuid import uuid4
+
+        project = Project(
+            id=str(uuid4()),
+            tenant_id=test_tenant_db.id,
+            name="Project with Conversation",
+            description="Test",
+            owner_id=test_user.id,
+            memory_rules={},
+            graph_config={},
+        )
+        db.add(project)
+
+        user_project = UserProject(
+            id=str(uuid4()),
+            user_id=test_user.id,
+            project_id=project.id,
+            role="owner",
+            permissions={"admin": True},
+        )
+        db.add(user_project)
+
+        conversation = Conversation(
+            id=str(uuid4()),
+            project_id=project.id,
+            tenant_id=test_tenant_db.id,
+            user_id=test_user.id,
+            title="Conversation to Delete",
+            status="active",
+        )
+        db.add(conversation)
+
+        message = Message(
+            id=str(uuid4()),
+            conversation_id=conversation.id,
+            role="user",
+            content="hello",
+        )
+        db.add(message)
+
+        tool_record = ToolExecutionRecord(
+            id=str(uuid4()),
+            conversation_id=conversation.id,
+            message_id=message.id,
+            call_id="call-1",
+            tool_name="test_tool",
+            status="success",
+            sequence_number=1,
+        )
+        db.add(tool_record)
+
+        event = AgentExecutionEvent(
+            id=str(uuid4()),
+            conversation_id=conversation.id,
+            message_id=message.id,
+            event_type="message",
+            event_data={},
+            event_time_us=1,
+            event_counter=0,
+        )
+        db.add(event)
+        await db.commit()
+
+        # Act
+        response = await authenticated_async_client.delete(f"/api/v1/projects/{project.id}")
+
+        # Assert
+        assert response.status_code == 204
+        for model, item_id in [
+            (Project, project.id),
+            (Conversation, conversation.id),
+            (Message, message.id),
+            (ToolExecutionRecord, tool_record.id),
+            (AgentExecutionEvent, event.id),
+        ]:
+            result = await db.execute(select(model).where(model.id == item_id))
+            assert result.scalar_one_or_none() is None
 
 
 @pytest.mark.asyncio

@@ -98,20 +98,15 @@ async def test_project_viewer_has_read_only_access(db_session: AsyncSession):
     db_session.add(viewer_user)
     await db_session.commit()
 
-    # Assign role (Project Viewer is usually assigned via UserProject, but here we test RBAC direct assignment if supported, or we need to simulate UserProject permissions if AuthorizationService reads them)
-    # Assuming AuthorizationService.assign_role supports project roles if defined in RoleDefinition
-
-    # NOTE: Project Viewer role might need project_id context.
-    # If AuthorizationService handles project roles via UserProject table, this test might need adjustment.
-    # But if it uses UserRole table for everything, then assign_role works.
-    # Let's assume UserRole table for now as per original test.
-
     await auth_service.assign_role(
         user_id=viewer_user.id, role_name=RoleDefinition.PROJECT_VIEWER, project_id="project-123"
     )
 
-    # Get permissions
     permissions = await auth_service.get_user_permissions(viewer_user.id, project_id="project-123")
+    other_project_permissions = await auth_service.get_user_permissions(
+        viewer_user.id, project_id="project-456"
+    )
+    unscoped_permissions = await auth_service.get_user_permissions(viewer_user.id)
 
     # Should have read permissions
     assert PermissionCode.PROJECT_READ in permissions
@@ -121,6 +116,9 @@ async def test_project_viewer_has_read_only_access(db_session: AsyncSession):
     assert PermissionCode.PROJECT_UPDATE not in permissions
     assert PermissionCode.MEMORY_CREATE not in permissions
     assert PermissionCode.MEMORY_UPDATE not in permissions
+    assert PermissionCode.PROJECT_READ not in other_project_permissions
+    assert PermissionCode.MEMORY_READ not in other_project_permissions
+    assert PermissionCode.PROJECT_READ not in unscoped_permissions
 
 
 @pytest.mark.asyncio

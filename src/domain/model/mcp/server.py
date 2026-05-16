@@ -117,10 +117,12 @@ class MCPServerConfig(ValueObject):
     def __post_init__(self) -> None:
         """Validate configuration based on transport type."""
         # Normalize: if command is a bare string (from DB), wrap in list
-        if isinstance(self.command, str):
-            object.__setattr__(self, "command", [self.command])
+        command_value: list[str] | str | None = self.command
+        if isinstance(command_value, str):
+            command_value = [command_value]
+            object.__setattr__(self, "command", command_value)
         if self.transport_type == TransportType.LOCAL:
-            if not self.command:
+            if not command_value:
                 raise ValueError("Command is required for local transport")
         elif self.transport_type in (
             TransportType.HTTP,

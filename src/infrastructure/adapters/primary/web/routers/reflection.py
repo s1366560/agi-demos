@@ -33,6 +33,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_playbook_repository i
 from src.infrastructure.adapters.secondary.persistence.sql_reflection_verdict_repository import (
     SqlReflectionVerdictRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/projects", tags=["reflection"])
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ async def _ensure_member(
     if result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to project",
+            detail=_("Access denied to project"),
         )
 
 

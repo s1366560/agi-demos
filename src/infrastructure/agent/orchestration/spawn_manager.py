@@ -527,7 +527,7 @@ class SpawnManager:
         if not session_id:
             return 0
         depth = 0
-        current = session_id
+        current: str | None = session_id
         visited: set[str] = set()
         while current and current not in visited:
             visited.add(current)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -38,6 +39,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.agent.plugins.control_plane import PluginControlPlaneService
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 from src.infrastructure.agent.plugins.registry import get_plugin_registry
+from src.infrastructure.i18n import gettext as _
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 if TYPE_CHECKING:
@@ -76,7 +78,7 @@ async def verify_project_access(
 
     if not user_project:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to project"
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
         )
     return user_project
 
@@ -102,7 +104,7 @@ async def verify_tenant_access(
     if not user_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to tenant",
+            detail=_("Access denied to tenant"),
         )
     return True
 
@@ -676,14 +678,18 @@ async def _ensure_channel_plugin_enabled_for_project(
         return
 
     runtime_manager = get_plugin_runtime_manager()
-    plugin_records, _ = runtime_manager.list_plugins(tenant_id=tenant_id)
+    plugin_records, _plugin_diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
     plugin_record = next((item for item in plugin_records if item.get("name") == plugin_name), None)
     if plugin_record and not bool(plugin_record.get("enabled", True)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Plugin '{plugin_name}' is disabled for tenant '{tenant_id}'. "
-                f"Enable it before configuring channel_type '{channel_type}'."
+            detail=_(
+                "Plugin '{plugin_name}' is disabled for tenant '{tenant_id}'. "
+                "Enable it before configuring channel_type '{channel_type}'."
+            ).format(
+                plugin_name=plugin_name,
+                tenant_id=tenant_id,
+                channel_type=channel_type,
             ),
         )
 
@@ -783,7 +789,9 @@ async def list_tenant_channel_plugin_catalog(
 ) -> ChannelPluginCatalogResponse:
     """List channel plugin catalog for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
+    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
+        tenant_id=tenant_id
+    )
     return ChannelPluginCatalogResponse(
         items=_build_channel_catalog_items(plugin_records=plugin_records)
     )
@@ -801,13 +809,17 @@ async def get_tenant_channel_plugin_schema(
 ) -> ChannelPluginConfigSchemaResponse:
     """Return plugin channel schema metadata for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
-    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
+    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
+        tenant_id=tenant_id
+    )
     plugin_by_name = {record["name"]: record for record in plugin_records}
     metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
     if metadata is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Channel type not found in plugin catalog: {channel_type}",
+            detail=_("Channel type not found in plugin catalog: {channel_type}").format(
+                channel_type=channel_type
+            ),
         )
 
     plugin_record = plugin_by_name.get(metadata.plugin_name, {})
@@ -957,7 +969,9 @@ async def list_project_channel_plugin_catalog(
     """List channel types currently provided by loaded plugins."""
     await verify_project_access(project_id, current_user, db)
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
+    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
+        tenant_id=project_tenant_id
+    )
     return ChannelPluginCatalogResponse(
         items=_build_channel_catalog_items(plugin_records=plugin_records)
     )
@@ -976,14 +990,18 @@ async def get_project_channel_plugin_schema(
     """Return config schema metadata for a plugin-provided channel type."""
     await verify_project_access(project_id, current_user, db)
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
+    plugin_records, _plugin_diagnostics, _channel_types_by_plugin = await _load_runtime_plugins(
+        tenant_id=project_tenant_id
+    )
     plugin_by_name = {record["name"]: record for record in plugin_records}
     metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
 
     if metadata is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Channel type not found in plugin catalog: {channel_type}",
+            detail=_("Channel type not found in plugin catalog: {channel_type}").format(
+                channel_type=channel_type
+            ),
         )
 
     plugin_record = plugin_by_name.get(metadata.plugin_name, {})
@@ -1249,7 +1267,7 @@ async def get_config(
     config = await repo.get_by_id(config_id)
 
     if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Configuration not found"))
 
     # Verify project access
     await verify_project_access(config.project_id, current_user, db)
@@ -1269,7 +1287,7 @@ async def update_config(
     config = await repo.get_by_id(config_id)
 
     if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Configuration not found"))
 
     # Verify project access (requires admin or owner role)
     await verify_project_access(config.project_id, current_user, db, ["owner", "admin"])
@@ -1355,7 +1373,7 @@ async def delete_config(
     config = await repo.get_by_id(config_id)
 
     if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Configuration not found"))
 
     # Verify project access (requires admin or owner role)
     await verify_project_access(config.project_id, current_user, db, ["owner", "admin"])
@@ -1375,7 +1393,7 @@ async def delete_config(
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete configuration",
+            detail=_("Failed to delete configuration"),
         )
 
     return None
@@ -1392,56 +1410,66 @@ async def test_config(
     config = await repo.get_by_id(config_id)
 
     if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Configuration not found"))
 
     # Verify project access
     await verify_project_access(config.project_id, current_user, db)
 
-    # Decrypt credentials for testing
-    encryption_service = get_encryption_service()
-    app_secret = ""
-    if config.app_secret:
-        try:
-            app_secret = encryption_service.decrypt(config.app_secret)
-        except Exception as e:
-            logger.warning(f"Failed to decrypt app_secret: {e}")
-            return {"success": False, "message": "Failed to decrypt credentials"}
-
-    # Test connection based on channel type
     try:
-        if config.channel_type == "feishu":
-            from src.infrastructure.adapters.secondary.channels.channel_plugin_loader import (
-                load_channel_module,
-            )
+        adapter = await _build_channel_adapter_for_test(config)
+        try:
+            health_ok = await _run_channel_adapter_health_check(adapter)
+        finally:
+            await _disconnect_test_channel_adapter(adapter)
 
-            FeishuClient = load_channel_module("feishu", "client").FeishuClient
-
-            # Create client to validate credentials
-            FeishuClient(
-                app_id=config.app_id or "",
-                app_secret=app_secret,
-                domain=config.domain or "feishu",
-            )
-
-            # Try to get bot info as a test
-            # This will fail if credentials are invalid
-            # await client.get_bot_info()
-
-            await repo.update_status(config_id, "connected")
+        if not health_ok:
+            message = f"Connection health check failed for {config.channel_type}"
+            await repo.update_status(config_id, "error", message)
             await db.commit()
-
-            return {"success": True, "message": "Connection successful"}
-        else:
             return {
                 "success": False,
-                "message": f"Testing not implemented for {config.channel_type}",
+                "message": message,
             }
+
+        await repo.update_status(config_id, "connected")
+        await db.commit()
+        return {"success": True, "message": "Connection successful"}
 
     except Exception as e:
         await repo.update_status(config_id, "error", str(e))
         await db.commit()
 
         return {"success": False, "message": str(e)}
+
+
+async def _build_channel_adapter_for_test(config: ChannelConfigModel) -> object:
+    """Build a plugin channel adapter without starting the long-lived runtime loop."""
+    from src.infrastructure.channels.connection_manager import ChannelConnectionManager
+
+    manager = ChannelConnectionManager()
+    return await manager._create_adapter(config)
+
+
+async def _run_channel_adapter_health_check(adapter: object) -> bool:
+    health_check = getattr(adapter, "health_check", None)
+    if not callable(health_check):
+        return False
+
+    result = health_check()
+    if inspect.isawaitable(result):
+        result = await result
+    return bool(result)
+
+
+async def _disconnect_test_channel_adapter(adapter: object) -> None:
+    if not getattr(adapter, "connected", False):
+        return
+    disconnect = getattr(adapter, "disconnect", None)
+    if not callable(disconnect):
+        return
+    result = disconnect()
+    if inspect.isawaitable(result):
+        await result
 
 
 class ChannelStatusResponse(BaseModel):
@@ -1713,7 +1741,7 @@ async def get_connection_status(
     config = await repo.get_by_id(config_id)
 
     if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Configuration not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Configuration not found"))
 
     # Verify project access
     await verify_project_access(config.project_id, current_user, db)
@@ -1775,7 +1803,7 @@ async def list_all_connection_status(
     if not current_user.is_superuser and not has_admin_role:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin role required",
+            detail=_("Admin role required"),
         )
 
     channel_manager = get_channel_manager()
@@ -1845,7 +1873,7 @@ async def push_message_to_channel(
     if not binding_row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No channel binding found for this conversation",
+            detail=_("No channel binding found for this conversation"),
         )
 
     # Verify user has access to the channel's project
@@ -1871,7 +1899,7 @@ async def push_message_to_channel(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to deliver message to channel",
+            detail=_("Failed to deliver message to channel"),
         )
 
     return PushMessageResponse(success=True, message="Message sent")

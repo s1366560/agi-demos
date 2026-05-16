@@ -21,6 +21,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     EventReplayResponse,
@@ -144,7 +145,7 @@ async def get_conversation_events(
 
     except Exception as e:
         logger.error(f"Error getting conversation events: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get events: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get events: {e!s}")) from e
 
 
 @router.get(
@@ -230,7 +231,7 @@ async def get_execution_status(
 
     except Exception as e:
         logger.error(f"Error getting execution status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get execution status: {e!s}")) from e
 
 
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
@@ -263,20 +264,20 @@ async def resume_execution(
         # Check if resumable
         if not await resume_service.can_resume(conversation_id):
             raise HTTPException(
-                status_code=404, detail="No resumable checkpoint found for this conversation"
+                status_code=404, detail=_("No resumable checkpoint found for this conversation")
             )
 
         # Get resume context
         context = await resume_service.get_resume_context(conversation_id)
         if not context:
-            raise HTTPException(status_code=404, detail="Failed to get resume context")
+            raise HTTPException(status_code=404, detail=_("Failed to get resume context"))
 
         # Prepare resume request
         resume_request = await resume_service.prepare_resume_request(
             conversation_id, override_message=override_message
         )
         if not resume_request:
-            raise HTTPException(status_code=500, detail="Failed to prepare resume request")
+            raise HTTPException(status_code=500, detail=_("Failed to prepare resume request"))
 
         # Mark as resumed
         await resume_service.mark_resumed(conversation_id, context.checkpoint.id)
@@ -294,7 +295,7 @@ async def resume_execution(
         raise
     except Exception as e:
         logger.error(f"Error resuming execution: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to resume execution: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to resume execution: {e!s}")) from e
 
 
 @router.get(
@@ -320,10 +321,10 @@ async def get_workflow_status(
         conversation_repo = SqlConversationRepository(db)
         conversation = await conversation_repo.find_by_id(conversation_id)
         if not conversation:
-            raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+            raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
 
         if conversation.tenant_id != current_user.tenant_id:  # type: ignore[attr-defined]
-            raise HTTPException(status_code=403, detail="Access denied to this conversation")
+            raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
 
         actor = await get_actor_if_exists(
             tenant_id=conversation.tenant_id,
@@ -333,7 +334,7 @@ async def get_workflow_status(
         if not actor:
             raise HTTPException(
                 status_code=404,
-                detail=f"No actor found for conversation {conversation_id}",
+                detail=_(f"No actor found for conversation {conversation_id}"),
             )
 
         status = await await_ray(actor.status.remote())
@@ -367,4 +368,4 @@ async def get_workflow_status(
         raise
     except Exception as e:
         logger.error(f"Error getting workflow status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get workflow status: {e!s}")) from e

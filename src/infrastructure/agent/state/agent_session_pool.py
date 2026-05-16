@@ -633,6 +633,7 @@ async def get_or_create_agent_session(
     )
 
 
+    from src.domain.ports.services.skill_resource_port import SkillResourcePort
     from src.infrastructure.adapters.secondary.skill import (
         LocalSkillResourceAdapter,
         SandboxSkillResourceAdapter,
@@ -646,7 +647,7 @@ async def get_or_create_agent_session(
     host_project_path = resolve_project_base_path(project_id)
 
     if sandbox_adapter:
-        skill_resource_port = SandboxSkillResourceAdapter(
+        skill_resource_port: SkillResourcePort = SandboxSkillResourceAdapter(
             sandbox_adapter=sandbox_adapter,
             default_project_path=host_project_path,
         )

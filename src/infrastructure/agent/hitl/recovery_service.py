@@ -268,7 +268,7 @@ class HITLRecoveryService:
                         "Replaying recoverable responses from persisted state."
                     )
 
-                    async def _recover_with_limit(request: object) -> bool:
+                    async def _recover_with_limit(request: HITLRequest) -> bool:
                         async with semaphore:
                             return await self._recover_answered_request(request)
 
@@ -294,7 +294,7 @@ class HITLRecoveryService:
                         len(processing_requests),
                     )
 
-                    async def _recover_processing_with_limit(request: object) -> bool:
+                    async def _recover_processing_with_limit(request: HITLRequest) -> bool:
                         async with semaphore:
                             return await self._recover_stale_processing_request(
                                 request,

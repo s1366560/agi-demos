@@ -29,6 +29,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Message as DBMessage,
     User,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import ExecutionStatsResponse
 from .utils import get_container_with_db
@@ -675,7 +676,7 @@ async def get_conversation_messages(
         )
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         event_repo = container.agent_execution_event_repository()
         tool_exec_repo = container.tool_execution_record_repository()
@@ -775,7 +776,7 @@ async def get_conversation_messages(
         import traceback
 
         logger.error(f"Error getting conversation messages: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to get messages: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get messages: {e!s}")) from e
 
 
 @router.get("/conversations/{conversation_id}/execution")
@@ -820,7 +821,7 @@ async def get_conversation_execution(
     except Exception as e:
         logger.error(f"Error getting conversation execution history: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get execution history: {e!s}"
+            status_code=500, detail=_(f"Failed to get execution history: {e!s}")
         ) from e
 
 
@@ -844,10 +845,10 @@ async def get_conversation_tool_executions(
         conversation = await conversation_repo.find_by_id(conversation_id)
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         if conversation.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         tool_execution_repo = container.tool_execution_record_repository()
 
@@ -867,7 +868,7 @@ async def get_conversation_tool_executions(
     except Exception as e:
         logger.error(f"Error getting tool execution history: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get tool execution history: {e!s}"
+            status_code=500, detail=_(f"Failed to get tool execution history: {e!s}")
         ) from e
 
 
@@ -894,10 +895,10 @@ async def get_conversation_execution_status(
         conversation = await conversation_repo.find_by_id(conversation_id)
 
         if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         if conversation.user_id != current_user.id or conversation.project_id != project_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         redis_client = container.redis_client
         is_running = False
@@ -942,7 +943,7 @@ async def get_conversation_execution_status(
         raise
     except Exception as e:
         logger.error(f"Error getting conversation execution status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get execution status: {e!s}")) from e
 
 
 async def _get_recovery_info(
@@ -1102,7 +1103,7 @@ async def get_execution_stats(
     except Exception as e:
         logger.error(f"Error getting execution statistics: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get execution statistics: {e!s}"
+            status_code=500, detail=_(f"Failed to get execution statistics: {e!s}")
         ) from e
 
 
@@ -1137,4 +1138,4 @@ async def get_message_replies(
         ]
     except Exception as e:
         logger.error(f"Error getting message replies: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get message replies: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get message replies: {e!s}")) from e

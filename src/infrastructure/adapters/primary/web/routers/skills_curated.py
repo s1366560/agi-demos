@@ -39,6 +39,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     SkillSubmission,
     User as UserModel,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ def _require_superuser(user: UserModel) -> None:
     if not bool(getattr(user, "is_superuser", False)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only superusers can review skill submissions",
+            detail=_("Only superusers can review skill submissions"),
         )
 
 
@@ -190,7 +191,7 @@ async def fork_curated_skill(
     if curated is None or curated.status != "active":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Curated skill not found",
+            detail=_("Curated skill not found"),
         )
 
     payload = dict(curated.payload)
@@ -248,7 +249,7 @@ async def submit_skill_for_review(
     if skill is None or skill.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Skill not found in this tenant",
+            detail=_("Skill not found in this tenant"),
         )
 
     snapshot = _skill_to_snapshot(skill, data.proposed_semver)
@@ -304,17 +305,17 @@ async def edit_pending_submission(
     submission = await db.get(SkillSubmission, submission_id)
     if submission is None or submission.submitter_tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("Submission not found")
         )
     if submission.submitter_user_id not in (None, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the original submitter may edit this submission",
+            detail=_("Only the original submitter may edit this submission"),
         )
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot edit submission in {submission.status} state",
+            detail=_(f"Cannot edit submission in {submission.status} state"),
         )
 
     if data.proposed_semver is not None:
@@ -327,13 +328,13 @@ async def edit_pending_submission(
         if submission.source_skill_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot refresh snapshot: submission has no source_skill_id",
+                detail=_("Cannot refresh snapshot: submission has no source_skill_id"),
             )
         skill = await db.get(SkillModel, submission.source_skill_id)
         if skill is None or skill.tenant_id != tenant_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Source skill no longer exists in this tenant",
+                detail=_("Source skill no longer exists in this tenant"),
             )
         submission.skill_snapshot = _skill_to_snapshot(
             skill, submission.proposed_semver
@@ -363,17 +364,17 @@ async def withdraw_pending_submission(
     submission = await db.get(SkillSubmission, submission_id)
     if submission is None or submission.submitter_tenant_id != tenant_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("Submission not found")
         )
     if submission.submitter_user_id not in (None, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the original submitter may withdraw this submission",
+            detail=_("Only the original submitter may withdraw this submission"),
         )
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot withdraw submission in {submission.status} state",
+            detail=_(f"Cannot withdraw submission in {submission.status} state"),
         )
     submission.status = "withdrawn"
     submission.reviewed_at = datetime.now(UTC)
@@ -415,12 +416,12 @@ async def admin_approve_submission(
     submission = await db.get(SkillSubmission, submission_id)
     if submission is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("Submission not found")
         )
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Submission already {submission.status}",
+            detail=_(f"Submission already {submission.status}"),
         )
 
     # P2-4 Track D: semver bump + history. If bump provided, derive next
@@ -464,8 +465,8 @@ async def admin_approve_submission(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"A curated skill with this content already exists "
-                f"(id={existing.id}, semver={existing.semver}, status={existing.status})"
+                _(f"A curated skill with this content already exists "
+                f"(id={existing.id}, semver={existing.semver}, status={existing.status})")
             ),
         )
 
@@ -522,12 +523,12 @@ async def admin_reject_submission(
     submission = await db.get(SkillSubmission, submission_id)
     if submission is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("Submission not found")
         )
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Submission already {submission.status}",
+            detail=_(f"Submission already {submission.status}"),
         )
     submission.status = "rejected"
     submission.reviewer_id = current_user.id

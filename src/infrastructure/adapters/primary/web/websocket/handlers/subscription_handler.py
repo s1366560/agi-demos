@@ -141,17 +141,18 @@ async def _maybe_start_recovery_bridge(
         async def _run_recovery_stream() -> None:
             from src.configuration.factories import create_llm_client
 
-            llm = await create_llm_client(context.tenant_id)
-            agent_service = container.agent_service(llm)
-            await stream_hitl_response_to_websocket(
-                agent_service=agent_service,
-                session_id=context.session_id,
-                conversation_id=conversation_id,
-                message_id=running_message_id,
-                replay_from_db=False,
-                from_time_us=cursor_time_us,
-                from_counter=cursor_counter,
-            )
+            async with context.fresh_db_context() as stream_context:
+                llm = await create_llm_client(stream_context.tenant_id)
+                agent_service = stream_context.get_scoped_container().agent_service(llm)
+                await stream_hitl_response_to_websocket(
+                    agent_service=agent_service,
+                    session_id=stream_context.session_id,
+                    conversation_id=conversation_id,
+                    message_id=running_message_id,
+                    replay_from_db=False,
+                    from_time_us=cursor_time_us,
+                    from_counter=cursor_counter,
+                )
 
         started = await context.connection_manager.try_start_bridge_task(
             session_id=context.session_id,

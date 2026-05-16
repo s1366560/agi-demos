@@ -12,6 +12,7 @@
     "**/.mypy_cache",
     "**/.git",
     ".venv",
+    "**/.venv",
     "web",
     "design-prototype",
     "notebooks",

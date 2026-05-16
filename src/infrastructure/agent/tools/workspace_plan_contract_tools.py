@@ -327,7 +327,7 @@ def _verification_next_action_kind(value: str, verdict: str) -> str:
 
 
 def _verification_feedback_items(
-    items: list[dict[str, Any]],
+    items: list[Any],
     *,
     limit: int = 8,
 ) -> list[dict[str, Any]]:
@@ -487,7 +487,7 @@ def _confidence(value: object) -> float:
     return max(0.0, min(parsed, 1.0))
 
 
-def _normalize_next_tasks(value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _normalize_next_tasks(value: list[Any]) -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     for index, item in enumerate(value[:12], start=1):
         if not isinstance(item, dict):
@@ -512,7 +512,7 @@ def _normalize_next_tasks(value: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return tasks
 
 
-def _normalize_findings(value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _normalize_findings(value: list[Any]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     for item in value[:12]:
         if not isinstance(item, dict):

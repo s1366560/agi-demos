@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
 from sqlalchemy import func, select
@@ -58,6 +58,7 @@ from src.domain.ports.services.task_allocator_port import (
     WorkspaceAgent as AllocatorAgent,
 )
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_supervisor_port import TickReport
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgePort,
 )
@@ -128,6 +129,7 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
 )
+from src.infrastructure.agent.workspace_plan.run_controller import WorkspaceRunController
 from src.infrastructure.agent.workspace_plan.supervisor import (
     AgentPoolProvider,
     AttemptContextProvider,
@@ -142,6 +144,18 @@ from src.infrastructure.agent.workspace_plan.system_actor import (
 from src.infrastructure.agent.workspace_plan.verification_judge import (
     UnavailableWorkspaceVerificationJudge,
     WorkspaceVerifierAgentJudge,
+)
+from src.infrastructure.agent.workspace_plan.worktree_manager import (
+    AttemptWorktreeContext,
+    WorkspaceWorktreeManager,
+    compact_command_output as _manager_compact_command_output,
+    default_attempt_worktree_path as _manager_default_attempt_worktree_path,
+    safe_git_token as _manager_safe_git_token,
+    worktree_branch_name as _manager_worktree_branch_name,
+    worktree_dirty_signature_command as _manager_worktree_dirty_signature_command,
+    worktree_integration_command as _manager_worktree_integration_command,
+    worktree_setup_command as _manager_worktree_setup_command,
+    worktree_setup_note as _manager_worktree_setup_note,
 )
 
 if TYPE_CHECKING:
@@ -187,7 +201,8 @@ _NO_OUTPUT_SENTINELS = frozenset(
 )
 
 WorktreePreparer = Callable[
-    [AsyncSession, str, WorkspaceTask, str | None, str | None], Awaitable[str | None]
+    [AsyncSession, str, WorkspaceTask, str | None, str | None],
+    Awaitable[str | AttemptWorktreeContext | None],
 ]
 
 _AUTO_TEAM_AGENT_TOOLS = [
@@ -286,53 +301,88 @@ def make_supervisor_tick_handler(
         leader_agent_id = (
             _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
         )
-        if item.plan_id:
-            reconciled_terminal_attempt = await _reconcile_plan_nodes_with_terminal_attempts(
-                session=session,
-                plan_id=item.plan_id,
-                workspace_id=workspace_id,
-            )
-            reconciled_reported_attempt = await _reconcile_plan_nodes_with_reported_attempts(
-                session=session,
-                plan_id=item.plan_id,
-                workspace_id=workspace_id,
-            )
-            if reconciled_terminal_attempt or reconciled_reported_attempt:
-                await session.commit()
-        resolved_agent_pool = agent_pool
-        if resolved_agent_pool is None:
-            await _ensure_leader_execution_team(
-                session=session,
-                workspace_id=workspace_id,
-                leader_agent_id=leader_agent_id,
-            )
-            resolved_agent_pool = _make_sql_agent_pool(
+
+        async def _run_existing_tick() -> TickReport:
+            if item.plan_id:
+                reconciled_terminal_attempt = await _reconcile_plan_nodes_with_terminal_attempts(
+                    session=session,
+                    plan_id=item.plan_id,
+                    workspace_id=workspace_id,
+                )
+                reconciled_reported_attempt = await _reconcile_plan_nodes_with_reported_attempts(
+                    session=session,
+                    plan_id=item.plan_id,
+                    workspace_id=workspace_id,
+                )
+                if reconciled_terminal_attempt or reconciled_reported_attempt:
+                    await session.commit()
+            resolved_agent_pool = agent_pool
+            if resolved_agent_pool is None:
+                await _ensure_leader_execution_team(
+                    session=session,
+                    workspace_id=workspace_id,
+                    leader_agent_id=leader_agent_id,
+                )
+                resolved_agent_pool = _make_sql_agent_pool(
+                    session,
+                    leader_agent_id=leader_agent_id,
+                )
+            orchestrator = build_sql_orchestrator(
                 session,
-                leader_agent_id=leader_agent_id,
+                config=config,
+                agent_pool=resolved_agent_pool,
+                dispatcher=dispatcher or _make_sql_dispatcher(session, item, payload),
+                attempt_context=attempt_context or _make_sql_attempt_context(session),
+                progress_sink=progress_sink,
+                iteration_reviewer=await _make_sql_iteration_reviewer(
+                    session=session,
+                    workspace_id=workspace_id,
+                    root_task_id=_payload_string(payload, "root_task_id"),
+                ),
+                verification_judge=await _make_sql_verification_judge(
+                    session=session,
+                    workspace_id=workspace_id,
+                    root_task_id=_payload_string(payload, "root_task_id"),
+                ),
             )
-        orchestrator = build_sql_orchestrator(
-            session,
-            config=config,
-            agent_pool=resolved_agent_pool,
-            dispatcher=dispatcher or _make_sql_dispatcher(session, item, payload),
-            attempt_context=attempt_context or _make_sql_attempt_context(session),
-            progress_sink=progress_sink,
-            iteration_reviewer=await _make_sql_iteration_reviewer(
-                session=session,
-                workspace_id=workspace_id,
-                root_task_id=_payload_string(payload, "root_task_id"),
-            ),
-            verification_judge=await _make_sql_verification_judge(
-                session=session,
-                workspace_id=workspace_id,
-                root_task_id=_payload_string(payload, "root_task_id"),
-            ),
+            report = await orchestrator.tick_once(workspace_id)
+            if report.errors:
+                raise RuntimeError("; ".join(report.errors))
+            return report
+
+        _ = await WorkspaceRunController(session).tick(
+            plan_id=item.plan_id,
+            workspace_id=workspace_id,
+            reason=_payload_string(payload, "controller_reason") or item.event_type,
+            actor_id=leader_agent_id,
+            runner=_run_existing_tick,
+            current_outbox_id=item.id,
         )
-        report = await orchestrator.tick_once(workspace_id)
-        if report.errors:
-            raise RuntimeError("; ".join(report.errors))
 
     return _handle
+
+
+async def _run_controller_action(
+    *,
+    session: AsyncSession,
+    item: WorkspacePlanOutboxModel,
+    workspace_id: str,
+    actor_id: str | None,
+    reason: str,
+    action: Callable[[], Awaitable[None]],
+) -> None:
+    async def _runner() -> TickReport:
+        await action()
+        return TickReport(workspace_id=workspace_id)
+
+    _ = await WorkspaceRunController(session).tick(
+        plan_id=item.plan_id,
+        workspace_id=workspace_id,
+        reason=reason,
+        actor_id=actor_id,
+        runner=_runner,
+        current_outbox_id=item.id,
+    )
 
 
 async def _make_sql_iteration_reviewer(
@@ -1130,64 +1180,15 @@ def _worktree_integration_command(
     worktree_path: str,
     commit_ref: str,
 ) -> str:
-    code_root = shlex.quote(sandbox_code_root)
-    worktree = shlex.quote(worktree_path)
-    commit = shlex.quote(commit_ref)
-    return "\n".join(
-        [
-            "set -e",
-            f"cd {code_root}",
-            f"if ! git -C {worktree} cat-file -e {commit}^{{commit}}; then",
-            '  echo "status=failed"',
-            '  echo "reason=commit_ref not found in attempt worktree"',
-            "  exit 65",
-            "fi",
-            f"if git merge-base --is-ancestor {commit} HEAD; then",
-            '  echo "status=already_merged"',
-            '  printf "git_head=%s\\n" "$(git rev-parse --short HEAD)"',
-            "  exit 0",
-            "fi",
-            'dirty="$(git status --porcelain)"',
-            'if [ -n "$dirty" ]; then',
-            '  echo "status=blocked_dirty_main"',
-            '  echo "reason=sandbox_code_root has uncommitted changes"',
-            '  printf "dirty_signature=%s\\n" "$(printf "%s" "$dirty" | git hash-object --stdin)"',
-            "  git status --short",
-            "  exit 66",
-            "fi",
-            "set +e",
-            f"git merge --no-edit {commit}",
-            'merge_status="$?"',
-            "set -e",
-            'if [ "$merge_status" -ne 0 ]; then',
-            '  echo "status=failed"',
-            '  echo "reason=merge_failed_aborted"',
-            "  git status --short",
-            "  git merge --abort >/dev/null 2>&1 || true",
-            '  exit "$merge_status"',
-            "fi",
-            'echo "status=merged"',
-            'printf "git_head=%s\\n" "$(git rev-parse --short HEAD)"',
-        ]
+    return _manager_worktree_integration_command(
+        sandbox_code_root=sandbox_code_root,
+        worktree_path=worktree_path,
+        commit_ref=commit_ref,
     )
 
 
 def _worktree_dirty_signature_command(*, sandbox_code_root: str) -> str:
-    code_root = shlex.quote(sandbox_code_root)
-    return "\n".join(
-        [
-            "set -e",
-            f"cd {code_root}",
-            'dirty="$(git status --porcelain)"',
-            'if [ -n "$dirty" ]; then',
-            '  echo "status=dirty"',
-            '  printf "dirty_signature=%s\\n" "$(printf "%s" "$dirty" | git hash-object --stdin)"',
-            "  git status --short",
-            "  exit 0",
-            "fi",
-            'echo "status=clean"',
-        ]
-    )
+    return _manager_worktree_dirty_signature_command(sandbox_code_root=sandbox_code_root)
 
 
 def _integration_status_from_output(*outputs: str) -> str:
@@ -1879,7 +1880,7 @@ def make_worker_launch_handler(
             )
             return
 
-        setup_note = await _worker_launch_worktree_note(
+        worktree_context = await _worker_launch_worktree_context(
             worktree_preparer or _prepare_attempt_worktree_if_available,
             session=session,
             workspace_id=workspace_id,
@@ -1887,6 +1888,20 @@ def make_worker_launch_handler(
             extra_instructions=extra_instructions,
             attempt_id=attempt_id,
         )
+        await _persist_worker_launch_worktree_context(
+            session=session,
+            task=task,
+            context=worktree_context,
+        )
+        if worktree_context is not None and worktree_context.setup_failed:
+            await _block_task_for_worktree_setup_failure(
+                session=session,
+                task=task,
+                context=worktree_context,
+            )
+            return
+
+        setup_note = worktree_context.setup_note() if worktree_context is not None else None
         extra_instructions = _append_launch_instruction_note(extra_instructions, setup_note)
 
         from src.infrastructure.agent.workspace.worker_launch import (
@@ -1903,6 +1918,9 @@ def make_worker_launch_handler(
             extra_instructions=extra_instructions,
             reuse_conversation_id=reuse_conversation_id,
             repair_brief_prompt=repair_brief_prompt,
+            attempt_worktree_context=(
+                worktree_context.to_dict() if worktree_context is not None else None
+            ),
         )
         await _mark_plan_node_running_after_launch_schedule(
             session=session,
@@ -1911,7 +1929,22 @@ def make_worker_launch_handler(
             attempt_id=attempt_id,
         )
 
-    return _handle
+    async def _wrapped(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
+        payload = dict(item.payload_json or {})
+        workspace_id = _payload_string(payload, "workspace_id") or item.workspace_id
+        leader_agent_id = (
+            _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        )
+        await _run_controller_action(
+            session=session,
+            item=item,
+            workspace_id=workspace_id,
+            actor_id=leader_agent_id,
+            reason=item.event_type,
+            action=lambda: _handle(item, session),
+        )
+
+    return _wrapped
 
 
 async def _should_defer_worker_launch(
@@ -2089,15 +2122,16 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
         return None
     previous_attempt_id = _mapping_string(metadata, "last_verification_attempt_id")
     if not previous_attempt_id:
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
             leader_agent_id=leader_agent_id,
             reason="missing_previous_attempt_id",
         )
+        return None
     if not _repair_turn_reuse_enabled():
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2105,9 +2139,10 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason="reuse_disabled",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     repair_turn_count = _nonnegative_int(metadata.get("same_conversation_repair_turn_count"))
     if repair_turn_count >= _repair_turn_reuse_max():
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2115,9 +2150,10 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason="max_repair_turns_reached",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     previous_attempt = await session.get(WorkspaceTaskSessionAttemptModel, previous_attempt_id)
     if previous_attempt is None:
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2125,8 +2161,9 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason="previous_attempt_missing",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     if previous_attempt.workspace_task_id != task.id:
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2134,9 +2171,10 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason="previous_attempt_task_mismatch",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     previous_status = _attempt_status_value(previous_attempt)
     if previous_status != WorkspaceTaskSessionAttemptStatus.REJECTED.value:
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2144,9 +2182,10 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason=f"previous_attempt_status_{previous_status or 'unknown'}",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     judge_verdict = _mapping_string(metadata, "last_verification_judge_verdict")
     if judge_verdict != "needs_rework":
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2154,11 +2193,12 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason=f"judge_verdict_{judge_verdict or 'missing'}",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     conversation_id = _mapping_string(
         {"conversation_id": previous_attempt.conversation_id}, "conversation_id"
     )
     if not conversation_id:
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2166,8 +2206,9 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason="missing_conversation",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
     if not _node_has_reusable_worktree(node):
-        return await _repair_turn_ineligible(
+        await _repair_turn_ineligible(
             session=session,
             task=task,
             node=node,
@@ -2175,6 +2216,7 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
             reason="missing_reusable_worktree",
             previous_attempt_id=previous_attempt_id,
         )
+        return None
 
     repair_turn_index = repair_turn_count + 1
     return {
@@ -2613,7 +2655,22 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:  # noqa: C901, 
             },
         )
 
-    return _handle
+    async def _wrapped(item: WorkspacePlanOutboxModel, session: AsyncSession) -> None:
+        payload = dict(item.payload_json or {})
+        workspace_id = _payload_string(payload, "workspace_id") or item.workspace_id
+        leader_agent_id = (
+            _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        )
+        await _run_controller_action(
+            session=session,
+            item=item,
+            workspace_id=workspace_id,
+            actor_id=leader_agent_id,
+            reason=item.event_type,
+            action=lambda: _handle(item, session),
+        )
+
+    return _wrapped
 
 
 async def _defer_handoff_resume_for_unmet_dependencies(
@@ -2937,7 +2994,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 "preview_urls": preview_urls,
             },
         )
-        preview_url = next(iter(preview_urls.values()), None) or _pipeline_preview_url(
+        primary_preview_url = next(iter(preview_urls.values()), None) or _pipeline_preview_url(
             contract.health_url,
             contract.preview_port,
         )
@@ -2951,7 +3008,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 status="skipped" if not contract.deploy_command else run_status,
                 command=contract.deploy_command,
                 port=contract.preview_port,
-                preview_url=preview_url,
+                preview_url=primary_preview_url,
                 health_url=contract.health_url,
                 rollback_ref=_pipeline_commit_ref(node),
                 log_ref=None,
@@ -2965,7 +3022,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             status=run_status,
             reason=failure_reason,
             evidence_refs=evidence_refs,
-            preview_url=preview_url,
+            preview_url=primary_preview_url,
             health_url=contract.health_url,
         )
         await SqlWorkspacePlanOutboxRepository(session).enqueue(
@@ -3498,7 +3555,7 @@ def _metadata_string_values(metadata: Mapping[str, Any], key: str) -> list[str]:
     return []
 
 
-async def _worker_launch_worktree_note(
+async def _worker_launch_worktree_context(
     preparer: WorktreePreparer,
     *,
     session: AsyncSession,
@@ -3506,9 +3563,10 @@ async def _worker_launch_worktree_note(
     task: WorkspaceTask,
     extra_instructions: str | None,
     attempt_id: str | None,
-) -> str | None:
+) -> AttemptWorktreeContext | None:
     try:
-        return await preparer(session, workspace_id, task, extra_instructions, attempt_id)
+        result = await preparer(session, workspace_id, task, extra_instructions, attempt_id)
+        return _coerce_worktree_prepare_result(result, attempt_id=attempt_id)
     except Exception as exc:
         logger.warning(
             "workspace_plan.worker_launch.worktree_prepare_failed",
@@ -3520,7 +3578,99 @@ async def _worker_launch_worktree_note(
             },
             exc_info=True,
         )
-        return _worktree_setup_note(status="failed", reason=f"preparer raised: {exc}")
+        return AttemptWorktreeContext(
+            workspace_root=None,
+            sandbox_code_root=None,
+            active_root=None,
+            worktree_path=None,
+            branch_name=None,
+            base_ref=None,
+            attempt_id=attempt_id,
+            is_isolated=False,
+            setup_status="failed",
+            setup_reason=f"preparer raised: {exc}",
+        )
+
+
+def _coerce_worktree_prepare_result(
+    result: str | AttemptWorktreeContext | None,
+    *,
+    attempt_id: str | None,
+) -> AttemptWorktreeContext | None:
+    if result is None or isinstance(result, AttemptWorktreeContext):
+        return result
+    fields = _worktree_setup_note_fields(result)
+    status = fields.get("status")
+    if not status:
+        return None
+    worktree_path = fields.get("worktree_path")
+    active_root = posixpath.normpath(worktree_path) if worktree_path else None
+    return AttemptWorktreeContext(
+        workspace_root=None,
+        sandbox_code_root=None,
+        active_root=active_root,
+        worktree_path=active_root,
+        branch_name=fields.get("branch_name"),
+        base_ref=fields.get("base_ref"),
+        attempt_id=attempt_id,
+        is_isolated=bool(active_root),
+        setup_status=status,
+        setup_reason=fields.get("reason"),
+        setup_output=fields.get("output"),
+    )
+
+
+def _worktree_setup_note_fields(note: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for raw_line in note.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("["):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        fields[key.strip()] = value.strip()
+    return fields
+
+
+async def _persist_worker_launch_worktree_context(
+    *,
+    session: AsyncSession,
+    task: WorkspaceTask,
+    context: AttemptWorktreeContext | None,
+) -> None:
+    if context is None:
+        return
+    task_model = await session.get(WorkspaceTaskModel, task.id)
+    if task_model is None:
+        return
+    metadata = dict(task_model.metadata_json or {})
+    metadata.update(context.metadata_patch())
+    task_model.metadata_json = metadata
+    task_model.updated_at = datetime.now(UTC)
+    task.metadata = metadata
+
+
+async def _block_task_for_worktree_setup_failure(
+    *,
+    session: AsyncSession,
+    task: WorkspaceTask,
+    context: AttemptWorktreeContext,
+) -> None:
+    task_model = await session.get(WorkspaceTaskModel, task.id)
+    if task_model is None:
+        return
+    reason = context.setup_reason or "attempt worktree setup failed"
+    metadata = dict(task_model.metadata_json or {})
+    metadata.update(context.metadata_patch())
+    metadata["launch_state"] = "worktree_setup_failed"
+    task_model.metadata_json = metadata
+    task_model.status = WorkspaceTaskStatus.BLOCKED.value
+    task_model.blocker_reason = f"worktree_setup_failed: {reason}"
+    task_model.updated_at = datetime.now(UTC)
+    task.metadata = metadata
+    task.status = WorkspaceTaskStatus.BLOCKED
+    task.blocker_reason = task_model.blocker_reason
 
 
 def _append_launch_instruction_note(instructions: str | None, note: str | None) -> str | None:
@@ -3531,124 +3681,32 @@ def _append_launch_instruction_note(instructions: str | None, note: str | None) 
     return f"{instructions.rstrip()}\n\n{note.strip()}"
 
 
-async def _prepare_attempt_worktree_if_available(  # noqa: PLR0911
+async def _prepare_attempt_worktree_if_available(
     session: AsyncSession,
     workspace_id: str,
     task: WorkspaceTask,
     _extra_instructions: str | None,
     attempt_id: str | None,
 ) -> str | None:
-    metadata = dict(task.metadata or {})
-    feature_checkpoint = metadata.get("feature_checkpoint")
-    if not isinstance(feature_checkpoint, Mapping) and not attempt_id:
-        return None
-    feature_metadata: Mapping[str, Any] = (
-        cast(Mapping[str, Any], feature_checkpoint)
-        if isinstance(feature_checkpoint, Mapping)
-        else {}
+    context = await WorkspaceWorktreeManager(
+        session,
+        runner_factory=_WorkspaceSandboxCommandRunner,
+    ).prepare_attempt(
+        workspace_id=workspace_id,
+        task=task,
+        attempt_id=attempt_id,
     )
-
-    worktree_path_template = _mapping_string(feature_metadata, "worktree_path")
-    branch_name = _mapping_string(feature_metadata, "branch_name")
-    base_ref = _mapping_string(feature_metadata, "base_ref") or "HEAD"
-    if (not worktree_path_template or not branch_name) and not attempt_id:
-        return _worktree_setup_note(
-            status="skipped",
-            reason="feature checkpoint does not include worktree_path and branch_name",
-        )
-
-    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
-    if workspace is None:
-        return _worktree_setup_note(status="skipped", reason="workspace not found")
-
-    root_metadata: Mapping[str, Any] = {}
-    root_task_id = _mapping_string(metadata, ROOT_GOAL_TASK_ID)
-    if root_task_id:
-        root_task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
-        if root_task is not None and root_task.workspace_id == workspace_id:
-            root_metadata = dict(root_task.metadata or {})
-
-    from src.infrastructure.agent.workspace.code_context import (
-        load_workspace_code_context,
-    )
-
-    workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
-    code_context = load_workspace_code_context(
-        project_id=workspace.project_id,
-        root_metadata=root_metadata,
-        workspace_metadata=workspace_metadata,
-    )
-    if not code_context.sandbox_code_root:
-        return _worktree_setup_note(
-            status="skipped",
-            reason="sandbox_code_root is not available for this workspace",
-        )
-
-    if not worktree_path_template:
-        worktree_path = _default_attempt_worktree_path(
-            sandbox_code_root=code_context.sandbox_code_root,
-            attempt_id=str(attempt_id),
-        )
-    else:
-        worktree_path = worktree_path_template.replace(
-            "${sandbox_code_root}", code_context.sandbox_code_root
-        )
-    if not branch_name:
-        branch_name = _worktree_branch_name(node_id=task.id, attempt_id=str(attempt_id))
-    if "${sandbox_code_root}" in worktree_path:
-        return _worktree_setup_note(
-            status="skipped",
-            reason="worktree_path still contains an unresolved sandbox_code_root placeholder",
-        )
-
-    protected_worktree_names = await _active_attempt_worktree_names(session, workspace_id)
-    command = _worktree_setup_command(
-        sandbox_code_root=code_context.sandbox_code_root,
-        worktree_path=worktree_path,
-        branch_name=branch_name,
-        base_ref=base_ref,
-        protected_worktree_names=protected_worktree_names,
-    )
-    try:
-        result = await _WorkspaceSandboxCommandRunner(
-            project_id=workspace.project_id,
-            tenant_id=workspace.tenant_id,
-        ).run_command(command, timeout=120)
-    except Exception as exc:
-        return _worktree_setup_note(
-            status="failed",
-            reason=str(exc),
-            worktree_path=worktree_path,
-            branch_name=branch_name,
-            base_ref=base_ref,
-        )
-
-    stdout = str(result.get("stdout") or "")
-    stderr = str(result.get("stderr") or "")
-    if int(result.get("exit_code") or 0) != 0:
-        return _worktree_setup_note(
-            status="failed",
-            reason=_compact_command_output(stderr or stdout),
-            worktree_path=worktree_path,
-            branch_name=branch_name,
-            base_ref=base_ref,
-        )
-    return _worktree_setup_note(
-        status="prepared",
-        output=_compact_command_output(stdout),
-        worktree_path=worktree_path,
-        branch_name=branch_name,
-        base_ref=base_ref,
-    )
+    return context.setup_note() if context is not None else None
 
 
 def _default_attempt_worktree_path(*, sandbox_code_root: str, attempt_id: str) -> str:
-    return posixpath.normpath(
-        posixpath.join(sandbox_code_root.rstrip("/"), "..", ".memstack", "worktrees", attempt_id)
+    return _manager_default_attempt_worktree_path(
+        sandbox_code_root=sandbox_code_root,
+        attempt_id=attempt_id,
     )
 
 
-async def _active_attempt_worktree_names(
+async def _active_attempt_worktree_names(  # pyright: ignore[reportUnusedFunction]
     session: AsyncSession, workspace_id: str
 ) -> tuple[str, ...]:
     rows = await session.execute(
@@ -3667,7 +3725,7 @@ async def _active_attempt_worktree_names(
     return tuple(sorted(str(row[0]) for row in rows.all() if row[0]))
 
 
-def _worktree_setup_command(
+def _worktree_setup_command(  # pyright: ignore[reportUnusedFunction]
     *,
     sandbox_code_root: str,
     worktree_path: str,
@@ -3675,70 +3733,16 @@ def _worktree_setup_command(
     base_ref: str,
     protected_worktree_names: Iterable[str] = (),
 ) -> str:
-    code_root = shlex.quote(sandbox_code_root)
-    worktree = shlex.quote(worktree_path)
-    branch = shlex.quote(branch_name)
-    base = shlex.quote(base_ref)
-    protected = shlex.quote(" ".join(sorted({name for name in protected_worktree_names if name})))
-    return "\n".join(
-        [
-            "set -e",
-            f"cd {code_root}",
-            'repo_name="$(basename "$(pwd)")"',
-            'fallback_remote="$(dirname "$(pwd)")/.memstack/git-remotes/${repo_name}.git"',
-            "if ! git remote get-url origin >/dev/null 2>&1; then",
-            '  mkdir -p "$(dirname "$fallback_remote")"',
-            '  git init --bare "$fallback_remote" >/dev/null',
-            '  git remote add origin "$fallback_remote"',
-            "fi",
-            "git config push.default current",
-            f'mkdir -p "$(dirname {worktree})"',
-            f'worktree_root="$(dirname {worktree})"',
-            'worktree_root="$(cd "$worktree_root" && pwd -P)"',
-            f"protected_worktree_names={protected}",
-            'if [ -d "$worktree_root" ]; then',
-            "  stop_stale_pid() {",
-            '    kill -TERM "$1" 2>/dev/null || true',
-            '    kill -TERM "-$1" 2>/dev/null || true',
-            '    kill -KILL "$1" 2>/dev/null || true',
-            '    kill -KILL "-$1" 2>/dev/null || true',
-            "  }",
-            "  ps -eo pid= 2>/dev/null | while read -r pid; do",
-            '    [ -n "$pid" ] || continue',
-            '    [ "$pid" = "$$" ] && continue',
-            '    proc_args="$(ps -p "$pid" -o args= 2>/dev/null || true)"',
-            '    case "$proc_args" in',
-            '      *"npm run dev"*|*"pnpm run dev"*|*"yarn dev"*|*"bun run dev"*|*"tsx watch"*|*"nodemon"*|*"next dev"*|*"vite"*|*"webpack serve"*) ;;',
-            "      *) continue ;;",
-            "    esac",
-            '    proc_cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"',
-            '    for attempt_dir in "$worktree_root"/*; do',
-            '      [ -d "$attempt_dir" ] || continue',
-            '      attempt_name="$(basename "$attempt_dir")"',
-            '      case " $protected_worktree_names " in *" $attempt_name "*) continue ;; esac',
-            "      matched=0",
-            '      case "$proc_cwd" in "$attempt_dir"|"$attempt_dir"/*) matched=1 ;; esac',
-            '      case "$proc_args" in *"$attempt_dir"*) matched=1 ;; esac',
-            '      if [ "$matched" = 1 ]; then',
-            '        stop_stale_pid "$pid"',
-            "        break",
-            "      fi",
-            "    done",
-            "  done",
-            "fi",
-            f"if [ -e {worktree}/.git ] || [ -f {worktree}/.git ]; then",
-            f"  git -C {worktree} checkout {branch}",
-            "else",
-            f"  git worktree add -B {branch} {worktree} {base}",
-            "fi",
-            f'printf "git_head=%s\\n" "$(git -C {worktree} rev-parse HEAD)"',
-            f"git -C {worktree} status --short",
-            f"git -C {worktree} diff --stat -- || true",
-        ]
+    return _manager_worktree_setup_command(
+        sandbox_code_root=sandbox_code_root,
+        worktree_path=worktree_path,
+        branch_name=branch_name,
+        base_ref=base_ref,
+        protected_worktree_names=protected_worktree_names,
     )
 
 
-def _worktree_setup_note(
+def _worktree_setup_note(  # pyright: ignore[reportUnusedFunction]
     *,
     status: str,
     reason: str | None = None,
@@ -3747,26 +3751,18 @@ def _worktree_setup_note(
     branch_name: str | None = None,
     base_ref: str | None = None,
 ) -> str:
-    lines = ["[worktree-setup]", f"status={status}"]
-    if worktree_path:
-        lines.append(f"worktree_path={worktree_path}")
-    if branch_name:
-        lines.append(f"branch_name={branch_name}")
-    if base_ref:
-        lines.append(f"base_ref={base_ref}")
-    if reason:
-        lines.append(f"reason={_compact_command_output(reason)}")
-    if output:
-        lines.append(f"output={_compact_command_output(output)}")
-    lines.append("[/worktree-setup]")
-    return "\n".join(lines)
+    return _manager_worktree_setup_note(
+        status=status,
+        reason=reason,
+        output=output,
+        worktree_path=worktree_path,
+        branch_name=branch_name,
+        base_ref=base_ref,
+    )
 
 
 def _compact_command_output(value: str, *, limit: int = 1000) -> str:
-    compacted = value.strip().replace("\n", "\\n")
-    if len(compacted) <= limit:
-        return compacted
-    return compacted[: limit - 15] + "...[truncated]"
+    return _manager_compact_command_output(value, limit=limit)
 
 
 async def _ensure_root_started_for_dispatch(
@@ -4274,15 +4270,11 @@ def _clear_stale_attempt_metadata(metadata: Mapping[str, object]) -> dict[str, o
 
 
 def _worktree_branch_name(*, node_id: str, attempt_id: str) -> str:
-    node_token = _safe_git_token(node_id)[:48]
-    attempt_token = _safe_git_token(attempt_id)[:12]
-    return f"workspace/{node_token}-{attempt_token}"
+    return _manager_worktree_branch_name(node_id=node_id, attempt_id=attempt_id)
 
 
-def _safe_git_token(value: str) -> str:
-    token = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in value)
-    token = token.strip("./-")
-    return token or "node"
+def _safe_git_token(value: str) -> str:  # pyright: ignore[reportUnusedFunction]
+    return _manager_safe_git_token(value)
 
 
 def _tool_result_text(raw: Mapping[str, Any]) -> str:

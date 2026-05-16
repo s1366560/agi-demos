@@ -13,7 +13,7 @@ class ASRServicePort(ABC):
         """Transcribe audio file to text."""
 
     @abstractmethod
-    async def transcribe_stream(
+    def transcribe_stream(
         self,
         audio_stream: AsyncGenerator[bytes, None],
         language: str = "zh-CN",
@@ -32,7 +32,7 @@ class TTSServicePort(ABC):
         """Synthesize text to audio bytes."""
 
     @abstractmethod
-    async def synthesize_stream(
+    def synthesize_stream(
         self, text: str, voice_type: str | None = None, options: dict[str, Any] | None = None
     ) -> AsyncGenerator[bytes, None]:
         """Synthesize text to audio stream."""

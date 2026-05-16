@@ -4,13 +4,13 @@ TDD approach: Write tests first, expect failures, then implement.
 The SessionManager unifies management of terminal and desktop sessions.
 """
 
-import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from src.server.desktop_manager import DesktopManager
 from src.server.session_manager import SessionManager, SessionStatus
 from src.server.web_terminal import WebTerminalManager
-from src.server.desktop_manager import DesktopManager
 
 
 def create_mock_process(pid: int = 12345, returncode: int = None) -> MagicMock:
@@ -65,16 +65,21 @@ class TestSessionManager:
     async def test_start_all_enabled_sessions(self, manager):
         """Test starting all enabled sessions."""
         mock_terminal = create_mock_process(pid=1001)
-        mock_xvfb = create_mock_process(pid=2001)
-        mock_lxde = create_mock_process(pid=2002)
-        mock_xvnc = create_mock_process(pid=2003)
-        mock_novnc = create_mock_process(pid=2004)
+        mock_kasmvnc = create_mock_process(pid=2001)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            # Terminal needs 1 call, Desktop needs 4 calls
+        with (
+            patch.object(
+                manager.desktop_manager,
+                "_is_port_listening",
+                side_effect=[False, True, True],
+            ),
+            patch("asyncio.sleep", AsyncMock()),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
+            # Terminal needs 1 call, KasmVNC desktop needs 1 call.
             mock_exec.side_effect = [
                 mock_terminal,  # ttyd
-                mock_xvfb, mock_lxde, mock_xvnc, mock_novnc,  # desktop
+                mock_kasmvnc,  # KasmVNC
             ]
 
             await manager.start_all()
@@ -91,13 +96,18 @@ class TestSessionManager:
             desktop_enabled=True,
         )
 
-        mock_xvfb = create_mock_process(pid=2001)
-        mock_lxde = create_mock_process(pid=2002)
-        mock_xvnc = create_mock_process(pid=2003)
-        mock_novnc = create_mock_process(pid=2004)
+        mock_kasmvnc = create_mock_process(pid=2001)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.side_effect = [mock_xvfb, mock_lxde, mock_xvnc, mock_novnc]
+        with (
+            patch.object(
+                manager.desktop_manager,
+                "_is_port_listening",
+                side_effect=[False, True, True],
+            ),
+            patch("asyncio.sleep", AsyncMock()),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
+            mock_exec.side_effect = [mock_kasmvnc]
 
             await manager.start_all()
 
@@ -127,15 +137,22 @@ class TestSessionManager:
     async def test_stop_all_sessions(self, manager):
         """Test stopping all sessions."""
         mock_terminal = create_mock_process(pid=1001)
-        mock_xvfb = create_mock_process(pid=2001)
-        mock_lxde = create_mock_process(pid=2002)
-        mock_xvnc = create_mock_process(pid=2003)
-        mock_novnc = create_mock_process(pid=2004)
+        mock_kasmvnc = create_mock_process(pid=2001)
+        mock_vncserver_kill = create_mock_process(pid=2002)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
+        with (
+            patch.object(
+                manager.desktop_manager,
+                "_is_port_listening",
+                side_effect=[False, True, True, False],
+            ),
+            patch("asyncio.sleep", AsyncMock()),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
             mock_exec.side_effect = [
                 mock_terminal,
-                mock_xvfb, mock_lxde, mock_xvnc, mock_novnc,
+                mock_kasmvnc,
+                mock_vncserver_kill,
             ]
 
             await manager.start_all()
@@ -159,34 +176,38 @@ class TestSessionManager:
         """Test restarting all sessions."""
         # First start processes
         mock_terminal = create_mock_process(pid=1001)
-        mock_xvfb = create_mock_process(pid=2001)
-        mock_xfce = create_mock_process(pid=2002)
-        mock_xvnc = create_mock_process(pid=2003)
-        mock_novnc = create_mock_process(pid=2004)
+        mock_kasmvnc = create_mock_process(pid=2001)
 
         # Stop processes (vncserver -kill during desktop stop)
-        mock_vncserver_kill1 = create_mock_process(pid=2005)
+        mock_vncserver_kill1 = create_mock_process(pid=2002)
 
         # Restart processes
         mock_terminal2 = create_mock_process(pid=1002)
-        mock_xvfb2 = create_mock_process(pid=2006)
-        mock_xfce2 = create_mock_process(pid=2007)
-        mock_xvnc2 = create_mock_process(pid=2008)
-        mock_novnc2 = create_mock_process(pid=2009)
+        mock_kasmvnc2 = create_mock_process(pid=2003)
 
         # Create iterator for all subprocess calls in order
-        process_iterator = iter([
-            # First start
-            mock_terminal,  # Terminal start
-            mock_xvfb, mock_xfce, mock_xvnc, mock_novnc,  # Desktop start
-            # Stop (called by restart_all before second start)
-            mock_vncserver_kill1,  # vncserver -kill
-            # Second start (restart)
-            mock_terminal2,  # Terminal start
-            mock_xvfb2, mock_xfce2, mock_xvnc2, mock_novnc2,  # Desktop start
-        ])
+        process_iterator = iter(
+            [
+                # First start
+                mock_terminal,  # Terminal start
+                mock_kasmvnc,  # Desktop start
+                # Stop (called by restart_all before second start)
+                mock_vncserver_kill1,  # vncserver -kill
+                # Second start (restart)
+                mock_terminal2,  # Terminal start
+                mock_kasmvnc2,  # Desktop start
+            ]
+        )
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
+        with (
+            patch.object(
+                manager.desktop_manager,
+                "_is_port_listening",
+                side_effect=[False, True, True, False, True, True],
+            ),
+            patch("asyncio.sleep", AsyncMock()),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
             mock_exec.side_effect = lambda *args, **kwargs: next(process_iterator)
 
             await manager.start_all()
@@ -194,7 +215,7 @@ class TestSessionManager:
 
             # Verify processes are new
             assert manager.terminal_manager.process.pid == 1002
-            assert manager.desktop_manager.xvfb_process.pid == 2006
+            assert manager.desktop_manager.kasmvnc_process.pid == 2003
 
     def test_get_status_when_not_running(self, manager):
         """Test status when sessions are not running."""
@@ -209,10 +230,10 @@ class TestSessionManager:
     def test_get_status_when_running(self, manager):
         """Test status when sessions are running."""
         mock_terminal = create_mock_process(pid=1001)
-        mock_xvfb = create_mock_process(pid=2001)
+        mock_kasmvnc = create_mock_process(pid=2001)
 
         manager.terminal_manager.process = mock_terminal
-        manager.desktop_manager.xvfb_process = mock_xvfb
+        manager.desktop_manager.kasmvnc_process = mock_kasmvnc
 
         status = manager.get_status()
         assert status.terminal_running is True
@@ -236,7 +257,7 @@ class TestSessionManager:
         assert "port" in info
         assert info["port"] == 6080
         assert "url" in info
-        assert info["url"] == "http://localhost:6080/vnc.html"
+        assert info["url"] == "http://localhost:6080"
         assert "display" in info
         assert info["display"] == ":1"
 
@@ -244,15 +265,22 @@ class TestSessionManager:
     async def test_context_manager(self, manager):
         """Test that sessions are managed with context manager."""
         mock_terminal = create_mock_process(pid=1001)
-        mock_xvfb = create_mock_process(pid=2001)
-        mock_lxde = create_mock_process(pid=2002)
-        mock_xvnc = create_mock_process(pid=2003)
-        mock_novnc = create_mock_process(pid=2004)
+        mock_kasmvnc = create_mock_process(pid=2001)
+        mock_vncserver_kill = create_mock_process(pid=2002)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
+        with (
+            patch.object(
+                manager.desktop_manager,
+                "_is_port_listening",
+                side_effect=[False, True, True, False],
+            ),
+            patch("asyncio.sleep", AsyncMock()),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
             mock_exec.side_effect = [
                 mock_terminal,
-                mock_xvfb, mock_lxde, mock_xvnc, mock_novnc,
+                mock_kasmvnc,
+                mock_vncserver_kill,
             ]
 
             async with manager:

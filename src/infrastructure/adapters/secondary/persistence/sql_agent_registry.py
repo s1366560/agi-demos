@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -258,12 +259,15 @@ class SqlAgentRegistryRepository(
 
         db_limit = max(limit - builtin_count, 0)
         db_offset = max(offset - len(builtin_agents), 0)
-        query = (
-            query.order_by(AgentDefinitionModel.created_at.desc()).limit(db_limit).offset(db_offset)
-        )
-
-        result = await self._session.execute(refresh_select_statement(query.execution_options(populate_existing=True)))
-        db_agents = result.scalars().all()
+        db_agents: Sequence[AgentDefinitionModel] = ()
+        if db_limit > 0:
+            query = (
+                query.order_by(AgentDefinitionModel.created_at.desc()).limit(db_limit).offset(db_offset)
+            )
+            result = await self._session.execute(
+                refresh_select_statement(query.execution_options(populate_existing=True))
+            )
+            db_agents = result.scalars().all()
 
         agents = [d for a in db_agents if (d := self._to_domain(a)) is not None]
         return _dedupe_agents_by_name_prefer_builtin(builtin_slice + agents)
@@ -372,11 +376,12 @@ class SqlAgentRegistryRepository(
 
         result = await self._session.execute(refresh_select_statement(query))
         builtin_count = 1
-        return (result.scalar() or 0) + builtin_count
+        return int(result.scalar() or 0) + builtin_count
 
-    def _to_domain(self, db_agent: AgentDefinitionModel | None) -> Agent | None:
+    def _to_domain(self, db_agent: object) -> Agent | None:
         if db_agent is None:
             return None
+        db_agent = cast("AgentDefinitionModel", db_agent)
 
         trigger = AgentTrigger(
             description=db_agent.trigger_description or "",

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -5,6 +6,7 @@ import pytest
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
 
+from src.domain.model.memory.episode import Episode, SourceType
 from src.infrastructure.adapters.primary.web.dependencies import get_graphiti_client
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     verify_api_key_dependency,
@@ -44,10 +46,16 @@ async def test_create_episode(
     test_app.dependency_overrides[get_graphiti_client] = lambda: mock_graphiti_service
     test_app.dependency_overrides[verify_api_key_dependency] = lambda: mock_api_key_dependency
 
-    # Mock add_episode returns result.episode.uuid
-    mock_result = Mock()
-    mock_result.episode = Mock(uuid=str(uuid4()))
-    mock_graphiti_service.add_episode = AsyncMock(return_value=mock_result)
+    created_episode_id = str(uuid4())
+    mock_graphiti_service.add_episode = AsyncMock(
+        return_value=Episode(
+            id=created_episode_id,
+            name=mock_episode_data["content"][:50] + "...",
+            content=mock_episode_data["content"],
+            source_type=SourceType.TEXT,
+            valid_at=datetime.now(UTC),
+        )
+    )
     # Mock driver for health queries
     mock_graphiti_service.driver = Mock()
     mock_graphiti_service.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
@@ -57,10 +65,12 @@ async def test_create_episode(
 
     assert response.status_code == status.HTTP_202_ACCEPTED
     data = response.json()
-    assert data["id"] == mock_result.episode.uuid
+    assert data["id"] == created_episode_id
     assert data["status"] == "processing"
 
-    assert mock_graphiti_service.add_episode.called
+    added_episode = mock_graphiti_service.add_episode.call_args.args[0]
+    assert isinstance(added_episode, Episode)
+    assert added_episode.content == mock_episode_data["content"]
 
     test_app.dependency_overrides = {}
 

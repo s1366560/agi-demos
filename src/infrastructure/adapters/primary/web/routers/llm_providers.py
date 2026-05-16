@@ -7,7 +7,7 @@ including CRUD operations, health checks, and tenant assignments.
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -30,6 +30,7 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserRole
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ async def get_current_user_with_roles(
         .where(User.id == current_user.id)
         .options(selectinload(User.roles).selectinload(UserRole.role)))
     )
-    return result.scalar_one()
+    return cast(User, result.scalar_one())
 
 
 async def require_admin(current_user: User = Depends(get_current_user_with_roles)) -> User:
@@ -67,7 +68,7 @@ async def require_admin(current_user: User = Depends(get_current_user_with_roles
     if not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail=_("Admin access required"),
         )
     return current_user
 
@@ -413,7 +414,7 @@ async def get_provider(
     if not provider_response:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Provider not found",
+            detail=_("Provider not found"),
         )
 
     # Check if provider is active (non-admins can't see inactive providers)
@@ -421,7 +422,7 @@ async def get_provider(
     if not is_admin and not provider_response.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Provider not found",
+            detail=_("Provider not found"),
         )
 
     return provider_response
@@ -443,7 +444,7 @@ async def update_provider(
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Provider not found",
+            detail=_("Provider not found"),
         )
 
     logger.info(f"Provider updated: {provider_id} by user {current_user.id}")
@@ -465,7 +466,7 @@ async def delete_provider(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Provider not found",
+            detail=_("Provider not found"),
         )
 
     logger.info(f"Provider deleted: {provider_id} by user {current_user.id}")
@@ -510,7 +511,7 @@ async def get_provider_health(
     if not health:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No health data available for this provider",
+            detail=_("No health data available for this provider"),
         )
 
     return health
@@ -536,7 +537,7 @@ async def list_tenant_assignments(
     if not is_admin and current_user.tenant_id != tenant_id:  # type: ignore[attr-defined]
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to tenant assignments",
+            detail=_("Access denied to tenant assignments"),
         )
 
     return await service.get_tenant_providers(tenant_id, operation_type)
@@ -626,7 +627,7 @@ async def unassign_provider_from_tenant(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tenant-provider mapping not found",
+            detail=_("Tenant-provider mapping not found"),
         )
 
     logger.info(
@@ -753,5 +754,5 @@ async def reset_circuit_breaker(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to reset circuit breaker: {e}",
+            detail=_(f"Failed to reset circuit breaker: {e}"),
         ) from e

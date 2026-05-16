@@ -98,12 +98,16 @@ class ProjectAgentActor:
 
             # Inject plan repository for Plan Mode awareness
             try:
-                from src.configuration.di_container import (
-                    get_container,  # type: ignore[attr-defined]
+                from src.infrastructure.adapters.primary.web.startup.container import (
+                    get_app_container,
                 )
 
-                container = get_container()
-                self._agent._plan_repo = container._agent.plan_repository()
+                container = get_app_container()
+                if container is not None:
+                    agent_container = getattr(container, "_agent", None)
+                    plan_repository_factory = getattr(agent_container, "plan_repository", None)
+                    if callable(plan_repository_factory):
+                        self._agent._plan_repo = plan_repository_factory()
             except Exception:
                 pass  # Plan Mode awareness is optional
 
@@ -273,6 +277,7 @@ class ProjectAgentActor:
     ) -> dict[str, Any]:
         if not self._agent:
             return {"status": "unavailable", "request_id": request_id, "ack": False}
+        agent = self._agent
 
         from src.infrastructure.agent.hitl.coordinator import (
             ResolveResult,
@@ -315,6 +320,7 @@ class ProjectAgentActor:
             }
 
         return await self._resume_continue_request(
+            agent=agent,
             request_id=request_id,
             response_data=response_data,
             conversation_id=conversation_id,
@@ -324,12 +330,17 @@ class ProjectAgentActor:
     async def _resume_continue_request(
         self,
         *,
+        agent: ProjectReActAgent | None = None,
         request_id: str,
         response_data: dict[str, Any],
         conversation_id: str | None,
         message_id: str | None,
     ) -> dict[str, Any]:
         """Fallback resume path when no in-memory coordinator owns the request."""
+        resume_agent = agent if agent is not None else self._agent
+        if resume_agent is None:
+            return {"status": "unavailable", "request_id": request_id, "ack": False}
+
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
             SqlHITLRequestRepository,
@@ -365,7 +376,7 @@ class ProjectAgentActor:
                 lease_owner=self._lease_owner(),
             ):
                 result = await continue_project_chat(
-                    self._agent,
+                    resume_agent,
                     request_id,
                     response_data,
                     lease_owner=self._lease_owner(),

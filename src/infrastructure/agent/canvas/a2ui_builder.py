@@ -18,7 +18,7 @@ import ast
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeGuard
 
 
 def _new_id() -> str:
@@ -96,7 +96,10 @@ def _is_string_literal(value: object) -> bool:
     return isinstance(value, str)
 
 
-def _is_plain_object(value: object) -> bool:
+JSONObject = dict[str, object]
+
+
+def _is_plain_object(value: object) -> TypeGuard[JSONObject]:
     """Return True when value is a JSON-like object."""
     return isinstance(value, dict)
 
@@ -292,7 +295,9 @@ def _validate_text_field_component_payload(
     field_path: str,
 ) -> str | None:
     """Validate a TextField component payload."""
-    if error := _validate_inline_string_value(payload.get("label"), field_path=f"{field_path}.label"):
+    if error := _validate_inline_string_value(
+        payload.get("label"), field_path=f"{field_path}.label"
+    ):
         return error
     if error := _validate_inline_string_value(payload.get("text"), field_path=f"{field_path}.text"):
         return error
@@ -324,14 +329,18 @@ def _validate_checkbox_component_payload(
     field_path: str,
 ) -> str | None:
     """Validate a CheckBox component payload."""
-    if error := _validate_inline_string_value(payload.get("label"), field_path=f"{field_path}.label"):
+    if error := _validate_inline_string_value(
+        payload.get("label"), field_path=f"{field_path}.label"
+    ):
         return error
-    if error := _validate_inline_boolean_value(payload.get("value"), field_path=f"{field_path}.value"):
+    if error := _validate_inline_boolean_value(
+        payload.get("value"), field_path=f"{field_path}.value"
+    ):
         return error
     return None
 
 
-def _validate_multiple_choice_component_payload(
+def _validate_multiple_choice_component_payload(  # noqa: PLR0911
     payload: dict[str, object],
     *,
     field_path: str,
@@ -368,7 +377,7 @@ def _validate_multiple_choice_component_payload(
     return None
 
 
-def _validate_radio_component_payload(
+def _validate_radio_component_payload(  # noqa: PLR0911
     payload: dict[str, object],
     *,
     field_path: str,
@@ -455,7 +464,7 @@ def _validate_inline_boolean_value(value: object, *, field_path: str) -> str | N
     return _validate_boolean_value(value, field_path=field_path)
 
 
-def _validate_scalar_or_path_value(value: object, *, field_path: str) -> str | None:
+def _validate_scalar_or_path_value(value: object, *, field_path: str) -> str | None:  # noqa: PLR0911
     """Validate a table cell value."""
     if isinstance(value, bool):
         return None
@@ -534,7 +543,7 @@ def _validate_modal_component_payload(
     )
 
 
-def _validate_table_component_payload(
+def _validate_table_component_payload(  # noqa: C901, PLR0911, PLR0912
     payload: dict[str, object],
     *,
     field_path: str,
@@ -852,7 +861,7 @@ def _normalize_component_options(options: object) -> object:
     return normalized_options
 
 
-def _canonicalize_component_payload_values(
+def _canonicalize_component_payload_values(  # noqa: C901, PLR0911, PLR0912, PLR0915
     component_key: str,
     payload: dict[str, object],
 ) -> dict[str, object]:
@@ -1033,7 +1042,7 @@ def _normalize_gap_payload(value: object) -> str | None:
     return None
 
 
-def _normalize_inline_text_component_payload(value: object) -> dict[str, object] | None:
+def _normalize_inline_text_component_payload(value: object) -> dict[str, object] | None:  # noqa: PLR0912
     """Normalize a title/label sugar value into a Text component payload."""
     normalized_text = _normalize_inline_string_payload(value)
     if normalized_text is not None:
@@ -1108,7 +1117,7 @@ def _make_synthetic_text_component(
     }
 
 
-def _canonicalize_surface_components(
+def _canonicalize_surface_components(  # noqa: C901, PLR0912, PLR0915
     components: object,
     *,
     used_ids: set[str] | None = None,
@@ -1378,12 +1387,12 @@ def _coerce_message_dicts(raw: object) -> list[dict[str, object]]:
             return parsed_messages
         return _split_compound_a2ui_record(raw)
     if isinstance(raw, list):
-        parsed_messages: list[dict[str, object]] = []
+        parsed_list_messages: list[dict[str, object]] = []
         for entry in raw:
             if not isinstance(entry, dict):
                 continue
-            parsed_messages.extend(_split_compound_a2ui_record(entry))
-        return parsed_messages
+            parsed_list_messages.extend(_split_compound_a2ui_record(entry))
+        return parsed_list_messages
     return []
 
 
@@ -1433,7 +1442,7 @@ def _extract_json_objects(raw: str) -> list[str]:
     return [raw[start:end] for start, end in _extract_json_object_spans(raw)]
 
 
-def _repair_json_bracket_balance(raw: str) -> str | None:
+def _repair_json_bracket_balance(raw: str) -> str | None:  # noqa: C901, PLR0912
     """Repair simple missing JSON bracket/brace closers in LLM-authored payloads."""
     repaired: list[str] = []
     stack: list[str] = []
@@ -1489,19 +1498,23 @@ def _repair_json_bracket_balance(raw: str) -> str | None:
 def _parse_json_like(raw: str) -> object | None:
     """Parse JSON, then fall back to safe Python literal syntax for common LLM slips."""
     try:
-        return json.loads(raw)
+        parsed: object = json.loads(raw)
+        return parsed
     except json.JSONDecodeError:
         try:
-            return ast.literal_eval(raw)
+            parsed = ast.literal_eval(raw)
+            return parsed
         except (ValueError, SyntaxError):
             repaired = _repair_json_bracket_balance(raw)
             if repaired is None:
                 return None
             try:
-                return json.loads(repaired)
+                parsed = json.loads(repaired)
+                return parsed
             except json.JSONDecodeError:
                 try:
-                    return ast.literal_eval(repaired)
+                    parsed = ast.literal_eval(repaired)
+                    return parsed
                 except (ValueError, SyntaxError):
                     return None
 
@@ -1610,7 +1623,7 @@ def _validate_begin_rendering_payload(payload: dict[str, object]) -> str | None:
     return None
 
 
-def _validate_surface_update_component(component: object, index: int) -> str | None:
+def _validate_surface_update_component(component: object, index: int) -> str | None:  # noqa: C901, PLR0911, PLR0912
     """Validate a single surfaceUpdate component entry."""
     if not isinstance(component, dict):
         return _invalid_a2ui_payload(f"surfaceUpdate.components[{index}] must be an object.")
@@ -1721,7 +1734,9 @@ def _validate_a2ui_record(
     return saw_begin_rendering, saw_surface_update, saw_supported_envelope, None
 
 
-def _parse_a2ui_validation_records(messages: str) -> tuple[list[dict[str, object]], str | None]:
+def _parse_a2ui_validation_records(  # noqa: C901, PLR0911, PLR0912
+    messages: str,
+) -> tuple[list[dict[str, object]], str | None]:
     """Parse raw A2UI messages for validation and detect flat payload misuse."""
     stripped = _strip_markdown_code_fence(messages)
     if not stripped:
@@ -1895,7 +1910,7 @@ def _child_component_ids(value: object) -> list[str]:
     return [item for item in explicit_list if _is_non_empty_string(item)]
 
 
-def _referenced_component_ids(component: dict[str, object]) -> list[str]:
+def _referenced_component_ids(component: dict[str, object]) -> list[str]:  # noqa: PLR0911
     """Return child component ids referenced by a component payload."""
     component_key, payload, error = _component_payload_from_entry(component, index=-1)
     if error is not None:
@@ -1978,12 +1993,14 @@ def _select_best_render_root(
     return best_root
 
 
-def _canonicalize_begin_rendering_roots(
+def _canonicalize_begin_rendering_roots(  # noqa: C901, PLR0911
     records: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Retarget beginRendering.root to the top-level container when a leaf root hides siblings."""
     surface_ids = {
-        surface_id for record in records if (surface_id := _surface_id_from_record(record)) is not None
+        surface_id
+        for record in records
+        if (surface_id := _surface_id_from_record(record)) is not None
     }
     if len(surface_ids) != 1:
         return records
@@ -2066,7 +2083,7 @@ def _rebuild_stream_state(records: list[dict[str, object]]) -> _A2UIMessageStrea
     return state
 
 
-def _validate_component_references(
+def _validate_component_references(  # noqa: C901, PLR0912
     root: str | None,
     components_by_id: dict[str, dict[str, object]],
 ) -> str | None:
@@ -2215,16 +2232,16 @@ def _build_data_record(
     if not isinstance(direct_data_model, dict):
         return None
 
-    payload: dict[str, object] = {
+    model_payload: dict[str, object] = {
         "path": "/",
         "contents": [direct_data_model],
     }
     if surface_id:
-        payload["surfaceId"] = surface_id
-    return {"dataModelUpdate": payload}
+        model_payload["surfaceId"] = surface_id
+    return {"dataModelUpdate": model_payload}
 
 
-def _apply_record_to_stream_state(
+def _apply_record_to_stream_state(  # noqa: C901, PLR0912
     state: _A2UIMessageStreamState,
     record: dict[str, object],
 ) -> None:
@@ -2308,7 +2325,10 @@ def _serialize_stream_state(state: _A2UIMessageStreamState) -> str:
     return "\n".join(json.dumps(record) for record in records)
 
 
-def merge_a2ui_message_stream(previous_messages: str | None, incoming_messages: str) -> str:
+def merge_a2ui_message_stream(  # noqa: C901, PLR0911
+    previous_messages: str | None,
+    incoming_messages: str,
+) -> str:
     """Merge incremental A2UI JSONL updates for validation and replay use cases."""
     if not incoming_messages:
         return canonicalize_a2ui_messages(previous_messages) if previous_messages else ""
@@ -2368,7 +2388,7 @@ def merge_a2ui_message_stream(previous_messages: str | None, incoming_messages: 
     return serialized or canonical_incoming_messages
 
 
-def validate_a2ui_messages(
+def validate_a2ui_messages(  # noqa: PLR0911
     messages: str,
     *,
     require_initial_render: bool = True,
@@ -2682,11 +2702,11 @@ def _normalize_choice_options(
             normalized.append({"label": _str_val(label), "value": value})
             continue
         if isinstance(option, dict) and _is_non_empty_string(option.get("value")):
-            label = option.get("label")
+            dict_label = option.get("label")
             normalized.append(
                 {
-                    "label": _str_val(str(label))
-                    if isinstance(label, str)
+                    "label": _str_val(str(dict_label))
+                    if isinstance(dict_label, str)
                     else _str_val(str(option["value"])),
                     "value": str(option["value"]),
                 }

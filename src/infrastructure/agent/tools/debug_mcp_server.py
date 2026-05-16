@@ -47,7 +47,7 @@ def configure_debug_mcp_server(
 
 def _parse_mcp_response(
     response: dict[str, Any],
-) -> dict[str, Any] | None:
+) -> dict[str, Any] | list[Any] | None:
     """Parse MCP tool response to extract data."""
     if not response:
         return None
@@ -133,7 +133,7 @@ async def debug_mcp_server_tool(
             arguments={"name": server_name},
         )
         status_data = _parse_mcp_response(status_result)
-        if status_data:
+        if isinstance(status_data, dict):
             result["status"] = status_data.get("status")
             result["process_info"] = {
                 "pid": status_data.get("pid"),
@@ -160,7 +160,7 @@ async def debug_mcp_server_tool(
                 },
             )
             logs_data = _parse_mcp_response(logs_result)
-            if logs_data:
+            if isinstance(logs_data, dict):
                 result["logs"] = logs_data.get("logs", logs_data.get("content", ""))
         except Exception as exc:
             logger.warning("Failed to get server logs: %s", exc)

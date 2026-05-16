@@ -25,6 +25,10 @@ from src.infrastructure.agent.tools.mcp_errors import (
     MCPToolErrorClassifier,
     RetryConfig,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    ACTIVE_EXECUTION_ROOT,
+    ATTEMPT_WORKTREE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -314,9 +318,11 @@ def _normalize_workspace_harness_kwargs(tool_name: str, kwargs: dict[str, Any]) 
 
 
 def _sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
+    if active_root := _active_execution_root_from_context(ctx):
+        return active_root
+
     if override := _workspace_root_override_from_context(ctx):
         return override
-
     return _declared_sandbox_code_root_from_context(ctx)
 
 
@@ -335,8 +341,38 @@ def _declared_sandbox_code_root_from_context(ctx: ToolContext) -> str | None:
     return value
 
 
+def _active_execution_root_from_context(ctx: ToolContext) -> str | None:
+    runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
+    for raw in (
+        runtime.get(ACTIVE_EXECUTION_ROOT),
+        _attempt_worktree_root(runtime),
+    ):
+        if not isinstance(raw, str):
+            continue
+        value = posixpath.normpath(raw.strip().rstrip("/"))
+        if value and value != "/workspace" and value.startswith("/workspace/"):
+            return value
+    return None
+
+
+def _attempt_worktree_root(runtime: Mapping[str, Any]) -> str | None:
+    attempt_worktree = runtime.get(ATTEMPT_WORKTREE)
+    if not isinstance(attempt_worktree, Mapping):
+        return None
+    for key in ("active_root", "worktree_path"):
+        raw = attempt_worktree.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw
+    return None
+
+
 def _workspace_root_override_from_context(ctx: ToolContext) -> str | None:
     runtime = ctx.runtime_context if isinstance(ctx.runtime_context, Mapping) else {}
+    if active_root := _active_execution_root_from_context(ctx):
+        declared_root = _declared_sandbox_code_root_from_context(ctx)
+        if declared_root is None or posixpath.normpath(declared_root) != active_root:
+            return active_root
+
     if not runtime.get("workspace_root_override"):
         return None
 

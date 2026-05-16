@@ -5,6 +5,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    ACTIVE_EXECUTION_ROOT,
+    ATTEMPT_WORKTREE,
     AUTONOMY_SCHEMA_VERSION_KEY,
     DERIVED_FROM_INTERNAL_PLAN_STEP,
     EXECUTION_STATE,
@@ -15,6 +17,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_HARNESS,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
+    WORKTREE_SETUP,
 )
 
 AUTONOMY_SCHEMA_VERSION = 1
@@ -97,6 +100,30 @@ class WorkspaceCodeContextModel(ContractModel):
     loaded_agents_files: list[str] = Field(default_factory=list)
     agents_digest: str | None = None
     agents_excerpt: str | None = None
+
+
+class AttemptWorktreeContextMetadataModel(ContractModel):
+    workspace_root: str | None = None
+    sandbox_code_root: str | None = None
+    active_root: str | None = None
+    worktree_path: str | None = None
+    branch_name: str | None = None
+    base_ref: str | None = None
+    attempt_id: str | None = None
+    is_isolated: bool = False
+    setup_status: str | None = None
+    setup_reason: str | None = None
+    setup_output: str | None = None
+
+
+class WorktreeSetupMetadataModel(ContractModel):
+    status: str | None = None
+    reason: str | None = None
+    output: str | None = None
+    worktree_path: str | None = None
+    branch_name: str | None = None
+    base_ref: str | None = None
+    attempt_id: str | None = None
 
 
 class HarnessFeatureItemModel(ContractModel):
@@ -315,6 +342,9 @@ class ExecutionTaskMetadataModel(ContractModel):
     workspace_plan_id: str | None = None
     workspace_plan_node_id: str | None = None
     code_context: WorkspaceCodeContextModel | None = None
+    attempt_worktree: AttemptWorktreeContextMetadataModel | None = None
+    active_execution_root: str | None = None
+    worktree_setup: WorktreeSetupMetadataModel | None = None
     harness_feature_id: str | None = None
     preflight_checks: list[HarnessPreflightCheckModel] = Field(default_factory=list)
     feature_checkpoint: FeatureCheckpointMetadataModel | None = None
@@ -356,6 +386,13 @@ class ExecutionTaskMetadataModel(ContractModel):
     task_execution_session_status: str | None = None
     task_execution_session_last_error: str | None = None
     task_execution_session_last_checked_at: str | None = None
+    worktree_integration_status: str | None = None
+    worktree_integration_summary: str | None = None
+    worktree_integration_attempt_id: str | None = None
+    worktree_integration_ran_at: str | None = None
+    worktree_integration_commit_ref: str | None = None
+    worktree_integration_worktree_path: str | None = None
+    worktree_integration_dirty_signature: str | None = None
     execution_recovery_actions: list[ExecutionRecoveryActionModel] = Field(default_factory=list)
     progress_events: list[WorkspaceProgressEventModel] = Field(default_factory=list)
     next_session_briefing: str | None = None
@@ -379,6 +416,9 @@ def has_autonomy_metadata(metadata: dict[str, Any] | None) -> bool:
             "goal_health",
             "workspace_type",
             "autonomy_profile",
+            ATTEMPT_WORKTREE,
+            ACTIVE_EXECUTION_ROOT,
+            WORKTREE_SETUP,
             WORKSPACE_HARNESS,
             REMEDIATION_STATUS,
             "blocked_child_task_ids",

@@ -39,12 +39,12 @@ class TestInjectAppModelContext:
         assert injected[1:] == messages
 
     @pytest.mark.parametrize(
-        ("preferred_language", "expected_phrase"),
-        [
-            ("zh-CN", "Simplified Chinese"),
-            ("en-US", "English"),
-        ],
-    )
+            ("preferred_language", "expected_phrase"),
+            [
+                ("zh-CN", "Chinese (Simplified)"),
+                ("en-US", "English"),
+            ],
+        )
     def test_preferred_language_context_instructs_reply_language(
         self,
         preferred_language: str,
@@ -55,9 +55,9 @@ class TestInjectAppModelContext:
         injected = _inject_preferred_language_context(messages, preferred_language)
 
         assert injected[0]["role"] == "system"
-        assert "[Response Language]" in injected[0]["content"]
+        assert "[Language Directive]" in injected[0]["content"]
         assert expected_phrase in injected[0]["content"]
-        assert "Do not translate quoted user content" in injected[0]["content"]
+        assert "Keep tool arguments, code" in injected[0]["content"]
         assert injected[1:] == messages
 
     def test_preferred_language_context_ignores_unknown_language(self) -> None:

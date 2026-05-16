@@ -27,9 +27,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
 
-if TYPE_CHECKING:
-    from src.domain.llm_providers.llm_types import LLMClient
-
 
 # =============================================================================
 # Pydantic Schema for LLM Structured Output
@@ -157,7 +154,9 @@ class CommunityUpdater:
                     logger.warning(f"Failed to generate community summary: {e}")
 
             # Save community
-            member_uuids = cast(list[str], [e.get("uuid") for e in member_entities if e.get("uuid") is not None])
+            member_uuids = cast(
+                list[str], [e.get("uuid") for e in member_entities if e.get("uuid") is not None]
+            )
             await self._louvain_detector.save_community(community, member_uuids)
 
             updated_communities.append(community)
@@ -329,20 +328,33 @@ class CommunityUpdater:
 
         # Get raw response from LLM using domain Message interface
         if hasattr(self._llm_client, "ainvoke"):
-            response = await self._llm_client.ainvoke(messages)
-            content = response.content if hasattr(response, "content") else str(response)
+            ainvoke_response = await self._llm_client.ainvoke(messages)
+            content = self._response_content(ainvoke_response)
         elif hasattr(self._llm_client, "chat"):
             # OpenAI-style client - convert domain messages to dict format
             dict_messages = [
                 {"role": m.role if hasattr(m, "role") else "user", "content": m.content}
                 for m in messages
             ]
-            response = await self._llm_client.chat.completions.create(
+            chat_response = await self._llm_client.chat.completions.create(
                 model=self._model or getattr(self._llm_client, "model", "gpt-4"),
                 messages=dict_messages,
                 temperature=0.3,
             )
-            content = response.choices[0].message.content
+            content = self._response_content(chat_response.choices[0].message)
+        elif hasattr(self._llm_client, "generate"):
+            generated_response = await self._llm_client.generate(
+                messages=messages,
+                temperature=0.3,
+                response_format="json",
+            )
+            content = self._response_content(generated_response)
+        elif hasattr(self._llm_client, "_generate_response"):
+            legacy_response = await self._llm_client._generate_response(
+                messages=messages,
+                response_model=None,
+            )
+            content = self._response_content(legacy_response)
         else:
             raise NotImplementedError(f"Unsupported LLM client type: {type(self._llm_client)}")
 
@@ -377,6 +389,19 @@ class CommunityUpdater:
             logger.debug(f"Raw response: {content[:500]}")
             # Return empty result if parsing fails
             raise ValueError(f"Failed to parse community summary JSON: {e}") from e
+
+    @staticmethod
+    def _response_content(response: object) -> str:
+        """Extract text content from supported LLM response shapes."""
+        if isinstance(response, str):
+            return response
+        if isinstance(response, dict):
+            content = response.get("content", "")
+        else:
+            content = getattr(response, "content", None)
+        if content is None:
+            return "" if response is None else str(response)
+        return content if isinstance(content, str) else str(content)
 
     async def _get_existing_communities(
         self,

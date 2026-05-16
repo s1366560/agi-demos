@@ -25,6 +25,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .utils import get_container_with_db
 
@@ -82,7 +83,7 @@ async def cancel_subagent_execution(
         if redis_client is None:
             raise HTTPException(
                 status_code=503,
-                detail="Redis is not available. Cannot signal cancellation.",
+                detail=_("Redis is not available. Cannot signal cancellation."),
             )
 
         reason = body.reason if body else None
@@ -123,5 +124,5 @@ async def cancel_subagent_execution(
         logger.error(f"Error cancelling SubAgent execution: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to cancel SubAgent execution: {e!s}",
+            detail=_(f"Failed to cancel SubAgent execution: {e!s}"),
         ) from e

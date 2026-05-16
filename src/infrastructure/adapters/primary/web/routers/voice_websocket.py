@@ -18,7 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
 from src.configuration.di_container import DIContainer
-from src.infrastructure.adapters.primary.web.websocket.auth import authenticate_websocket
+from src.infrastructure.adapters.primary.web.websocket.auth import (
+    authenticate_websocket,
+    extract_websocket_api_key,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 
@@ -40,7 +43,7 @@ _ASR_SILENCE_THRESHOLD = 1.5
 @router.websocket("/chat")
 async def voice_chat_endpoint(
     websocket: WebSocket,
-    token: str = Query(...),
+    token: str | None = Query(None),
     project_id: str = Query(...),
     conversation_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
@@ -54,7 +57,12 @@ async def voice_chat_endpoint(
     - Server sends JSON text frames for control messages
     """
     # 1. Authenticate
-    auth_result = await authenticate_websocket(token, db)
+    api_key = extract_websocket_api_key(websocket, token)
+    if not api_key:
+        await websocket.close(code=4003, reason="Authentication failed")
+        return
+
+    auth_result = await authenticate_websocket(api_key, db)
     if not auth_result:
         await websocket.close(code=4003, reason="Authentication failed")
         return
@@ -97,10 +105,12 @@ async def voice_chat_endpoint(
         )
 
         result = await db.execute(
-            refresh_select_statement(select(LLMProviderORM)
-            .where(LLMProviderORM.provider_type.like("volcengine%"))
-            .where(LLMProviderORM.is_active.is_(True))
-            .limit(1))
+            refresh_select_statement(
+                select(LLMProviderORM)
+                .where(LLMProviderORM.provider_type.like("volcengine%"))
+                .where(LLMProviderORM.is_active.is_(True))
+                .limit(1)
+            )
         )
         provider = result.scalar_one_or_none()
         if provider and provider.config:

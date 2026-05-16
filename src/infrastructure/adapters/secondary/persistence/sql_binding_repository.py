@@ -25,6 +25,11 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 logger = logging.getLogger(__name__)
 
 
+def _trace_specificity_score(entry: dict[str, object]) -> int:
+    value = entry.get("specificity_score", 0)
+    return value if isinstance(value, int) else 0
+
+
 class SqlAgentBindingRepository(
     BaseRepository[AgentBinding, object],
     AgentBindingRepositoryPort,
@@ -77,7 +82,7 @@ class SqlAgentBindingRepository(
         return self._to_domain(db_binding) if db_binding else None
 
     @override
-    async def delete(self, entity_id: str) -> bool:  # type: ignore[override]
+    async def delete(self, entity_id: str) -> bool:
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentBindingModel,
         )
@@ -306,7 +311,7 @@ class SqlAgentBindingRepository(
             key=lambda e: (
                 not bool(e["selected"]),
                 bool(e.get("eliminated", False)),
-                -(int(e.get("specificity_score", 0) or 0)),  # type: ignore[arg-type]
+                -_trace_specificity_score(e),
             )
         )
 

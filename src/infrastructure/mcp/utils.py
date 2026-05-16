@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 
 def parse_tool_result(result: dict[str, Any]) -> dict[str, Any] | list[Any] | str:
@@ -35,6 +35,7 @@ def parse_tool_result(result: dict[str, Any]) -> dict[str, Any] | list[Any] | st
 
     # Try to parse as JSON
     try:
-        return json.loads(text)
+        parsed: object = json.loads(text)
     except (json.JSONDecodeError, ValueError):
         return text
+    return cast(dict[str, Any] | list[Any] | str, parsed)

@@ -67,9 +67,16 @@ class ConnectionManager:
         # Event dispatcher manager for async event delivery
         self.dispatcher_manager: DispatcherManager = dispatcher_manager or get_dispatcher_manager()
 
-    async def connect(self, user_id: str, session_id: str, websocket: WebSocket) -> None:
+    async def connect(
+        self,
+        user_id: str,
+        session_id: str,
+        websocket: WebSocket,
+        *,
+        subprotocol: str | None = None,
+    ) -> None:
         """Accept and register a new WebSocket connection for a session."""
-        await websocket.accept()
+        await websocket.accept(subprotocol=subprotocol)
         async with self._lock:
             # Register the new session connection
             self.active_connections[session_id] = websocket

@@ -12,6 +12,8 @@ the raw schema description alone.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
+
 # ---------------------------------------------------------------------------
 # TOOL_SUMMARIES
 # ---------------------------------------------------------------------------
@@ -168,7 +170,7 @@ TOOL_ORDER: list[str] = [
 
 
 def apply_tool_summaries(
-    definitions: list[object],
+    definitions: Iterable[object],
     summaries: dict[str, str] | None = None,
 ) -> None:
     """Apply enhanced descriptions from *summaries* to tool definitions in-place.
@@ -189,7 +191,7 @@ def apply_tool_summaries(
 
 
 def sort_by_tool_order(
-    definitions: list[object],
+    definitions: Sequence[object],
     order: list[str] | None = None,
 ) -> list[object]:
     """Return *definitions* sorted according to *order*.

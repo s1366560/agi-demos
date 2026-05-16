@@ -36,6 +36,7 @@ from src.infrastructure.adapters.primary.web.routers.workspace_events import (
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +333,7 @@ def _to_http_error(exc: Exception) -> HTTPException:
             return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_("Internal server error")
     )
 
 

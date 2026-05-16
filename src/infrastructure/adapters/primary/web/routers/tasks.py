@@ -7,21 +7,30 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from src.application.services.auth_service_v2 import AuthService
 from src.application.use_cases.task import (
     GetTaskQuery,
     UpdateTaskCommand,
 )
 from src.configuration.di_container import DIContainer
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
+from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+    get_api_key_from_header,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
 from src.infrastructure.adapters.secondary.persistence.models import TaskLog as DBTaskLog
+from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
+    SqlAPIKeyRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_user_repository import SqlUserRepository
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +79,23 @@ class QueueDepthPoint(BaseModel):
 async def get_di_container(db: AsyncSession = Depends(get_db)) -> DIContainer:
     """Get DI container with use cases"""
     return DIContainer(db)
+
+
+async def verify_task_stream_api_key(api_key: str) -> None:
+    """Verify task stream API keys without holding a DB session open for the SSE lifetime."""
+    async with async_session_factory() as session:
+        auth_service = AuthService(
+            user_repository=SqlUserRepository(session),
+            api_key_repository=SqlAPIKeyRepository(session),
+        )
+        try:
+            _ = await auth_service.verify_api_key(api_key)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(exc),
+            ) from exc
+        await session.commit()
 
 
 # --- Helper Functions ---
@@ -334,10 +360,10 @@ async def retry_task_endpoint(
     )
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=_("Task not found"))
 
     if task.status != TaskLogStatus.FAILED:
-        raise HTTPException(status_code=400, detail="Task can only be retried if failed")
+        raise HTTPException(status_code=400, detail=_("Task can only be retried if failed"))
 
     # Update task to pending
     task = await use_case.execute(
@@ -367,11 +393,11 @@ async def stop_task_endpoint(
     task = await get_use_case.execute(refresh_select_statement(GetTaskQuery(task_id=task_id)))
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=_("Task not found"))
 
     if task.status not in ["PENDING", "PROCESSING"]:
         raise HTTPException(
-            status_code=400, detail="Task can only be stopped if pending or processing"
+            status_code=400, detail=_("Task can only be stopped if pending or processing")
         )
 
     # Mark task as stopped
@@ -495,7 +521,10 @@ async def _poll_task_updates(
 
 
 @router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)
-async def stream_task_status(task_id: str) -> EventSourceResponse:
+async def stream_task_status(
+    task_id: str,
+    api_key: str = Depends(get_api_key_from_header),
+) -> EventSourceResponse:
     """Stream task status updates using Server-Sent Events (SSE).
 
     This endpoint deliberately does NOT take a request-scoped
@@ -525,11 +554,11 @@ async def stream_task_status(task_id: str) -> EventSourceResponse:
         });
     """
     logger.info(f"SSE stream requested for task {task_id}")
+    await verify_task_stream_api_key(api_key)
 
     async def event_generator() -> AsyncGenerator[Any, None]:
         """Generate SSE events for task status updates."""
         logger.info(f"Event generator started for task {task_id}")
-        from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
         try:
             async with async_session_factory() as session:
@@ -600,7 +629,7 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> A
     task = result.scalar_one_or_none()
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=_("Task not found"))
 
     return task_to_response(
         TaskLog(

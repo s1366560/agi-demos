@@ -59,7 +59,7 @@ class TransportChannelAdapter(ABC):
     # ------------------------------------------------------------------
 
     @abstractmethod
-    async def receive(self) -> AsyncIterator[ChannelMessage]:
+    def receive(self) -> AsyncIterator[ChannelMessage]:
         """Yield incoming messages from the transport.
 
         Implementations should ``yield`` each normalised
@@ -67,9 +67,7 @@ class TransportChannelAdapter(ABC):
         terminate when the transport is closed or :meth:`disconnect`
         is called.
         """
-        # Abstract -- subclasses must override.
-        return
-        yield  # pragma: no cover
+        raise NotImplementedError
 
     @abstractmethod
     async def send(self, message: ChannelMessage) -> None:

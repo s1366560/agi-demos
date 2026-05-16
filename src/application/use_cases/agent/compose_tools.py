@@ -71,6 +71,8 @@ class ComposeToolsUseCase:
             ValueError: If tools are not available or incompatible
         """
         execution_context = execution_context or {}
+        tenant_id = self._extract_context_id(execution_context, "tenant_id")
+        project_id = self._extract_context_id(execution_context, "project_id")
 
         # Validate tools are available
         missing_tools = set(tool_names) - set(self._available_tools.keys())
@@ -81,14 +83,25 @@ class ComposeToolsUseCase:
         tools = [self._available_tools[name] for name in tool_names]
 
         # Check for existing composition
-        existing_composition = await self._find_composition_for_tools(tool_names)
+        existing_composition = await self._find_composition_for_tools(
+            tool_names,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
         if existing_composition:
             logger.info(f"Using existing composition: {existing_composition.name}")
             composition = existing_composition
         else:
+            if not tenant_id:
+                raise ValueError("tenant_id is required to create a tool composition")
             # Create new composition
-            composition = await self._create_composition(tool_names, tools)
+            composition = await self._create_composition(
+                tool_names,
+                tools,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
             logger.info(f"Created new composition: {composition.name}")
 
         # Execute the composition
@@ -106,24 +119,49 @@ class ComposeToolsUseCase:
 
         return result
 
+    @staticmethod
+    def _extract_context_id(execution_context: dict[str, Any], key: str) -> str | None:
+        """Read a non-empty string identifier from execution context."""
+        value = execution_context.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
     async def _find_composition_for_tools(
         self,
         tool_names: list[str],
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> ToolComposition | None:
         """Find an existing composition for the given tools."""
-        compositions = await self._composition_repository.list_by_tools(tool_names)
+        compositions = await self._composition_repository.list_by_tools(
+            tool_names,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
         # Find composition with exact tool order match
-        for composition in compositions:
-            if composition.tools == tool_names:
+        exact_matches = [
+            composition for composition in compositions if composition.tools == tool_names
+        ]
+
+        if project_id:
+            for composition in exact_matches:
+                if composition.project_id == project_id:
+                    return composition
+
+        for composition in exact_matches:
+            if composition.project_id is None:
                 return composition
 
-        return None
+        return exact_matches[0] if exact_matches else None
 
     async def _create_composition(
         self,
         tool_names: list[str],
         tools: list[AgentToolBase],
+        tenant_id: str,
+        project_id: str | None = None,
     ) -> ToolComposition:
         """Create a new tool composition."""
         # Validate tool compatibility
@@ -143,11 +181,12 @@ class ComposeToolsUseCase:
 
         # Create composition
         composition = ToolComposition.create(
-            tenant_id="",
+            tenant_id=tenant_id,
             name=name,
             description=f"Composition of {', '.join(tool_names)}",
             tools=tool_names,
             composition_type="sequential",
+            project_id=project_id,
         )
 
         # Save composition
@@ -489,6 +528,8 @@ class ComposeToolsUseCase:
         self,
         tool_names: list[str] | None = None,
         limit: int = 100,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> list[ToolComposition]:
         """
         List tool compositions.
@@ -496,21 +537,42 @@ class ComposeToolsUseCase:
         Args:
             tool_names: Optional filter by tool names
             limit: Maximum number of compositions to return
+            tenant_id: Optional tenant scope
+            project_id: Optional project scope
 
         Returns:
             List of tool compositions
         """
         if tool_names:
-            return await self._composition_repository.list_by_tools(tool_names)
-        return await self._composition_repository.list_all(limit)
+            return await self._composition_repository.list_by_tools(
+                tool_names,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+        return await self._composition_repository.list_all(
+            limit,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
-    async def get_composition(self, composition_id: str) -> ToolComposition | None:
+    async def get_composition(
+        self, composition_id: str, tenant_id: str | None = None
+    ) -> ToolComposition | None:
         """Get a specific composition by ID."""
-        return await self._composition_repository.get_by_id(composition_id)
+        return await self._composition_repository.get_by_id(composition_id, tenant_id=tenant_id)
 
-    async def get_composition_by_name(self, name: str) -> ToolComposition | None:
+    async def get_composition_by_name(
+        self,
+        name: str,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> ToolComposition | None:
         """Get a specific composition by name."""
-        return await self._composition_repository.get_by_name(name)
+        return await self._composition_repository.get_by_name(
+            name,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
     async def delete_composition(self, composition_id: str) -> bool:
         """Delete a composition."""

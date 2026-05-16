@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 
 async def _has_workspace_member(context: MessageContext, workspace_id: str) -> bool:
     """Check whether the current websocket user still belongs to the workspace."""
-    member_repo = context.get_scoped_container().workspace_member_repository()
-    member = await member_repo.find_by_workspace_and_user(workspace_id, context.user_id)
+    async with context.fresh_db_context() as scoped_context:
+        member_repo = scoped_context.get_scoped_container().workspace_member_repository()
+        member = await member_repo.find_by_workspace_and_user(workspace_id, scoped_context.user_id)
     return member is not None
 
 

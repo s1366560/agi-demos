@@ -73,34 +73,34 @@ DEFAULT_WATCHDOG_INTERVAL_SECONDS = float(
 # --- Phase 7: Prometheus metrics (soft import) ------------------------------
 
 try:  # pragma: no cover - exercised in prod runtime
-    from prometheus_client import Counter  # type: ignore[import-untyped]
+    from prometheus_client import Counter  # pyright: ignore[reportMissingImports]
 
-    _WTP_VERB_COUNTER = Counter(
+    _wtp_verb_counter = Counter(
         "memstack_wtp_envelopes_total",
         "Total WTP envelopes processed by the supervisor, labeled by verb.",
         labelnames=("verb", "source"),
     )
-    _WTP_STALE_COUNTER = Counter(
+    _wtp_stale_counter = Counter(
         "memstack_wtp_stale_attempts_total",
         "Total attempts flipped to blocked by the liveness watchdog.",
     )
 except Exception:  # pragma: no cover - keep supervisor importable without prom
-    _WTP_VERB_COUNTER = None  # type: ignore[assignment]
-    _WTP_STALE_COUNTER = None  # type: ignore[assignment]
+    _wtp_verb_counter = None
+    _wtp_stale_counter = None
 
 
 def _count_verb(verb: WtpVerb, *, source: str) -> None:
-    if _WTP_VERB_COUNTER is None:
+    if _wtp_verb_counter is None:
         return
     with contextlib.suppress(Exception):
-        _WTP_VERB_COUNTER.labels(verb=verb.value, source=source).inc()
+        _wtp_verb_counter.labels(verb=verb.value, source=source).inc()
 
 
 def _count_stale() -> None:
-    if _WTP_STALE_COUNTER is None:
+    if _wtp_stale_counter is None:
         return
     with contextlib.suppress(Exception):
-        _WTP_STALE_COUNTER.inc()
+        _wtp_stale_counter.inc()
 
 
 class _RedisLike(Protocol):

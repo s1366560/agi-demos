@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
 
@@ -41,6 +42,12 @@ def _build_context() -> SimpleNamespace:
         send_ack=AsyncMock(),
         send_error=AsyncMock(),
     )
+
+    @asynccontextmanager
+    async def _fresh_db_context():
+        yield context
+
+    context.fresh_db_context = _fresh_db_context
     return context
 
 
@@ -88,7 +95,9 @@ async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> Non
 
     context.connection_manager.try_start_bridge_task.side_effect = _try_start_bridge_task
 
-    await handler.handle(context, {"conversation_id": "conv-1", "from_time_us": 100, "from_counter": 2})
+    await handler.handle(
+        context, {"conversation_id": "conv-1", "from_time_us": 100, "from_counter": 2}
+    )
 
     context.connection_manager.subscribe.assert_awaited_once_with("session-1", "conv-1")
     context.connection_manager.try_start_bridge_task.assert_awaited_once()
@@ -161,7 +170,9 @@ async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
 
     context.connection_manager.try_start_bridge_task.side_effect = _try_start_bridge_task
 
-    await handler.handle(context, {"conversation_id": "conv-1", "from_time_us": 100, "from_counter": 1})
+    await handler.handle(
+        context, {"conversation_id": "conv-1", "from_time_us": 100, "from_counter": 1}
+    )
     if created_tasks:
         await asyncio.gather(*created_tasks)
 

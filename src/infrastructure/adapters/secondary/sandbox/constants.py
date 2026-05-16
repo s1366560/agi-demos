@@ -6,9 +6,16 @@ Infrastructure-specific constants (ports) are defined here.
 """
 
 # Re-export domain constants for backwards compatibility
-from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE  # noqa: F401
+from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 
 # WebSocket ports inside container
 MCP_WEBSOCKET_PORT = 8765
 DESKTOP_PORT = 6080  # noVNC
 TERMINAL_PORT = 7681  # ttyd
+
+__all__ = [
+    "DEFAULT_SANDBOX_IMAGE",
+    "DESKTOP_PORT",
+    "MCP_WEBSOCKET_PORT",
+    "TERMINAL_PORT",
+]

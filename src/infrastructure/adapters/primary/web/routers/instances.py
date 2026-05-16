@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     User as UserModel,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ async def _get_owned_instance_or_404(
     if instance is None or getattr(instance, "tenant_id", None) != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Instance {instance_id} not found",
+            detail=_(f"Instance {instance_id} not found"),
         )
     return instance
 
@@ -156,7 +157,7 @@ async def create_instance(
         logger.exception("Error creating instance")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -190,7 +191,7 @@ async def list_instances(
         logger.exception("Error listing instances")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -213,7 +214,7 @@ async def get_instance(
         logger.exception("Error getting instance")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -266,7 +267,7 @@ async def update_instance(
         logger.exception("Error updating instance")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -299,7 +300,7 @@ async def delete_instance(
         logger.exception("Error deleting instance")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -343,7 +344,7 @@ async def scale_instance(
         logger.exception("Error scaling instance")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -380,7 +381,7 @@ async def restart_instance(
         logger.exception("Error restarting instance")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -415,7 +416,7 @@ async def get_config(
         logger.exception("Error getting instance config")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -453,7 +454,7 @@ async def update_config(
         logger.exception("Error updating instance config")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -490,7 +491,7 @@ async def save_pending_config(
         logger.exception("Error saving pending config")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -526,7 +527,7 @@ async def apply_pending_config(
         logger.exception("Error applying pending config")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -582,7 +583,7 @@ async def add_member(
         logger.exception("Error adding member")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -626,7 +627,7 @@ async def search_users(
         logger.exception("Error searching users")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -677,7 +678,7 @@ async def update_member_role(
         logger.exception("Error updating member role")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -714,7 +715,7 @@ async def remove_member(
         logger.exception("Error removing member")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -766,7 +767,7 @@ async def list_members(
         logger.exception("Error listing members")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -801,7 +802,7 @@ async def get_instance_llm_config(
         logger.exception("Error getting instance LLM config")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e
 
 
@@ -840,5 +841,5 @@ async def update_instance_llm_config(
         logger.exception("Error updating instance LLM config")
         raise HTTPException(
             status_code=500,
-            detail="Internal server error",
+            detail=_("Internal server error"),
         ) from e

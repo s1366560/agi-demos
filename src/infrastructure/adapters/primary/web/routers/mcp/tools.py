@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     MCPToolCallRequest,
@@ -105,19 +106,19 @@ async def call_mcp_tool(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {request_data.server_id}",
+            detail=_(f"MCP server not found: {request_data.server_id}"),
         )
 
     if server.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )
 
     if not server.enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"MCP server '{server.name}' is disabled",
+            detail=_(f"MCP server '{server.name}' is disabled"),
         )
 
     try:
@@ -130,7 +131,7 @@ async def call_mcp_tool(
         if not server.config:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"MCP server '{server.name}' has no transport configuration",
+                detail=_(f"MCP server '{server.name}' has no transport configuration"),
             )
 
         async with MCPClient(
@@ -165,5 +166,5 @@ async def call_mcp_tool(
         logger.error(f"Failed to call MCP tool: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to call MCP tool: {e!s}",
+            detail=_(f"Failed to call MCP tool: {e!s}"),
         ) from e

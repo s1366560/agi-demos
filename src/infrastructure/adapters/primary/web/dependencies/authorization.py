@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.authorization_service import AuthorizationService
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ def require_permission(permission: str) -> Callable[..., Any]:
 
             if not current_user:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=_("Authentication required")
                 )
 
             # Get auth_service from kwargs if available, or use the one passed as dependency
@@ -57,7 +58,7 @@ def require_permission(permission: str) -> Callable[..., Any]:
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Authorization service not configured",
+                    detail=_("Authorization service not configured"),
                 )
 
             # Extract tenant_id and project_id from kwargs for context
@@ -85,7 +86,7 @@ def require_permission(permission: str) -> Callable[..., Any]:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission '{permission}' required",
+                    detail=_(f"Permission '{permission}' required"),
                 )
 
             # Permission granted, proceed with the endpoint
@@ -121,14 +122,14 @@ def require_any_permission(*permissions: str) -> Callable[..., Any]:
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=_("Authentication required")
                 )
 
             auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Authorization service not configured",
+                    detail=_("Authorization service not configured"),
                 )
 
             tenant_id = kwargs.get("tenant_id")
@@ -154,7 +155,7 @@ def require_any_permission(*permissions: str) -> Callable[..., Any]:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"One of permissions {permissions} required",
+                    detail=_(f"One of permissions {permissions} required"),
                 )
 
             return cast(None, await func(*args, **kwargs))
@@ -189,14 +190,14 @@ def require_all_permissions(*permissions: str) -> Callable[..., Any]:
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=_("Authentication required")
                 )
 
             auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Authorization service not configured",
+                    detail=_("Authorization service not configured"),
                 )
 
             tenant_id = kwargs.get("tenant_id")
@@ -221,7 +222,7 @@ def require_all_permissions(*permissions: str) -> Callable[..., Any]:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permissions required: {missing_permissions}",
+                    detail=_(f"Permissions required: {missing_permissions}"),
                 )
 
             return cast(None, await func(*args, **kwargs))
@@ -257,14 +258,14 @@ def require_role(role: str) -> Callable[..., Any]:
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=_("Authentication required")
                 )
 
             auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Authorization service not configured",
+                    detail=_("Authorization service not configured"),
                 )
 
             # Get user's roles
@@ -280,7 +281,7 @@ def require_role(role: str) -> Callable[..., Any]:
                     f"User {current_user.id} denied access to {func.__name__}: missing role {role}"
                 )
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail=f"Role '{role}' required"
+                    status_code=status.HTTP_403_FORBIDDEN, detail=_(f"Role '{role}' required")
                 )
 
             return cast(None, await func(*args, **kwargs))

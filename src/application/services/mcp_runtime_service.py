@@ -383,6 +383,48 @@ class MCPRuntimeService:
         )
         return result
 
+    async def list_server_prompts(
+        self,
+        server_id: str,
+        tenant_id: str,
+    ) -> list[dict[str, Any]]:
+        """List prompt templates exposed by a tenant-owned MCP server."""
+        server = await self.get_server_for_tenant(server_id, tenant_id)
+        if not server.project_id:
+            return []
+
+        return await self._sandbox_manager.list_prompts(
+            project_id=server.project_id,
+            server_name=server.name,
+        )
+
+    async def set_server_log_level(
+        self,
+        server_id: str,
+        tenant_id: str,
+        level: str,
+    ) -> bool:
+        """Set logging level for a tenant-owned MCP server runtime."""
+        server = await self.get_server_for_tenant(server_id, tenant_id)
+        if not server.project_id:
+            return False
+
+        success = await self._sandbox_manager.set_log_level(
+            project_id=server.project_id,
+            server_name=server.name,
+            level=level,
+        )
+        await self._record_event(
+            tenant_id=tenant_id,
+            project_id=server.project_id,
+            server_id=server.id,
+            event_type="server.log_level",
+            status="success" if success else "failed",
+            error_message=None if success else "Failed to set MCP server log level",
+            metadata={"level": level},
+        )
+        return success
+
     async def delete_server(self, server_id: str, tenant_id: str) -> None:
         """Delete server and associated apps with lifecycle auditing."""
         server = await self.get_server_for_tenant(server_id, tenant_id)
@@ -636,7 +678,7 @@ class MCPRuntimeService:
         result: dict[str, Any] = {}
 
         # Extract command string
-        cmd = config.command
+        cmd: object = config.command
         if isinstance(cmd, list) and cmd:
             result["command"] = cmd[0]
             # Prefer explicit args if present; otherwise use tail of command list

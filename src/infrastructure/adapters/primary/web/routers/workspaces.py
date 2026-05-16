@@ -114,7 +114,7 @@ def _coerce_use_case(value: Any) -> WorkspaceUseCase | None:  # noqa: ANN401
     if value == "software_development":
         return "programming"
     if isinstance(value, str) and value in _VALID_USE_CASES:
-        return value
+        return cast(WorkspaceUseCase, value)  # pyright: ignore[reportUnnecessaryCast]
     return None
 
 

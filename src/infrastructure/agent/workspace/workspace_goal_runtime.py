@@ -59,6 +59,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository
 from src.infrastructure.adapters.secondary.persistence.sql_cyber_objective_repository import (
     SqlCyberObjectiveRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
     SqlWorkspaceAgentRepository,
 )
@@ -78,6 +79,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_sessio
     SqlWorkspaceTaskSessionAttemptRepository,
 )
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+from src.infrastructure.agent.workspace.dispatcher.retry_policy import DEFAULT_RETRY_POLICY
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
     CURRENT_ATTEMPT_ID,
@@ -94,6 +96,11 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     TASK_ROLE,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
+)
+from src.infrastructure.agent.workspace_plan.run_contract import WorkspaceRunContract
+from src.infrastructure.agent.workspace_plan.run_controller import (
+    WorkspaceRunController,
+    completion_gate_for_plan,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import persisted_attempt_leader_agent_id
 
@@ -453,6 +460,51 @@ async def _load_workspace_metadata_for_task(
     return dict(metadata) if isinstance(metadata, Mapping) else {}
 
 
+async def _workspace_run_gate_allows_root_completion(
+    *,
+    workspace_id: str,
+    task_repo: SqlWorkspaceTaskRepository,
+) -> tuple[bool, str | None]:
+    session = getattr(task_repo, "_session", None)
+    if not isinstance(session, AsyncSession):
+        return True, None
+
+    plan = await SqlPlanRepository(session).get_by_workspace(workspace_id)
+    if plan is None:
+        return True, None
+
+    workspace_metadata = await _load_workspace_metadata_for_task(
+        task_repo=task_repo,
+        workspace_id=workspace_id,
+    )
+    try:
+        root_metadata = plan.goal_node.metadata
+    except ValueError:
+        root_metadata = {}
+    contract = WorkspaceRunContract.from_sources(
+        workspace_metadata=workspace_metadata,
+        root_metadata=root_metadata,
+    )
+    controller = WorkspaceRunController(session)
+    retry_queue = await controller.retry_queue(workspace_id)
+    active_attempts = await controller.active_attempts(workspace_id)
+    gate = completion_gate_for_plan(
+        plan,
+        retry_queue=retry_queue,
+        active_attempts=active_attempts,
+        contract=contract,
+    )
+    if gate.get("allowed") is True:
+        return True, None
+    reasons = gate.get("blocked_reasons")
+    reason = (
+        str(reasons[0])
+        if isinstance(reasons, list) and reasons
+        else "workspace run completion gate blocked"
+    )
+    return False, reason
+
+
 async def _record_root_auto_complete_failure(
     *,
     root_task: WorkspaceTask,
@@ -558,6 +610,18 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
             root_task=root_task,
             task_repo=task_repo,
             reason=evidence_block_reason or "root auto-complete evidence is insufficient",
+        )
+        return None
+
+    gate_allows_completion, gate_block_reason = await _workspace_run_gate_allows_root_completion(
+        workspace_id=workspace_id,
+        task_repo=task_repo,
+    )
+    if not gate_allows_completion:
+        await _record_root_auto_complete_failure(
+            root_task=root_task,
+            task_repo=task_repo,
+            reason=gate_block_reason or "workspace run completion gate blocked",
         )
         return None
 
@@ -817,16 +881,24 @@ def _schedule_workspace_retry_attempt(
     root_goal_task_id: str,
     workspace_task_id: str,
     attempt_id: str,
+    attempt_number: int | str = 1,
     actor_user_id: str,
     leader_agent_id: str,
     retry_feedback: str,
 ) -> None:
+    try:
+        retry_attempt_number = int(attempt_number)
+    except (TypeError, ValueError):
+        retry_attempt_number = 1
+    backoff_seconds = DEFAULT_RETRY_POLICY.backoff_for(retry_attempt_number)
     task = asyncio.create_task(
-        _launch_workspace_retry_attempt(
+        _launch_workspace_retry_attempt_after_backoff(
+            backoff_seconds=backoff_seconds,
             workspace_id=workspace_id,
             root_goal_task_id=root_goal_task_id,
             workspace_task_id=workspace_task_id,
             attempt_id=attempt_id,
+            attempt_number=retry_attempt_number,
             actor_user_id=actor_user_id,
             leader_agent_id=leader_agent_id,
             retry_feedback=retry_feedback,
@@ -836,12 +908,39 @@ def _schedule_workspace_retry_attempt(
     task.add_done_callback(_background_tasks.discard)
 
 
+async def _launch_workspace_retry_attempt_after_backoff(
+    *,
+    backoff_seconds: float,
+    workspace_id: str,
+    root_goal_task_id: str,
+    workspace_task_id: str,
+    attempt_id: str,
+    attempt_number: int | str | None = None,
+    actor_user_id: str,
+    leader_agent_id: str,
+    retry_feedback: str,
+) -> None:
+    if backoff_seconds > 0:
+        await asyncio.sleep(backoff_seconds)
+    await _launch_workspace_retry_attempt(
+        workspace_id=workspace_id,
+        root_goal_task_id=root_goal_task_id,
+        workspace_task_id=workspace_task_id,
+        attempt_id=attempt_id,
+        attempt_number=attempt_number,
+        actor_user_id=actor_user_id,
+        leader_agent_id=leader_agent_id,
+        retry_feedback=retry_feedback,
+    )
+
+
 async def _launch_workspace_retry_attempt(
     *,
     workspace_id: str,
     root_goal_task_id: str,
     workspace_task_id: str,
     attempt_id: str,
+    attempt_number: int | str | None = None,
     actor_user_id: str,
     leader_agent_id: str,
     retry_feedback: str,
@@ -895,6 +994,9 @@ async def _launch_workspace_retry_attempt(
     worker_binding_line = (
         f"workspace_agent_binding_id={worker_binding_id}\n" if worker_binding_id else ""
     )
+    attempt_number_line = (
+        f"attempt_number={attempt_number}\n" if attempt_number is not None else ""
+    )
     user_message = (
         "Please continue autonomous workspace task execution for the existing workspace task. "
         "Review the previous attempt feedback, relaunch execution for the same task, and keep "
@@ -903,6 +1005,7 @@ async def _launch_workspace_retry_attempt(
         "[workspace-task-binding]\n"
         f"workspace_task_id={workspace_task_id}\n"
         f"attempt_id={attempt_id}\n"
+        f"{attempt_number_line}"
         f"root_goal_task_id={root_goal_task_id}\n"
         f"workspace_id={workspace_id}\n"
         f"{worker_binding_line}"
@@ -944,6 +1047,11 @@ async def _launch_workspace_retry_attempt(
                         "conversation_scope": conversation_scope,
                         "retry_launch": True,
                         "created_at": datetime.now(UTC).isoformat(),
+                        **(
+                            {"attempt_number": attempt_number}
+                            if attempt_number is not None
+                            else {}
+                        ),
                         **(
                             {PREFERRED_LANGUAGE: preferred_language}
                             if preferred_language is not None
@@ -1425,6 +1533,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                             ROOT_GOAL_TASK_ID: str(task.metadata.get(ROOT_GOAL_TASK_ID) or ""),
                             "workspace_task_id": task.id,
                             "attempt_id": new_attempt.id,
+                            "attempt_number": str(new_attempt.attempt_number),
                             "actor_user_id": actor_user_id,
                             "leader_agent_id": leader_agent_id,
                             "retry_feedback": summary or task.title,

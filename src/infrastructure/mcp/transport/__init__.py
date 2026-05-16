@@ -14,12 +14,14 @@ All transports implement the MCPTransportPort interface from the domain layer.
 from src.infrastructure.mcp.transport.base import BaseTransport
 from src.infrastructure.mcp.transport.factory import TransportFactory
 from src.infrastructure.mcp.transport.http import HTTPTransport
+from src.infrastructure.mcp.transport.sse import SSETransport
 from src.infrastructure.mcp.transport.stdio import StdioTransport
 from src.infrastructure.mcp.transport.websocket import WebSocketTransport
 
 __all__ = [
     "BaseTransport",
     "HTTPTransport",
+    "SSETransport",
     "StdioTransport",
     "TransportFactory",
     "WebSocketTransport",

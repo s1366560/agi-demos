@@ -23,6 +23,7 @@ class TestTransportFactory:
         assert "local" in types
         assert "stdio" in types
         assert "http" in types
+        assert "sse" in types
         assert "websocket" in types
 
     def test_supports_local(self):
@@ -36,6 +37,10 @@ class TestTransportFactory:
     def test_supports_websocket(self):
         """Test supports returns True for websocket."""
         assert TransportFactory().supports("websocket") is True
+
+    def test_supports_sse(self):
+        """Test supports returns True for SSE."""
+        assert TransportFactory().supports("sse") is True
 
     def test_supports_unknown(self):
         """Test supports returns False for unknown type."""
@@ -58,6 +63,15 @@ class TestTransportFactory:
         transport = TransportFactory().create(config)
 
         assert isinstance(transport, HTTPTransport)
+
+    def test_create_sse_transport(self):
+        """Test creating SSE transport."""
+        from src.infrastructure.mcp.transport.sse import SSETransport
+
+        config = TransportConfig.sse(url="http://localhost:8080/mcp")
+        transport = TransportFactory().create(config)
+
+        assert isinstance(transport, SSETransport)
 
     def test_create_websocket_transport(self):
         """Test creating WebSocket transport."""
@@ -89,6 +103,17 @@ class TestTransportFactory:
         )
 
         assert isinstance(transport, WebSocketTransport)
+
+    def test_create_from_type_sse(self):
+        """Test create_from_type with SSE."""
+        from src.infrastructure.mcp.transport.sse import SSETransport
+
+        transport = TransportFactory().create_from_type(
+            "sse",
+            {"url": "http://localhost:8080/mcp"},
+        )
+
+        assert isinstance(transport, SSETransport)
 
 
 # ============================================================================

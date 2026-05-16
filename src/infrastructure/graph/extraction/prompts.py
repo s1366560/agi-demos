@@ -176,12 +176,12 @@ def build_reflexion_prompt(
 
     # Handle both EntityNode objects and dictionaries
     def get_entity_info(e: object) -> str:
-        if hasattr(e, "name"):
-            # EntityNode object
-            return f"- {e.name} ({e.entity_type or 'Unknown'}): {e.summary or ''}"
-        else:
-            # Dictionary
+        if isinstance(e, dict):
             return f"- {e.get('name', 'Unknown')} ({e.get('entity_type', 'Unknown')}): {e.get('summary', '')}"
+        name = getattr(e, "name", "Unknown")
+        entity_type = getattr(e, "entity_type", None) or "Unknown"
+        summary = getattr(e, "summary", None) or ""
+        return f"- {name} ({entity_type}): {summary}"
 
     entities_str = "\n".join(get_entity_info(e) for e in extracted_entities)
 

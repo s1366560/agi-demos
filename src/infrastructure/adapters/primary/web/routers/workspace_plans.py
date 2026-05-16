@@ -68,6 +68,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/plan", tags=["workspace-plans"])
 logger = logging.getLogger(__name__)
@@ -4370,12 +4371,12 @@ async def request_workspace_plan_pipeline_run(
         )
         plan = await SqlPlanRepository(db).get_by_workspace(workspace_id)
         if plan is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan_not_found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("plan_not_found"))
         node = _pipeline_target_node(plan, body.node_id)
         if node is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="pipeline_target_node_not_found",
+                detail=_("pipeline_target_node_not_found"),
             )
         outbox = await SqlWorkspacePlanOutboxRepository(db).enqueue(
             plan_id=plan.id,
@@ -4428,7 +4429,7 @@ async def request_workspace_plan_delivery_contract_regeneration(
         )
         plan = await SqlPlanRepository(db).get_by_workspace(workspace_id)
         if plan is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan_not_found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("plan_not_found"))
 
         result = await db.execute(
             refresh_select_statement(
@@ -4437,7 +4438,7 @@ async def request_workspace_plan_delivery_contract_regeneration(
         )
         workspace_model = result.scalar_one_or_none()
         if workspace_model is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workspace_not_found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("workspace_not_found"))
 
         metadata = dict(workspace_model.metadata_json or {})
         delivery = dict(metadata.get("delivery_cicd") or {})

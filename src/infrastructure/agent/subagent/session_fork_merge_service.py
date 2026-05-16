@@ -81,14 +81,11 @@ class SessionForkMergeService:
         """Merge *child* results back into *parent* per strategy."""
         strategy = child.merge_strategy or MergeStrategy.RESULT_ONLY
 
-        if strategy is MergeStrategy.RESULT_ONLY:
-            merged = result.to_context_message()
-        elif strategy is MergeStrategy.FULL_HISTORY:
+        merged = result.to_context_message()
+        if strategy is MergeStrategy.FULL_HISTORY:
             merged = self._merge_full_history(child, child_messages)
         elif strategy is MergeStrategy.SUMMARY:
             merged = result.summary
-        else:  # pragma: no cover -- exhaustive enum guard
-            merged = result.to_context_message()
 
         event = SessionMergedEvent(
             parent_conversation_id=parent.id,

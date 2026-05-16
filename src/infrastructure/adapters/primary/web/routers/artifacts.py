@@ -18,6 +18,7 @@ from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import ArtifactCategory, ArtifactStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,10 @@ def get_artifact_service() -> ArtifactService:
         container = DIContainer()
         _artifact_service = container.artifact_service()
 
-    return _artifact_service  # type: ignore[unreachable]
+    service = _artifact_service
+    if service is None:
+        raise RuntimeError("Artifact service initialization failed")
+    return service
 
 
 # === Request/Response Models ===
@@ -126,7 +130,7 @@ async def list_artifacts(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid category: {category}. Valid categories: {[c.value for c in ArtifactCategory]}",
+                detail=_(f"Invalid category: {category}. Valid categories: {[c.value for c in ArtifactCategory]}"),
             ) from None
 
     # Get artifacts
@@ -185,7 +189,7 @@ async def get_artifact(
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
 
     return ArtifactResponse(
         id=artifact.id,
@@ -224,18 +228,18 @@ async def download_artifact(
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
 
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
             status_code=400,
-            detail=f"Artifact not ready for download (status: {artifact.status.value})",
+            detail=_(f"Artifact not ready for download (status: {artifact.status.value})"),
         )
 
     # Refresh URL to ensure it's valid
     url = await service.refresh_artifact_url(artifact_id)
     if not url:
-        raise HTTPException(status_code=500, detail="Failed to generate download URL")
+        raise HTTPException(status_code=500, detail=_("Failed to generate download URL"))
 
     # Redirect to presigned URL
     return RedirectResponse(url=url, status_code=307)
@@ -255,17 +259,17 @@ async def refresh_artifact_url(
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
 
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot refresh URL for artifact with status: {artifact.status.value}",
+            detail=_(f"Cannot refresh URL for artifact with status: {artifact.status.value}"),
         )
 
     url = await service.refresh_artifact_url(artifact_id)
     if not url:
-        raise HTTPException(status_code=500, detail="Failed to refresh URL")
+        raise HTTPException(status_code=500, detail=_("Failed to refresh URL"))
 
     return RefreshUrlResponse(artifact_id=artifact_id, url=url)
 
@@ -286,17 +290,17 @@ async def update_artifact_content(
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
 
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot update artifact with status: {artifact.status.value}",
+            detail=_(f"Cannot update artifact with status: {artifact.status.value}"),
         )
 
     updated = await service.update_artifact_content(artifact_id, request.content)
     if not updated:
-        raise HTTPException(status_code=500, detail="Failed to update artifact content")
+        raise HTTPException(status_code=500, detail=_("Failed to update artifact content"))
 
     return UpdateContentResponse(
         artifact_id=artifact_id,
@@ -319,11 +323,11 @@ async def delete_artifact(
     artifact = await service.get_artifact(artifact_id)
 
     if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise HTTPException(status_code=404, detail=_("Artifact not found"))
 
     success = await service.delete_artifact(artifact_id)
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete artifact")
+        raise HTTPException(status_code=500, detail=_("Failed to delete artifact"))
 
     return {"status": "deleted", "artifact_id": artifact_id}
 

@@ -55,6 +55,8 @@ from src.infrastructure.agent.workspace.workspace_goal_runtime import (
     apply_workspace_worker_report,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
+    ACTIVE_EXECUTION_ROOT,
+    ATTEMPT_WORKTREE,
     AUTONOMY_SCHEMA_VERSION_KEY,
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
@@ -66,6 +68,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     TASK_ROLE,
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
+    WORKTREE_SETUP,
 )
 from src.infrastructure.agent.workspace_plan.factory import (
     _project_verification_to_workspace_task,
@@ -641,6 +644,94 @@ async def test_worker_launch_handler_supplies_system_leader_when_payload_omits_l
 
     assert launched
     assert launched[0]["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+
+
+@pytest.mark.asyncio
+async def test_worker_launch_handler_blocks_when_worktree_setup_fails(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="task-worktree-fail-1",
+            workspace_id="workspace-1",
+            title="Do not launch on setup failure",
+            description="Worker launch must not continue after worktree setup fails.",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+            },
+        )
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "task-worktree-fail-1",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+        },
+        metadata={"source": "unit"},
+    )
+    await db_session.commit()
+
+    launched: list[dict[str, object]] = []
+
+    def fake_schedule_worker_session(**kwargs: object) -> None:
+        launched.append(kwargs)
+
+    async def fake_worktree_preparer(
+        _session: AsyncSession,
+        _workspace_id: str,
+        _task: WorkspaceTask,
+        _extra_instructions: str | None,
+        _attempt_id: str | None,
+    ) -> str:
+        return (
+            "[worktree-setup]\n"
+            "status=failed\n"
+            "worktree_path=/workspace/.memstack/worktrees/attempt-fail-1\n"
+            "reason=git worktree add failed\n"
+            "[/worktree-setup]"
+        )
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        fake_schedule_worker_session,
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(
+                worktree_preparer=fake_worktree_preparer
+            ),
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+
+    assert not launched
+    task = await db_session.get(WorkspaceTaskModel, "task-worktree-fail-1")
+    assert task is not None
+    assert task.status == "blocked"
+    assert task.blocker_reason == "worktree_setup_failed: git worktree add failed"
+    assert task.metadata_json[WORKTREE_SETUP]["status"] == "failed"
+    assert task.metadata_json[ATTEMPT_WORKTREE]["worktree_path"] == (
+        "/workspace/.memstack/worktrees/attempt-fail-1"
+    )
+    assert task.metadata_json[ACTIVE_EXECUTION_ROOT] == (
+        "/workspace/.memstack/worktrees/attempt-fail-1"
+    )
 
 
 @pytest.mark.asyncio
@@ -1378,17 +1469,31 @@ async def test_run_once_releases_claimed_item_when_cancelled(
 
 @pytest.mark.asyncio
 async def test_poll_loop_continues_after_claimed_item_cancelled(
-    db_session: AsyncSession,
+    test_engine,
 ) -> None:
-    await _seed_workspace_and_plan(db_session)
-    repo = SqlWorkspacePlanOutboxRepository(db_session)
-    item = await repo.enqueue(
-        plan_id="worker-plan-1",
-        workspace_id="workspace-1",
-        event_type="worker_launch",
-        max_attempts=2,
-    )
+    session_maker = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_maker() as seed_session:
+        await _seed_workspace_and_plan(seed_session)
+        repo = SqlWorkspacePlanOutboxRepository(seed_session)
+        item = await repo.enqueue(
+            plan_id="worker-plan-1",
+            workspace_id="workspace-1",
+            event_type="worker_launch",
+            max_attempts=2,
+        )
+        item_id = item.id
+        await seed_session.commit()
+
     calls = 0
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[AsyncSession]:
+        async with session_maker() as session:
+            try:
+                yield session
+            except BaseException:
+                await session.rollback()
+                raise
 
     async def flaky_handler(
         _outbox_item: WorkspacePlanOutboxModel,
@@ -1402,14 +1507,16 @@ async def test_poll_loop_continues_after_claimed_item_cancelled(
     async def wait_for_completed() -> None:
         deadline = asyncio.get_running_loop().time() + 2
         while asyncio.get_running_loop().time() < deadline:
-            loaded = await repo.get_by_id(item.id)
+            async with session_maker() as inspect_session:
+                inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+                loaded = await inspect_repo.get_by_id(item_id)
             if loaded is not None and loaded.status == "completed":
                 return
             await asyncio.sleep(0.01)
         raise AssertionError("outbox item was not retried after cancellation")
 
     worker = WorkspacePlanOutboxWorker(
-        session_factory=_session_factory(db_session),
+        session_factory=factory,
         handlers={"worker_launch": flaky_handler},
         worker_id="worker-a",
         poll_interval_seconds=0.01,
@@ -1421,7 +1528,9 @@ async def test_poll_loop_continues_after_claimed_item_cancelled(
     finally:
         await worker.stop()
 
-    loaded = await repo.get_by_id(item.id)
+    async with session_maker() as inspect_session:
+        inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+        loaded = await inspect_repo.get_by_id(item_id)
     assert loaded is not None
     assert loaded.status == "completed"
     assert loaded.attempt_count == 1

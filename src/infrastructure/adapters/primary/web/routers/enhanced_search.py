@@ -16,6 +16,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.graph.neo4j_client import Neo4jClient
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ async def search_advanced(
     logger.info(f"search_advanced called: query='{query}', project_id='{project_id}'")
     try:
         if not graph_service:
-            raise HTTPException(status_code=503, detail="Graph service not available")
+            raise HTTPException(status_code=503, detail=_("Graph service not available"))
 
         # Use NativeGraphAdapter's search method
         results = await graph_service.search(
@@ -131,7 +132,7 @@ async def search_by_graph_traversal(
     """
     try:
         if not neo4j_client:
-            raise HTTPException(status_code=503, detail="Neo4j client not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j client not available"))
 
         # Build relationship type filter
         rel_filter = ""
@@ -209,7 +210,7 @@ async def search_by_community(
     """
     try:
         if not neo4j_client:
-            raise HTTPException(status_code=503, detail="Neo4j client not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j client not available"))
 
         # Get entities in community
         entity_query = """
@@ -288,7 +289,7 @@ async def search_temporal(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         parsed_since = None
         parsed_until = None
 
@@ -297,7 +298,7 @@ async def search_temporal(
                 parsed_since = datetime.fromisoformat(since)
             except ValueError:
                 raise HTTPException(
-                    status_code=400, detail="Invalid 'since' datetime format"
+                    status_code=400, detail=_("Invalid 'since' datetime format")
                 ) from None
 
         if until:
@@ -305,7 +306,7 @@ async def search_temporal(
                 parsed_until = datetime.fromisoformat(until)
             except ValueError:
                 raise HTTPException(
-                    status_code=400, detail="Invalid 'until' datetime format"
+                    status_code=400, detail=_("Invalid 'until' datetime format")
                 ) from None
 
         # Build temporal filter
@@ -386,14 +387,14 @@ async def search_with_facets(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         parsed_since = None
         if since:
             try:
                 parsed_since = datetime.fromisoformat(since)
             except ValueError:
                 raise HTTPException(
-                    status_code=400, detail="Invalid 'since' datetime format"
+                    status_code=400, detail=_("Invalid 'since' datetime format")
                 ) from None
 
         # Build filters
@@ -584,10 +585,10 @@ async def memory_search(
         project_id = params.get("project_id") or params.get("tenant_id")
 
         if not query:
-            raise HTTPException(status_code=400, detail="Query is required")
+            raise HTTPException(status_code=400, detail=_("Query is required"))
 
         if not graph_service:
-            raise HTTPException(status_code=503, detail="Graph service not available")
+            raise HTTPException(status_code=503, detail=_("Graph service not available"))
 
         # Use NativeGraphAdapter's search method
         results = await graph_service.search(

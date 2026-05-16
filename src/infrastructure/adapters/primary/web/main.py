@@ -5,9 +5,12 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
-# Configure application-wide logging before any other imports.
+from src.infrastructure.logging_redaction import install_sensitive_log_redaction
+
+# Configure application-wide logging before importing the rest of the app.
 # Uvicorn only configures its own loggers; without this, all src.* loggers
 # have no handlers and their output is silently discarded.
+install_sensitive_log_redaction()
 logging.basicConfig(
     level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -244,9 +247,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
 
     # Start Blackboard transactional outbox dispatcher
-    await initialize_blackboard_outbox_dispatcher(
-        redis_client=cast(Redis | None, redis_client)
-    )
+    await initialize_blackboard_outbox_dispatcher(redis_client=cast(Redis | None, redis_client))
 
     # Start task/conversation execution-session recovery after the outbox worker
     # is available to drain any queued retry launches from the startup sweep.
@@ -326,17 +327,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
             DB session, builds the SQL-backed service, and returns an object
             whose ``reflect_window`` commits before returning.
             """
-            session_factory = container._session_factory  # type: ignore[attr-defined]
+            session_factory = container._session_factory
             if session_factory is None:
                 return None
+            active_session_factory = session_factory
 
             class _SessionScopedReflection:
                 async def reflect_window(self, pid: str) -> list[ReflectionVerdict]:
-                    async with session_factory() as session:
+                    async with active_session_factory() as session:
                         service = await container.reflection_service(pid, session=session)
                         verdicts = await service.reflect_window(pid)
                         await session.commit()
-                        return verdicts
+                        return cast("list[ReflectionVerdict]", verdicts)
 
             del project_id  # service is keyed by reflect_window's argument
             return cast("ReflectionService", _SessionScopedReflection())
@@ -448,6 +450,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
         configure_wtp_publisher(None)
     except Exception:
         logger.exception("Error stopping WorkspaceSupervisor")
+
+    # Close MCP websocket clients owned by sandbox adapters without
+    # terminating containers; they are recovered from Docker on startup.
+    try:
+        from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
+            shutdown_sandbox_adapter_singleton,
+        )
+
+        await shutdown_sandbox_adapter_singleton()
+    except Exception:
+        logger.exception("Error closing API sandbox adapter")
+
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import (
+            shutdown_mcp_sandbox_adapter,
+        )
+
+        await shutdown_mcp_sandbox_adapter()
+    except Exception:
+        logger.exception("Error closing agent MCP sandbox adapter")
+
+    try:
+        infra_container = getattr(app.state.container, "_infra", None)
+        sandbox_adapter = getattr(infra_container, "_sandbox_adapter_instance", None)
+        if infra_container is not None and sandbox_adapter is not None:
+            await sandbox_adapter.close()
+            infra_container._sandbox_adapter_instance = None
+            logger.info("Container sandbox adapter closed")
+    except Exception:
+        logger.exception("Error closing container sandbox adapter")
 
     # Shutdown
     logger.info("Shutting down...")
@@ -641,6 +673,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # Register Routers
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(tenants.router)
+    # Register project sandbox routes before the generic project routes so
+    # /api/v1/projects/sandboxes is not captured as a project id.
+    app.include_router(project_sandbox.router)
     app.include_router(projects.router)
     app.include_router(agent_router)  # Modular agent router
     app.include_router(websocket_router)  # WebSocket for agent chat
@@ -685,9 +720,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Sandbox (MCP-enabled Docker containers)
     app.include_router(sandbox.router)
-
-    # Project Sandbox (Project-dedicated persistent sandboxes)
-    app.include_router(project_sandbox.router)
 
     # Terminal (Interactive shell via WebSocket)
     app.include_router(terminal.router)

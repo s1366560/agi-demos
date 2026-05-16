@@ -47,7 +47,7 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
             db_memory.status = memory.status
             db_memory.processing_status = memory.processing_status
             db_memory.meta = memory.metadata
-            db_memory.updated_at = memory.updated_at  # type: ignore[assignment]
+            db_memory.updated_at = memory.updated_at
         else:
             # Create new memory
             db_memory = self._to_db(memory)

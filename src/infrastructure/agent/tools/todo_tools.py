@@ -12,7 +12,7 @@ import json
 import logging
 import uuid
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, cast
 
 from src.application.services.workspace_task_service import (
     WorkspaceTaskAuthorityContext,
@@ -252,11 +252,11 @@ async def todoread_tool(
             )
 
             workspace_id, root_goal_task_id = workspace_markers
-            tasks = await SqlWorkspaceTaskRepository(session).find_by_root_goal_task_id(
+            workspace_tasks = await SqlWorkspaceTaskRepository(session).find_by_root_goal_task_id(
                 workspace_id,
                 root_goal_task_id,
             )
-            todos = [_workspace_task_to_todo(task) for task in tasks]
+            todos = [_workspace_task_to_todo(task) for task in workspace_tasks]
             if status is not None:
                 todos = [todo for todo in todos if todo["status"] == status]
         else:
@@ -265,16 +265,16 @@ async def todoread_tool(
             )
 
             repo = SqlAgentTaskRepository(session)
-            tasks = await repo.find_by_conversation(conversation_id, status=status)
+            agent_tasks = await repo.find_by_conversation(conversation_id, status=status)
             # Sort: priority (high first), then order_index
             priority_order = {"high": 0, "medium": 1, "low": 2}
-            tasks.sort(
+            agent_tasks.sort(
                 key=lambda t: (
                     priority_order.get(t.priority.value, 1),
                     t.order_index,
                 )
             )
-            todos = [t.to_dict() for t in tasks]
+            todos = [t.to_dict() for t in agent_tasks]
         await session.commit()
 
     result = {
@@ -285,7 +285,7 @@ async def todoread_tool(
     }
     logger.info(
         "todoread: returning %d tasks for %s",
-        len(tasks),
+        len(todos),
         conversation_id,
     )
     return ToolResult(output=json.dumps(result, indent=2))
@@ -537,7 +537,7 @@ async def _workspace_update_matched_replacement(
             actor_user_id=actor_user_id,
             match=match,
         )
-    return await command_service.update_task(
+    updated_task: object = await command_service.update_task(
         workspace_id=workspace_id,
         task_id=match.id,
         actor_user_id=actor_user_id,
@@ -548,6 +548,7 @@ async def _workspace_update_matched_replacement(
         reason="todowrite.workspace_authority.replace",
         authority=WorkspaceTaskAuthorityContext.leader(None),
     )
+    return cast(WorkspaceTask, updated_task)
 
 
 async def _workspace_todowrite_replace(
@@ -1223,12 +1224,17 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                 if synthesized is not None:
                                     metadata_update = {"goal_evidence": synthesized}
                             if next_status == WorkspaceTaskStatus.IN_PROGRESS:
-                                root_goal_task_id = existing_task.metadata.get("root_goal_task_id")
-                                if isinstance(root_goal_task_id, str) and root_goal_task_id:
+                                parent_root_goal_task_id = existing_task.metadata.get(
+                                    "root_goal_task_id"
+                                )
+                                if (
+                                    isinstance(parent_root_goal_task_id, str)
+                                    and parent_root_goal_task_id
+                                ):
                                     finder = getattr(task_repo, "find_by_id", None)
                                     if callable(finder):
                                         try:
-                                            root_task_result = finder(root_goal_task_id)
+                                            root_task_result = finder(parent_root_goal_task_id)
                                             root_task = (
                                                 await root_task_result
                                                 if inspect.isawaitable(root_task_result)
@@ -1243,7 +1249,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                                         ):
                                             await command_service.start_task(
                                                 workspace_id=workspace_id,
-                                                task_id=root_goal_task_id,
+                                                task_id=parent_root_goal_task_id,
                                                 actor_user_id=ctx.user_id,
                                                 actor_type="agent",
                                                 reason="todowrite.workspace_authority.start_root",

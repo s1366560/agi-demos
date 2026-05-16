@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, update
@@ -20,17 +20,25 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     NodeCardModel,
     ObservabilityDeadLetterModel,
 )
+from src.infrastructure.i18n import gettext as _
 
 PREFIX = "/api/v1/tenants/{tenant_id}/workspaces/{workspace_id}/observability"
 
 router = APIRouter(tags=["observability"])
 
 
-def _ws_filter(model: type, tenant_id: str, workspace_id: str) -> tuple[Any, ...]:
+class _WorkspaceScopedModel(Protocol):
+    tenant_id: Any
+    workspace_id: Any
+    deleted_at: Any
+
+
+def _ws_filter(model: object, tenant_id: str, workspace_id: str) -> tuple[Any, ...]:
+    scoped_model = cast(_WorkspaceScopedModel, model)
     return (
-        model.tenant_id == tenant_id,
-        model.workspace_id == workspace_id,
-        model.deleted_at.is_(None),
+        scoped_model.tenant_id == tenant_id,
+        scoped_model.workspace_id == workspace_id,
+        scoped_model.deleted_at.is_(None),
     )
 
 
@@ -212,7 +220,7 @@ async def retry_dead_letter(
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dead letter not found",
+            detail=_("Dead letter not found"),
         )
     now = datetime.now(UTC)
     stmt = (
@@ -380,7 +388,7 @@ async def get_node_card(
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Node card not found",
+            detail=_("Node card not found"),
         )
     return {
         "id": row.id,
@@ -444,7 +452,7 @@ async def update_node_card(
     if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Node card not found",
+            detail=_("Node card not found"),
         )
     allowed = {
         "name",

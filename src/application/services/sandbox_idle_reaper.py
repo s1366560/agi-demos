@@ -81,6 +81,9 @@ class SandboxIdleReaper:
         """Whether the reaper background loop is currently active."""
         return self._running
 
+    def _is_running(self) -> bool:
+        return self._running
+
     def start(self) -> None:
         """Start the background reaper loop.
 
@@ -117,10 +120,10 @@ class SandboxIdleReaper:
 
     async def _reaper_loop(self) -> None:
         """Main loop: sleep then sweep, until stopped."""
-        while self._running:
+        while self._is_running():
             try:
                 await asyncio.sleep(self._check_interval_seconds)
-                if not self._running:
+                if not self._is_running():
                     break
                 await self._sweep()
             except asyncio.CancelledError:

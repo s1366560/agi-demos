@@ -123,7 +123,7 @@ class RedisAgentNamespaceAdapter:
         full_keys = [_build_key(project_id, agent_id, k) for k in keys]
         values = await self._redis.mget(full_keys)
         result: dict[str, str | None] = {}
-        for key, value in zip(keys, values):
+        for key, value in zip(keys, values, strict=True):
             result[key] = str(value) if value is not None else None
         return result
 

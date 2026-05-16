@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.events.types import AgentEventType
@@ -123,7 +124,7 @@ class RedisStreamBlackboardEventPort(BlackboardEventPort):
             "workspace_id": workspace_id,
         }
         try:
-            stream_id = await self._redis.xadd(
+            stream_id: object = await self._redis.xadd(
                 self.stream_key(workspace_id),
                 cast(Any, fields),
                 maxlen=self._maxlen,
@@ -135,9 +136,13 @@ class RedisStreamBlackboardEventPort(BlackboardEventPort):
                 extra={"workspace_id": workspace_id, "event_type": event_type.value},
             )
             raise
+        if stream_id is None:
+            return None
         if isinstance(stream_id, bytes):
-            stream_id = stream_id.decode("utf-8")
-        return stream_id
+            return stream_id.decode("utf-8")
+        if isinstance(stream_id, str):
+            return stream_id
+        return str(stream_id)
 
     async def stream_since(
         self,
@@ -191,7 +196,7 @@ def _decode_fields(fields: dict[str, Any] | list[Any]) -> dict[str, str]:
     if not fields:
         return out
     # fields is either dict.items() or a list of tuples from Redis.
-    items: Any = fields.items() if isinstance(fields, dict) else fields  # type: ignore[union-attr]
+    items: Iterable[Any] = fields.items() if isinstance(fields, dict) else fields
     for key, value in items:
         if isinstance(key, bytes):
             key = key.decode("utf-8")

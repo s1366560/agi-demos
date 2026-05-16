@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.graph.neo4j_client import Neo4jClient
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ async def deduplicate_entities(
 
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         group_id = getattr(current_user, "project_id", None) or "neo4j"
         project_id = getattr(current_user, "project_id", None)
 
@@ -241,7 +242,7 @@ async def invalidate_stale_edges(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         cutoff_date = datetime.now(UTC) - timedelta(days=days_since_update)
 
         # Find stale edges (relationships with created_at timestamp)
@@ -308,7 +309,7 @@ async def get_maintenance_status(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         # Get basic graph stats
         entity_query = "MATCH (e:Entity) RETURN count(e) as count"
         entity_result = await neo4j_client.execute_query(entity_query)
@@ -662,7 +663,7 @@ async def get_embedding_status(
     and count of nodes missing embeddings.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]  # type: ignore[import-untyped]
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # pyright: ignore[reportMissingImports]
             get_existing_embedding_dimension,
         )
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
@@ -725,7 +726,7 @@ async def rebuild_embeddings(
     using the current embedder. Useful after switching LLM providers.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # pyright: ignore[reportMissingImports]
             rebuild_embeddings_for_project,
         )
 
@@ -758,7 +759,7 @@ async def check_embedding_dimensions(
     vector similarity operations to fail.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # pyright: ignore[reportMissingImports]
             detect_mixed_dimensions,
         )
 
@@ -810,7 +811,7 @@ async def validate_embeddings(
     Returns detailed validation report.
     """
     try:
-        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # type: ignore[import-untyped]
+        from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (  # pyright: ignore[reportMissingImports]
             validate_embeddings_in_db,
         )
 
@@ -849,7 +850,7 @@ async def get_native_embedding_status(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         from src.configuration.config import get_settings
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
@@ -990,7 +991,7 @@ def _resolve_target_dimension(target_model: str) -> int:
 
     raise HTTPException(
         status_code=400,
-        detail=f"Unknown model dimension for: {target_model}",
+        detail=_(f"Unknown model dimension for: {target_model}"),
     )
 
 

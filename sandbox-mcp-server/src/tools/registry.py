@@ -66,7 +66,9 @@ from src.tools.mcp_management import (
     create_mcp_server_call_tool_tool,
     create_mcp_server_discover_tools_tool,
     create_mcp_server_install_tool,
+    create_mcp_server_list_prompts_tool,
     create_mcp_server_list_tool,
+    create_mcp_server_set_log_level_tool,
     create_mcp_server_start_tool,
     create_mcp_server_stop_tool,
 )
@@ -202,6 +204,8 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_mcp_server_list_tool())
     registry.register(create_mcp_server_discover_tools_tool())
     registry.register(create_mcp_server_call_tool_tool())
+    registry.register(create_mcp_server_list_prompts_tool())
+    registry.register(create_mcp_server_set_log_level_tool())
 
     # Register dependency management tools
     registry.register(create_deps_install_tool())

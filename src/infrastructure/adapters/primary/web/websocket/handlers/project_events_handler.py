@@ -27,16 +27,17 @@ logger = logging.getLogger(__name__)
 
 
 async def _has_project_member(context: MessageContext, project_id: str) -> bool:
-    result = await context.db.execute(
-        refresh_select_statement(
-            select(UserProject).where(
-                and_(
-                    UserProject.user_id == context.user_id,
-                    UserProject.project_id == project_id,
+    async with context.fresh_db_context() as scoped_context:
+        result = await scoped_context.db.execute(
+            refresh_select_statement(
+                select(UserProject).where(
+                    and_(
+                        UserProject.user_id == scoped_context.user_id,
+                        UserProject.project_id == project_id,
+                    )
                 )
             )
         )
-    )
     return result.scalar_one_or_none() is not None
 
 

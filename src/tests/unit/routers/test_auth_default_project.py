@@ -61,7 +61,7 @@ class TestEnsureDefaultProject:
             select(Project).where(Project.id == user_projects[0].project_id)
         )
         project = result.scalar_one()
-        assert project.name == "默认项目"
+        assert project.name == "Default project"
         assert project.owner_id == user.id
         assert project.tenant_id == tenant.id
 

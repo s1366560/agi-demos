@@ -397,11 +397,11 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
             refresh_select_statement(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
         )
         for em in result.scalars().all():
-            key = (em.source_type, em.target_type)  # type: ignore[attr-defined]
+            key = (em.source_type, em.target_type)
             if key not in edge_type_map:
                 edge_type_map[key] = []
-            if em.edge_type not in edge_type_map[key]:  # type: ignore[attr-defined]
-                edge_type_map[key].append(em.edge_type)  # type: ignore[attr-defined]
+            if em.edge_type not in edge_type_map[key]:
+                edge_type_map[key].append(em.edge_type)
 
     # Build ID/name mappings
     entity_type_id_to_name = {

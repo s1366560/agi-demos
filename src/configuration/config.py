@@ -113,6 +113,17 @@ class Settings(BaseSettings):
         alias="EMBEDDING_INDEX_AUTO_CREATE",
         description="Auto-create vector indices on startup if missing.",
     )
+    graph_reflexion_enabled: bool = Field(
+        default=False,
+        alias="GRAPH_REFLEXION_ENABLED",
+        description="Enable reflexion pass during graph entity extraction.",
+    )
+    graph_reflexion_max_iterations: int = Field(
+        default=2,
+        alias="GRAPH_REFLEXION_MAX_ITERATIONS",
+        ge=1,
+        description="Maximum reflexion iterations for graph entity extraction.",
+    )
 
     # LLM Timeout & Concurrency Settings
     llm_timeout: int = Field(
@@ -345,6 +356,8 @@ class Settings(BaseSettings):
     sandbox_profile_type: str = Field(default="standard", alias="SANDBOX_PROFILE_TYPE")
     sandbox_auto_recover: bool = Field(default=True, alias="SANDBOX_AUTO_RECOVER")
     sandbox_health_check_interval: int = Field(default=60, alias="SANDBOX_HEALTH_CHECK_INTERVAL")
+    sandbox_service_token: str | None = Field(default=None, alias="SANDBOX_SERVICE_TOKEN")
+    sandbox_platform_url: str | None = Field(default=None, alias="SANDBOX_PLATFORM_URL")
     sandbox_host_source_path: str = Field(
         default="", alias="SANDBOX_HOST_SOURCE_PATH"
     )  # Host path to mount read-only into sandbox (e.g., /path/to/project/src)

@@ -98,7 +98,7 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
-        return result.scalar_one()
+        return int(result.scalar_one())
 
     @override
     async def find_due_jobs(self, now: datetime) -> list[CronJob]:
@@ -270,7 +270,7 @@ class SqlCronJobRunRepository(BaseRepository[CronJobRun, CronJobRunModel], CronJ
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
-        return result.scalar_one()
+        return int(result.scalar_one())
 
     @override
     def _to_domain(self, db_model: CronJobRunModel | None) -> CronJobRun | None:

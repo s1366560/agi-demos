@@ -175,6 +175,7 @@ class MCPSandboxAdapter(SandboxPort):
         max_memory_mb: int = 16384,  # 16GB default
         max_cpu_cores: int = 16,
         workspace_base: str = "/workspace",
+        redis_client: Any | None = None,
     ) -> None:
         """
         Initialize MCP sandbox adapter.
@@ -191,6 +192,7 @@ class MCPSandboxAdapter(SandboxPort):
             max_memory_mb: Maximum total memory allocation across all sandboxes
             max_cpu_cores: Maximum total CPU cores across all sandboxes
             workspace_base: Base directory for sandbox workspaces (e.g., /tmp/memstack-sandbox)
+            redis_client: Optional Redis client for cross-process sandbox state visibility
         """
         self._mcp_image = mcp_image
         self._default_timeout = default_timeout
@@ -200,6 +202,7 @@ class MCPSandboxAdapter(SandboxPort):
         self._desktop_port_start = desktop_port_start
         self._terminal_port_start = terminal_port_start
         self._workspace_base = workspace_base
+        self._redis_client = redis_client
 
         # Resource limits
         self._max_concurrent_sandboxes = max_concurrent_sandboxes
@@ -1023,7 +1026,9 @@ class MCPSandboxAdapter(SandboxPort):
         except NotFound:
             return
         except Exception as e:
-            logger.warning("Failed to inspect partial sandbox %s after %s: %s", sandbox_id, reason, e)
+            logger.warning(
+                "Failed to inspect partial sandbox %s after %s: %s", sandbox_id, reason, e
+            )
             return
 
         container_name = container.name or sandbox_id
@@ -1092,6 +1097,13 @@ class MCPSandboxAdapter(SandboxPort):
                 "TERMINAL_PORT": str(TERMINAL_PORT),
                 **config.environment,
             }
+            settings = get_settings()
+            if settings.sandbox_platform_url:
+                sandbox_env.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
+            if settings.sandbox_service_token:
+                sandbox_env.setdefault(
+                    "MEMSTACK_PLATFORM_SERVICE_TOKEN", settings.sandbox_service_token
+                )
             # Expose host source mount point so agents know where to find it
             for container_path in config.volumes.values():
                 if container_path:
@@ -1236,7 +1248,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
 
             # Persist sandbox state for crash recovery
-            self._persist_sandbox_state(sandbox_id, SandboxStatus.RUNNING.value, project_id)
+            await self._persist_sandbox_state(sandbox_id, SandboxStatus.RUNNING.value, project_id)
 
             return instance
 
@@ -1343,6 +1355,9 @@ class MCPSandboxAdapter(SandboxPort):
                     instance.mcp_client = client
                     logger.info(f"MCP client connected: {sandbox_id}")
                     return True
+            except asyncio.CancelledError:
+                await client.disconnect()
+                raise
             except Exception as e:
                 if attempt < max_retries - 1:
                     wait_time = backoff_factor * (2**attempt)
@@ -1355,8 +1370,10 @@ class MCPSandboxAdapter(SandboxPort):
                     logger.error(
                         f"Failed to connect MCP client after {max_retries} attempts: {sandbox_id}"
                     )
+                    await client.disconnect()
                     return False
 
+        await client.disconnect()
         return False
 
     async def disconnect_mcp(self, sandbox_id: str) -> None:
@@ -1366,6 +1383,22 @@ class MCPSandboxAdapter(SandboxPort):
             await instance.mcp_client.disconnect()
             instance.mcp_client = None
             logger.info(f"MCP client disconnected: {sandbox_id}")
+
+    async def close(self) -> None:
+        """Close adapter-owned background tasks and MCP websocket clients.
+
+        This is intentionally non-destructive for sandbox containers; shutdown
+        should release API-process network resources without terminating user
+        sandboxes that can be recovered from Docker on the next startup.
+        """
+        await self.stop_periodic_cleanup()
+        await self.stop_mcp_server_health_check()
+
+        async with self._instance_lock:
+            sandbox_ids = list(self._active_sandboxes.keys())
+
+        for sandbox_id in sandbox_ids:
+            await self.disconnect_mcp(sandbox_id)
 
     async def list_tools(self, sandbox_id: str) -> list[dict[str, Any]]:
         """
@@ -1583,7 +1616,7 @@ class MCPSandboxAdapter(SandboxPort):
             if instance
             else None
         )
-        self._persist_sandbox_state(sandbox_id, SandboxStatus.TERMINATED.value, project_id)
+        await self._persist_sandbox_state(sandbox_id, SandboxStatus.TERMINATED.value, project_id)
 
     async def _pre_destroy_hook(self, sandbox_id: str, project_id: str) -> None:
         """Capture workspace state before sandbox container destruction.
@@ -1677,15 +1710,34 @@ class MCPSandboxAdapter(SandboxPort):
                 exc_info=True,
             )
 
-    def _persist_sandbox_state(self, sandbox_id: str, state: str, project_id: str | None) -> None:
+    async def _persist_sandbox_state(
+        self, sandbox_id: str, state: str, project_id: str | None
+    ) -> None:
         """Persist sandbox state to workspace manifest for crash recovery.
 
         This is a best-effort, fire-and-forget helper. Errors are logged but
         never propagated so callers can proceed without risk.
-
-        TODO: Replace with Redis-based persistence when redis_client is wired
-        into MCPSandboxAdapter for faster reads and cross-process visibility.
         """
+        if self._redis_client is not None:
+            try:
+                updated_at = datetime.now(UTC).isoformat()
+                mapping = {
+                    "sandbox_id": sandbox_id,
+                    "state": state,
+                    "updated_at": updated_at,
+                }
+                if project_id:
+                    mapping["project_id"] = project_id
+                await self._redis_client.hset(f"sandbox:state:{sandbox_id}", mapping=mapping)
+                if project_id:
+                    await self._redis_client.sadd(f"project:{project_id}:sandboxes", sandbox_id)
+            except Exception:
+                logger.debug(
+                    "Failed to persist sandbox state to Redis for %s",
+                    sandbox_id,
+                    exc_info=True,
+                )
+
         if not project_id:
             return
         workspace_path = f"{self._workspace_base}/{project_id}"
@@ -1781,7 +1833,7 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
             # Container exists, check if running
-            return container.status == "running"
+            return bool(container.status == "running")
         except NotFound:
             # Container doesn't exist
             return False
@@ -2979,10 +3031,17 @@ class MCPSandboxAdapter(SandboxPort):
             "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
             "labels": labels,
         }
+        settings = get_settings()
+        environment = cast("dict[str, str]", container_config["environment"])
+        if settings.sandbox_platform_url:
+            environment.setdefault("MEMSTACK_PLATFORM_URL", settings.sandbox_platform_url)
+        if settings.sandbox_service_token:
+            environment.setdefault(
+                "MEMSTACK_PLATFORM_SERVICE_TOKEN", settings.sandbox_service_token
+            )
         if project_path:
             container_config["volumes"] = {project_path: {"bind": "/workspace", "mode": "rw"}}
         # Pip cache volume (shared across containers)
-        settings = get_settings()
         if settings.sandbox_pip_cache_enabled:
             os.makedirs(settings.sandbox_pip_cache_path, exist_ok=True)
             volumes = cast(

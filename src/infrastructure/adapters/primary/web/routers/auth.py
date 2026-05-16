@@ -135,14 +135,14 @@ async def login_for_access_token(
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail=_("Incorrect username or password"),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is inactive",
+            detail=_("User account is inactive"),
         )
 
     # Check for admin role
@@ -152,7 +152,7 @@ async def login_for_access_token(
         permissions.append("admin")
 
     # Generate a temporary session API key
-    plain_key, _ = await create_api_key(
+    plain_key, _hashed_key = await create_api_key(
         db,
         user_id=user.id,
         name=f"Login Session {form_data.username}",
@@ -182,7 +182,7 @@ async def force_change_password(
     if not verify_password(request.old_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect",
+            detail=_("Current password is incorrect"),
         )
 
     from src.application.services.auth_service_v2 import AuthService
@@ -390,7 +390,7 @@ async def device_code_request(request: dict[str, Any] | None = None) -> dict[str
     Accepts an optional JSON body (currently unused but kept for forward
     compatibility with client_id / scope hints).
     """
-    _ = request  # reserved
+    _request_unused = request  # reserved
     from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
     redis_client = await get_redis_client()
@@ -401,7 +401,7 @@ async def device_code_request(request: dict[str, Any] | None = None) -> dict[str
         if not await redis_client.exists(_user_code_key(user_code)):
             break
     else:
-        raise HTTPException(status_code=503, detail="Could not allocate user code")
+        raise HTTPException(status_code=503, detail=_("Could not allocate user code"))
 
     device_code = secrets.token_urlsafe(32)
     payload = {
@@ -445,20 +445,20 @@ async def device_code_approve(
 
     user_code = str(payload.get("user_code", "")).strip().upper()
     if not user_code:
-        raise HTTPException(status_code=400, detail="user_code required")
+        raise HTTPException(status_code=400, detail=_("user_code required"))
 
     redis_client = await get_redis_client()
     device_code_raw = await redis_client.get(_user_code_key(user_code))
     if device_code_raw is None:
-        raise HTTPException(status_code=404, detail="user_code expired or unknown")
+        raise HTTPException(status_code=404, detail=_("user_code expired or unknown"))
     device_code = device_code_raw.decode() if isinstance(device_code_raw, bytes) else device_code_raw
 
     raw = await redis_client.get(_device_key(device_code))
     if raw is None:
-        raise HTTPException(status_code=410, detail="device code expired")
+        raise HTTPException(status_code=410, detail=_("device code expired"))
     session = _json.loads(raw)
     if session.get("status") != "pending":
-        raise HTTPException(status_code=409, detail=f"already {session.get('status')}")
+        raise HTTPException(status_code=409, detail=_(f"already {session.get('status')}"))
 
     # Determine permissions like /auth/token does.
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
@@ -490,12 +490,12 @@ async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
 
     device_code = str(payload.get("device_code", "")).strip()
     if not device_code:
-        raise HTTPException(status_code=400, detail="device_code required")
+        raise HTTPException(status_code=400, detail=_("device_code required"))
 
     redis_client = await get_redis_client()
     raw = await redis_client.get(_device_key(device_code))
     if raw is None:
-        raise HTTPException(status_code=410, detail="expired_token")
+        raise HTTPException(status_code=410, detail=_("expired_token"))
     session = _json.loads(raw)
     status_val = session.get("status", "pending")
     if status_val == "pending":
@@ -510,7 +510,7 @@ async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
 
     access_token = session.get("access_token")
     if not access_token:
-        raise HTTPException(status_code=500, detail="approved but no token stored")
+        raise HTTPException(status_code=500, detail=_("approved but no token stored"))
 
     # Single-use: delete the device code + user_code index.
     await redis_client.delete(_device_key(device_code))

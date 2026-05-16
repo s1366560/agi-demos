@@ -104,8 +104,10 @@ class MCPConnector:
 
             except TimeoutError:
                 logger.warning(f"Connection timeout (attempt {attempt}/{max_retries})")
+                await client.disconnect()
             except Exception as e:
                 logger.warning(f"Connection failed (attempt {attempt}/{max_retries}): {e}")
+                await client.disconnect()
 
             if attempt < max_retries:
                 await asyncio.sleep(retry_delay)

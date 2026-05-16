@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
     from src.domain.ports.services.graph_service_port import GraphServicePort
     from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
@@ -40,10 +42,11 @@ def initialize_container(
     """
     global _app_container
     logger.info("Initializing DI container...")
+    typed_redis_client = cast("Redis | None", redis_client)
     container = DIContainer(
         session_factory=async_session_factory,
         graph_service=graph_service,
-        redis_client=redis_client,
+        redis_client=typed_redis_client,
         workflow_engine=workflow_engine,
     )
     _app_container = container

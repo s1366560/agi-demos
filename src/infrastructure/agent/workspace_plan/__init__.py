@@ -32,6 +32,14 @@ from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanO
 from src.infrastructure.agent.workspace_plan.planner import LLMGoalPlanner
 from src.infrastructure.agent.workspace_plan.progress import ProgressProjector
 from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepository
+from src.infrastructure.agent.workspace_plan.run_contract import (
+    WorkspacePathValidation,
+    WorkspaceRunContract,
+)
+from src.infrastructure.agent.workspace_plan.run_controller import (
+    WorkspaceRunController,
+    WorkspaceRunTickResult,
+)
 from src.infrastructure.agent.workspace_plan.supervisor import WorkspaceSupervisor
 from src.infrastructure.agent.workspace_plan.verifier import (
     AcceptanceCriterionVerifier,
@@ -55,7 +63,11 @@ __all__ = [
     "RegexCriterionRunner",
     "SchemaCriterionRunner",
     "WorkspaceOrchestrator",
+    "WorkspacePathValidation",
     "WorkspacePlanOutboxWorker",
+    "WorkspaceRunContract",
+    "WorkspaceRunController",
+    "WorkspaceRunTickResult",
     "WorkspaceSupervisor",
     "build_default_orchestrator",
     "build_sql_orchestrator",

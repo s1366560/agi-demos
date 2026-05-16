@@ -25,7 +25,7 @@ import json
 import logging
 import struct
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
@@ -85,7 +85,7 @@ class AsyncASRStreamingClient:
         self._access_key = access_key
         self._app_key = app_key
         self._ws_url = ws_url
-        self._proxy: str | bool = proxy if proxy is not None else True
+        self._proxy: str | Literal[True] = proxy if proxy is not None else True
         self._ws: ClientConnection | None = None
         self._request_id = str(uuid.uuid4())
         self._sequence = 1

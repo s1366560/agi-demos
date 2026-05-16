@@ -415,12 +415,6 @@ def mock_neo4j_client():
 
 
 @pytest.fixture
-def mock_graphiti_client(mock_neo4j_client):
-    """Legacy fixture - alias for mock_neo4j_client for backward compatibility."""
-    return mock_neo4j_client
-
-
-@pytest.fixture
 def mock_graph_service(mock_neo4j_client):
     """Create a mock GraphServicePort (NativeGraphAdapter).
 
@@ -432,7 +426,10 @@ def mock_graph_service(mock_neo4j_client):
     service = Mock()
     # Expose the underlying client for tests that need direct Neo4j access
     service.client = mock_neo4j_client
+    service.driver = mock_neo4j_client
     service.embedder = None
+    service.llm_client = None
+    mock_neo4j_client.llm_client = None
 
     # Mock GraphServicePort methods
     service.add_episode = AsyncMock()
@@ -445,6 +442,12 @@ def mock_graph_service(mock_neo4j_client):
     service.remove_episode_by_memory_id = AsyncMock(return_value=True)
 
     return service
+
+
+@pytest.fixture
+def mock_graphiti_client(mock_graph_service):
+    """Legacy fixture - alias for the native graph service."""
+    return mock_graph_service
 
 
 # --- Service Mock Fixtures ---

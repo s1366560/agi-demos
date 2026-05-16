@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import ray
 import redis.asyncio as aioredis
@@ -21,6 +21,9 @@ from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
 from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.infrastructure.agent.hitl.utils import HITLRequestRecord
 
 
 @ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)  # type: ignore[call-overload]
@@ -251,7 +254,7 @@ class HITLStreamRouterActor:
         """Await actor continuation off the hot path and ACK only when safe."""
         try:
             continue_result = await await_ray(
-                actor.continue_chat.remote(
+                cast(Any, actor).continue_chat.remote(
                     request_id,
                     response_data,
                     conversation_id,
@@ -274,7 +277,7 @@ class HITLStreamRouterActor:
         stream_key: str,
         msg_id: str,
         request_id: str,
-        hitl_request: object,
+        hitl_request: HITLRequestRecord,
         request_status: object,
         pending_idle_ms: int | None,
     ) -> tuple[bool, bool]:

@@ -24,6 +24,7 @@ from src.domain.ports.services.dead_letter_queue_port import (
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -153,13 +154,13 @@ async def get_dlq(request: Request) -> DeadLetterQueuePort:
         if dlq is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="DLQ service not available",
+                detail=_("DLQ service not available"),
             )
         return cast(DeadLetterQueuePort, dlq)
     except AttributeError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Application container not initialized",
+            detail=_("Application container not initialized"),
         ) from None
 
 
@@ -168,7 +169,7 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":  # type: ignore[attr-defined]
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail=_("Admin access required"),
         )
     return current_user
 
@@ -205,7 +206,7 @@ async def list_messages(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status: {filter_status}. Valid values: {[s.value for s in DLQMessageStatus]}",
+                detail=_(f"Invalid status: {filter_status}. Valid values: {[s.value for s in DLQMessageStatus]}"),
             ) from None
 
     messages = await dlq.get_messages(
@@ -247,7 +248,7 @@ async def get_message(
     if message is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"DLQ message not found: {message_id}",
+            detail=_(f"DLQ message not found: {message_id}"),
         )
 
     return DLQMessageResponse.from_domain(message)
@@ -273,7 +274,7 @@ async def retry_message(
     except DLQMessageNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"DLQ message not found: {message_id}",
+            detail=_(f"DLQ message not found: {message_id}"),
         ) from None
 
 
@@ -321,7 +322,7 @@ async def discard_message(
     except DLQMessageNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"DLQ message not found: {message_id}",
+            detail=_(f"DLQ message not found: {message_id}"),
         ) from None
 
 

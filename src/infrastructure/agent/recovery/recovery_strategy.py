@@ -174,10 +174,12 @@ class CompactContextStrategy:
 class ProviderFailoverStrategy:
     """Recovery strategy for provider outages.
 
-    Placeholder strategy that signals a provider failover is needed.
-    Actual provider switching is delegated to the LLM infrastructure
-    layer. Returns should_retry=True so the caller can attempt the
-    operation with an alternate provider.
+    Provider switching is owned by the LLM invocation layer
+    (``LLMInvoker``/``FailoverChain``), where the failed operation and
+    alternate model configuration are available. Session recovery cannot
+    safely switch providers by returning a message, so this strategy
+    reports an unrecovered outage instead of causing the ReAct loop to
+    retry the same provider.
     """
 
     def __init__(
@@ -191,39 +193,33 @@ class ProviderFailoverStrategy:
         return "provider_failover"
 
     async def execute(self, context: RecoveryContext) -> RecoveryAction:
-        """Signal that provider failover is needed.
+        """Report provider outage recovery status.
 
         Args:
             context: Recovery context with provider error.
 
         Returns:
-            RecoveryAction signaling failover needed.
+            RecoveryAction indicating that session-level recovery cannot
+            perform provider failover.
         """
-        if not self._fallback_providers:
-            logger.warning(
-                "Provider down but no fallback providers configured (session=%s)",
-                context.session_id,
-            )
-            return RecoveryAction(
-                recovered=False,
-                message=("Provider unavailable: no fallback providers configured"),
-                should_retry=False,
-            )
-
-        provider_idx = (context.attempt - 1) % len(self._fallback_providers)
-        target_provider = self._fallback_providers[provider_idx]
-
-        logger.info(
-            "Provider failover: switching to %s (attempt %d)",
-            target_provider,
+        fallback_hint = (
+            f" configured candidates={', '.join(self._fallback_providers)}"
+            if self._fallback_providers
+            else " no candidates configured"
+        )
+        logger.warning(
+            "Provider outage cannot be recovered in session recovery layer (session=%s, attempt=%d,%s)",
+            context.session_id,
             context.attempt,
+            fallback_hint,
         )
         return RecoveryAction(
-            recovered=True,
+            recovered=False,
             message=(
-                f"Provider failover: switching to {target_provider} (attempt {context.attempt})"
+                "Provider unavailable: session recovery cannot switch providers; "
+                "configure LLMInvoker FailoverChain for automatic provider failover"
             ),
-            should_retry=True,
+            should_retry=False,
         )
 
 

@@ -28,6 +28,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User as DBUser,
     UserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -91,7 +92,7 @@ async def create_deploy(
         ) from e
     except Exception as e:
         logger.exception("Error creating deploy")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.get("/", response_model=DeployListResponse)
@@ -123,7 +124,7 @@ async def list_deploys(
         raise
     except Exception as e:
         logger.exception("Error listing deploys")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.get(
@@ -144,14 +145,14 @@ async def get_latest_deploy(
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No deploys found for instance {instance_id}",
+                detail=_(f"No deploys found for instance {instance_id}"),
             )
         return DeployResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Error getting latest deploy")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.get("/{deploy_id}", response_model=DeployResponse)
@@ -169,14 +170,14 @@ async def get_deploy(
         if result is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Deploy {deploy_id} not found",
+                detail=_(f"Deploy {deploy_id} not found"),
             )
         return DeployResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Error getting deploy")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.post(
@@ -209,7 +210,7 @@ async def mark_deploy_success(
         ) from e
     except Exception as e:
         logger.exception("Error marking deploy success")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.post(
@@ -242,7 +243,7 @@ async def mark_deploy_failed(
         ) from e
     except Exception as e:
         logger.exception("Error marking deploy failed")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.post(
@@ -271,7 +272,7 @@ async def cancel_deploy(
         ) from e
     except Exception as e:
         logger.exception("Error cancelling deploy")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.get("/{deploy_id}/progress")
@@ -290,7 +291,7 @@ async def stream_deploy_progress(
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User does not belong to any tenant",
+            detail=_("User does not belong to any tenant"),
         )
 
     container = get_container_with_db(request, db)
@@ -300,7 +301,7 @@ async def stream_deploy_progress(
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Deploy {deploy_id} not found",
+            detail=_(f"Deploy {deploy_id} not found"),
         )
 
     rc: Any = container.redis_client

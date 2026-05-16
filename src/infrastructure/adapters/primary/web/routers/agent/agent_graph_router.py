@@ -18,6 +18,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .utils import get_container_with_db
 
@@ -284,7 +285,7 @@ async def list_graphs(
         raise
     except Exception:
         logger.exception("Failed to list graphs")
-        raise HTTPException(status_code=500, detail="Failed to list graphs") from None
+        raise HTTPException(status_code=500, detail=_("Failed to list graphs")) from None
 
 
 @router.post("/graphs", response_model=GraphResponse, status_code=201)
@@ -304,7 +305,7 @@ async def create_graph(
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid pattern: {body.pattern}. Valid: {[p.value for p in GraphPattern]}",
+            detail=_(f"Invalid pattern: {body.pattern}. Valid: {[p.value for p in GraphPattern]}"),
         ) from exc
 
     nodes = [
@@ -355,7 +356,7 @@ async def create_graph(
         raise
     except Exception:
         logger.exception("Failed to create graph")
-        raise HTTPException(status_code=500, detail="Failed to create graph") from None
+        raise HTTPException(status_code=500, detail=_("Failed to create graph")) from None
 
 
 @router.get("/graphs/{graph_id}", response_model=GraphResponse)
@@ -372,9 +373,9 @@ async def get_graph(
         graph = await repo.find_by_id(graph_id)
     except Exception:
         logger.exception("Failed to get graph %s", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to get graph") from None
+        raise HTTPException(status_code=500, detail=_("Failed to get graph")) from None
     if graph is None or graph.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail="Graph not found")
+        raise HTTPException(status_code=404, detail=_("Graph not found"))
     return _graph_to_response(graph)
 
 
@@ -393,10 +394,10 @@ async def update_graph(
         graph = await repo.find_by_id(graph_id)
     except Exception:
         logger.exception("Failed to find graph %s for update", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to update graph") from None
+        raise HTTPException(status_code=500, detail=_("Failed to update graph")) from None
 
     if graph is None or graph.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail="Graph not found")
+        raise HTTPException(status_code=404, detail=_("Graph not found"))
 
     _apply_graph_updates(graph, body)
 
@@ -412,7 +413,7 @@ async def update_graph(
         raise
     except Exception:
         logger.exception("Failed to update graph %s", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to update graph") from None
+        raise HTTPException(status_code=500, detail=_("Failed to update graph")) from None
 
 
 @router.delete("/graphs/{graph_id}", status_code=204)
@@ -429,10 +430,10 @@ async def delete_graph(
         graph = await repo.find_by_id(graph_id)
     except Exception:
         logger.exception("Failed to find graph %s for deletion", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to delete graph") from None
+        raise HTTPException(status_code=500, detail=_("Failed to delete graph")) from None
 
     if graph is None or graph.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail="Graph not found")
+        raise HTTPException(status_code=404, detail=_("Graph not found"))
 
     try:
         await repo.delete(graph_id)
@@ -441,7 +442,7 @@ async def delete_graph(
         raise
     except Exception:
         logger.exception("Failed to delete graph %s", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to delete graph") from None
+        raise HTTPException(status_code=500, detail=_("Failed to delete graph")) from None
 
 
 # ---------------------------------------------------------------------------
@@ -479,7 +480,7 @@ async def start_graph_run(
         raise
     except Exception:
         logger.exception("Failed to start graph run for graph %s", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to start graph run") from None
+        raise HTTPException(status_code=500, detail=_("Failed to start graph run")) from None
 
 
 @router.get("/graphs/{graph_id}/runs", response_model=GraphRunListResponse)
@@ -502,7 +503,7 @@ async def list_graph_runs(
         raise
     except Exception:
         logger.exception("Failed to list runs for graph %s", graph_id)
-        raise HTTPException(status_code=500, detail="Failed to list graph runs") from None
+        raise HTTPException(status_code=500, detail=_("Failed to list graph runs")) from None
 
 
 @router.get("/graphs/runs/{run_id}", response_model=GraphRunResponse)
@@ -519,9 +520,9 @@ async def get_graph_run(
         run = await orchestrator.get_run_status(run_id)
     except Exception:
         logger.exception("Failed to get run %s", run_id)
-        raise HTTPException(status_code=500, detail="Failed to get graph run") from None
+        raise HTTPException(status_code=500, detail=_("Failed to get graph run")) from None
     if run is None or run.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail="Graph run not found")
+        raise HTTPException(status_code=404, detail=_("Graph run not found"))
     return _run_to_response(run, include_executions=True)
 
 
@@ -541,7 +542,7 @@ async def cancel_graph_run(
         run, _events = await orchestrator.cancel_run(run_id, reason=reason)
         await db.commit()
         if run.tenant_id != user_tenant_id:
-            raise HTTPException(status_code=404, detail="Graph run not found")
+            raise HTTPException(status_code=404, detail=_("Graph run not found"))
         return _run_to_response(run, include_executions=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -549,4 +550,4 @@ async def cancel_graph_run(
         raise
     except Exception:
         logger.exception("Failed to cancel run %s", run_id)
-        raise HTTPException(status_code=500, detail="Failed to cancel graph run") from None
+        raise HTTPException(status_code=500, detail=_("Failed to cancel graph run")) from None

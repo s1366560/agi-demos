@@ -48,9 +48,7 @@ WtpHandler = Callable[[WtpEnvelope, AgentMessage], Awaitable[None]]
 
 def _envelope_from_message(message: AgentMessage) -> WtpEnvelope | None:
     """Return a :class:`WtpEnvelope` if ``message`` carries a WTP payload."""
-    metadata = message.metadata or {}
-    if not isinstance(metadata, dict):
-        return None
+    metadata: dict[str, Any] = message.metadata or {}
     if metadata.get("wtp_version") is None and metadata.get("wtp_verb") is None:
         return None
 

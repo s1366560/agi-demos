@@ -335,7 +335,7 @@ class HITLCoordinator:
     def resolve(
         self,
         request_id: str,
-        response_data: dict[str, Any],
+        response_data: object,
         *,
         tenant_id: str | None = None,
         project_id: str | None = None,
@@ -451,7 +451,7 @@ def unregister_coordinator(request_id: str) -> None:
 
 def resolve_by_request_id(
     request_id: str,
-    response_data: dict[str, Any],
+    response_data: object,
     *,
     tenant_id: str | None = None,
     project_id: str | None = None,
@@ -505,7 +505,7 @@ def validate_hitl_response(
     *,
     hitl_type: HITLType,
     request_data: dict[str, Any],
-    response_data: dict[str, Any],
+    response_data: object,
     conversation_id: str,
     tenant_id: str | None,
     project_id: str | None,

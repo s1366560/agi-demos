@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import Project
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -53,5 +54,5 @@ async def ensure_project_access(db: AsyncSession, project_id: str, tenant_id: st
     if result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )

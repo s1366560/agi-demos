@@ -17,7 +17,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from src.domain.events.agent_events import (
     AgentA2UIActionAnsweredEvent,
@@ -933,8 +933,9 @@ async def _discard_prepared_request(
     """Remove a prepared HITL request when setup fails before waiting."""
     pending_entry = coordinator._pending.pop(request_id, None)
     if pending_entry is not None:
-        pending_future = getattr(pending_entry, "future", pending_entry)
-        completion_future = getattr(pending_entry, "completion_future", None)
+        pending_object = cast(Any, pending_entry)
+        pending_future = getattr(pending_object, "future", pending_object)
+        completion_future = getattr(pending_object, "completion_future", None)
         if hasattr(pending_future, "done") and not pending_future.done():
             pending_future.set_result({"cancelled": True, "reason": reason})
         if completion_future is not None and not completion_future.done():

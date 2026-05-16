@@ -13,7 +13,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .config import AgentInstanceConfig
 from .lifecycle import LifecycleStateMachine
@@ -232,7 +232,8 @@ class AgentInstance:
 
                 # 执行请求
                 event_count = 0
-                async for event in self._agent.stream(
+                agent = cast(Any, self._agent)
+                async for event in agent.stream(
                     conversation_id=request.conversation_id,
                     user_message=request.user_message,
                     project_id=self.config.project_id,

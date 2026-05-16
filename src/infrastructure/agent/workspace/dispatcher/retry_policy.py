@@ -1,13 +1,4 @@
-"""Dispatcher retry policy (P2d M2 — minimal stub).
-
-Placeholder for future work. M2 does not yet consolidate retry/backoff logic
-(which currently lives in ``_schedule_workspace_retry_attempt`` and elsewhere).
-This module exists to mark the extension point so M4 / M5 refactors have a
-clear target.
-
-The constants here are intentionally set to permissive defaults; callers that
-want to enforce a retry budget must opt in.
-"""
+"""Dispatcher retry/backoff policy for workspace retry launches."""
 
 from __future__ import annotations
 
@@ -18,7 +9,7 @@ __all__ = ["DEFAULT_RETRY_POLICY", "DispatchRetryPolicy"]
 
 @dataclass(frozen=True)
 class DispatchRetryPolicy:
-    """Policy parameters for future retry/backoff logic.
+    """Policy parameters for retry/backoff logic.
 
     Attributes
     ----------
@@ -50,7 +41,7 @@ class DispatchRetryPolicy:
             return 0.0
         # Exponential: initial * 2^(attempt-2), capped.
         value = self.initial_backoff_seconds * (2 ** (attempt - 2))
-        return min(value, self.max_backoff_seconds)
+        return value if value <= self.max_backoff_seconds else self.max_backoff_seconds
 
 
 DEFAULT_RETRY_POLICY = DispatchRetryPolicy()

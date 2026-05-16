@@ -3,15 +3,18 @@
 Provides token generation, validation, and revocation for sandbox authentication.
 """
 
+import hmac
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_token_service import SandboxTokenService
+from src.configuration.config import get_settings
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     SandboxTokenRequest,
@@ -24,6 +27,36 @@ from .utils import assert_caller_owns_project, get_sandbox_token_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    prefix = "Bearer "
+    if not authorization.startswith(prefix):
+        return None
+    token = authorization[len(prefix) :].strip()
+    return token or None
+
+
+def require_sandbox_service_auth(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    """Require the internal sandbox service token for platform token validation."""
+    expected_token = get_settings().sandbox_service_token
+    if not expected_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Sandbox service token is not configured"),
+        )
+
+    supplied_token = _extract_bearer_token(authorization)
+    if not supplied_token or not hmac.compare_digest(supplied_token, expected_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_("Invalid sandbox service credentials"),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 @router.post("/projects/{project_id}/token", response_model=SandboxTokenResponse)
@@ -55,10 +88,12 @@ async def generate_sandbox_token(
         ttl_override=request.ttl_seconds,
     )
 
-    # Build WebSocket URL hint
-    websocket_hint = f"wss://your-sandbox-host:8765?token={access_token.token}"
+    # Keep credentials out of URL-shaped fields; callers already receive the
+    # token separately and should send it through an auth header or WebSocket
+    # subprotocol instead of query parameters.
+    websocket_hint = "wss://your-sandbox-host:8765"
     if request.sandbox_type == "local":
-        websocket_hint = f"wss://your-tunnel-url?token={access_token.token}"
+        websocket_hint = "wss://your-tunnel-url"
 
     return SandboxTokenResponse(
         token=access_token.token,
@@ -73,6 +108,7 @@ async def generate_sandbox_token(
 @router.post("/token/validate", response_model=ValidateTokenResponse)
 async def validate_sandbox_token(
     request: ValidateTokenRequest,
+    _service_auth: None = Depends(require_sandbox_service_auth),
     token_service: SandboxTokenService = Depends(get_sandbox_token_service),
 ) -> ValidateTokenResponse:
     """
@@ -83,9 +119,8 @@ async def validate_sandbox_token(
     ``user_id`` to avoid cross-tenant identity leakage to any caller that
     happens to reach this endpoint.
 
-    TODO(P1-15 follow-up): require a service-account bearer token for this
-    endpoint and move it onto an internal-only path so unauthenticated
-    network reachability is no longer enough to probe token validity.
+    Requires a service-account bearer token so network reachability alone is
+    not enough to probe token validity.
     """
     result = token_service.validate_token(
         token=request.token,

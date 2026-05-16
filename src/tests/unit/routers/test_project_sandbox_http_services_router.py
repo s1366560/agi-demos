@@ -40,7 +40,6 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     app.dependency_overrides[router_mod.get_current_user] = _current_user
     app.dependency_overrides[router_mod.get_current_user_from_desktop_proxy] = _current_user
-    app.dependency_overrides[router_mod.get_current_user_from_header_or_query] = _current_user
     app.dependency_overrides[router_mod.get_current_user_tenant] = _tenant_id
     app.dependency_overrides[router_mod.get_db] = _db
     app.dependency_overrides[router_mod.get_lifecycle_service] = lambda: lifecycle_service

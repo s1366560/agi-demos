@@ -19,6 +19,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_db,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 from .utils import assert_caller_owns_project, get_event_publisher
 
@@ -117,8 +118,8 @@ async def subscribe_sandbox_events(
 
     Migration example:
     ```javascript
-    // Old SSE approach (deprecated)
-    const es = new EventSource('/api/v1/sandbox/events/proj-123?token=xxx');
+    // Old SSE approach is deprecated; do not create new query-token clients.
+    const es = new EventSource('/api/v1/sandbox/events/proj-123');
 
     // New WebSocket approach (recommended)
     ws.send(JSON.stringify({ type: 'subscribe_sandbox', project_id: 'proj-123' }));
@@ -129,7 +130,7 @@ async def subscribe_sandbox_events(
     and service events (desktop_started, desktop_stopped, terminal_started, etc.).
 
     Query Parameters:
-    - token: API key for authentication (required for SSE since EventSource cannot set headers)
+    - token: Legacy query-token authentication for existing SSE clients only
     - last_id: Last received event ID for resuming (default: "0")
 
     SSE Format:
@@ -149,7 +150,7 @@ async def subscribe_sandbox_events(
         logger.warning("[SandboxSSE] Event bus not available, returning 503")
         raise HTTPException(
             status_code=503,
-            detail="Event streaming service temporarily unavailable. Redis event bus not configured.",
+            detail=_("Event streaming service temporarily unavailable. Redis event bus not configured."),
         )
 
     return StreamingResponse(

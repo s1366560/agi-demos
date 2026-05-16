@@ -81,6 +81,15 @@ CURRENT_ATTEMPT_ID: Final[str] = "current_attempt_id"
 CURRENT_ATTEMPT_WORKER_BINDING_ID: Final[str] = "current_attempt_worker_binding_id"
 """Workspace-scoped binding id for the worker on the active attempt."""
 
+ATTEMPT_WORKTREE: Final[str] = "attempt_worktree"
+"""Structured attempt worktree context used as the worker execution root."""
+
+ACTIVE_EXECUTION_ROOT: Final[str] = "active_execution_root"
+"""Absolute sandbox path that tools should treat as the current read/write/test root."""
+
+WORKTREE_SETUP: Final[str] = "worktree_setup"
+"""Structured setup result for the current attempt worktree."""
+
 PENDING_LEADER_ADJUDICATION: Final[str] = "pending_leader_adjudication"
 """True while a worker report is waiting for leader verdict."""
 
@@ -95,6 +104,8 @@ LAST_LEADER_ADJUDICATION_STATUS: Final[str] = "last_leader_adjudication_status"
 
 
 __all__ = [
+    "ACTIVE_EXECUTION_ROOT",
+    "ATTEMPT_WORKTREE",
     "AUTONOMY_SCHEMA_VERSION_KEY",
     "CURRENT_ATTEMPT_ID",
     "CURRENT_ATTEMPT_WORKER_BINDING_ID",
@@ -116,4 +127,5 @@ __all__ = [
     "WORKSPACE_HARNESS",
     "WORKSPACE_PLAN_ID",
     "WORKSPACE_PLAN_NODE_ID",
+    "WORKTREE_SETUP",
 ]

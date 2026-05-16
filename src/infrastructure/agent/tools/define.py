@@ -66,6 +66,7 @@ class ToolInfo:
         tags: Freeform tags for filtering.
         execution_context: Optional execution context (host, sandbox, or hybrid).
         dependencies: Optional runtime dependencies for this tool.
+        sandbox_id: Optional sandbox identifier for sandbox-backed MCP tools.
     """
 
     name: str
@@ -79,6 +80,8 @@ class ToolInfo:
     execution_context: ExecutionContext | None = None
     dependencies: RuntimeDependencies | None = None
     aliases: tuple[str, ...] = ()
+    sandbox_id: str | None = None
+    _sandbox_id: str | None = None
 
 
 # ---------------------------------------------------------------------------

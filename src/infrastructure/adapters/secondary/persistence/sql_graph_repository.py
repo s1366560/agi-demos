@@ -142,7 +142,7 @@ class SqlAgentGraphRepository(BaseRepository[AgentGraph, AgentGraphModel], Agent
             query = query.where(AgentGraphModel.is_active.is_(True))
 
         result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
-        return result.scalar_one()
+        return int(result.scalar_one())
 
     # --- Node / Edge conversion helpers ---
 

@@ -150,8 +150,8 @@ class RedisSpawnManager:
                 self._serialize(record),
             )
             if parent_session_id:
-                pipe.sadd(self._children_key(parent_session_id), child_session_id)  # type: ignore[arg-type]
-            pipe.sadd(self._project_key(project_id), child_session_id)  # type: ignore[arg-type]
+                pipe.sadd(self._children_key(parent_session_id), child_session_id)
+            pipe.sadd(self._project_key(project_id), child_session_id)
             await pipe.execute()
         except Exception:
             logger.exception(
@@ -447,7 +447,7 @@ class RedisSpawnManager:
         try:
             pipe = self._redis.pipeline()
             pipe.delete(self._record_key(child_session_id))
-            pipe.srem(self._project_key(record.project_id), child_session_id)  # type: ignore[arg-type]
+            pipe.srem(self._project_key(record.project_id), child_session_id)
             await pipe.execute()
         except Exception:
             logger.exception(
@@ -459,7 +459,9 @@ class RedisSpawnManager:
         parent_sid = await self._find_parent_session(child_session_id)
         if parent_sid:
             try:
-                await self._redis.srem(self._children_key(parent_sid), child_session_id)  # type: ignore[arg-type]
+                srem_result = self._redis.srem(self._children_key(parent_sid), child_session_id)
+                if isinstance(srem_result, Awaitable):
+                    await srem_result
             except Exception:
                 logger.exception(
                     "Failed to remove child from parent set: parent=%s child=%s",

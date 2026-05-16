@@ -13,6 +13,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_graphiti_client,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -112,4 +113,4 @@ async def short_term_recall(
 
     except Exception as e:
         logger.error(f"Short-term recall failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Short-term recall failed: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Short-term recall failed: {e!s}")) from e

@@ -8,7 +8,7 @@ decisions using SQLAlchemy ORM models directly.
 import logging
 from typing import Any
 
-from sqlalchemy import literal, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.permissions import PermissionCode
@@ -75,7 +75,7 @@ class AuthorizationService(AuthorizationPort):
         Args:
             user_id: User ID
             tenant_id: Optional tenant ID
-            project_id: Optional project ID (not yet implemented in DB model)
+            project_id: Optional project ID for project-scoped roles
 
         Returns:
             List of permission codes
@@ -85,10 +85,7 @@ class AuthorizationService(AuthorizationPort):
             if await self._is_system_admin(user_id):
                 return [p.value for p in PermissionCode]
 
-            # Build query to get user's roles and permissions
-            # Get roles that are either:
-            # 1. System-wide (no tenant_id)
-            # 2. Tenant-scoped (matching tenant_id)
+            # Build query to get system-wide, tenant-scoped, or project-scoped permissions.
             query = (
                 select(Permission.code)
                 .join(RolePermission, Permission.id == RolePermission.permission_id)
@@ -97,14 +94,15 @@ class AuthorizationService(AuthorizationPort):
                 .where(UserRole.user_id == user_id)
             )
 
-            # Filter by tenant context if provided
+            scope_predicates = [and_(UserRole.tenant_id.is_(None), UserRole.project_id.is_(None))]
             if tenant_id:
-                query = query.where(
-                    (UserRole.tenant_id == tenant_id) | (UserRole.tenant_id.is_(None))
+                scope_predicates.append(
+                    and_(UserRole.tenant_id == tenant_id, UserRole.project_id.is_(None))
                 )
-            else:
-                # If no tenant context, only get system-wide roles
-                query = query.where(UserRole.tenant_id.is_(None))
+            if project_id:
+                scope_predicates.append(UserRole.project_id == project_id)
+
+            query = query.where(or_(*scope_predicates))
 
             result = await self._session.execute(query)
             permissions = [row[0] for row in result.all()]
@@ -129,7 +127,7 @@ class AuthorizationService(AuthorizationPort):
             user_id: User ID
             role_name: Role name (e.g., "tenant_admin", "project_viewer")
             tenant_id: Optional tenant ID for tenant-scoped roles
-            project_id: Optional project ID (for future project-scoped roles)
+            project_id: Optional project ID for project-scoped roles
 
         Raises:
             ValueError: If role doesn't exist or user doesn't exist
@@ -160,7 +158,8 @@ class AuthorizationService(AuthorizationPort):
             select(UserRole).where(
                 UserRole.user_id == user_id,
                 UserRole.role_id == role_obj.id,
-                UserRole.tenant_id == tenant_id if tenant_id else literal(True),
+                UserRole.tenant_id == tenant_id if tenant_id else UserRole.tenant_id.is_(None),
+                UserRole.project_id == project_id if project_id else UserRole.project_id.is_(None),
             )
         )
         if existing.scalar_one_or_none():
@@ -169,7 +168,11 @@ class AuthorizationService(AuthorizationPort):
 
         # Assign role
         user_role = UserRole(
-            id=UserRole.generate_id(), user_id=user_id, role_id=role_obj.id, tenant_id=tenant_id
+            id=UserRole.generate_id(),
+            user_id=user_id,
+            role_id=role_obj.id,
+            tenant_id=tenant_id,
+            project_id=project_id,
         )
         self._session.add(user_role)
         await self._session.commit()
@@ -177,6 +180,7 @@ class AuthorizationService(AuthorizationPort):
         logger.info(
             f"Assigned role {role_name} to user {user_id}"
             + (f" in tenant {tenant_id}" if tenant_id else "")
+            + (f" in project {project_id}" if project_id else "")
         )
 
     async def remove_role(
@@ -193,7 +197,7 @@ class AuthorizationService(AuthorizationPort):
             user_id: User ID
             role_name: Role name
             tenant_id: Optional tenant ID
-            project_id: Optional project ID
+            project_id: Optional project ID for project-scoped roles
 
         Raises:
             ValueError: If role assignment doesn't exist
@@ -213,6 +217,11 @@ class AuthorizationService(AuthorizationPort):
         else:
             query = query.where(UserRole.tenant_id.is_(None))
 
+        if project_id:
+            query = query.where(UserRole.project_id == project_id)
+        else:
+            query = query.where(UserRole.project_id.is_(None))
+
         user_role = await self._session.execute(query)
         user_role_obj = user_role.scalar_one_or_none()
 
@@ -224,7 +233,9 @@ class AuthorizationService(AuthorizationPort):
 
         logger.info(f"Removed role {role_name} from user {user_id}")
 
-    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    async def get_user_roles(
+        self, user_id: str, tenant_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         Get all roles assigned to a user.
 
@@ -242,10 +253,15 @@ class AuthorizationService(AuthorizationPort):
         )
 
         if tenant_id:
-            query = query.where((UserRole.tenant_id == tenant_id) | (UserRole.tenant_id.is_(None)))
+            query = query.where(
+                or_(
+                    and_(UserRole.tenant_id == tenant_id, UserRole.project_id.is_(None)),
+                    and_(UserRole.tenant_id.is_(None), UserRole.project_id.is_(None)),
+                )
+            )
 
         result = await self._session.execute(query)
-        roles = []
+        roles: list[dict[str, Any]] = []
         for user_role, role in result.all():
             roles.append(
                 {
@@ -253,6 +269,7 @@ class AuthorizationService(AuthorizationPort):
                     "name": role.name,
                     "description": role.description,
                     "tenant_id": user_role.tenant_id,
+                    "project_id": user_role.project_id,
                 }
             )
 

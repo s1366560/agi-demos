@@ -28,6 +28,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_decision_record_repos
 from src.infrastructure.adapters.secondary.persistence.sql_trust_policy_repository import (
     SqlTrustPolicyRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,7 @@ async def get_decision_record(
     service = _build_service(db)
     record = await service.get_decision_record(record_id)
     if record is None:
-        raise HTTPException(status_code=404, detail="Decision record not found")
+        raise HTTPException(status_code=404, detail=_("Decision record not found"))
     return _record_response(record)
 
 

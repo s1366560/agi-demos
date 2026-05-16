@@ -123,8 +123,13 @@ class ToolPipeline:
 
         if hook_result.decision == HookDecision.ASK:
             yield ToolEvent.permission_asked(tool.name)
-            approved = await ctx.ask(tool.permission or tool.name)
-            if not approved:
+            permission_result = await self._permission_manager.ask(
+                permission=tool.permission or tool.name,
+                patterns=[tool.name],
+                session_id=ctx.session_id,
+                metadata={"tool": tool.name, "input": args, "source": "pre_hook"},
+            )
+            if permission_result == "reject":
                 logger.warning("User denied hook-ask for tool=%s", tool.name)
                 yield ToolEvent.denied(tool.name)
                 return

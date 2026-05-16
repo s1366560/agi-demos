@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.background_tasks import task_manager
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ async def get_task_status(task_id: str, current_user: User = Depends(get_current
     """
     task = task_manager.get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=_("Task not found"))
 
     return task.to_dict()
 
@@ -51,7 +52,7 @@ async def cancel_task(
     """
     success = await task_manager.cancel_task(task_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=_("Task not found"))
 
     return {"status": "success", "message": f"Task {task_id} cancelled", "task_id": task_id}
 

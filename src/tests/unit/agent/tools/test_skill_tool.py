@@ -156,7 +156,7 @@ class TestSkillTool:
 
         assert result.metadata["user_message"] == "I need help with X"
 
-    async def test_skill_denied_by_ctx_ask(self) -> None:
+    async def test_skill_tool_does_not_duplicate_permission_prompt(self) -> None:
         skill_data = SkillData(name="denied", description="desc", content="content")
         loader = FakeSkillLoader(skills={"denied": skill_data})
         configure_skill_loader(loader)
@@ -166,8 +166,9 @@ class TestSkillTool:
 
         result = await skill_tool.execute(ctx, name="denied")
 
-        assert result.is_error is True
-        assert "denied" in result.output.lower()
+        assert result.is_error is False
+        assert result.output == "content"
+        ctx.ask.assert_not_awaited()
 
     def test_skill_tool_is_tool_info(self) -> None:
         from src.infrastructure.agent.tools.define import ToolInfo

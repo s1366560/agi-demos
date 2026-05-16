@@ -50,6 +50,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_plan_repository impor
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard",
@@ -224,6 +225,12 @@ class WorkspaceExecutionDiagnosticsResponse(BaseModel):
     pending_adjudications: list[dict[str, Any]]
     evidence_gaps: list[dict[str, Any]]
     recent_tool_failures: list[dict[str, Any]]
+    controller_state: dict[str, Any] = Field(default_factory=dict)
+    retry_queue: list[dict[str, Any]] = Field(default_factory=list)
+    active_attempts: list[dict[str, Any]] = Field(default_factory=list)
+    last_reconciliation: dict[str, Any] = Field(default_factory=dict)
+    completion_gate: dict[str, Any] = Field(default_factory=dict)
+    blocked_reason: str | None = None
 
 
 def _to_post_response(post: BlackboardPost) -> BlackboardPostResponse:
@@ -759,15 +766,6 @@ async def delete_file(
             metadata=_blackboard_event_metadata(tenant_id, project_id),
         )
         await db.commit()
-        await publish_workspace_event(
-            request.app.state.container.redis(),
-            workspace_id=workspace_id,
-            event_type=AgentEventType.BLACKBOARD_FILE_DELETED,
-            payload=_blackboard_event_payload(
-                {"workspace_id": workspace_id, "file_id": file_id, "deleted": deleted}
-            ),
-            metadata=_blackboard_event_metadata(tenant_id, project_id),
-        )
         return {"deleted": deleted}
     except Exception as exc:
         await db.rollback()
@@ -789,7 +787,7 @@ async def rename_or_move_file(
     if payload.name is None and payload.parent_path is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide at least one of 'name' or 'parent_path'",
+            detail=_("Provide at least one of 'name' or 'parent_path'"),
         )
     try:
         updated: BlackboardFile | None = None

@@ -262,6 +262,66 @@ class TestProviderService:
         }
 
     @pytest.mark.asyncio
+    async def test_bedrock_health_check_requires_secret_key_config(self, service):
+        """Bedrock health checks should fail fast without the AWS secret key."""
+        provider = MagicMock()
+        provider.config = {"region": "us-east-1"}
+
+        status, error_message = await service._check_bedrock_provider("access-key", provider)
+
+        assert status == "unhealthy"
+        assert error_message == "Bedrock health check requires aws_secret_access_key in config"
+
+    @pytest.mark.asyncio
+    async def test_vertex_health_check_uses_configured_oauth_token(self, service):
+        """Vertex health checks should call the Model Garden endpoint with OAuth auth."""
+        provider = MagicMock()
+        provider.config = {
+            "project_id": "project-1",
+            "location": "us-central1",
+            "access_token": "token-1",
+        }
+
+        with patch.object(
+            service,
+            "_http_health_check",
+            new=AsyncMock(return_value=("healthy", None)),
+        ) as mock_health_check:
+            status, error_message = await service._check_vertex_provider(
+                MagicMock(),
+                None,
+                "unused-api-key",
+                provider,
+            )
+
+        assert status == "healthy"
+        assert error_message is None
+        mock_health_check.assert_awaited_once()
+        assert mock_health_check.await_args.kwargs["url"] == (
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/project-1/"
+            "locations/us-central1/publishers/google/models"
+        )
+        assert mock_health_check.await_args.kwargs["headers"] == {
+            "Authorization": "Bearer token-1"
+        }
+
+    @pytest.mark.asyncio
+    async def test_vertex_health_check_requires_project_id(self, service):
+        """Vertex health checks should return actionable config errors."""
+        provider = MagicMock()
+        provider.config = {"access_token": "token-1"}
+
+        status, error_message = await service._check_vertex_provider(
+            MagicMock(),
+            None,
+            "unused-api-key",
+            provider,
+        )
+
+        assert status == "unhealthy"
+        assert error_message == "Vertex AI health check requires project_id in config"
+
+    @pytest.mark.asyncio
     async def test_delete_provider_keeps_health_registration_for_same_type(self, service):
         """Deleting one provider should keep health check registration if same-type provider remains."""
         provider_id = uuid4()

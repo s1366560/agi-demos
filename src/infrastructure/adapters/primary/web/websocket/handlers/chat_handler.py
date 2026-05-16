@@ -121,19 +121,11 @@ class SendMessageHandler(WebSocketMessageHandler):
             # Auto-subscribe this session to this conversation
             await context.connection_manager.subscribe(context.session_id, conversation_id)
 
-            # Create LLM and agent service
-            from src.configuration.factories import create_llm_client
-
-            llm = await create_llm_client(context.tenant_id)
-            agent_service = container.agent_service(llm)
-
             # Send acknowledgment
             await context.send_ack("send_message", conversation_id=conversation_id)
 
-            # Start streaming in background task
             task = asyncio.create_task(
-                stream_agent_to_websocket(
-                    agent_service=agent_service,
+                stream_agent_to_websocket_with_fresh_session(
                     context=context,
                     conversation_id=conversation_id,
                     user_message=user_message,
@@ -287,6 +279,41 @@ async def _resolve_user_preferred_language(context: MessageContext) -> str | Non
     except Exception:
         logger.debug("[WS] Failed to load user preferred_language", exc_info=True)
     return None
+
+
+async def stream_agent_to_websocket_with_fresh_session(
+    context: MessageContext,
+    conversation_id: str,
+    user_message: str,
+    project_id: str,
+    preferred_language: str | None = None,
+    attachment_ids: list[str] | None = None,
+    file_metadata: list[dict[str, Any]] | None = None,
+    forced_skill_name: str | None = None,
+    app_model_context: dict[str, Any] | None = None,
+    image_attachments: list[str] | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Create a fresh DB-scoped agent service for the long-running stream."""
+    async with context.fresh_db_context() as stream_context:
+        from src.configuration.factories import create_llm_client
+
+        llm = await create_llm_client(stream_context.tenant_id)
+        agent_service = stream_context.get_scoped_container().agent_service(llm)
+        await stream_agent_to_websocket(
+            agent_service=agent_service,
+            context=stream_context,
+            conversation_id=conversation_id,
+            user_message=user_message,
+            project_id=project_id,
+            preferred_language=preferred_language,
+            attachment_ids=attachment_ids,
+            file_metadata=file_metadata,
+            forced_skill_name=forced_skill_name,
+            app_model_context=app_model_context,
+            image_attachments=image_attachments,
+            agent_id=agent_id,
+        )
 
 
 async def stream_agent_to_websocket(

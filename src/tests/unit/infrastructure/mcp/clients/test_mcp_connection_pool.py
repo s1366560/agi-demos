@@ -208,6 +208,27 @@ class TestConnectionPoolDisconnect:
             # Disconnected client should be cleaned up
             mock_disconnected.disconnect.assert_called()
 
+    @pytest.mark.asyncio
+    async def test_get_connection_disconnects_cancelled_client(self):
+        """Test that cancelled connection creation releases client resources."""
+        from src.infrastructure.mcp.clients.mcp_connection_pool import MCPConnectionPool
+
+        pool = MCPConnectionPool(url="ws://localhost:8765", pool_size=3)
+
+        with patch(
+            "src.infrastructure.mcp.clients.mcp_connection_pool.MCPWebSocketClient"
+        ) as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.connect = AsyncMock(side_effect=asyncio.CancelledError)
+            mock_client.disconnect = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(asyncio.CancelledError):
+                await pool.get_connection()
+
+            mock_client.disconnect.assert_awaited_once()
+            assert pool._created_count == 0
+
 
 class TestConnectionPoolConcurrency:
     """Test concurrent access to the pool."""

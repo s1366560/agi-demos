@@ -32,6 +32,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _job_enabled(job: CronJob) -> bool:
+    return job.enabled
+
+
 async def execute_cron_job(job_id: str) -> None:
     """Execute a single cron job.
 
@@ -127,7 +131,7 @@ async def execute_cron_job(job_id: str) -> None:
             logger.info("[CronExecutor] Deleted one-shot job %s after success", job.id)
 
         # If job got disabled by record_failure (max retries), unregister
-        if not job.enabled:
+        if not _job_enabled(job):
             try:
                 from src.infrastructure.scheduler.scheduler_service import (
                     unregister_job,

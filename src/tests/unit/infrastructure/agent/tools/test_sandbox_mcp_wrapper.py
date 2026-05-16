@@ -731,6 +731,47 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
 
+    async def test_workspace_worker_bash_uses_structured_active_execution_root(self):
+        """Structured runtime root should win without parsing prompt text."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(
+                runtime_context={
+                    "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                    "attempt_worktree": {
+                        "active_root": "/workspace/my-evo/../.memstack/worktrees/att-structured",
+                        "worktree_path": "/workspace/my-evo/../.memstack/worktrees/att-structured",
+                    },
+                    "active_execution_root": (
+                        "/workspace/my-evo/../.memstack/worktrees/att-structured"
+                    ),
+                }
+            ),
+            command="pwd",
+        )
+
+        assert result.is_error is False
+        assert (
+            adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-structured"
+        )
+
     async def test_workspace_worker_bash_parses_bracketed_worktree_override(self):
         """The runtime should honor [worktree-setup] worktree_path lines too."""
         adapter = MockSandboxAdapter()

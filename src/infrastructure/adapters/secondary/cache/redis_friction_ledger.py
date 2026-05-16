@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, override
 
 from src.domain.model.flow.friction_signal import FrictionKind, FrictionSignal
 from src.domain.ports.repositories.friction_ledger import FrictionLedger
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 
 KEY_PREFIX = "memstack:friction:"
+RedisStreamValue = bytes | bytearray | memoryview | str | int | float
 
 
 class RedisFrictionLedger(FrictionLedger):
@@ -49,7 +50,7 @@ class RedisFrictionLedger(FrictionLedger):
 
     @override
     async def append(self, signal: FrictionSignal) -> None:
-        payload: dict[str, Any] = {
+        payload: dict[RedisStreamValue, RedisStreamValue] = {
             "task_id": signal.task_id,
             "kind": signal.kind.value,
             "source_lane": signal.source_lane or "",
@@ -57,11 +58,9 @@ class RedisFrictionLedger(FrictionLedger):
             "metadata": json.dumps(signal.metadata, default=str),
             "observed_at": signal.observed_at.isoformat(),
         }
-        # redis-py types are invariant on the field dict; cast to satisfy pyright
-        # while preserving runtime behaviour (all values are str-encodable).
         await self._redis.xadd(
             self._key(signal.project_id),
-            payload,  # pyright: ignore[reportArgumentType]
+            payload,
             maxlen=self._max_len,
             approximate=True,
         )
@@ -80,7 +79,7 @@ class RedisFrictionLedger(FrictionLedger):
         effective_since = max(since, oldest_allowed) if since else oldest_allowed
         effective_until = until or now
 
-        raw: list[tuple[bytes, dict[bytes, bytes]]] = await self._redis.xrange(  # type: ignore[no-untyped-call]
+        raw: list[tuple[bytes, dict[bytes, bytes]]] = await self._redis.xrange(
             self._key(project_id), min="-", max="+", count=limit
         )
 

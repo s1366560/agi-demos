@@ -29,7 +29,8 @@ import logging
 import struct
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from contextlib import suppress
+from typing import Any, Literal
 
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
@@ -175,7 +176,7 @@ class AsyncTTSStreamingClient:
         self._app_key = app_key
         self._speaker = speaker
         self._ws_url = ws_url
-        self._proxy: str | bool = proxy if proxy is not None else True
+        self._proxy: str | Literal[True] = proxy if proxy is not None else True
         self._ws: ClientConnection | None = None
         self._connect_id = str(uuid.uuid4())
         self._session_id = ""
@@ -478,10 +479,8 @@ class AsyncTTSStreamingClient:
             audio_bytes = data[offset:]
 
         if compression == GZIP_COMPRESSION and audio_bytes:
-            try:
+            with suppress(gzip.BadGzipFile):
                 audio_bytes = gzip.decompress(audio_bytes)
-            except gzip.BadGzipFile:
-                pass  # Already decompressed or raw
 
         return {"kind": "audio", "data": audio_bytes}
 
@@ -557,64 +556,100 @@ class AsyncTTSStreamingClient:
             return self._parse_bare_payload(data, offset, serialization, compression)
 
         # event_code (4B)
-        if len(data) < offset + 4:
+        event = self._read_uint32(data, offset)
+        if event is None:
             return self._fallback_json_parse(data, offset, compression)
 
-        (event_code,) = struct.unpack(">I", data[offset : offset + 4])
-        offset += 4
-        result["event"] = event_code
+        event_code, offset = event
+        result = self._build_event_result(event_code)
 
-        if event_code == EventSessionFinished:
-            result["session_finished"] = True
-
-        # Determine which ID field follows based on event type
-        # Reference utils.py: connection events have connection_id,
-        # others (except StartConnection/FinishConnection) have session_id
-        if event_code in _CONNECTION_EVENTS:
-            # Connection-level events
-            # StartConnection(1)/FinishConnection(2) in client->server
-            # don't carry IDs but server responses (50/51/52) carry
-            # connection_id
-            if event_code in (
-                EventConnectionStarted,
-                EventConnectionFailed,
-                EventConnectionFinished,
-            ):
-                # connection_id_len + connection_id
-                if len(data) >= offset + 4:
-                    (cid_len,) = struct.unpack(">I", data[offset : offset + 4])
-                    offset += 4
-                    if cid_len > 0 and len(data) >= offset + cid_len:
-                        result["connection_id"] = data[offset : offset + cid_len].decode(
-                            "utf-8", errors="replace"
-                        )
-                        offset += cid_len
-        else:
-            # Session/task events have session_id
-            if len(data) >= offset + 4:
-                (sid_len,) = struct.unpack(">I", data[offset : offset + 4])
-                offset += 4
-                if sid_len > 0 and len(data) >= offset + sid_len:
-                    result["session_id"] = data[offset : offset + sid_len].decode(
-                        "utf-8", errors="replace"
-                    )
-                    offset += sid_len
-
-        # payload_len (4B) + payload
-        if len(data) >= offset + 4:
-            (payload_len,) = struct.unpack(">I", data[offset : offset + 4])
-            offset += 4
-            if payload_len > 0 and len(data) >= offset + payload_len:
-                payload_bytes = data[offset : offset + payload_len]
-                payload_bytes = self._decompress(payload_bytes, compression)
-                if serialization == JSON_SERIALIZATION:
-                    try:
-                        parsed: dict[str, Any] = json.loads(payload_bytes)
-                        result["payload"] = parsed
-                    except json.JSONDecodeError:
-                        result["payload_raw"] = payload_bytes.decode("utf-8", errors="replace")
+        offset = self._parse_event_identifier(data, offset, event_code, result)
+        self._parse_event_payload(data, offset, serialization, compression, result)
 
         return {"kind": "event", "data": result}
+
+    @staticmethod
+    def _read_uint32(data: bytes, offset: int) -> tuple[int, int] | None:
+        """Read a big-endian uint32 and return the new offset."""
+        if len(data) < offset + 4:
+            return None
+        (value,) = struct.unpack(">I", data[offset : offset + 4])
+        return value, offset + 4
+
+    @staticmethod
+    def _build_event_result(event_code: int) -> dict[str, Any]:
+        """Create the base parsed event payload."""
+        result: dict[str, Any] = {"event": event_code}
+        if event_code == EventSessionFinished:
+            result["session_finished"] = True
+        return result
+
+    def _parse_event_identifier(
+        self,
+        data: bytes,
+        offset: int,
+        event_code: int,
+        result: dict[str, Any],
+    ) -> int:
+        """Parse the optional connection_id or session_id field."""
+        if event_code in (
+            EventConnectionStarted,
+            EventConnectionFailed,
+            EventConnectionFinished,
+        ):
+            return self._parse_length_prefixed_text(data, offset, "connection_id", result)
+        if event_code not in _CONNECTION_EVENTS:
+            return self._parse_length_prefixed_text(data, offset, "session_id", result)
+        return offset
+
+    @staticmethod
+    def _parse_length_prefixed_text(
+        data: bytes,
+        offset: int,
+        field_name: str,
+        result: dict[str, Any],
+    ) -> int:
+        """Parse a uint32 length plus UTF-8 text field."""
+        length_info = AsyncTTSStreamingClient._read_uint32(data, offset)
+        if length_info is None:
+            return offset
+
+        text_len, offset = length_info
+        if text_len > 0 and len(data) >= offset + text_len:
+            result[field_name] = data[offset : offset + text_len].decode(
+                "utf-8",
+                errors="replace",
+            )
+            return offset + text_len
+        return offset
+
+    def _parse_event_payload(
+        self,
+        data: bytes,
+        offset: int,
+        serialization: int,
+        compression: int,
+        result: dict[str, Any],
+    ) -> None:
+        """Parse the optional JSON payload into an event result."""
+        payload_info = self._read_uint32(data, offset)
+        if payload_info is None:
+            return
+
+        payload_len, offset = payload_info
+        if payload_len <= 0 or len(data) < offset + payload_len:
+            return
+
+        payload_bytes = data[offset : offset + payload_len]
+        payload_bytes = self._decompress(payload_bytes, compression)
+        if serialization != JSON_SERIALIZATION:
+            return
+
+        try:
+            parsed: dict[str, Any] = json.loads(payload_bytes)
+            result["payload"] = parsed
+        except json.JSONDecodeError:
+            result["payload_raw"] = payload_bytes.decode("utf-8", errors="replace")
 
     def _parse_bare_payload(
         self,
@@ -659,10 +694,8 @@ class AsyncTTSStreamingClient:
         """Last-resort: try to treat the remainder as bare JSON."""
         raw = data[offset:]
         if compression == GZIP_COMPRESSION:
-            try:
+            with suppress(gzip.BadGzipFile):
                 raw = gzip.decompress(raw)
-            except gzip.BadGzipFile:
-                pass
         try:
             parsed: dict[str, Any] = json.loads(raw)
             return {"kind": "event", "data": parsed}

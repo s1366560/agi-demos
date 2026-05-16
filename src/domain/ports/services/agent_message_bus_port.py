@@ -167,7 +167,7 @@ class AgentMessageBusPort(ABC):
         """
 
     @abstractmethod
-    async def subscribe_messages(
+    def subscribe_messages(
         self,
         agent_id: str,
         session_id: str,

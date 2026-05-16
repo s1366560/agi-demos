@@ -33,6 +33,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_conversation_reposito
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     HITLCancelRequest,
@@ -92,7 +93,7 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
     if hitl_type != "env_var" and (has_cancelled or has_timeout):
         raise HTTPException(
             status_code=400,
-            detail="cancelled/timeout responses are only supported for env_var HITL",
+            detail=_("cancelled/timeout responses are only supported for env_var HITL"),
         )
 
     if hitl_type != "env_var":
@@ -103,13 +104,13 @@ def _validate_hitl_response_shape(*, hitl_type: str, response_data: dict[str, An
     if variant_count != 1:
         raise HTTPException(
             status_code=400,
-            detail="env_var responses must include exactly one of values/cancelled/timeout",
+            detail=_("env_var responses must include exactly one of values/cancelled/timeout"),
         )
 
     if has_values and not isinstance(response_data.get("values"), dict):
         raise HTTPException(
             status_code=400,
-            detail="env_var values must be an object",
+            detail=_("env_var values must be an object"),
         )
 
 
@@ -146,7 +147,7 @@ async def _load_authorized_pending_hitl_request(
         logger.warning(f"HITL request not found in database: {request_id}")
         raise HTTPException(
             status_code=404,
-            detail=f"HITL request {request_id} not found",
+            detail=_(f"HITL request {request_id} not found"),
         )
 
     logger.info(
@@ -157,14 +158,14 @@ async def _load_authorized_pending_hitl_request(
     if hitl_request.tenant_id != tenant_id:
         raise HTTPException(
             status_code=403,
-            detail="Access denied to this HITL request",
+            detail=_("Access denied to this HITL request"),
         )
 
     if hitl_request.user_id:
         if hitl_request.user_id != user_id:
             raise HTTPException(
                 status_code=403,
-                detail="Access denied to this HITL request",
+                detail=_("Access denied to this HITL request"),
             )
         has_access = bool(hitl_request.project_id) and await _user_has_project_access(
             db=db,
@@ -182,21 +183,21 @@ async def _load_authorized_pending_hitl_request(
     if not has_access:
         raise HTTPException(
             status_code=403,
-            detail="Access denied to this HITL request",
+            detail=_("Access denied to this HITL request"),
         )
 
     if await _mark_hitl_timeout_if_expired(db=db, repo=repo, hitl_request=hitl_request):
         raise HTTPException(
             status_code=400,
-            detail=f"HITL request {request_id} has expired (status: timeout)",
+            detail=_(f"HITL request {request_id} has expired (status: timeout)"),
         )
 
     if hitl_request.status != HITLRequestStatus.PENDING:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"HITL request {request_id} is no longer pending "
-                f"(status: {hitl_request.status.value})"
+                _(f"HITL request {request_id} is no longer pending "
+                f"(status: {hitl_request.status.value})")
             ),
         )
 
@@ -222,13 +223,13 @@ def _validate_and_summarize_hitl_response(
     if stored_hitl_type is None:
         raise HTTPException(
             status_code=400,
-            detail="HITL request has an invalid stored type",
+            detail=_("HITL request has an invalid stored type"),
         )
 
     if request.hitl_type != stored_hitl_type:
         raise HTTPException(
             status_code=400,
-            detail="HITL type does not match request",
+            detail=_("HITL type does not match request"),
         )
 
     _validate_hitl_response_shape(
@@ -285,11 +286,11 @@ async def get_pending_hitl_requests(
         conversation = await conv_repo.find_by_id(conversation_id)
 
         if not conversation:
-            raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+            raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
 
         # Verify user has access (same tenant)
         if conversation.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied to this conversation")
+            raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
         has_access = await _user_has_hitl_access(
             db=db,
             user_id=str(current_user.id),
@@ -298,7 +299,7 @@ async def get_pending_hitl_requests(
             conversation_id=conversation_id,
         )
         if not has_access:
-            raise HTTPException(status_code=403, detail="Access denied to this conversation")
+            raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
 
         # Query pending requests
         repo = SqlHITLRequestRepository(db)
@@ -336,7 +337,7 @@ async def get_pending_hitl_requests(
     except Exception as e:
         logger.error(f"Error getting pending HITL requests: {e}", exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Failed to get pending HITL requests: {e!s}"
+            status_code=500, detail=_(f"Failed to get pending HITL requests: {e!s}")
         ) from e
 
 
@@ -363,7 +364,7 @@ async def get_project_pending_hitl_requests(
             project_id=project_id,
         )
         if not has_access:
-            raise HTTPException(status_code=403, detail="Access denied to this project")
+            raise HTTPException(status_code=403, detail=_("Access denied to this project"))
 
         repo = SqlHITLRequestRepository(db)
         pending = await repo.get_pending_by_project_for_user(
@@ -400,7 +401,7 @@ async def get_project_pending_hitl_requests(
     except Exception as e:
         logger.error(f"Error getting project pending HITL requests: {e}", exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Failed to get pending HITL requests: {e!s}"
+            status_code=500, detail=_(f"Failed to get pending HITL requests: {e!s}")
         ) from e
 
 
@@ -447,7 +448,7 @@ async def respond_to_hitl(
         if request.hitl_type not in valid_types:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid hitl_type '{request.hitl_type}'. Must be one of: {valid_types}",
+                detail=_(f"Invalid hitl_type '{request.hitl_type}'. Must be one of: {valid_types}"),
             )
 
         repo = SqlHITLRequestRepository(db)
@@ -475,7 +476,7 @@ async def respond_to_hitl(
         if updated_request is None:
             raise HTTPException(
                 status_code=409,
-                detail=f"HITL request {request.request_id} could not be updated",
+                detail=_(f"HITL request {request.request_id} could not be updated"),
             )
         await db.commit()
 
@@ -522,7 +523,7 @@ async def respond_to_hitl(
         logger.error(f"Error responding to HITL request: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to respond to HITL request: {e!s}",
+            detail=_(f"Failed to respond to HITL request: {e!s}"),
         ) from e
 
 
@@ -549,7 +550,7 @@ async def cancel_hitl_request(
         if cancelled_request is None:
             raise HTTPException(
                 status_code=409,
-                detail=f"HITL request {request.request_id} could not be cancelled",
+                detail=_(f"HITL request {request.request_id} could not be cancelled"),
             )
         await db.commit()
 
@@ -581,7 +582,7 @@ async def cancel_hitl_request(
         logger.error(f"Error cancelling HITL request: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to cancel HITL request: {e!s}",
+            detail=_(f"Failed to cancel HITL request: {e!s}"),
         ) from e
 
 

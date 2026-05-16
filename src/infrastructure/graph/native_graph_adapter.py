@@ -132,6 +132,11 @@ class NativeGraphAdapter(GraphServicePort):
         return self._embedding_service
 
     @property
+    def llm_client(self) -> LLMClient:
+        """Get the LLM client (for compatibility with legacy AI tool routes)."""
+        return self._llm_client
+
+    @property
     def community_updater(self) -> CommunityUpdater:
         """Get the community updater (lazily initialized)."""
         return self._get_community_updater()
@@ -778,8 +783,6 @@ class NativeGraphAdapter(GraphServicePort):
                     # Parse created_at if it's a string
                     created_at = node_data.get("created_at")
                     if isinstance(created_at, str):
-
-
                         created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                     else:
                         created_at = datetime.now()

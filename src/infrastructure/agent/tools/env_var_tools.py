@@ -500,8 +500,8 @@ def _validate_request_env_inputs(
     *,
     tenant_id: str | None,
     project_id: str | None,
-    fields: list[dict[str, Any]],
-    context: dict[str, Any] | None,
+    fields: list[Any],
+    context: object,
     save_to_project: bool,
     hitl_handler: Any,
     session_factory: Any,
@@ -523,7 +523,7 @@ def _validate_request_env_inputs(
 
 
 def _normalize_request_env_fields(
-    fields: list[dict[str, Any]],
+    fields: list[Any],
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Normalize env-var request fields and return an error message, if any."""
     normalized_fields: list[dict[str, Any]] = []

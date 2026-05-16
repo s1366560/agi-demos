@@ -101,6 +101,10 @@ msgstr "Default project"
 msgid "Default project for {owner}"
 msgstr "Default project for {owner}"
 
+#: src/infrastructure/adapters/primary/web/routers/auth.py:138
+msgid "Incorrect username or password"
+msgstr "Incorrect username or password"
+
 #: src/infrastructure/adapters/primary/web/routers/auth.py:263
 msgid "API key not found"
 msgstr ""
@@ -293,4 +297,3 @@ msgstr ""
 
 #~ msgid "Validation failed"
 #~ msgstr "Validation failed"
-

@@ -50,8 +50,11 @@ def get_message_service(
             metadata=dict(WORKSPACE_CHAT_EVENT_METADATA),
         )
 
-    return container.workspace_message_service(
-        workspace_event_publisher=_publish_event if redis_client is not None else None,
+    return cast(
+        WorkspaceMessageService,
+        container.workspace_message_service(
+            workspace_event_publisher=_publish_event if redis_client is not None else None,
+        ),
     )
 
 

@@ -19,6 +19,7 @@ from src.application.services.sandbox_orchestrator import (
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user, get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     DesktopStartRequest,
@@ -101,7 +102,7 @@ async def start_desktop(
         raise
     except Exception as e:
         logger.error(f"Failed to start desktop for sandbox {sandbox_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to start desktop: {e!s}")) from e
 
 
 @router.delete("/{sandbox_id}/desktop", response_model=DesktopStopResponse)
@@ -143,7 +144,7 @@ async def stop_desktop(
         raise
     except Exception as e:
         logger.error(f"Failed to stop desktop for sandbox {sandbox_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to stop desktop: {e!s}")) from e
 
 
 @router.get("/{sandbox_id}/desktop", response_model=DesktopStatusResponse)
@@ -179,7 +180,7 @@ async def get_desktop_status(
         raise
     except Exception as e:
         logger.error(f"Failed to get desktop status for sandbox {sandbox_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get desktop status: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get desktop status: {e!s}")) from e
 
 
 # --- Terminal Management Endpoints ---
@@ -235,7 +236,7 @@ async def start_terminal(
         raise
     except Exception as e:
         logger.error(f"Failed to start terminal for sandbox {sandbox_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to start terminal: {e!s}")) from e
 
 
 @router.delete("/{sandbox_id}/terminal", response_model=TerminalStopResponse)
@@ -277,7 +278,7 @@ async def stop_terminal(
         raise
     except Exception as e:
         logger.error(f"Failed to stop terminal for sandbox {sandbox_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to stop terminal: {e!s}")) from e
 
 
 @router.get("/{sandbox_id}/terminal", response_model=TerminalStatusResponse)
@@ -310,4 +311,4 @@ async def get_terminal_status(
         raise
     except Exception as e:
         logger.error(f"Failed to get terminal status for sandbox {sandbox_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get terminal status: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get terminal status: {e!s}")) from e

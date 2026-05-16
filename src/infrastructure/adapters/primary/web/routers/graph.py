@@ -6,6 +6,7 @@ moved to enhanced_search.py to avoid duplication.
 """
 
 import logging
+from collections.abc import Iterable
 from datetime import UTC
 from typing import Any, cast
 
@@ -22,6 +23,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.graph.neo4j_client import Neo4jClient
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,38 @@ def _serialize_datetime(value: Any) -> str | None:
         return cast(str | None, value.isoformat())
     # Fallback to string conversion
     return str(value) if value else None
+
+
+def _sanitize_graph_value(value: Any) -> Any:
+    """Convert Neo4j driver values into JSON-serializable response values."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, dict):
+        raw_dict = cast(dict[str, Any], value)
+        return {key: _sanitize_graph_value(nested_value) for key, nested_value in raw_dict.items()}
+
+    if isinstance(value, (list, tuple, set)):
+        raw_items = cast(Iterable[Any], value)
+        return [_sanitize_graph_value(item) for item in raw_items]
+
+    if hasattr(value, "isoformat"):
+        return cast(str, value.isoformat())
+
+    return str(value)
+
+
+def _sanitize_graph_properties(
+    props: dict[str, Any] | None, excluded_keys: set[str]
+) -> dict[str, Any]:
+    if not props:
+        return {}
+
+    return {
+        key: _sanitize_graph_value(value)
+        for key, value in props.items()
+        if key not in excluded_keys
+    }
 
 
 # --- Schemas ---
@@ -95,7 +129,7 @@ async def list_communities(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         conditions = ["coalesce(c.member_count, 0) >= 0"]  # Always include base condition
         params: dict[str, Any] = {"limit": limit, "offset": offset}
 
@@ -169,7 +203,7 @@ async def list_entities(
     """List entities in the knowledge graph with filtering and pagination."""
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         conditions = []
         params: dict[str, Any] = {"limit": limit, "offset": offset}
 
@@ -247,7 +281,7 @@ async def get_entity_types(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         conditions = []
         params: dict[str, Any] = {}
 
@@ -298,7 +332,7 @@ async def get_entity(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         query = """
         MATCH (e:Entity {uuid: $uuid})
         RETURN properties(e) as props, labels(e) as labels
@@ -307,7 +341,7 @@ async def get_entity(
         result = await neo4j_client.execute_query(query, uuid=entity_id)
 
         if not result.records:
-            raise HTTPException(status_code=404, detail="Entity not found")
+            raise HTTPException(status_code=404, detail=_("Entity not found"))
 
         props = result.records[0]["props"]
 
@@ -370,7 +404,7 @@ async def get_entity_relationships(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         # Build relationship type filter
         rel_filter = ""
         params: dict[str, Any] = {"uuid": entity_id, "limit": limit}
@@ -449,7 +483,7 @@ async def get_graph(
     """Get graph data for visualization."""
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         query = """
         MATCH (n)
         WHERE ('Entity' IN labels(n) OR 'Episodic' IN labels(n) OR 'Community' IN labels(n))
@@ -472,9 +506,9 @@ async def get_graph(
 
         for r in result.records:
             s_id = r["source_id"]
-            s_props = r["source_props"]
-            if "name_embedding" in s_props:
-                del s_props["name_embedding"]
+            s_props = _sanitize_graph_properties(
+                r["source_props"], excluded_keys={"name_embedding"}
+            )
 
             if s_id not in nodes_map:
                 nodes_map[s_id] = {
@@ -488,9 +522,9 @@ async def get_graph(
 
             if r["target_id"]:
                 t_id = r["target_id"]
-                t_props = r["target_props"]
-                if "name_embedding" in t_props:
-                    del t_props["name_embedding"]
+                t_props = _sanitize_graph_properties(
+                    r["target_props"], excluded_keys={"name_embedding"}
+                )
 
                 if t_id not in nodes_map:
                     nodes_map[t_id] = {
@@ -503,9 +537,9 @@ async def get_graph(
                     }
 
                 if r["edge_id"]:
-                    e_props = r["edge_props"]
-                    if "fact_embedding" in e_props:
-                        del e_props["fact_embedding"]
+                    e_props = _sanitize_graph_properties(
+                        r["edge_props"], excluded_keys={"fact_embedding"}
+                    )
 
                     edges_list.append(
                         {
@@ -526,7 +560,7 @@ async def get_graph(
 
 
 @router.post("/memory/graph/subgraph")
-async def get_subgraph(  # noqa: C901,PLR0912
+async def get_subgraph(
     params: SubgraphRequest,
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
@@ -534,7 +568,7 @@ async def get_subgraph(  # noqa: C901,PLR0912
     """Get subgraph for specific nodes."""
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         project_id = params.project_id
 
         query = """
@@ -575,9 +609,9 @@ async def get_subgraph(  # noqa: C901,PLR0912
             # Process source node
             s_id = r["source_id"]
             if s_id:
-                s_props = r["source_props"]
-                if "name_embedding" in s_props:
-                    del s_props["name_embedding"]
+                s_props = _sanitize_graph_properties(
+                    r["source_props"], excluded_keys={"name_embedding"}
+                )
 
                 if s_id not in nodes_map:
                     nodes_map[s_id] = {
@@ -592,9 +626,9 @@ async def get_subgraph(  # noqa: C901,PLR0912
             # Process target node and edge if available
             if r.get("target_id"):
                 t_id = r["target_id"]
-                t_props = r["target_props"]
-                if "name_embedding" in t_props:
-                    del t_props["name_embedding"]
+                t_props = _sanitize_graph_properties(
+                    r["target_props"], excluded_keys={"name_embedding"}
+                )
 
                 if t_id not in nodes_map:
                     nodes_map[t_id] = {
@@ -607,9 +641,9 @@ async def get_subgraph(  # noqa: C901,PLR0912
                     }
 
                 if r.get("edge_id"):
-                    e_props = r["edge_props"] or {}
-                    if "fact_embedding" in e_props:
-                        del e_props["fact_embedding"]
+                    e_props = _sanitize_graph_properties(
+                        r["edge_props"], excluded_keys={"fact_embedding"}
+                    )
 
                     edges_list.append(
                         {
@@ -649,7 +683,7 @@ async def get_community(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         query = """
         MATCH (c:Community {uuid: $uuid})
         RETURN properties(c) as props
@@ -658,7 +692,7 @@ async def get_community(
         result = await neo4j_client.execute_query(query, uuid=community_id)
 
         if not result.records:
-            raise HTTPException(status_code=404, detail="Community not found")
+            raise HTTPException(status_code=404, detail=_("Community not found"))
 
         props = result.records[0]["props"]
 
@@ -699,7 +733,7 @@ async def get_community_members(
     """
     try:
         if neo4j_client is None:
-            raise HTTPException(status_code=503, detail="Neo4j not available")
+            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         # Note: Entity-[:BELONGS_TO]->Community (not Community-[:HAS_MEMBER]->Entity)
         query = """
         MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
@@ -820,11 +854,11 @@ async def rebuild_communities(
         from src.infrastructure.graph.schemas import EntityNode
 
         if not graph_service:
-            raise HTTPException(status_code=500, detail="Graph service not initialized")
+            raise HTTPException(status_code=500, detail=_("Graph service not initialized"))
 
         try:
             if neo4j_client is None:
-                raise HTTPException(status_code=503, detail="Neo4j not available")
+                raise HTTPException(status_code=503, detail=_("Neo4j not available"))
             # Remove existing communities
             await neo4j_client.execute_query(
                 """
@@ -858,8 +892,9 @@ async def rebuild_communities(
 
             # Use community updater if available
             communities_count = 0
-            if hasattr(graph_service, "community_updater"):
-                communities = await graph_service.community_updater.update_communities_for_entities(  # type: ignore[union-attr]
+            community_updater = getattr(graph_service, "community_updater", None)
+            if community_updater is not None:
+                communities = await community_updater.update_communities_for_entities(
                     entities=entities,
                     project_id=target_project_id,
                     regenerate_all=True,
@@ -875,5 +910,5 @@ async def rebuild_communities(
         except Exception as e:
             logger.error(f"Failed to rebuild communities: {e}")
             raise HTTPException(
-                status_code=500, detail=f"Failed to rebuild communities: {e!s}"
+                status_code=500, detail=_(f"Failed to rebuild communities: {e!s}")
             ) from e

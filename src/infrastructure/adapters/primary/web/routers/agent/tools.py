@@ -15,9 +15,11 @@ from src.configuration.config import get_settings
 from src.domain.model.agent.sandbox_scope import SandboxScope
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
+    get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     CapabilityDomainSummary,
@@ -76,7 +78,7 @@ async def _memory_tools_available(*, tenant_id: str | None) -> bool:
     from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 
     runtime_manager = get_plugin_runtime_manager()
-    _ = await runtime_manager.ensure_loaded()
+    _runtime_loaded = await runtime_manager.ensure_loaded()
     return runtime_manager.is_plugin_enabled("memory-runtime", tenant_id=tenant_id)
 
 
@@ -143,9 +145,9 @@ async def get_tool_capabilities(
         from src.infrastructure.agent.plugins.registry import get_plugin_registry
 
         runtime_manager = get_plugin_runtime_manager()
-        _ = await runtime_manager.ensure_loaded()
+        _runtime_loaded = await runtime_manager.ensure_loaded()
         tenant_id = getattr(current_user, "tenant_id", None)
-        plugin_records, _ = runtime_manager.list_plugins(tenant_id=tenant_id)
+        plugin_records, _plugin_diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
         registry = get_plugin_registry()
 
         memory_tools_available = await _memory_tools_available(tenant_id=tenant_id)
@@ -182,7 +184,7 @@ async def get_tool_capabilities(
     except Exception as e:
         logger.error(f"Error getting tool capabilities: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get tool capabilities: {e!s}"
+            status_code=500, detail=_(f"Failed to get tool capabilities: {e!s}")
         ) from e
 
 
@@ -192,6 +194,7 @@ async def list_tool_compositions(
     tools: str | None = Query(None, description="Comma-separated list of tool names to filter by"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of compositions"),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ToolCompositionsListResponse:
     """List tool compositions."""
@@ -204,9 +207,9 @@ async def list_tool_compositions(
 
         if tools:
             tool_names = [t.strip() for t in tools.split(",") if t.strip()]
-            compositions = await composition_repo.list_by_tools(tool_names)
+            compositions = await composition_repo.list_by_tools(tool_names, tenant_id=tenant_id)
         else:
-            compositions = await composition_repo.list_all(limit)
+            compositions = await composition_repo.list_all(limit, tenant_id=tenant_id)
 
         return ToolCompositionsListResponse(
             compositions=[
@@ -231,7 +234,7 @@ async def list_tool_compositions(
     except Exception as e:
         logger.error(f"Error listing tool compositions: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to list tool compositions: {e!s}"
+            status_code=500, detail=_(f"Failed to list tool compositions: {e!s}")
         ) from e
 
 
@@ -240,6 +243,7 @@ async def get_tool_composition(
     composition_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ToolCompositionResponse:
     """Get a specific tool composition."""
@@ -249,10 +253,10 @@ async def get_tool_composition(
         )
 
         composition_repo = SqlToolCompositionRepository(db)
-        composition = await composition_repo.find_by_id(composition_id)
+        composition = await composition_repo.get_by_id(composition_id, tenant_id=tenant_id)
 
         if not composition:
-            raise HTTPException(status_code=404, detail="Tool composition not found")
+            raise HTTPException(status_code=404, detail=_("Tool composition not found"))
 
         return ToolCompositionResponse(
             id=composition.id,
@@ -272,7 +276,7 @@ async def get_tool_composition(
         raise
     except Exception as e:
         logger.error(f"Error getting tool composition: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tool composition: {e!s}") from e
+        raise HTTPException(status_code=500, detail=_(f"Failed to get tool composition: {e!s}")) from e
 
 
 @router.post("/debug/tool-policy", response_model=ToolPolicyDebugResponse)
@@ -291,7 +295,7 @@ async def debug_tool_policy(
         valid = [s.value for s in SandboxScope]
         raise HTTPException(
             status_code=422,
-            detail=f"Invalid sandbox_scope '{body.sandbox_scope}'. Valid: {valid}",
+            detail=_(f"Invalid sandbox_scope '{body.sandbox_scope}'. Valid: {valid}"),
         ) from exc
 
     sandbox_allowed = frozenset(body.sandbox_allowed_tools) if body.sandbox_allowed_tools else None

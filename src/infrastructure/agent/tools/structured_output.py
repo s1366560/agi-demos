@@ -63,7 +63,7 @@ def _json_type_to_python(json_type: str) -> type[Any]:
     Returns:
         Corresponding Python type. Defaults to ``Any`` for unknown types.
     """
-    return _JSON_TYPE_MAP.get(json_type, Any)  # type: ignore[return-value]
+    return _JSON_TYPE_MAP.get(json_type, Any)  # pyright: ignore[reportReturnType]
 
 
 def _schema_to_pydantic(

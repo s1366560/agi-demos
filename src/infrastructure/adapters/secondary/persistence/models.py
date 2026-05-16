@@ -142,6 +142,9 @@ class UserRole(IdGeneratorMixin, Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     role_id: Mapped[str] = mapped_column(String, ForeignKey("roles.id"), nullable=False)
     tenant_id: Mapped[str | None] = mapped_column(String, ForeignKey("tenants.id"), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="roles")
@@ -1222,9 +1225,19 @@ class ToolComposition(Base):
     """Tool composition for tracking effective tool combinations."""
 
     __tablename__ = "tool_compositions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "name",
+            "project_id",
+            name="uq_tool_compositions_tenant_name_project",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, default="global", index=True)
+    project_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tools: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     execution_template: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)

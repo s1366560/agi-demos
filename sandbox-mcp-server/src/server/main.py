@@ -6,8 +6,12 @@ import logging
 import os
 import signal
 import sys
+from typing import TYPE_CHECKING
 
-from .websocket_server import MCPWebSocketServer
+from .websocket_server import AuthConfig, MCPWebSocketServer
+
+if TYPE_CHECKING:
+    from src.server.session_manager import SessionManager
 
 # Configure logging
 logging.basicConfig(
@@ -15,6 +19,13 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def setup_signal_handlers(
@@ -87,10 +98,18 @@ async def run_server(
     )
 
     # Create server
+    auth_config = AuthConfig(
+        enabled=_env_bool("MCP_AUTH_ENABLED", False),
+        platform_url=os.getenv("MEMSTACK_PLATFORM_URL"),
+        platform_service_token=os.getenv("MEMSTACK_PLATFORM_SERVICE_TOKEN"),
+        allow_localhost=_env_bool("MCP_ALLOW_LOCALHOST", True),
+        static_token=os.getenv("MCP_STATIC_TOKEN"),
+    )
     server = MCPWebSocketServer(
         host=host,
         port=port,
         workspace_dir=workspace_dir,
+        auth_config=auth_config,
     )
 
     # Register all tools

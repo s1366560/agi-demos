@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -15,11 +15,10 @@ from src.domain.model.agent.agent_definition import (
     LEGACY_DEFAULT_MAX_ITERATIONS,
     MAX_ITERATIONS_EXPLICIT_METADATA_KEY,
     Agent,
-    AgentModel,
 )
 from src.domain.model.agent.delegate_config import DelegateConfig
 from src.domain.model.agent.session_policy import SessionPolicy
-from src.domain.model.agent.subagent import AgentTrigger
+from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -33,6 +32,7 @@ from src.infrastructure.agent.tools._agent_definition_policy import (
     normalize_new_agent_a2a,
     normalize_updated_agent_a2a,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .access import require_tenant_access
 from .utils import get_container_with_db
@@ -178,7 +178,7 @@ async def create_definition(
         )
 
         created = await orchestrator.create_agent(agent)
-        return created.to_dict()
+        return cast(dict[str, Any], created.to_dict())
 
     except ValueError as e:
         status_code = 409 if "already exists" in str(e) else 400
@@ -186,7 +186,7 @@ async def create_definition(
     except IntegrityError as e:
         raise HTTPException(
             status_code=409,
-            detail=f"Agent with name '{body.name}' already exists",
+            detail=_(f"Agent with name '{body.name}' already exists"),
         ) from e
     except HTTPException:
         raise
@@ -198,7 +198,7 @@ async def create_definition(
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to create definition",
+            detail=_("Failed to create definition"),
         ) from e
 
 
@@ -244,7 +244,7 @@ async def list_definitions(
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to list definitions",
+            detail=_("Failed to list definitions"),
         ) from e
 
 
@@ -265,13 +265,13 @@ async def get_definition(
         if agent is None:
             raise HTTPException(
                 status_code=404,
-                detail="Definition not found",
+                detail=_("Definition not found"),
             )
 
         if agent.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
-        return agent.to_dict()
+        return cast(dict[str, Any], agent.to_dict())
 
     except HTTPException:
         raise
@@ -283,7 +283,7 @@ async def get_definition(
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to get definition",
+            detail=_("Failed to get definition"),
         ) from e
 
 
@@ -305,11 +305,11 @@ async def update_definition(
         if existing is None:
             raise HTTPException(
                 status_code=404,
-                detail="Definition not found",
+                detail=_("Definition not found"),
             )
 
         if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         updates = body.model_dump(exclude_unset=True)
         if "max_iterations" in updates:
@@ -324,7 +324,7 @@ async def update_definition(
 
         updated = await registry.update(existing)
         await db.commit()
-        return updated.to_dict()
+        return cast(dict[str, Any], updated.to_dict())
 
     except HTTPException:
         raise
@@ -338,7 +338,7 @@ async def update_definition(
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to update definition",
+            detail=_("Failed to update definition"),
         ) from e
 
 
@@ -359,11 +359,11 @@ async def delete_definition(
         if existing is None:
             raise HTTPException(
                 status_code=404,
-                detail="Definition not found",
+                detail=_("Definition not found"),
             )
 
         if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         await registry.delete(definition_id)
         await db.commit()
@@ -379,7 +379,7 @@ async def delete_definition(
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to delete definition",
+            detail=_("Failed to delete definition"),
         ) from e
 
 
@@ -401,15 +401,15 @@ async def set_definition_enabled(
         if existing is None:
             raise HTTPException(
                 status_code=404,
-                detail="Definition not found",
+                detail=_("Definition not found"),
             )
 
         if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         updated = await registry.set_enabled(definition_id, body.enabled)
         await db.commit()
-        return updated.to_dict()
+        return cast(dict[str, Any], updated.to_dict())
 
     except HTTPException:
         raise
@@ -423,7 +423,7 @@ async def set_definition_enabled(
         )
         raise HTTPException(
             status_code=500,
-            detail="Failed to update definition",
+            detail=_("Failed to update definition"),
         ) from e
 
 

@@ -174,9 +174,8 @@ _HANDLERS: Mapping[WorkspaceTaskStatus, _Handler] = {
     WorkspaceTaskStatus.DONE: _handle_done,
     WorkspaceTaskStatus.BLOCKED: _handle_blocked,
     WorkspaceTaskStatus.IN_PROGRESS: _handle_in_progress,
-    # TODO: no handler; it falls through with no attempt-service
-    # side effect; this is a replan/reprioritize that the caller handles via
-    # the separate "start root task" path.
+    # Reprioritize verdicts intentionally have no attempt-service side effect;
+    # the caller handles them through the separate root-start path.
 }
 
 

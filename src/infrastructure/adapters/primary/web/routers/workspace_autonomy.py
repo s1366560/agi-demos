@@ -19,6 +19,7 @@ from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap 
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
     prefix="/api/v1/workspaces/{workspace_id}/autonomy",
@@ -81,7 +82,7 @@ async def trigger_workspace_autonomy_tick(
 
     if outcome.get("reason") == "workspace_not_found":
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found")
         )
 
     return AutonomyTickResponse(

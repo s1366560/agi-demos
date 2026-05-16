@@ -10,7 +10,10 @@ class ClusterCreate(BaseModel):
     """Request model for creating a cluster."""
 
     name: str = Field(..., description="Cluster name", min_length=1, max_length=255)
-    tenant_id: str = Field(..., description="Tenant ID")
+    tenant_id: str | None = Field(
+        default=None,
+        description="Tenant ID. Omitted by clients because the API derives it from auth context.",
+    )
     compute_provider: str = Field(
         default="docker",
         description="Compute provider type",
@@ -147,3 +150,18 @@ class ClusterListResponse(BaseModel):
             }
         }
     )
+
+
+class ClusterHealthResponse(BaseModel):
+    """Response model for cluster health snapshots."""
+
+    status: str = Field(..., description="Cluster status or health label")
+    node_count: int = Field(default=0, ge=0, description="Known node count")
+    cpu_usage: float | None = Field(default=None, ge=0.0, le=100.0, description="CPU usage")
+    memory_usage: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description="Memory usage",
+    )
+    checked_at: datetime | None = Field(default=None, description="Last health check timestamp")

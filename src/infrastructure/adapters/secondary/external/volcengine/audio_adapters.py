@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from contextlib import suppress
 from typing import Any, BinaryIO
 
 from src.domain.ports.services.audio_service_port import ASRServicePort, TTSServicePort
@@ -94,10 +95,8 @@ class VolcengineASRAdapter(ASRServicePort):
             finally:
                 if not send_task.done():
                     send_task.cancel()
-                    try:
+                    with suppress(asyncio.CancelledError):
                         await send_task
-                    except asyncio.CancelledError:
-                        pass
         finally:
             await client.close()
 

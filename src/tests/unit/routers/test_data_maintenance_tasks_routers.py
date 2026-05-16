@@ -60,6 +60,22 @@ class TestDataExportRouter:
         assert data["tenant_id"] == "tenant_123"
 
     @pytest.mark.asyncio
+    async def test_export_data_failure_returns_error(self, client, mock_graphiti_client):
+        """Test export failures are not reported as empty successful exports."""
+        mock_graphiti_client.driver = Mock()
+        mock_graphiti_client.driver.execute_query = AsyncMock(
+            side_effect=RuntimeError("neo4j down")
+        )
+
+        response = client.post(
+            "/api/v1/data/export",
+            json={"include_episodes": True},
+        )
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.json()["detail"] == "Failed to export data"
+
+    @pytest.mark.asyncio
     async def test_get_graph_stats(self, client, mock_graphiti_client):
         """Test getting graph statistics."""
 
@@ -153,7 +169,7 @@ class TestMaintenanceRouter:
     """Test cases for maintenance router endpoints."""
 
     @pytest.mark.asyncio
-    async def test_deduplicate_entities_dry_run(self, client, mock_graphiti_client):
+    async def test_deduplicate_entities_dry_run(self, client, mock_neo4j_client):
         """Test entity deduplication in dry run mode."""
         # Mock response with duplicates
         mock_records = [
@@ -165,7 +181,7 @@ class TestMaintenanceRouter:
 
         mock_result = Mock()
         mock_result.records = mock_records
-        mock_graphiti_client.execute_query = AsyncMock(return_value=mock_result)
+        mock_neo4j_client.execute_query = AsyncMock(return_value=mock_result)
 
         # Make request
         response = client.post(

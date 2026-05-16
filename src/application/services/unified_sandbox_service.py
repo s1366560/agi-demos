@@ -875,7 +875,6 @@ class UnifiedSandboxService(SandboxResourcePort):
             if not sandbox_id:
                 return None
             return await self._adapter.read_resource(sandbox_id, uri)
-            return None
         except Exception:
             logger.debug("read_resource not supported by adapter", exc_info=True)
             return None

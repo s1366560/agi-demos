@@ -7,7 +7,7 @@ Business logic is delegated to AuthService in the application layer.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from fastapi import Depends, Header, HTTPException, Query, status
@@ -35,6 +35,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository im
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
     SqlUserRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 if TYPE_CHECKING:
     from src.domain.model.workspace.actor_identity import ActorIdentity
@@ -86,7 +87,7 @@ async def get_api_key_from_header(
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing API key. Please provide an API key in the Authorization header.",
+            detail=_("Missing API key. Please provide an API key in the Authorization header."),
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -100,7 +101,7 @@ async def get_api_key_from_header(
     if not api_key.startswith("ms_sk_"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key format. API keys should start with 'ms_sk_'",
+            detail=_("Invalid API key format. API keys should start with 'ms_sk_'"),
         )
 
     return api_key
@@ -133,12 +134,12 @@ async def get_api_key_from_header_or_query(
             return token
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key format. API keys should start with 'ms_sk_'",
+            detail=_("Invalid API key format. API keys should start with 'ms_sk_'"),
         )
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing API key. Please provide an API key in the Authorization header or 'token' query parameter.",
+        detail=_("Missing API key. Please provide an API key in the Authorization header or 'token' query parameter."),
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -148,7 +149,7 @@ async def get_api_key_from_header_query_or_cookie(
     authorization: str | None = Header(None),
     token: str | None = Query(None, description="API key for authentication"),
 ) -> str:
-    """Extract API key from Authorization header, query parameter, or cookie.
+    """Extract API key from Authorization header, query parameter, or proxy cookie.
 
     Used by desktop proxy endpoints where sub-resources (CSS/JS/SVG) are loaded
     by the browser without query parameters. The initial request sets a cookie
@@ -166,19 +167,26 @@ async def get_api_key_from_header_query_or_cookie(
         if api_key.startswith("ms_sk_"):
             return api_key
 
+    protocols = connection.headers.get("sec-websocket-protocol", "")
+    for protocol in (part.strip() for part in protocols.split(",")):
+        if protocol.startswith("ms_sk_"):
+            return protocol
+
     # Try query parameter
     query_token = token or connection.query_params.get("token")
     if query_token and query_token.startswith("ms_sk_"):
         return query_token
 
-    # Fall back to cookie (for desktop proxy sub-resources)
-    cookie_token = connection.cookies.get("desktop_token")
+    # Fall back to proxy auth cookies for iframe sub-resources and WebSocket handshakes.
+    cookie_token = connection.cookies.get("sandbox_proxy_token") or connection.cookies.get(
+        "desktop_token"
+    )
     if cookie_token and cookie_token.startswith("ms_sk_"):
         return cookie_token
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing API key.",
+        detail=_("Missing API key."),
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -254,14 +262,14 @@ async def get_current_user_from_desktop_proxy(
     try:
         domain_user = await auth_service.get_user_by_id(api_key.user_id)
         if not domain_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
         result = await db.execute(
             refresh_select_statement(select(DBUser).where(DBUser.id == domain_user.id))
         )
         db_user = result.scalar_one_or_none()
         if not db_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        return db_user
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
+        return cast(DBUser, db_user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
@@ -287,7 +295,7 @@ async def get_current_user_from_header_or_query(
         if not domain_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
+                detail=_("User not found"),
             )
 
         # Convert to DB model for backward compatibility
@@ -299,10 +307,10 @@ async def get_current_user_from_header_or_query(
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
+                detail=_("User not found"),
             )
 
-        return db_user
+        return cast(DBUser, db_user)
 
     except ValueError as e:
         raise HTTPException(
@@ -369,7 +377,7 @@ async def get_current_user(
         if not domain_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
+                detail=_("User not found"),
             )
 
         # Convert to DB model for backward compatibility
@@ -383,10 +391,10 @@ async def get_current_user(
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
+                detail=_("User not found"),
             )
 
-        return db_user
+        return cast(DBUser, db_user)
 
     except ValueError as e:
         raise HTTPException(
@@ -451,10 +459,10 @@ async def get_current_user_tenant(
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User does not belong to any tenant. Please contact administrator.",
+            detail=_("User does not belong to any tenant. Please contact administrator."),
         )
 
-    return tenant_id
+    return cast(str, tenant_id)
 
 
 async def create_api_key(

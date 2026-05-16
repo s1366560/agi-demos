@@ -100,7 +100,8 @@ class BaseTransport(ABC):
         Args:
             request_id: The ID of the request to cancel.
         """
-        logger.debug(f"cancel_request not implemented for {type(self).__name__}")
+        logger.debug(f"cancel_request is a no-op for {type(self).__name__}")
+
     async def receive(
         self,
         timeout: float | None = None,

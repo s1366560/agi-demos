@@ -6,18 +6,22 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.domain.model.mcp.server import MCPServer
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import MCPLifecycleEvent
 from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
     SqlMCPServerRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
     MCPHealthSummary,
@@ -34,11 +38,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+MCP_LOGGING_LEVELS = {
+    "debug",
+    "info",
+    "notice",
+    "warning",
+    "error",
+    "critical",
+    "alert",
+    "emergency",
+}
+
 
 async def _get_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
     """Get unified MCP runtime service from DI container (H2 fix)."""
     container = request.app.state.container.with_db(db)
-    return container.mcp_runtime_service()
+    return cast(MCPRuntimeService, container.mcp_runtime_service())
 
 
 @router.post("/create", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
@@ -85,7 +100,7 @@ async def create_mcp_server(
         logger.error(f"Failed to create MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create MCP server: {e!s}",
+            detail=_("Failed to create MCP server: {error}").format(error=str(e)),
         ) from e
 
 
@@ -133,13 +148,13 @@ async def get_mcp_server(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
+            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
         )
 
     if server.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )
 
     return MCPServerResponse.model_validate(server)
@@ -195,7 +210,7 @@ async def update_mcp_server(
         logger.error(f"Failed to update MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to update MCP server: {e!s}",
+            detail=_("Failed to update MCP server: {error}").format(error=str(e)),
         ) from e
 
 
@@ -217,13 +232,13 @@ async def delete_mcp_server(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
+            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
         )
 
     if server.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )
 
     try:
@@ -256,7 +271,7 @@ async def delete_mcp_server(
         logger.error(f"Failed to delete MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to delete MCP server: {e!s}",
+            detail=_("Failed to delete MCP server: {error}").format(error=str(e)),
         ) from e
 
 
@@ -306,7 +321,7 @@ async def sync_mcp_server_tools(
         logger.error(f"Failed to sync MCP server tools: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to sync MCP server tools: {e!s}",
+            detail=_("Failed to sync MCP server tools: {error}").format(error=str(e)),
         ) from e
 
 
@@ -408,7 +423,7 @@ async def reconcile_mcp_project(
         logger.exception("Failed to reconcile MCP project %s", project_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to reconcile MCP servers",
+            detail=_("Failed to reconcile MCP servers"),
         ) from e
 
 
@@ -483,50 +498,38 @@ async def get_mcp_server_health(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
+            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
         )
     if server.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )
 
     return _compute_server_health(server)
 
 
 # ---------------------------------------------------------------------------
-# SEP-1865 P2: Prompts & Logging stub endpoints
-# These endpoints provide the API surface for the frontend Prompts and Logs
-# tabs.  Real MCP client connections are ephemeral and not easily accessible
-# from the web layer, so these return stubs until full wiring is done.
+# SEP-1865 P2: Prompts & Logging endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.get("/{server_id}/prompts")
 async def list_mcp_server_prompts(
     server_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-) -> list[dict[str, Any]]:
-    """List prompts exposed by an MCP server.
-
-    NOTE: Stub endpoint. Real prompt listing requires an active MCP client
-    session which is currently managed inside the sandbox runtime, not the
-    web layer.  Returns an empty list until full wiring is implemented.
-    """
-    repository = SqlMCPServerRepository(db)
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
-        )
-    if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
-    return []
+) -> dict[str, list[dict[str, Any]]]:
+    """List prompts exposed by an MCP server."""
+    try:
+        runtime = await _get_runtime_service(request, db)
+        prompts = await runtime.list_server_prompts(server_id, tenant_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return {"prompts": prompts}
 
 
 @router.post("/{server_id}/log-level")
@@ -536,51 +539,93 @@ async def set_mcp_server_log_level(
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
 ) -> dict[str, Any]:
-    """Set the logging level for an MCP server.
-
-    NOTE: Stub endpoint.  The actual `logging/setLevel` JSON-RPC call requires
-    an active MCP client connection managed by the sandbox runtime.
-    """
-    repository = SqlMCPServerRepository(db)
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
-        )
-    if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
+    """Set the logging level for an MCP server."""
     body = await request.json()
-    level: str = body.get("level", "info")
-    logger.info(f"Log level set request for server {server_id}: {level} (stub)")
-    return {"status": "accepted", "level": level, "note": "Stub: not yet forwarded to MCP server"}
+    raw_level = body.get("level", "info") if isinstance(body, dict) else "info"
+    level = raw_level.strip().lower() if isinstance(raw_level, str) else "info"
+    if level not in MCP_LOGGING_LEVELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid MCP logging level: {level}").format(level=level),
+        )
+
+    try:
+        runtime = await _get_runtime_service(request, db)
+        success = await runtime.set_server_log_level(server_id, tenant_id, level)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    await db.commit()
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_("Failed to set MCP server log level"),
+        )
+    return {"status": "ok", "level": level}
 
 
 @router.get("/{server_id}/logs")
 async def list_mcp_server_logs(
     server_id: str,
+    limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-) -> list[dict[str, Any]]:
-    """List recent log messages from an MCP server.
+) -> dict[str, list[dict[str, Any]]]:
+    """List recent persisted lifecycle log messages for an MCP server."""
+    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id)
+    result = await db.execute(
+        refresh_select_statement(
+            select(MCPLifecycleEvent)
+            .where(
+                MCPLifecycleEvent.server_id == server.id,
+                MCPLifecycleEvent.tenant_id == tenant_id,
+            )
+            .order_by(desc(MCPLifecycleEvent.created_at))
+            .limit(limit)
+        )
+    )
+    events = result.scalars().all()
+    return {"logs": [_mcp_lifecycle_event_to_log(event) for event in events]}
 
-    NOTE: Stub endpoint.  MCP log messages (`notifications/message`) are
-    transient server-pushed notifications, not stored persistently.  Returns
-    an empty list until a log aggregation pipeline is implemented.
-    """
+
+async def _get_mcp_server_for_tenant(
+    db: AsyncSession,
+    server_id: str,
+    tenant_id: str,
+) -> MCPServer:
     repository = SqlMCPServerRepository(db)
     server = await repository.get_by_id(server_id)
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
+            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
         )
     if server.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=_("Access denied"),
         )
-    return []
+    return server
+
+
+def _mcp_lifecycle_event_to_log(event: MCPLifecycleEvent) -> dict[str, Any]:
+    level_by_status = {
+        "success": "info",
+        "failed": "error",
+        "failure": "error",
+        "error": "error",
+        "warning": "warning",
+    }
+    level = level_by_status.get(event.status, "info")
+    return {
+        "level": level,
+        "logger": event.event_type,
+        "data": {
+            "status": event.status,
+            "message": event.error_message,
+            "metadata": event.metadata_json or {},
+        },
+        "timestamp": event.created_at.isoformat() if event.created_at else None,
+    }

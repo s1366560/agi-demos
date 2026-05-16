@@ -6,19 +6,29 @@ import pytest
 from fastapi import status
 
 
+@pytest.fixture
+def ai_tools_llm(monkeypatch):
+    """Patch ai_tools to use a tenant-bound mock LLM client."""
+    from src.infrastructure.adapters.primary.web.routers import ai_tools
+
+    mock_llm_client = Mock()
+    mock_llm_client.generate = AsyncMock(return_value={"content": "Test response"})
+    mock_create_llm_client = AsyncMock(return_value=mock_llm_client)
+    monkeypatch.setattr(ai_tools, "create_llm_client", mock_create_llm_client)
+    return mock_llm_client, mock_create_llm_client
+
+
 @pytest.mark.unit
 class TestAIToolsRouter:
     """Test cases for ai_tools router endpoints."""
 
     @pytest.mark.asyncio
-    async def test_optimize_content_success(self, client, mock_graphiti_client):
+    async def test_optimize_content_success(self, client, ai_tools_llm):
         """Test successful content optimization."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(
-            return_value="Optimized content with improved clarity."
-        )
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {
+            "content": "Optimized content with improved clarity."
+        }
 
         # Make request
         response = client.post(
@@ -36,12 +46,10 @@ class TestAIToolsRouter:
         assert data["content"] == "Optimized content with improved clarity."
 
     @pytest.mark.asyncio
-    async def test_optimize_content_default_instruction(self, client, mock_graphiti_client):
+    async def test_optimize_content_default_instruction(self, client, ai_tools_llm):
         """Test content optimization with default instruction."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value="Improved content")
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": "Improved content"}
 
         # Make request without instruction
         response = client.post(
@@ -51,20 +59,18 @@ class TestAIToolsRouter:
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
-        mock_llm_client.generate_response.assert_called_once()
+        mock_llm_client.generate.assert_called_once()
         # Verify prompt contains default instruction
-        call_args = mock_llm_client.generate_response.call_args
+        call_args = mock_llm_client.generate.call_args
         # messages is passed as keyword argument
         messages = call_args.kwargs.get("messages") or (call_args.args[0] if call_args.args else [])
         assert "Improve clarity, fix grammar" in messages[0]["content"]
 
     @pytest.mark.asyncio
-    async def test_optimize_content_llm_not_available(self, client, mock_graphiti_client):
+    async def test_optimize_content_llm_not_available(self, client, ai_tools_llm):
         """Test content optimization when LLM is not available."""
-        # Mock no LLM client
-        mock_graphiti_client.llm_client = None
-        mock_graphiti_client.client = Mock()
-        mock_graphiti_client.client.llm_client = None
+        _, mock_create_llm_client = ai_tools_llm
+        mock_create_llm_client.return_value = None
 
         # Make request
         response = client.post(
@@ -77,12 +83,10 @@ class TestAIToolsRouter:
         assert "not available" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_optimize_content_llm_failure(self, client, mock_graphiti_client):
+    async def test_optimize_content_llm_failure(self, client, ai_tools_llm):
         """Test content optimization when LLM call fails."""
-        # Mock LLM failure
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(side_effect=Exception("LLM error"))
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.side_effect = Exception("LLM error")
 
         # Make request
         response = client.post(
@@ -94,12 +98,10 @@ class TestAIToolsRouter:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     @pytest.mark.asyncio
-    async def test_generate_title_success(self, client, mock_graphiti_client):
+    async def test_generate_title_success(self, client, ai_tools_llm):
         """Test successful title generation."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value="Generated Title")
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": "Generated Title"}
 
         # Make request
         response = client.post(
@@ -114,12 +116,10 @@ class TestAIToolsRouter:
         assert data["title"] == "Generated Title"
 
     @pytest.mark.asyncio
-    async def test_generate_title_truncates_content(self, client, mock_graphiti_client):
+    async def test_generate_title_truncates_content(self, client, ai_tools_llm):
         """Test that long content is truncated for title generation."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value="Title")
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": "Title"}
 
         # Make request with long content (>1000 chars)
         long_content = "x" * 2000
@@ -131,18 +131,16 @@ class TestAIToolsRouter:
         # Assert
         assert response.status_code == status.HTTP_200_OK
         # Verify content was truncated
-        call_args = mock_llm_client.generate_response.call_args
+        call_args = mock_llm_client.generate.call_args
         # messages is passed as keyword argument
         messages = call_args.kwargs.get("messages") or (call_args.args[0] if call_args.args else [])
         assert len(messages[0]["content"]) < 2000  # Should be truncated
 
     @pytest.mark.asyncio
-    async def test_generate_title_removes_quotes(self, client, mock_graphiti_client):
+    async def test_generate_title_removes_quotes(self, client, ai_tools_llm):
         """Test that quotes are removed from generated title."""
-        # Mock LLM client returning title with quotes
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value='"Generated Title"')
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": '"Generated Title"'}
 
         # Make request
         response = client.post(
@@ -159,11 +157,10 @@ class TestAIToolsRouter:
         assert not data["title"].endswith('"')
 
     @pytest.mark.asyncio
-    async def test_generate_title_llm_not_available(self, client, mock_graphiti_client):
+    async def test_generate_title_llm_not_available(self, client, ai_tools_llm):
         """Test title generation when LLM is not available."""
-        # Mock no LLM client
-        mock_graphiti_client.llm_client = None
-        mock_graphiti_client.client = None
+        _, mock_create_llm_client = ai_tools_llm
+        mock_create_llm_client.return_value = None
 
         # Make request
         response = client.post(
@@ -175,12 +172,10 @@ class TestAIToolsRouter:
         assert response.status_code == status.HTTP_501_NOT_IMPLEMENTED
 
     @pytest.mark.asyncio
-    async def test_generate_title_llm_failure(self, client, mock_graphiti_client):
+    async def test_generate_title_llm_failure(self, client, ai_tools_llm):
         """Test title generation when LLM call fails."""
-        # Mock LLM failure
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(side_effect=Exception("API error"))
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.side_effect = Exception("API error")
 
         # Make request
         response = client.post(
@@ -197,12 +192,10 @@ class TestAIToolsEdgeCases:
     """Test edge cases for AI tools router."""
 
     @pytest.mark.asyncio
-    async def test_optimize_empty_content(self, client, mock_graphiti_client):
+    async def test_optimize_empty_content(self, client, ai_tools_llm):
         """Test optimizing empty content."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value="")
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": ""}
 
         # Make request with empty content
         response = client.post(
@@ -214,12 +207,10 @@ class TestAIToolsEdgeCases:
         assert response.status_code == status.HTTP_200_OK
 
     @pytest.mark.asyncio
-    async def test_generate_title_empty_content(self, client, mock_graphiti_client):
+    async def test_generate_title_empty_content(self, client, ai_tools_llm):
         """Test generating title for empty content."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value="Untitled")
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": "Untitled"}
 
         # Make request with empty content
         response = client.post(
@@ -231,12 +222,10 @@ class TestAIToolsEdgeCases:
         assert response.status_code == status.HTTP_200_OK
 
     @pytest.mark.asyncio
-    async def test_optimize_custom_instruction(self, client, mock_graphiti_client):
+    async def test_optimize_custom_instruction(self, client, ai_tools_llm):
         """Test content optimization with custom instruction."""
-        # Mock LLM client
-        mock_llm_client = Mock()
-        mock_llm_client.generate_response = AsyncMock(return_value="Simplified content")
-        mock_graphiti_client.llm_client = mock_llm_client
+        mock_llm_client, _ = ai_tools_llm
+        mock_llm_client.generate.return_value = {"content": "Simplified content"}
 
         # Make request with custom instruction
         response = client.post(
@@ -250,7 +239,7 @@ class TestAIToolsEdgeCases:
         # Assert
         assert response.status_code == status.HTTP_200_OK
         # Verify instruction was passed to LLM
-        call_args = mock_llm_client.generate_response.call_args
+        call_args = mock_llm_client.generate.call_args
         # messages is passed as keyword argument
         messages = call_args.kwargs.get("messages") or (call_args.args[0] if call_args.args else [])
         assert "Simplify for a 5-year-old" in messages[0]["content"]

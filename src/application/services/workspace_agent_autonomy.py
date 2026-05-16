@@ -20,6 +20,7 @@ from src.application.schemas.workspace_agent_autonomy import (
     has_autonomy_metadata,
 )
 from src.application.services.workspace_autonomy_profiles import (
+    VerificationGrade,
     WorkspaceAutonomyProfile,
     accepted_artifacts_for_profile,
     evaluate_completion_evidence,
@@ -475,7 +476,7 @@ def synthesize_goal_evidence_from_children(
     if profile.workspace_type == "software_development":
         has_required_artifacts = bool(accepted_artifacts)
         has_enough_verifications = len(dedup_verifications) >= len(child_tasks)
-        verification_grade = (
+        verification_grade: VerificationGrade = (
             "pass" if has_required_artifacts and has_enough_verifications else "warn"
         )
     else:
@@ -560,7 +561,7 @@ def _collect_child_completion_evidence(
     evidence_refs = task.metadata.get("evidence_refs")
     normalized_refs: list[str] = []
     if isinstance(evidence_refs, list):
-        normalized_refs = [str(ref) for ref in cast(list[Any], evidence_refs) if ref]
+        normalized_refs = [str(ref) for ref in evidence_refs if ref]
     if normalized_refs:
         artifacts.extend(
             _normalize_child_artifact_ref(
@@ -575,7 +576,7 @@ def _collect_child_completion_evidence(
 
     execution_verifications = task.metadata.get("execution_verifications")
     if isinstance(execution_verifications, list):
-        verifications.extend(str(item) for item in cast(list[Any], execution_verifications) if item)
+        verifications.extend(str(item) for item in execution_verifications if item)
     last_mutation_actor = task.metadata.get("last_mutation_actor")
     if isinstance(last_mutation_actor, Mapping):
         actor_data = cast(Mapping[str, Any], last_mutation_actor)
@@ -605,12 +606,12 @@ def _normalize_child_artifact_ref(
         return normalized
     should_root_relative_ref = (
         profile.workspace_type == "software_development"
-        and bool(sandbox_code_root)
+        and sandbox_code_root is not None
         and not normalized.startswith(profile.evidence.required_artifact_prefixes)
         and not normalized.startswith("workspace_task:")
         and "://" not in normalized
     )
-    if not should_root_relative_ref:
+    if not should_root_relative_ref or sandbox_code_root is None:
         return normalized
     if normalized.startswith("/workspace/"):
         return f"file_snapshot:{normalized}"
@@ -794,4 +795,5 @@ async def reconcile_root_goal_progress(
     )
     root_task.metadata = validate_autonomy_metadata(metadata)
     root_task.updated_at = datetime.now(UTC)
-    return await task_repo.save(root_task)
+    saved_task: object = await task_repo.save(root_task)
+    return cast(WorkspaceTask, saved_task)

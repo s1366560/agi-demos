@@ -44,6 +44,7 @@ class AuthConfig:
 
     enabled: bool = False  # Set to True for local sandbox mode
     platform_url: Optional[str] = None  # MemStack platform URL for token validation
+    platform_service_token: Optional[str] = None  # Service bearer token for platform validation
     allow_localhost: bool = True  # Allow unauthenticated localhost connections
     static_token: Optional[str] = None  # Optional static token for simple auth
 
@@ -264,9 +265,13 @@ class MCPWebSocketServer:
                 self._http_session = aiohttp.ClientSession()
 
             validate_url = f"{self.auth_config.platform_url}/api/v1/sandbox/token/validate"
+            headers = {}
+            if self.auth_config.platform_service_token:
+                headers["Authorization"] = f"Bearer {self.auth_config.platform_service_token}"
             async with self._http_session.post(
                 validate_url,
                 json={"token": token},
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:
                 if resp.status == 200:

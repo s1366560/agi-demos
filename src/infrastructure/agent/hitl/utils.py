@@ -80,14 +80,37 @@ _SECRET_TEXT_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{8,}")
 class HITLRequestRecord(Protocol):
     """Attribute-based view of a persisted HITL request."""
 
-    id: str
-    request_type: object
-    question: str | None
-    options: object
-    context: object
-    metadata: object
-    response: object
-    response_metadata: object
+    @property
+    def id(self) -> str:
+        ...
+
+    @property
+    def request_type(self) -> object:
+        ...
+
+    @property
+    def question(self) -> str | None:
+        ...
+
+    @property
+    def options(self) -> object:
+        ...
+
+    @property
+    def context(self) -> object:
+        ...
+
+    @property
+    def metadata(self) -> object:
+        ...
+
+    @property
+    def response(self) -> object:
+        ...
+
+    @property
+    def response_metadata(self) -> object:
+        ...
 
 
 _hitl_stream_encryption_service: EncryptionService | None = None
@@ -258,6 +281,35 @@ def _restore_choice_like_response(summary: str) -> str | list[str]:
     return summary
 
 
+def _restore_summary_hitl_response(
+    hitl_type: str,
+    response_summary: str,
+    response_metadata: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Restore non-encrypted HITL response payloads from persisted summaries."""
+    restored_response: dict[str, Any] | None = None
+    if hitl_type == "clarification":
+        restored_response = {"answer": _restore_choice_like_response(response_summary)}
+    elif hitl_type == "decision":
+        restored_response = {"decision": _restore_choice_like_response(response_summary)}
+    elif hitl_type == "permission":
+        normalized_response = response_summary.strip().lower()
+        if normalized_response in {"true", "false"}:
+            restored_response = {"granted": normalized_response == "true"}
+        else:
+            restored_response = {"action": response_summary}
+    elif hitl_type == "a2ui_action":
+        source_component_id = response_metadata.get("source_component_id")
+        context = response_metadata.get("context")
+        if isinstance(source_component_id, str) and isinstance(context, Mapping):
+            restored_response = {
+                "action_name": response_summary,
+                "source_component_id": source_component_id,
+                "context": dict(context),
+            }
+    return restored_response
+
+
 def restore_persisted_hitl_response(
     hitl_request: HITLRequestRecord,
 ) -> dict[str, Any] | None:
@@ -276,33 +328,13 @@ def restore_persisted_hitl_response(
             return restored_response
 
     if hitl_type == "env_var":
-        restored_response = unseal_hitl_response_data(response_metadata)
-    else:
-        response_summary = getattr(hitl_request, "response", None)
-        if not isinstance(response_summary, str) or not response_summary:
-            return None
+        return unseal_hitl_response_data(response_metadata)
 
-        if hitl_type == "clarification":
-            restored_response = {"answer": _restore_choice_like_response(response_summary)}
-        elif hitl_type == "decision":
-            restored_response = {"decision": _restore_choice_like_response(response_summary)}
-        elif hitl_type == "permission":
-            normalized_response = response_summary.strip().lower()
-            if normalized_response in {"true", "false"}:
-                restored_response = {"granted": normalized_response == "true"}
-            else:
-                restored_response = {"action": response_summary}
-        elif hitl_type == "a2ui_action":
-            source_component_id = response_metadata.get("source_component_id")
-            context = response_metadata.get("context")
-            if isinstance(source_component_id, str) and isinstance(context, Mapping):
-                restored_response = {
-                    "action_name": response_summary,
-                    "source_component_id": source_component_id,
-                    "context": dict(context),
-                }
+    response_summary = getattr(hitl_request, "response", None)
+    if not isinstance(response_summary, str) or not response_summary:
+        return None
 
-    return restored_response
+    return _restore_summary_hitl_response(hitl_type, response_summary, response_metadata)
 
 
 async def load_persisted_hitl_request(request_id: str) -> HITLRequestRecord | None:

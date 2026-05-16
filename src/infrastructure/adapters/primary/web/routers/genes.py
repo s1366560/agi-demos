@@ -34,6 +34,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -198,7 +199,7 @@ async def get_gene(
     if not gene:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Gene {gene_id} not found",
+            detail=_(f"Gene {gene_id} not found"),
         )
     return GeneResponse.model_validate(gene, from_attributes=True)
 
@@ -375,7 +376,7 @@ async def get_genome(
     if not genome:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Genome {genome_id} not found",
+            detail=_(f"Genome {genome_id} not found"),
         )
     return GenomeResponse.model_validate(genome, from_attributes=True)
 
@@ -577,7 +578,7 @@ async def get_instance_gene(
     if not ig:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"InstanceGene {instance_gene_id} not found",
+            detail=_(f"InstanceGene {instance_gene_id} not found"),
         )
     return InstanceGeneResponse(
         id=ig.id,

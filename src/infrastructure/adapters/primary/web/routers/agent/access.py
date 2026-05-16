@@ -14,6 +14,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserRole,
     UserTenant,
 )
+from src.infrastructure.i18n import gettext as _
 
 
 def _get_user_state(current_user: User) -> dict[str, object]:
@@ -94,7 +95,7 @@ async def _ensure_tenant_exists(
     """Raise when the requested tenant does not exist."""
     result = await db.execute(refresh_select_statement(select(Tenant.id).where(Tenant.id == tenant_id)))
     if result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="Tenant not found")
+        raise HTTPException(status_code=404, detail=_("Tenant not found"))
 
 
 async def get_tenant_role(
@@ -139,6 +140,6 @@ async def require_tenant_access(
     """Require tenant membership, and admin rights when requested."""
     role = await get_tenant_role(db, current_user, tenant_id)
     if role is None:
-        raise HTTPException(status_code=403, detail="Tenant access required")
+        raise HTTPException(status_code=403, detail=_("Tenant access required"))
     if require_admin and role not in {"admin", "owner"}:
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail=_("Admin access required"))

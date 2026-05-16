@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -19,6 +19,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 from .utils import get_container_with_db
 
@@ -98,7 +99,7 @@ async def create_binding(
 
         created = await repo.create(binding)
         await db.commit()
-        return created.to_dict()
+        return cast(dict[str, Any], created.to_dict())
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -108,7 +109,7 @@ async def create_binding(
         logger.error("Error creating binding: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create binding: {e!s}",
+            detail=_(f"Failed to create binding: {e!s}"),
         ) from e
 
 
@@ -142,7 +143,7 @@ async def list_bindings(
         logger.error("Error listing bindings: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to list bindings: {e!s}",
+            detail=_(f"Failed to list bindings: {e!s}"),
         ) from e
 
 
@@ -160,10 +161,10 @@ async def delete_binding(
 
         existing = await repo.get_by_id(binding_id)
         if existing is None:
-            raise HTTPException(status_code=404, detail="Binding not found")
+            raise HTTPException(status_code=404, detail=_("Binding not found"))
 
         if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         await repo.delete(binding_id)
         await db.commit()
@@ -175,7 +176,7 @@ async def delete_binding(
         logger.error("Error deleting binding: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to delete binding: {e!s}",
+            detail=_(f"Failed to delete binding: {e!s}"),
         ) from e
 
 
@@ -194,14 +195,14 @@ async def set_binding_enabled(
 
         existing = await repo.get_by_id(binding_id)
         if existing is None:
-            raise HTTPException(status_code=404, detail="Binding not found")
+            raise HTTPException(status_code=404, detail=_("Binding not found"))
 
         if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
         updated = await repo.set_enabled(binding_id, body.enabled)
         await db.commit()
-        return updated.to_dict()
+        return cast(dict[str, Any], updated.to_dict())
 
     except HTTPException:
         raise
@@ -211,7 +212,7 @@ async def set_binding_enabled(
         logger.error("Error updating binding: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update binding: {e!s}",
+            detail=_(f"Failed to update binding: {e!s}"),
         ) from e
 
 
@@ -238,7 +239,7 @@ async def list_group_bindings(
         logger.error("Error listing group bindings: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to list group bindings: {e!s}",
+            detail=_(f"Failed to list group bindings: {e!s}"),
         ) from e
 
 
@@ -311,5 +312,5 @@ async def test_binding_match(
         logger.error("Error testing binding match: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to test binding: {e!s}",
+            detail=_(f"Failed to test binding: {e!s}"),
         ) from e

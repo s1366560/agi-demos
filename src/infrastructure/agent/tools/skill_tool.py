@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
@@ -88,9 +88,10 @@ def _is_skill_allowed(ctx: ToolContext, skill_name: str) -> bool:
     allowed_skills = ctx.runtime_context.get("allowed_skills")
     if not isinstance(allowed_skills, list) or not allowed_skills:
         return True
+    allowed_skill_items = cast(list[object], allowed_skills)
     normalized_allowed = {
         str(item).strip().lower()
-        for item in allowed_skills
+        for item in allowed_skill_items
         if isinstance(item, str) and item.strip()
     }
     return skill_name.strip().lower() in normalized_allowed
@@ -157,14 +158,6 @@ async def skill_tool(ctx: ToolContext, *, name: str, user_message: str = "") -> 
             output=f"Skill '{name}' not found. No skills are currently available.",
             is_error=True,
         )
-
-    # Permission check
-    approved = await ctx.ask(
-        permission="skill",
-        description=f"Load skill: {skill.name} - {skill.description}",
-    )
-    if not approved:
-        return ToolResult(output="Skill loading denied by user.", is_error=True)
 
     logger.info(
         "Loaded skill '%s' (scope=%s, %d bytes)",

@@ -18,6 +18,7 @@ from src.configuration.di_container import DIContainer
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -324,7 +325,7 @@ async def create_subagent(
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"SubAgent with name '{data.name}' already exists",
+                detail=_(f"SubAgent with name '{data.name}' already exists"),
             )
 
         # Create subagent
@@ -529,7 +530,7 @@ async def import_filesystem_subagent(
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Filesystem SubAgent '{name}' not found",
+            detail=_(f"Filesystem SubAgent '{name}' not found"),
         )
 
     container = get_container_with_db(request, db)
@@ -540,7 +541,7 @@ async def import_filesystem_subagent(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"SubAgent '{name}' already exists in database",
+            detail=_(f"SubAgent '{name}' already exists in database"),
         )
 
     # Create a DB copy from the filesystem SubAgent
@@ -624,7 +625,7 @@ async def create_template(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Template '{data.name}' v{data.version} already exists",
+            detail=_(f"Template '{data.name}' v{data.version} already exists"),
         )
 
     template_data = data.model_dump()
@@ -668,7 +669,7 @@ async def get_template(
     if not template or template["tenant_id"] != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
+            detail=_("Template not found"),
         )
 
     return TemplateResponse(**template)
@@ -692,13 +693,13 @@ async def update_template(
     if not template or template["tenant_id"] != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
+            detail=_("Template not found"),
         )
 
     if template["is_builtin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot modify builtin templates",
+            detail=_("Cannot modify builtin templates"),
         )
 
     update_data = data.model_dump(exclude_unset=True)
@@ -727,13 +728,13 @@ async def delete_template(
     if not template or template["tenant_id"] != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
+            detail=_("Template not found"),
         )
 
     if template["is_builtin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot delete builtin templates",
+            detail=_("Cannot delete builtin templates"),
         )
 
     await repo.delete(template_id)
@@ -762,7 +763,7 @@ async def install_template(
     if not template or template["tenant_id"] != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
+            detail=_("Template not found"),
         )
 
     subagent_repo = container.subagent_repository()
@@ -772,7 +773,7 @@ async def install_template(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"SubAgent '{template['name']}' already exists",
+            detail=_(f"SubAgent '{template['name']}' already exists"),
         )
 
     subagent = SubAgent.create(
@@ -819,7 +820,7 @@ async def export_subagent_as_template(
     if not subagent or subagent.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     template_repo = container.subagent_template_repository()
@@ -866,14 +867,14 @@ async def get_subagent(
     if not subagent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     # Verify tenant access
     if subagent.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     return subagent_to_response(subagent)
@@ -897,14 +898,14 @@ async def update_subagent(
     if not subagent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     # Verify tenant access
     if subagent.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     # Check name uniqueness if changing
@@ -913,7 +914,7 @@ async def update_subagent(
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"SubAgent with name '{data.name}' already exists",
+                detail=_(f"SubAgent with name '{data.name}' already exists"),
             )
 
     # Update fields
@@ -986,14 +987,14 @@ async def delete_subagent(
     if not subagent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     # Verify tenant access
     if subagent.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     await repo.delete(subagent_id)
@@ -1020,14 +1021,14 @@ async def toggle_subagent_enabled(
     if not subagent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     # Verify tenant access
     if subagent.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     result = await repo.set_enabled(subagent_id, enabled)
@@ -1055,14 +1056,14 @@ async def get_subagent_stats(
     if not subagent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     # Verify tenant access
     if subagent.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="SubAgent not found",
+            detail=_("SubAgent not found"),
         )
 
     return SubAgentStatsResponse(

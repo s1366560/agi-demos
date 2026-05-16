@@ -8,16 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.cluster_schemas import (
     ClusterCreate,
+    ClusterHealthResponse,
     ClusterListResponse,
     ClusterResponse,
     ClusterUpdate,
 )
 from src.configuration.di_container import DIContainer
+from src.domain.model.cluster.cluster import Cluster
 from src.domain.model.cluster.enums import ClusterStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.i18n import gettext as _
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -33,6 +36,66 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/clusters", tags=["Clusters"])
+
+
+def _health_config(provider_config: dict[str, object]) -> dict[str, object]:
+    health = provider_config.get("health")
+    return dict(health) if isinstance(health, dict) else {}
+
+
+def _as_float(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _as_int(value: object) -> int | None:
+    numeric = _as_float(value)
+    return int(numeric) if numeric is not None else None
+
+
+def _usage_percent(used: object, total: object) -> float | None:
+    used_value = _as_float(used)
+    total_value = _as_float(total)
+    if used_value is None or total_value is None or total_value <= 0:
+        return None
+    return round(min(max((used_value / total_value) * 100, 0), 100), 2)
+
+
+def _cluster_health_response(cluster: Cluster) -> ClusterHealthResponse:
+    provider_config = cluster.provider_config or {}
+    health = _health_config(provider_config)
+
+    node_count = (
+        _as_int(health.get("total_nodes"))
+        or _as_int(provider_config.get("node_count"))
+        or _as_int(provider_config.get("nodes"))
+        or 0
+    )
+    cpu_usage = _as_float(health.get("cpu_usage"))
+    if cpu_usage is None:
+        cpu_usage = _usage_percent(health.get("used_cpu"), health.get("total_cpu"))
+    memory_usage = _as_float(health.get("memory_usage"))
+    if memory_usage is None:
+        memory_usage = _usage_percent(
+            health.get("used_memory_gb"),
+            health.get("total_memory_gb"),
+        )
+
+    return ClusterHealthResponse(
+        status=cluster.health_status or cluster.status.value,
+        node_count=node_count,
+        cpu_usage=cpu_usage,
+        memory_usage=memory_usage,
+        checked_at=cluster.last_health_check,
+    )
 
 
 class HealthStatusUpdate(BaseModel):
@@ -77,7 +140,7 @@ async def create_cluster(
         raise
     except Exception as e:
         logger.exception("Error creating cluster")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.get("/", response_model=ClusterListResponse)
@@ -109,32 +172,32 @@ async def list_clusters(
         raise
     except Exception as e:
         logger.exception("Error listing clusters")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.get("/{cluster_id}", response_model=ClusterResponse)
 async def get_cluster(
     cluster_id: str,
     request: Request,
-    _tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ClusterResponse:
     """Get a cluster by ID."""
     try:
         container = get_container_with_db(request, db)
         service = container.cluster_service()
-        result = await service.get_cluster(cluster_id)
+        result = await service.get_cluster(cluster_id, tenant_id=tenant_id)
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cluster {cluster_id} not found",
+                detail=_(f"Cluster {cluster_id} not found"),
             )
         return ClusterResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Error getting cluster")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.put("/{cluster_id}", response_model=ClusterResponse)
@@ -142,7 +205,7 @@ async def update_cluster(
     cluster_id: str,
     request: Request,
     data: ClusterUpdate,
-    _tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ClusterResponse:
     """Update a cluster."""
@@ -152,9 +215,11 @@ async def update_cluster(
         result = await service.update_cluster(
             cluster_id=cluster_id,
             name=data.name,
+            compute_provider=data.compute_provider,
             proxy_endpoint=data.proxy_endpoint,
             provider_config=data.provider_config,
             credentials_encrypted=data.credentials_encrypted,
+            tenant_id=tenant_id,
         )
         await db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
@@ -167,7 +232,7 @@ async def update_cluster(
         raise
     except Exception as e:
         logger.exception("Error updating cluster")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.delete(
@@ -178,14 +243,14 @@ async def update_cluster(
 async def delete_cluster(
     cluster_id: str,
     request: Request,
-    _tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a cluster."""
     try:
         container = get_container_with_db(request, db)
         service = container.cluster_service()
-        await service.delete_cluster(cluster_id)
+        await service.delete_cluster(cluster_id, tenant_id=tenant_id)
         await db.commit()
     except ValueError as e:
         raise HTTPException(
@@ -196,7 +261,35 @@ async def delete_cluster(
         raise
     except Exception as e:
         logger.exception("Error deleting cluster")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
+
+
+@router.get(
+    "/{cluster_id}/health",
+    response_model=ClusterHealthResponse,
+)
+async def get_cluster_health(
+    cluster_id: str,
+    request: Request,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> ClusterHealthResponse:
+    """Get the latest cluster health snapshot."""
+    try:
+        container = get_container_with_db(request, db)
+        service = container.cluster_service()
+        result = await service.get_cluster(cluster_id, tenant_id=tenant_id)
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_(f"Cluster {cluster_id} not found"),
+            )
+        return _cluster_health_response(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error getting cluster health")
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e
 
 
 @router.put(
@@ -207,7 +300,7 @@ async def update_health_status(
     cluster_id: str,
     request: Request,
     data: HealthStatusUpdate,
-    _tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> ClusterResponse:
     """Update cluster health status."""
@@ -218,6 +311,13 @@ async def update_health_status(
             cluster_id=cluster_id,
             status=ClusterStatus.connected,
             health_status=data.health_status,
+            total_nodes=data.total_nodes,
+            active_nodes=data.active_nodes,
+            total_cpu=data.total_cpu,
+            used_cpu=data.used_cpu,
+            total_memory_gb=data.total_memory_gb,
+            used_memory_gb=data.used_memory_gb,
+            tenant_id=tenant_id,
         )
         await db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
@@ -230,4 +330,4 @@ async def update_health_status(
         raise
     except Exception as e:
         logger.exception("Error updating cluster health")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        raise HTTPException(status_code=500, detail=_("Internal server error")) from e

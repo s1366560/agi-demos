@@ -241,6 +241,24 @@ class TestSessionRecoveryService:
         assert result.action is not None
         assert result.action.recovered is True
 
+    async def test_provider_down_does_not_retry_without_llm_failover_chain(self) -> None:
+        """Provider outages must not trigger a fake retry through session recovery."""
+
+        class ProviderDownError(Exception):
+            status_code = 503
+
+        service = SessionRecoveryService()
+
+        result = await service.attempt_recovery(
+            session_id="sess-1",
+            error=ProviderDownError("service unavailable"),
+        )
+
+        assert result.recovered is False
+        assert result.strategy_used == "provider_failover"
+        assert result.should_retry is False
+        assert "FailoverChain" in result.message
+
     async def test_default_strategies_present(self) -> None:
         service = SessionRecoveryService()
         strategies = service.get_strategies()

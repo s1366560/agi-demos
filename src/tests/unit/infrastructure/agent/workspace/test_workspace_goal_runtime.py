@@ -9,9 +9,12 @@ import pytest
 from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+from src.infrastructure.agent.workspace.dispatcher.retry_policy import DEFAULT_RETRY_POLICY
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    _background_tasks,
     _ensure_execution_attempt,
     _launch_workspace_retry_attempt,
+    _schedule_workspace_retry_attempt,
     adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
     auto_complete_ready_root,
@@ -991,6 +994,7 @@ class TestWorkspaceGoalRuntime:
                     root_goal_task_id="root-1",
                     workspace_task_id="child-adjudicate-1",
                     attempt_id="attempt-4",
+                    attempt_number="2",
                     actor_user_id="u-1",
                     leader_agent_id="leader-agent",
                     retry_feedback="Checklist drafted",
@@ -1079,6 +1083,45 @@ class TestWorkspaceGoalRuntime:
         assert captured["agent_id"] == "leader-agent"
         assert "attempt_id=attempt-9" in str(captured["user_message"])
         assert "Leader retry feedback: Please tighten verification" in str(captured["user_message"])
+
+    async def test_schedule_workspace_retry_attempt_applies_retry_policy_backoff(self) -> None:
+        before = set(_background_tasks)
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.asyncio.sleep",
+                new=AsyncMock(),
+            ) as sleep_mock,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime._launch_workspace_retry_attempt",
+                new=AsyncMock(),
+            ) as launch_mock,
+        ):
+            _schedule_workspace_retry_attempt(
+                workspace_id="ws-1",
+                root_goal_task_id="root-1",
+                workspace_task_id="child-1",
+                attempt_id="attempt-3",
+                attempt_number=3,
+                actor_user_id="u-1",
+                leader_agent_id="leader-agent",
+                retry_feedback="Retry with tighter verification",
+            )
+            created = [task for task in _background_tasks if task not in before]
+            assert len(created) == 1
+            await created[0]
+
+        sleep_mock.assert_awaited_once_with(DEFAULT_RETRY_POLICY.backoff_for(3))
+        launch_mock.assert_awaited_once_with(
+            workspace_id="ws-1",
+            root_goal_task_id="root-1",
+            workspace_task_id="child-1",
+            attempt_id="attempt-3",
+            attempt_number=3,
+            actor_user_id="u-1",
+            leader_agent_id="leader-agent",
+            retry_feedback="Retry with tighter verification",
+        )
 
     async def test_prepare_workspace_subagent_delegation_marks_matching_task_in_progress(  # noqa: PLR0915
         self,

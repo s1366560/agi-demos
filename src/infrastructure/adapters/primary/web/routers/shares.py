@@ -19,6 +19,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1", tags=["shares"])
 logger = logging.getLogger(__name__)
@@ -58,17 +59,17 @@ async def create_share(
     memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
     memory = memory_result.scalar_one_or_none()
     if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
+        raise HTTPException(status_code=404, detail=_("Memory not found"))
     if memory.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail=_("Access denied"))
     target_type = share_data.get("target_type")
     permission_level = share_data.get("permission_level")
     target_id = share_data.get("target_id")
     if target_type:
         if target_type not in ["user", "project"]:
-            raise HTTPException(status_code=400, detail="target_type must be 'user' or 'project'")
+            raise HTTPException(status_code=400, detail=_("target_type must be 'user' or 'project'"))
         if permission_level not in ["view", "edit"]:
-            raise HTTPException(status_code=400, detail="permission_level must be 'view' or 'edit'")
+            raise HTTPException(status_code=400, detail=_("permission_level must be 'view' or 'edit'"))
         # duplicate check
         if target_type == "user":
             existing_share = await db.execute(
@@ -84,7 +85,7 @@ async def create_share(
                 ))
             )
         if existing_share.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Memory already shared with this target")
+            raise HTTPException(status_code=400, detail=_("Memory already shared with this target"))
     # expiration
     expires_at = None
     if share_data.get("expires_at"):
@@ -138,12 +139,12 @@ async def list_shares(
     memory = memory_result.scalar_one_or_none()
 
     if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
+        raise HTTPException(status_code=404, detail=_("Memory not found"))
 
     # Check access - author OR project admin/owner
     if memory.author_id != current_user.id:
         if not await _check_project_admin_access(db, current_user.id, memory.project_id):
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Get shares
     shares_result = await db.execute(
@@ -182,22 +183,22 @@ async def delete_share(
     memory = memory_result.scalar_one_or_none()
 
     if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
+        raise HTTPException(status_code=404, detail=_("Memory not found"))
 
     # Check access - author OR project admin/owner
     if memory.author_id != current_user.id:
         if not await _check_project_admin_access(db, current_user.id, memory.project_id):
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Get share
     share_result = await db.execute(refresh_select_statement(select(MemoryShare).where(MemoryShare.id == share_id)))
     share = share_result.scalar_one_or_none()
 
     if not share:
-        raise HTTPException(status_code=404, detail="Share not found")
+        raise HTTPException(status_code=404, detail=_("Share not found"))
 
     if share.memory_id != memory_id:
-        raise HTTPException(status_code=400, detail="Share does not belong to this memory")
+        raise HTTPException(status_code=400, detail=_("Share does not belong to this memory"))
 
     # Delete share
     await db.delete(share)
@@ -227,7 +228,7 @@ async def get_shared_memory(
     share = share_result.scalar_one_or_none()
 
     if not share:
-        raise HTTPException(status_code=404, detail="Share link not found")
+        raise HTTPException(status_code=404, detail=_("Share link not found"))
 
     # Check expiration
     if share.expires_at:
@@ -235,14 +236,14 @@ async def get_shared_memory(
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=UTC)
         if exp < datetime.now(UTC):
-            raise HTTPException(status_code=403, detail="Share link has expired")
+            raise HTTPException(status_code=403, detail=_("Share link has expired"))
 
     # Get memory
     memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == share.memory_id)))
     memory = memory_result.scalar_one_or_none()
 
     if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
+        raise HTTPException(status_code=404, detail=_("Memory not found"))
 
     # Increment access count
     share.access_count += 1

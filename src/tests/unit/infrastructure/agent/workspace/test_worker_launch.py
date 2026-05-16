@@ -1062,6 +1062,44 @@ class TestBuildBrief:
             in (system_context["code_context"]["rule"])
         )
 
+    def test_structured_attempt_worktree_sets_active_execution_root(self) -> None:
+        task = _make_task()
+        code_context = WorkspaceCodeContext(sandbox_code_root="/workspace/my-evo")
+        attempt_worktree = {
+            "workspace_root": "/workspace",
+            "sandbox_code_root": "/workspace/my-evo",
+            "active_root": "/workspace/.memstack/worktrees/att-2",
+            "worktree_path": "/workspace/.memstack/worktrees/att-2",
+            "branch_name": "workspace/node-att-2",
+            "base_ref": "HEAD",
+            "attempt_id": "att-2",
+            "is_isolated": True,
+            "setup_status": "prepared",
+        }
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+            attempt_worktree_context=attempt_worktree,
+        )
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            code_context=code_context,
+            attempt_worktree_context=attempt_worktree,
+        )
+
+        assert "The current attempt root is `/workspace/.memstack/worktrees/att-2`" in brief
+        assert system_context["active_execution_root"] == "/workspace/.memstack/worktrees/att-2"
+        assert system_context["attempt_worktree"]["attempt_id"] == "att-2"
+        assert system_context["worktree_setup"]["status"] == "prepared"
+        assert system_context["workspace_root_override"]["source"] == "attempt_worktree"
+
     def test_rewrites_checkpoint_commands_to_attempt_worktree_root(self) -> None:
         task = _make_task()
         code_context = WorkspaceCodeContext(sandbox_code_root="/workspace/my-evo")

@@ -752,12 +752,12 @@ class SubAgentSessionRunner:
         )
         max_active = self.deps.max_subagent_active_runs
         if active_count >= max_active:
-            event = SubAgentQueuedEvent(
+            queued_event = SubAgentQueuedEvent(
                 subagent_id="",
                 subagent_name=subagent_name,
                 reason="concurrency_limit",
             )
-            return (False, [dict(event.to_event_dict())])
+            return (False, [dict(queued_event.to_event_dict())])
 
         return (True, [])
 
