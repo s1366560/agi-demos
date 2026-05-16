@@ -60,10 +60,10 @@ export const TemplateMarketplace: React.FC = () => {
     async (templateId: string) => {
       setInstalling((prev) => new Set(prev).add(templateId));
       try {
-        const result = await subagentTemplateService.install(templateId, 'default');
+        const result = await subagentTemplateService.install(templateId);
         message.success(
           t('agent.templates.installed', 'Installed SubAgent: {{name}}', {
-            name: result.name,
+            name: result.display_name || result.name,
           })
         );
       } catch {

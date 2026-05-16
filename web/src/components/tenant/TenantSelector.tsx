@@ -129,10 +129,19 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         onManageTenant?.(tenant);
                       }}
+                      aria-label={t('tenant.selector.manageTenant', {
+                        tenant: tenant.name,
+                        defaultValue: 'Manage {{tenant}}',
+                      })}
+                      title={t('tenant.selector.manageTenant', {
+                        tenant: tenant.name,
+                        defaultValue: 'Manage {{tenant}}',
+                      })}
                       className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     >
                       <Settings className="h-4 w-4" />

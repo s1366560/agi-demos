@@ -31,11 +31,9 @@ export const PrimaryAction = React.memo(function PrimaryAction({
   const buttonClass = variant === 'primary' ? 'btn-primary' : 'btn-secondary';
 
   return (
-    <Link to={to}>
-      <button className={buttonClass}>
-        {icon}
-        <span>{translateLabel(label)}</span>
-      </button>
+    <Link to={to} className={`${buttonClass} no-underline`}>
+      {icon}
+      <span>{translateLabel(label)}</span>
     </Link>
   );
 });

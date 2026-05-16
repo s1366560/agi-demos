@@ -312,9 +312,11 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
 
             <Tooltip title={t('mcp.serverCard.actions.viewToolsTooltip')}>
               <button
+                type="button"
                 onClick={() => {
                   onShowTools(server);
                 }}
+                aria-label={t('mcp.serverCard.actions.viewToolsTooltip')}
                 className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
               >
                 <Wrench size={18} />
@@ -322,9 +324,12 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
             </Tooltip>
 
             <button
+              type="button"
               onClick={() => {
                 onEdit(server);
               }}
+              aria-label={t('common.edit')}
+              title={t('common.edit')}
               className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
               <Pencil size={18} />
@@ -340,7 +345,12 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
               cancelText={t('common.cancel')}
               okButtonProps={{ danger: true }}
             >
-              <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors">
+              <button
+                type="button"
+                aria-label={t('common.delete')}
+                title={t('common.delete')}
+                className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
+              >
                 <Trash2 size={18} />
               </button>
             </Popconfirm>

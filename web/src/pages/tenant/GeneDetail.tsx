@@ -67,7 +67,7 @@ export const GeneDetail: FC = () => {
     getGene,
     installGene,
     rateGene,
-    listEvolutionEvents,
+    listGeneEvolutionEvents,
     clearError,
     reset,
     fetchGeneReviews,
@@ -87,14 +87,23 @@ export const GeneDetail: FC = () => {
   useEffect(() => {
     if (geneId) {
       getGene(geneId).catch(() => message.error(t('tenant.genes.fetchError')));
-      listEvolutionEvents(geneId).catch(() => {});
+      listGeneEvolutionEvents(geneId).catch(() => {});
       fetchGeneReviews(geneId, reviewPage, reviewPageSize).catch(() => {});
     }
     return () => {
       clearError();
       reset();
     };
-  }, [geneId, getGene, listEvolutionEvents, fetchGeneReviews, clearError, reset, t, reviewPage]);
+  }, [
+    geneId,
+    getGene,
+    listGeneEvolutionEvents,
+    fetchGeneReviews,
+    clearError,
+    reset,
+    t,
+    reviewPage,
+  ]);
 
   const handleInstallSubmit = async () => {
     try {
@@ -125,7 +134,7 @@ export const GeneDetail: FC = () => {
       const values = await rateForm.validateFields();
       if (geneId) {
         await rateGene(geneId, {
-          score: values.score,
+          rating: values.score,
           comment: values.comment ?? null,
         });
         message.success(t('tenant.genes.rateSuccess'));
@@ -504,7 +513,11 @@ export const GeneDetail: FC = () => {
             label={t('tenant.genes.configOverride')}
             tooltip={t('tenant.genes.configOverrideTooltip')}
           >
-            <Input.TextArea rows={4} placeholder='{"key": "value"}' className="font-mono text-sm" />
+            <Input.TextArea
+              rows={4}
+              placeholder={t('tenant.genes.configOverridePlaceholder')}
+              className="font-mono text-sm"
+            />
           </Form.Item>
         </Form>
       </Modal>

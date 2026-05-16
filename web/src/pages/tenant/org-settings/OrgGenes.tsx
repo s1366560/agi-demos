@@ -36,7 +36,7 @@ export const OrgGenes: React.FC = () => {
       const data = await genePolicyService.list(currentTenant.id);
       setPolicies(data);
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.genes.fetchError', 'Failed to load gene policies'));
+      message?.error(t('tenant.orgSettings.genes.fetchError'));
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +72,7 @@ export const OrgGenes: React.FC = () => {
     if (!currentTenant || !editing) return;
 
     if (!editing.policy_key.trim()) {
-      message?.error(t('tenant.orgSettings.genes.keyRequired', 'Policy key is required'));
+      message?.error(t('tenant.orgSettings.genes.keyRequired'));
       return;
     }
 
@@ -80,7 +80,7 @@ export const OrgGenes: React.FC = () => {
     try {
       parsedValue = JSON.parse(editing.policy_value) as Record<string, unknown>;
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.genes.invalidJson', 'Policy value must be valid JSON'));
+      message?.error(t('tenant.orgSettings.genes.invalidJson'));
       return;
     }
 
@@ -94,9 +94,9 @@ export const OrgGenes: React.FC = () => {
       await genePolicyService.upsert(currentTenant.id, editing.policy_key, data);
       await fetchPolicies();
       setEditing(null);
-      message?.success(t('tenant.orgSettings.genes.saveSuccess', 'Gene policy saved successfully'));
+      message?.success(t('tenant.orgSettings.genes.saveSuccess'));
     } catch (_err) {
-      message?.error(t('tenant.orgSettings.genes.saveError', 'Failed to save gene policy'));
+      message?.error(t('tenant.orgSettings.genes.saveError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -110,9 +110,9 @@ export const OrgGenes: React.FC = () => {
       try {
         await genePolicyService.remove(currentTenant.id, policyKey);
         await fetchPolicies();
-        message?.success(t('tenant.orgSettings.genes.deleteSuccess', 'Gene policy deleted'));
+        message?.success(t('tenant.orgSettings.genes.deleteSuccess'));
       } catch (_err) {
-        message?.error(t('tenant.orgSettings.genes.deleteError', 'Failed to delete gene policy'));
+        message?.error(t('tenant.orgSettings.genes.deleteError'));
       } finally {
         setDeletingKey(null);
       }
@@ -123,7 +123,7 @@ export const OrgGenes: React.FC = () => {
   if (!currentTenant) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-slate-500">{t('common.noTenant', 'No tenant selected')}</p>
+        <p className="text-slate-500">{t('common.noTenant')}</p>
       </div>
     );
   }
@@ -142,13 +142,10 @@ export const OrgGenes: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            {t('tenant.orgSettings.genes.title', 'Gene Policies')}
+            {t('tenant.orgSettings.genes.title')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t(
-              'tenant.orgSettings.genes.description',
-              'Manage organizational gene policies for agent behavior configuration'
-            )}
+            {t('tenant.orgSettings.genes.description')}
           </p>
         </div>
         <button
@@ -158,7 +155,7 @@ export const OrgGenes: React.FC = () => {
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus size={16} />
-          {t('tenant.orgSettings.genes.addPolicy', 'Add Policy')}
+          {t('tenant.orgSettings.genes.addPolicy')}
         </button>
       </div>
 
@@ -168,8 +165,8 @@ export const OrgGenes: React.FC = () => {
           <h3 className="text-md font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
             <Dna size={16} className="text-primary" />
             {editing.isNew
-              ? t('tenant.orgSettings.genes.addTitle', 'Add Gene Policy')
-              : t('tenant.orgSettings.genes.editTitle', 'Edit Gene Policy')}
+              ? t('tenant.orgSettings.genes.addTitle')
+              : t('tenant.orgSettings.genes.editTitle')}
           </h3>
 
           <div className="space-y-4 max-w-4xl">
@@ -178,7 +175,7 @@ export const OrgGenes: React.FC = () => {
                 htmlFor="gene-key"
                 className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
               >
-                {t('tenant.orgSettings.genes.policyKey', 'Policy Key')} *
+                {t('tenant.orgSettings.genes.policyKey')} *
               </label>
               <input
                 id="gene-key"
@@ -189,7 +186,7 @@ export const OrgGenes: React.FC = () => {
                 }}
                 disabled={!editing.isNew}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-                placeholder="e.g. agent_behavior, memory_retention"
+                placeholder={t('tenant.orgSettings.genes.policyKeyPlaceholder')}
               />
             </div>
 
@@ -198,7 +195,7 @@ export const OrgGenes: React.FC = () => {
                 htmlFor="gene-description"
                 className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
               >
-                {t('tenant.orgSettings.genes.policyDescription', 'Description')}
+                {t('tenant.orgSettings.genes.policyDescription')}
               </label>
               <input
                 id="gene-description"
@@ -208,10 +205,7 @@ export const OrgGenes: React.FC = () => {
                   setEditing({ ...editing, description: e.target.value });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
-                placeholder={t(
-                  'tenant.orgSettings.genes.descriptionPlaceholder',
-                  'Brief description of this policy'
-                )}
+                placeholder={t('tenant.orgSettings.genes.descriptionPlaceholder')}
               />
             </div>
 
@@ -220,7 +214,7 @@ export const OrgGenes: React.FC = () => {
                 htmlFor="gene-value"
                 className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
               >
-                {t('tenant.orgSettings.genes.policyValue', 'Policy Value (JSON)')} *
+                {t('tenant.orgSettings.genes.policyValue')} *
               </label>
               <textarea
                 id="gene-value"
@@ -230,7 +224,7 @@ export const OrgGenes: React.FC = () => {
                 }}
                 rows={6}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none font-mono text-sm"
-                placeholder='{ "key": "value" }'
+                placeholder={t('tenant.orgSettings.genes.policyValuePlaceholder')}
               />
             </div>
 
@@ -246,14 +240,14 @@ export const OrgGenes: React.FC = () => {
                 {isSubmitting && (
                   <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
                 )}
-                {t('common.save', 'Save')}
+                {t('common.save')}
               </button>
               <button
                 type="button"
                 onClick={handleCancelEdit}
                 className="px-6 py-2.5 rounded-lg font-medium border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
-                {t('common.cancel', 'Cancel')}
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -265,13 +259,10 @@ export const OrgGenes: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-12 text-center">
           <Dna size={16} className="text-slate-300 dark:text-slate-600 mb-4 block" />
           <p className="text-slate-500 dark:text-slate-400 mb-2">
-            {t('tenant.orgSettings.genes.empty', 'No gene policies configured')}
+            {t('tenant.orgSettings.genes.empty')}
           </p>
           <p className="text-sm text-slate-400 dark:text-slate-500">
-            {t(
-              'tenant.orgSettings.genes.emptyHint',
-              'Add a policy to configure agent behavior for your organization.'
-            )}
+            {t('tenant.orgSettings.genes.emptyHint')}
           </p>
         </div>
       ) : (
@@ -298,7 +289,7 @@ export const OrgGenes: React.FC = () => {
                     {JSON.stringify(policy.policy_value, null, 2)}
                   </pre>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-                    {t('tenant.orgSettings.genes.updatedAt', 'Updated')}:{' '}
+                    {t('tenant.orgSettings.genes.updatedAt')}:{' '}
                     {new Date(policy.updated_at ?? policy.created_at).toLocaleString()}
                   </p>
                 </div>
@@ -310,7 +301,7 @@ export const OrgGenes: React.FC = () => {
                     }}
                     disabled={editing !== null}
                     className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={t('common.edit', 'Edit')}
+                    title={t('common.edit')}
                   >
                     <Pencil size={20} />
                   </button>
@@ -321,7 +312,7 @@ export const OrgGenes: React.FC = () => {
                     }}
                     disabled={deletingKey === policy.policy_key}
                     className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={t('common.delete', 'Delete')}
+                    title={t('common.delete')}
                   >
                     {deletingKey === policy.policy_key ? (
                       <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />

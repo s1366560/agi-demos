@@ -34,6 +34,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
     if (collapsed) {
       return (
         <button
+          type="button"
           onClick={() => {
             setCollapsed(false);
           }}
@@ -56,9 +57,12 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
                 {t('agent.summary.title', 'Conversation Summary')}
               </span>
               <button
+                type="button"
                 onClick={() => {
                   setCollapsed(true);
                 }}
+                aria-label={t('agent.summary.collapse', 'Collapse summary')}
+                title={t('agent.summary.collapse', 'Collapse summary')}
                 className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"
               >
                 <ChevronUp size={12} />
@@ -71,6 +75,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
                   }}
                   disabled={regenerating}
                   className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"
+                  aria-label={t('agent.summary.regenerate', 'Regenerate summary')}
                   title={t('agent.summary.regenerate', 'Regenerate summary')}
                 >
                   {regenerating ? (

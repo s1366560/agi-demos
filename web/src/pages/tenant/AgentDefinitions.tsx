@@ -219,6 +219,7 @@ export const AgentDefinitions: React.FC = () => {
             onChange={(e) => {
               setSearch(e.target.value);
             }}
+            aria-label={t('common.search', 'Search...')}
             placeholder={t('common.search', 'Search...')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-text-inverse focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
           />
@@ -246,6 +247,9 @@ export const AgentDefinitions: React.FC = () => {
         </div>
 
         <select
+          aria-label={t('tenant.agentDefinitions.sort.label', {
+            defaultValue: 'Sort agent definitions',
+          })}
           value={sortField}
           onChange={(e) => {
             setSortField(e.target.value as SortField);

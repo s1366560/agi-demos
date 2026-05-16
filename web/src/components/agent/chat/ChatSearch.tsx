@@ -191,6 +191,8 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
           type="button"
           onClick={goPrev}
           disabled={matches.length === 0}
+          aria-label={t('agent.search.previousResult', 'Previous result')}
+          title={t('agent.search.previousResult', 'Previous result')}
           className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 disabled:opacity-30 transition-colors"
         >
           <ChevronUp size={14} />
@@ -199,6 +201,8 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
           type="button"
           onClick={goNext}
           disabled={matches.length === 0}
+          aria-label={t('agent.search.nextResult', 'Next result')}
+          title={t('agent.search.nextResult', 'Next result')}
           className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 disabled:opacity-30 transition-colors"
         >
           <ChevronDown size={14} />
@@ -207,6 +211,8 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
       <button
         type="button"
         onClick={onClose}
+        aria-label={t('agent.search.closeSearch', 'Close search')}
+        title={t('agent.search.closeSearch', 'Close search')}
         className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 transition-colors"
       >
         <X size={14} />

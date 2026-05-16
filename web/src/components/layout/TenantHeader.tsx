@@ -9,8 +9,9 @@
 
 /* eslint-disable react-refresh/only-export-components */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 
@@ -18,7 +19,6 @@ import {
   PanelLeft,
   PanelRight,
   Menu,
-  Bell,
   Search,
   Check,
   ChevronDown,
@@ -44,6 +44,8 @@ import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
 import { authAPI } from '@/services/api';
 
 import { deriveTopNavigationItems } from '@/config/navigation';
+
+import { NotificationDropdown } from './AppHeader/NotificationDropdown';
 
 import type { Tenant } from '@/types/memory';
 
@@ -202,6 +204,9 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   );
   const visibleNav = contextualNavItems.slice(0, MAX_VISIBLE_NAV_ITEMS);
   const overflowNav = contextualNavItems.slice(MAX_VISIBLE_NAV_ITEMS);
+  const searchPath = projectBasePath
+    ? `${projectBasePath}/advanced-search`
+    : `${basePath}/projects`;
 
   return (
     <>
@@ -259,9 +264,9 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-none">
-            <SearchButton />
+            <SearchButton searchPath={searchPath} />
             <BackgroundTasksButton />
-            <NotificationButton />
+            <NotificationDropdown />
             <HeaderUserMenu tenantId={tenantId} currentTenant={currentTenant} />
           </div>
         </div>
@@ -278,11 +283,34 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const trigger = ref.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 192;
+    const viewportPadding = 8;
+    const maxLeft = window.innerWidth - menuWidth - viewportPadding;
+
+    setMenuPosition({
+      left: Math.max(viewportPadding, Math.min(rect.left, maxLeft)),
+      top: rect.bottom + 4,
+    });
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const insideTrigger = ref.current?.contains(target) ?? false;
+      const insideMenu = menuRef.current?.contains(target) ?? false;
+
+      if (!insideTrigger && !insideMenu) {
+        setOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -290,14 +318,60 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [open, updateMenuPosition]);
+
   const isAnyActive = items.some((item) => isContextualTopNavItemActive(location.pathname, item));
+  const menu =
+    open && menuPosition
+      ? createPortal(
+          <div
+            ref={menuRef}
+            className="fixed w-48 bg-white dark:bg-surface-dark rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
+            style={{ left: menuPosition.left, top: menuPosition.top }}
+          >
+            {items.map((item) => {
+              const isActive = isContextualTopNavItemActive(location.pathname, item);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    void navigate(item.path);
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
+                    isActive
+                      ? 'text-primary bg-primary/5'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div className="relative shrink-0" ref={ref}>
       <button
         type="button"
         onClick={() => {
-          setOpen(!open);
+          updateMenuPosition();
+          setOpen((currentOpen) => !currentOpen);
         }}
         className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
           isAnyActive
@@ -308,30 +382,7 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
         <MoreHorizontal size={16} />
         <span className="hidden lg:inline">{t('nav.more', 'More')}</span>
       </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-surface-dark rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
-          {items.map((item) => {
-            const isActive = isContextualTopNavItemActive(location.pathname, item);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  void navigate(item.path);
-                  setOpen(false);
-                }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
-                  isActive
-                    ? 'text-primary bg-primary/5'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
@@ -362,35 +413,22 @@ function BackgroundTasksButton() {
 }
 
 /**
- * Compact search button (icon only, expandable later)
+ * Compact search button
  */
-function SearchButton() {
+function SearchButton({ searchPath }: { searchPath: string }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   return (
     <button
       type="button"
+      onClick={() => {
+        void navigate(searchPath);
+      }}
       className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       aria-label={t('common.search', 'Search')}
     >
       <Search size={18} />
-    </button>
-  );
-}
-
-/**
- * Notification bell
- */
-function NotificationButton() {
-  const { t } = useTranslation();
-
-  return (
-    <button
-      type="button"
-      className="p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-      aria-label={t('notifications.title', 'Notifications')}
-    >
-      <Bell size={18} />
     </button>
   );
 }

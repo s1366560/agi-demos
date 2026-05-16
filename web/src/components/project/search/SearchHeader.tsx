@@ -389,9 +389,14 @@ interface MobileConfigButtonProps {
 }
 
 function MobileConfigButton({ onClick }: MobileConfigButtonProps) {
+  const { t } = useTranslation();
+
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-label={t('search.header.openMobileFilters', 'Open search filters')}
+      title={t('search.header.openMobileFilters', 'Open search filters')}
       className="lg:hidden p-3 bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm"
     >
       <Sliders className="w-5 h-5" />

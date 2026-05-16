@@ -113,6 +113,40 @@ export const InstanceList: React.FC = () => {
     [deleteInstance, t, messageApi]
   );
 
+  const renderPaginationItem = useCallback(
+    (_page: number, type: string, originalElement: React.ReactNode) => {
+      const label =
+        type === 'prev'
+          ? t('tenant.instances.pagination.previousPage')
+          : type === 'next'
+            ? t('tenant.instances.pagination.nextPage')
+            : undefined;
+
+      if (!label || !React.isValidElement(originalElement)) {
+        return originalElement;
+      }
+
+      return React.cloneElement(originalElement, {
+        'aria-label': label,
+        title: label,
+      } as React.AriaAttributes & { title: string });
+    },
+    [t]
+  );
+
+  const tablePagination = useMemo(
+    () =>
+      filteredInstances.length > 10
+        ? {
+            pageSize: 10,
+            showSizeChanger: false,
+            showTotal: (total: number) => t('common.pagination.total', { total }),
+            itemRender: renderPaginationItem,
+          }
+        : false,
+    [filteredInstances.length, renderPaginationItem, t]
+  );
+
   const columns: ColumnsType<InstanceResponse> = useMemo(
     () => [
       {
@@ -160,44 +194,62 @@ export const InstanceList: React.FC = () => {
       {
         title: t('tenant.instances.columns.actions'),
         key: 'actions',
-        render: (_, record) => (
-          <Space size="middle">
-            <LazyButton
-              type="link"
-              onClick={() => {
-                handleView(record.id);
-              }}
-              className="p-0 font-medium"
-            >
-              {t('tenant.instances.actions.view')}
-            </LazyButton>
-            <LazyPopconfirm
-              title={t('tenant.instances.actions.restartConfirm')}
-              onConfirm={() => {
-                void handleRestart(record.id);
-              }}
-              okText={t('common.yes')}
-              cancelText={t('common.no')}
-            >
-              <LazyButton type="link" className="p-0">
-                {t('tenant.instances.actions.restart')}
+        render: (_, record) => {
+          const instanceName = record.name || record.id;
+
+          return (
+            <Space size="middle">
+              <LazyButton
+                type="link"
+                onClick={() => {
+                  handleView(record.id);
+                }}
+                aria-label={t('tenant.instances.actions.viewInstance', { name: instanceName })}
+                className="p-0 font-medium"
+              >
+                {t('tenant.instances.actions.view')}
               </LazyButton>
-            </LazyPopconfirm>
-            <LazyPopconfirm
-              title={t('tenant.instances.actions.deleteConfirm')}
-              onConfirm={() => {
-                void handleDelete(record.id);
-              }}
-              okText={t('common.yes')}
-              cancelText={t('common.no')}
-              okButtonProps={{ danger: true }}
-            >
-              <LazyButton type="link" danger className="p-0">
-                {t('tenant.instances.actions.delete')}
-              </LazyButton>
-            </LazyPopconfirm>
-          </Space>
-        ),
+              <LazyPopconfirm
+                title={t('tenant.instances.actions.restartConfirm')}
+                onConfirm={() => {
+                  void handleRestart(record.id);
+                }}
+                okText={t('common.yes')}
+                cancelText={t('common.no')}
+              >
+                <LazyButton
+                  type="link"
+                  className="p-0"
+                  aria-label={t('tenant.instances.actions.restartInstance', {
+                    name: instanceName,
+                  })}
+                >
+                  {t('tenant.instances.actions.restart')}
+                </LazyButton>
+              </LazyPopconfirm>
+              <LazyPopconfirm
+                title={t('tenant.instances.actions.deleteConfirm')}
+                onConfirm={() => {
+                  void handleDelete(record.id);
+                }}
+                okText={t('common.yes')}
+                cancelText={t('common.no')}
+                okButtonProps={{ danger: true }}
+              >
+                <LazyButton
+                  type="link"
+                  danger
+                  className="p-0"
+                  aria-label={t('tenant.instances.actions.deleteInstance', {
+                    name: instanceName,
+                  })}
+                >
+                  {t('tenant.instances.actions.delete')}
+                </LazyButton>
+              </LazyPopconfirm>
+            </Space>
+          );
+        },
       },
     ],
     [t, handleView, handleRestart, handleDelete]
@@ -272,11 +324,15 @@ export const InstanceList: React.FC = () => {
               style={{ width: '100%' }}
               options={[
                 { value: 'all', label: t('tenant.instances.status.all') },
-                { value: 'provisioning', label: t('tenant.instances.status.provisioning') },
+                { value: 'creating', label: t('tenant.instances.status.creating') },
+                { value: 'deploying', label: t('tenant.instances.status.deploying') },
                 { value: 'running', label: t('tenant.instances.status.running') },
                 { value: 'stopped', label: t('tenant.instances.status.stopped') },
+                { value: 'restarting', label: t('tenant.instances.status.restarting') },
+                { value: 'scaling', label: t('tenant.instances.status.scaling') },
+                { value: 'learning', label: t('tenant.instances.status.learning') },
                 { value: 'error', label: t('tenant.instances.status.error') },
-                { value: 'terminated', label: t('tenant.instances.status.terminated') },
+                { value: 'deleting', label: t('tenant.instances.status.deleting') },
               ]}
             />
           </div>
@@ -290,11 +346,7 @@ export const InstanceList: React.FC = () => {
           scroll={{ x: 'max-content' }}
           className="max-w-full"
           locale={{ emptyText: t('tenant.instances.emptyText', 'No instances found') }}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total) => t('common.pagination.total', { total }),
-          }}
+          pagination={tablePagination}
         />
       </div>
     </div>

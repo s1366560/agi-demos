@@ -1,54 +1,81 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
-import { Building2, Calendar, Camera, CheckCircle, MapPin, X } from 'lucide-react';
+import { Building2, Calendar, Camera, CheckCircle, KeyRound, MapPin, X } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 
 import { authAPI } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 
-import type { UserUpdate, UserProfile as UserProfileType } from '../types/memory';
+import type { User, UserProfile as UserProfileType, UserUpdate } from '../types/memory';
+
+type UserProfileFormData = UserUpdate & { email: string };
+type ProfileSectionId = 'basic' | 'contact' | 'preferences' | 'security';
+
+const DEFAULT_PROFILE: UserProfileType = {
+  job_title: '',
+  department: 'Engineering',
+  bio: '',
+  phone: '',
+  location: '',
+  timezone: 'Pacific Time (US & Canada)',
+  avatar_url: '',
+};
+
+const profileSections: Array<{ id: ProfileSectionId; labelKey: string }> = [
+  { id: 'basic', labelKey: 'user_profile.tabs.basic' },
+  { id: 'contact', labelKey: 'user_profile.tabs.contact' },
+  { id: 'preferences', labelKey: 'user_profile.tabs.preferences' },
+  { id: 'security', labelKey: 'user_profile.tabs.security' },
+];
+
+const buildUserFormData = (user: User): UserProfileFormData => ({
+  name: user.name,
+  email: user.email,
+  preferred_language:
+    user.preferred_language ??
+    (user.profile?.language === 'Chinese (Simplified)' ? 'zh-CN' : 'en-US'),
+  profile: {
+    ...DEFAULT_PROFILE,
+    ...(user.profile ?? {}),
+  },
+});
 
 export const UserProfile: React.FC = () => {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const { user, setUser } = useAuthStore();
+  const avatarUrlInputRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [formData, setFormData] = useState<UserUpdate & { email: string }>({
+  const [activeSection, setActiveSection] = useState<ProfileSectionId>('basic');
+  const [formData, setFormData] = useState<UserProfileFormData>({
     name: '',
     email: '',
-    profile: {
-      job_title: '',
-      department: 'Engineering',
-      bio: '',
-      phone: '',
-      location: '',
-      language: 'English (US)',
-      timezone: 'Pacific Time (US & Canada)',
-      avatar_url: '',
-    },
+    profile: DEFAULT_PROFILE,
   });
 
   useEffect(() => {
     if (user) {
-      setFormData({
-        name: user.name,
-        email: user.email,
-        profile: {
-          job_title: user.profile?.job_title || '',
-          department: user.profile?.department || 'Engineering',
-          bio: user.profile?.bio || '',
-          phone: user.profile?.phone || '',
-          location: user.profile?.location || '',
-          language: user.profile?.language || 'English (US)',
-          timezone: user.profile?.timezone || 'Pacific Time (US & Canada)',
-          avatar_url: user.profile?.avatar_url || '',
-        },
-      });
+      setFormData(buildUserFormData(user));
     }
   }, [user]);
+
+  const handleSectionClick = (sectionId: ProfileSectionId) => {
+    setActiveSection(sectionId);
+    const section = document.getElementById(`profile-section-${sectionId}`);
+    if (typeof section?.scrollIntoView === 'function') {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const focusAvatarUrlInput = () => {
+    setActiveSection('basic');
+    avatarUrlInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    avatarUrlInputRef.current?.focus();
+  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -56,6 +83,11 @@ export const UserProfile: React.FC = () => {
     const { name, value } = e.target;
     if (name === 'name' || name === 'email') {
       setFormData((prev) => ({ ...prev, [name]: value }));
+    } else if (name === 'preferred_language') {
+      setFormData((prev) => ({
+        ...prev,
+        preferred_language: value === 'zh-CN' ? 'zh-CN' : 'en-US',
+      }));
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -75,9 +107,13 @@ export const UserProfile: React.FC = () => {
       const updateData = {
         name: formData.name,
         profile: formData.profile,
+        preferred_language: formData.preferred_language,
       };
-      const updatedUser = await authAPI.updateProfile(updateData as Partial<UserProfileType>);
+      const updatedUser = await authAPI.updateProfile(updateData);
       setUser(updatedUser);
+      if (updatedUser.preferred_language) {
+        void i18n.changeLanguage(updatedUser.preferred_language);
+      }
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
@@ -86,6 +122,12 @@ export const UserProfile: React.FC = () => {
       console.error('Failed to update profile:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (user) {
+      setFormData(buildUserFormData(user));
     }
   };
 
@@ -132,6 +174,7 @@ export const UserProfile: React.FC = () => {
                   aria-label={t('user_profile.avatar.change', 'Change avatar')}
                   title={t('user_profile.avatar.change', 'Change avatar')}
                   className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark"
+                  onClick={focusAvatarUrlInput}
                 >
                   <Camera size={14} />
                 </button>
@@ -182,31 +225,27 @@ export const UserProfile: React.FC = () => {
                 aria-label={t('user_profile.tabs.label', 'Tabs')}
                 className="-mb-px flex min-w-max space-x-8"
               >
-                <button
-                  type="button"
-                  aria-current="page"
-                  className="border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white"
-                >
-                  {t('user_profile.tabs.basic')}
-                </button>
-                <button
-                  type="button"
-                  className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white"
-                >
-                  {t('user_profile.tabs.contact')}
-                </button>
-                <button
-                  type="button"
-                  className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white"
-                >
-                  {t('user_profile.tabs.preferences')}
-                </button>
-                <button
-                  type="button"
-                  className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white"
-                >
-                  {t('user_profile.tabs.security')}
-                </button>
+                {profileSections.map((section) => {
+                  const isActive = activeSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      aria-controls={`profile-section-${section.id}`}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={
+                        isActive
+                          ? 'border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white'
+                          : 'border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-gray-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-gray-600 dark:hover:text-white'
+                      }
+                      onClick={() => {
+                        handleSectionClick(section.id);
+                      }}
+                    >
+                      {t(section.labelKey)}
+                    </button>
+                  );
+                })}
               </nav>
             </div>
             <div className="p-6">
@@ -216,7 +255,7 @@ export const UserProfile: React.FC = () => {
                 }}
               >
                 {/* Basic Information Section */}
-                <div className="mb-8">
+                <div className="mb-8 scroll-mt-28" id="profile-section-basic">
                   <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
                     {t('user_profile.basic.title')}
                   </h3>
@@ -308,6 +347,26 @@ export const UserProfile: React.FC = () => {
                     <div className="col-span-full">
                       <label
                         className="block text-sm font-medium leading-6 text-slate-900 dark:text-white"
+                        htmlFor="avatar_url"
+                      >
+                        {t('user_profile.basic.avatar_url')}
+                      </label>
+                      <div className="mt-2">
+                        <input
+                          ref={avatarUrlInputRef}
+                          className="block w-full rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6"
+                          id="avatar_url"
+                          name="avatar_url"
+                          placeholder={t('user_profile.basic.avatar_url_placeholder')}
+                          type="url"
+                          value={formData.profile?.avatar_url ?? ''}
+                          onChange={handleChange}
+                        />
+                      </div>
+                    </div>
+                    <div className="col-span-full">
+                      <label
+                        className="block text-sm font-medium leading-6 text-slate-900 dark:text-white"
                         htmlFor="bio"
                       >
                         {t('user_profile.basic.about')}
@@ -330,7 +389,7 @@ export const UserProfile: React.FC = () => {
                 </div>
                 <hr className="border-slate-200 dark:border-slate-700 my-8" />
                 {/* Contact Information Section */}
-                <div className="mb-8">
+                <div className="mb-8 scroll-mt-28" id="profile-section-contact">
                   <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
                     {t('user_profile.contact.title')}
                   </h3>
@@ -381,7 +440,7 @@ export const UserProfile: React.FC = () => {
                 </div>
                 <hr className="border-slate-200 dark:border-slate-700 my-8" />
                 {/* Preferences Section */}
-                <div className="mb-8">
+                <div className="mb-8 scroll-mt-28" id="profile-section-preferences">
                   <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
                     {t('user_profile.preferences.title')}
                   </h3>
@@ -397,21 +456,18 @@ export const UserProfile: React.FC = () => {
                         <select
                           className="block w-full rounded-md border-0 py-1.5 text-slate-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6"
                           id="language"
-                          name="language"
-                          value={formData.profile?.language}
+                          name="preferred_language"
+                          value={formData.preferred_language ?? 'en-US'}
                           onChange={handleChange}
                         >
-                          <option value="English (US)">
+                          <option value="en-US">
                             {t('user_profile.preferences.languages.enUS', 'English (US)')}
                           </option>
-                          <option value="Chinese (Simplified)">
+                          <option value="zh-CN">
                             {t(
                               'user_profile.preferences.languages.zhSimplified',
                               'Chinese (Simplified)'
                             )}
-                          </option>
-                          <option value="Japanese">
-                            {t('user_profile.preferences.languages.japanese', 'Japanese')}
                           </option>
                         </select>
                       </div>
@@ -451,12 +507,42 @@ export const UserProfile: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                <hr className="border-slate-200 dark:border-slate-700 my-8" />
+                {/* Security Section */}
+                <div className="mb-8 scroll-mt-28" id="profile-section-security">
+                  <h3 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
+                    {t('user_profile.security.title')}
+                  </h3>
+                  <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-background-dark sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-md bg-primary/10 text-primary dark:bg-blue-500/15 dark:text-blue-300">
+                        <KeyRound size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                          {t('user_profile.security.password_title')}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          {t('user_profile.security.password_desc')}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/force-change-password"
+                      className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    >
+                      {t('user_profile.security.change_password')}
+                    </Link>
+                  </div>
+                </div>
 
                 {/* Action Buttons */}
                 <div className="flex items-center justify-end gap-x-4 border-t border-slate-200 pt-6 dark:border-slate-700">
                   <button
                     className="rounded-md px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:ring-gray-600 dark:text-white dark:hover:bg-gray-800"
                     type="button"
+                    disabled={isLoading}
+                    onClick={handleCancel}
                   >
                     {t('user_profile.buttons.cancel')}
                   </button>

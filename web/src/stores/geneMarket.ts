@@ -94,6 +94,7 @@ interface GeneMarketState {
 
   // Actions - Evolution
   listEvolutionEvents: (instanceId: string, params?: Record<string, unknown>) => Promise<void>;
+  listGeneEvolutionEvents: (geneId: string, params?: Record<string, unknown>) => Promise<void>;
   getEvolutionEvent: (id: string) => Promise<EvolutionEventResponse>;
   createEvolutionEvent: (data: EvolutionEventCreate) => Promise<EvolutionEventResponse>;
 
@@ -419,6 +420,24 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
+      listGeneEvolutionEvents: async (geneId: string, params = {}) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await geneMarketService.listGeneEvolutionEvents(geneId, params);
+          set({
+            evolutionEvents: response.events,
+            evolutionTotal: response.total,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          set({
+            error: getErrorMessage(error, 'Failed to list evolution events'),
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
+
       getEvolutionEvent: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
@@ -524,6 +543,8 @@ export const useGeneMarketActions = () =>
       rateGene: s.rateGene,
       rateGenome: s.rateGenome,
       listEvolutionEvents: s.listEvolutionEvents,
+      listGeneEvolutionEvents: s.listGeneEvolutionEvents,
+      getEvolutionEvent: s.getEvolutionEvent,
       createEvolutionEvent: s.createEvolutionEvent,
       setActiveTab: s.setActiveTab,
       setCurrentGene: s.setCurrentGene,

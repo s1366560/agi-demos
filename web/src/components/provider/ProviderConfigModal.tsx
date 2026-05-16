@@ -29,11 +29,14 @@ import {
   ModelCatalogEntry,
   ProviderConfig,
   ProviderCreate,
+  ProviderHealth,
   ProviderType,
   ProviderUpdate,
 } from '../../types/memory';
 
 import { ProviderIcon } from './ProviderIcon';
+
+import type { TFunction } from 'i18next';
 
 interface ProviderConfigModalProps {
   isOpen: boolean;
@@ -201,6 +204,38 @@ const resolveEmbeddingConfig = (provider: ProviderConfig): EmbeddingConfig | und
     return { model: provider.embedding_model };
   }
   return undefined;
+};
+
+const formatProviderHealthResult = (
+  health: ProviderHealth,
+  t: TFunction,
+  savedProvider = false
+): { success: boolean; message: string } => {
+  const responseTime =
+    typeof health.response_time_ms === 'number' ? ` (${String(health.response_time_ms)} ms)` : '';
+  const prefix = t(
+    savedProvider
+      ? 'tenant.providers.connectionTest.savedPrefix'
+      : 'tenant.providers.connectionTest.livePrefix'
+  );
+
+  if (health.status === 'healthy') {
+    return {
+      success: true,
+      message: t('tenant.providers.connectionTest.passed', { prefix, responseTime }),
+    };
+  }
+
+  const detail = health.error_message ? `: ${health.error_message}` : '';
+  return {
+    success: false,
+    message: t('tenant.providers.connectionTest.returned', {
+      prefix,
+      status: health.status,
+      responseTime,
+      detail,
+    }),
+  };
 };
 
 export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
@@ -514,7 +549,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   const handleTestConnection = useCallback(async () => {
     if (!formData.api_key && !isEditing && providerTypeRequiresApiKey(formData.provider_type)) {
-      setTestResult({ success: false, message: 'API key is required' });
+      setTestResult({ success: false, message: t('tenant.providers.connectionTest.apiKeyRequired') });
       return;
     }
 
@@ -522,14 +557,56 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setTestResult(null);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setTestResult({ success: true, message: 'Connection successful! API key is valid.' });
-    } catch (_err) {
-      setTestResult({ success: false, message: 'Connection failed. Please check your API key.' });
+      if (!formData.api_key && provider?.id) {
+        const health = await providerAPI.checkHealth(provider.id);
+        setTestResult(formatProviderHealthResult(health, t, true));
+        return;
+      }
+
+      const categoryForTest = getProviderCategory(formData.provider_type);
+      const providerMetaForTest = PROVIDERS.find(
+        (p) => p.value === resolveCatalogProviderType(formData.provider_type)
+      );
+      const includeLlmFields = categoryForTest === 'chat' || categoryForTest === 'coding';
+      const includeEmbeddingFields =
+        categoryForTest === 'embedding' ||
+        (categoryForTest === 'chat' && !!providerMetaForTest?.hasEmbedding);
+      const includeRerankerFields =
+        categoryForTest === 'reranker' ||
+        (categoryForTest === 'chat' && !!providerMetaForTest?.hasNativeRerank);
+
+      const testData: ProviderCreate = {
+        name: formData.name || `${formData.provider_type}-connection-test`,
+        provider_type: formData.provider_type,
+        api_key: formData.api_key,
+        base_url: formData.base_url || undefined,
+        llm_model: includeLlmFields ? formData.llm_model : undefined,
+        llm_small_model: includeLlmFields ? formData.llm_small_model || undefined : undefined,
+        embedding_model: includeEmbeddingFields ? formData.embedding_model || undefined : undefined,
+        reranker_model: includeRerankerFields ? formData.reranker_model || undefined : undefined,
+        config: formData.config,
+        is_active: formData.is_active,
+        is_default: formData.is_default,
+        pool_enabled: formData.pool_enabled,
+        pool_weight: formData.pool_weight,
+        ...(formData.model_tier ? { model_tier: formData.model_tier } : {}),
+        secondary_models: formData.secondary_models,
+      };
+
+      const health = await providerAPI.testConnection(testData);
+      setTestResult(formatProviderHealthResult(health, t));
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: getProviderErrorMessage(
+          err,
+          t('tenant.providers.connectionTest.failed')
+        ),
+      });
     } finally {
       setIsTesting(false);
     }
-  }, [formData.api_key, formData.provider_type, isEditing]);
+  }, [formData, isEditing, provider?.id, t]);
 
   const canProceed = () => {
     switch (currentStep) {
@@ -750,9 +827,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-lg shadow-xl overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-primary/5 to-transparent">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/40">
             <div>
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {isEditing ? 'Edit Provider' : 'Add New Provider'}
@@ -762,7 +839,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               </p>
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label={t('components.provider.config.close', {
+                defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
+              })}
+              title={t('components.provider.config.close', {
+                defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
+              })}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             >
               <X size={20} />
@@ -910,7 +994,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           onClick={() => {
                             void handleTestConnection();
                           }}
-                          disabled={isTesting || !formData.api_key}
+                          disabled={isTesting || (!formData.api_key && !provider?.id)}
                           className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 font-medium"
                         >
                           {isTesting ? (
@@ -2253,7 +2337,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     void handleSubmit();
                   }}
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <span className="flex items-center gap-2">
@@ -2272,7 +2356,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     );
                   }}
                   disabled={!canProceed()}
-                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary-dark transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>

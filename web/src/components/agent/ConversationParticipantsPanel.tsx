@@ -92,7 +92,9 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
       <aside
         className={className}
         data-testid="conversation-participants-panel"
-        aria-label="conversation participants"
+        aria-label={t('agent.participants.aria', {
+          defaultValue: 'Conversation participants',
+        })}
       >
         <header className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-medium uppercase tracking-wide text-[#666]">

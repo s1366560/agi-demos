@@ -334,7 +334,7 @@ export const InstanceChannels: React.FC = () => {
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, server_url: e.target.value });
                 }}
-                placeholder="ws://localhost:8080"
+                placeholder={t('tenant.instances.channels.config.serverUrlPlaceholder')}
               />
             </div>
             <div>
@@ -373,7 +373,7 @@ export const InstanceChannels: React.FC = () => {
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, url: e.target.value });
                 }}
-                placeholder="https://example.com/webhook"
+                placeholder={t('tenant.instances.channels.config.webhookUrlPlaceholder')}
               />
             </div>
             <div>
@@ -389,7 +389,7 @@ export const InstanceChannels: React.FC = () => {
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, secret: e.target.value });
                 }}
-                placeholder="********"
+                placeholder={t('tenant.instances.channels.config.secretPlaceholder')}
               />
             </div>
           </>
@@ -410,7 +410,7 @@ export const InstanceChannels: React.FC = () => {
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, base_url: e.target.value });
                 }}
-                placeholder="https://api.example.com"
+                placeholder={t('tenant.instances.channels.config.apiBaseUrlPlaceholder')}
               />
             </div>
             <div>
@@ -426,7 +426,7 @@ export const InstanceChannels: React.FC = () => {
                 onChange={(e) => {
                   setFormConfig({ ...formConfig, api_key: e.target.value });
                 }}
-                placeholder="********"
+                placeholder={t('tenant.instances.channels.config.apiKeyPlaceholder')}
               />
             </div>
           </>

@@ -49,4 +49,25 @@ describe('SearchConfig', () => {
 
     expect(onMobileConfigClose).toHaveBeenCalledTimes(1);
   });
+
+  it('adds a custom faceted tag through the add tag control', () => {
+    const onSelectedTagsChange = vi.fn();
+
+    render(
+      <SearchConfig
+        {...baseProps}
+        searchMode="faceted"
+        configTab="filters"
+        onSelectedTagsChange={onSelectedTagsChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.change(screen.getByLabelText('New tag'), {
+      target: { value: 'roadmap' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add tag' }));
+
+    expect(onSelectedTagsChange).toHaveBeenCalledWith(['roadmap']);
+  });
 });

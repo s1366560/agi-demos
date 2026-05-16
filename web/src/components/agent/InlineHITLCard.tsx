@@ -15,7 +15,7 @@ import React, { memo, useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Radio, Input, Form, Checkbox } from 'antd';
+import { Input, Form } from 'antd';
 import {
   HelpCircle,
   GitBranch,
@@ -203,6 +203,40 @@ const getHITLIconColorClass = (type: HITLType) => {
   }
 };
 
+const RadioIndicator: React.FC<{
+  checked: boolean;
+  tone?: 'blue' | 'amber';
+  className?: string;
+}> = ({ checked, tone = 'blue', className = '' }) => {
+  const activeClass =
+    tone === 'amber' ? 'border-amber-500 bg-amber-500' : 'border-blue-500 bg-blue-500';
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+        checked ? activeClass : 'border-slate-300 dark:border-slate-600'
+      } ${className}`}
+    >
+      {checked && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+    </span>
+  );
+};
+
+const CheckboxIndicator: React.FC<{ checked: boolean; className?: string }> = ({
+  checked,
+  className = '',
+}) => (
+  <span
+    aria-hidden="true"
+    className={`w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center ${
+      checked ? 'border-amber-500 bg-amber-500' : 'border-slate-300 dark:border-slate-600'
+    } ${className}`}
+  >
+    {checked && <span className="w-2 h-2 rounded-sm bg-white" />}
+  </span>
+);
+
 const formatTimeAgoKey = (
   timestamp: string
 ): { key: string; fallback: string; params?: Record<string, number> } => {
@@ -378,9 +412,7 @@ const ClarificationContent: React.FC<{
                         <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0" />
                       )
                     ) : (
-                      <Radio value={option.id} checked={isSelected} className="flex-shrink-0">
-                        <></>
-                      </Radio>
+                      <RadioIndicator checked={isSelected} />
                     )}
                     <span
                       className={`font-medium text-sm ${
@@ -419,6 +451,8 @@ const ClarificationContent: React.FC<{
             {data.allow_custom && !isAnswered && (
               <button
                 type="button"
+                aria-label={t('agent.hitl.option.custom_answer', 'Custom answer')}
+                title={t('agent.hitl.option.custom_answer', 'Custom answer')}
                 className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left w-full ${
                   selected === '__custom__'
                     ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
@@ -428,11 +462,12 @@ const ClarificationContent: React.FC<{
                   setSelected('__custom__');
                 }}
               >
-                <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
+                <span className="flex items-center gap-2">
+                  <RadioIndicator checked={selected === '__custom__'} />
                   <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
                     {t('agent.hitl.option.custom_answer', 'Custom answer')}
                   </span>
-                </Radio>
+                </span>
               </button>
             )}
           </>
@@ -569,11 +604,10 @@ const DecisionContent: React.FC<{
                 (option.estimated_time || option.estimated_cost || optionRisks.length);
 
               return (
-                <button
-                  type="button"
+                <div
                   key={optionKey}
                   className={`
-                    rounded-xl p-4 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 border-2 text-left w-full
+                    rounded-xl transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 border-2 text-left w-full
                     ${
                       isOptionSelected
                         ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
@@ -582,137 +616,144 @@ const DecisionContent: React.FC<{
                           : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer'
                     }
                   `}
-                  onClick={
-                    !isAnswered
-                      ? () => {
-                          if (isMultiSelect) {
-                            toggleMultiSelect(option.id);
-                          } else {
-                            setSelected(option.id);
-                          }
-                        }
-                      : undefined
-                  }
-                  disabled={isAnswered}
                 >
-                  <div className="flex items-start gap-3">
-                    {isAnswered ? (
-                      isOptionSelected ? (
-                        <CheckCircle2 className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <button
+                    type="button"
+                    className="w-full p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded-[10px] disabled:cursor-default"
+                    onClick={
+                      !isAnswered
+                        ? () => {
+                            if (isMultiSelect) {
+                              toggleMultiSelect(option.id);
+                            } else {
+                              setSelected(option.id);
+                            }
+                          }
+                        : undefined
+                    }
+                    disabled={isAnswered}
+                  >
+                    <div className="flex items-start gap-3">
+                      {isAnswered ? (
+                        isOptionSelected ? (
+                          <CheckCircle2 className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0 mt-0.5" />
+                        )
+                      ) : isMultiSelect ? (
+                        <CheckboxIndicator checked={isSelectedMulti} className="mt-0.5" />
                       ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0 mt-0.5" />
-                      )
-                    ) : isMultiSelect ? (
-                      <Checkbox checked={isSelectedMulti} className="mt-0.5 flex-shrink-0" />
-                    ) : (
-                      <div
-                        className={`
-                        w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center
-                        ${isOptionSelected ? 'border-amber-500 bg-amber-500' : 'border-slate-300 dark:border-slate-600'}
-                      `}
-                      >
-                        {isOptionSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={`font-medium text-sm ${
-                            isOptionSelected
-                              ? 'text-slate-800 dark:text-slate-200'
-                              : 'text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          {optionLabel}
-                        </span>
-                        {option.recommended && !isAnswered && (
-                          <LazyTag color="green" className="text-xs">
-                            {t('agent.hitl.tag.recommended', 'Recommended')}
-                          </LazyTag>
-                        )}
-                        {isOptionSelected && isAnswered && (
-                          <LazyTag color="amber" className="text-xs ml-auto">
-                            {t('agent.hitl.tag.selected', 'Selected')}
-                          </LazyTag>
-                        )}
-                        {!isOptionSelected && optionRisks.length > 0 && !isAnswered && (
-                          <LazyTag color="orange" className="text-xs">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            {t('agent.hitl.tag.has_risks', 'Has risks')}
-                          </LazyTag>
-                        )}
-                      </div>
-                      {optionDescription ? (
-                        <p
-                          className={`text-xs mt-1.5 leading-relaxed ${
-                            isOptionSelected
-                              ? 'text-slate-500 dark:text-slate-400'
-                              : 'text-slate-400 dark:text-slate-500'
-                          }`}
-                        >
-                          {optionDescription}
-                        </p>
-                      ) : null}
-
-                      {/* Metadata row - only show when not answered */}
-                      {!isAnswered && (option.estimated_time || option.estimated_cost) && (
-                        <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
-                          {option.estimated_time && (
-                            <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
-                              <Clock className="w-3 h-3" />
-                              {option.estimated_time}
-                            </span>
+                        <RadioIndicator
+                          checked={isOptionSelected}
+                          tone="amber"
+                          className="mt-0.5 w-5 h-5"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`font-medium text-sm ${
+                              isOptionSelected
+                                ? 'text-slate-800 dark:text-slate-200'
+                                : 'text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            {optionLabel}
+                          </span>
+                          {option.recommended && !isAnswered && (
+                            <LazyTag color="green" className="text-xs">
+                              {t('agent.hitl.tag.recommended', 'Recommended')}
+                            </LazyTag>
                           )}
-                          {option.estimated_cost && (
-                            <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
-                              <DollarSign size={14} className="inline" /> {option.estimated_cost}
-                            </span>
+                          {isOptionSelected && isAnswered && (
+                            <LazyTag color="amber" className="text-xs ml-auto">
+                              {t('agent.hitl.tag.selected', 'Selected')}
+                            </LazyTag>
+                          )}
+                          {!isOptionSelected && optionRisks.length > 0 && !isAnswered && (
+                            <LazyTag color="orange" className="text-xs">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              {t('agent.hitl.tag.has_risks', 'Has risks')}
+                            </LazyTag>
                           )}
                         </div>
-                      )}
-
-                      {/* Expandable risks - only show when not answered */}
-                      {hasDetails && (
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpanded(isExpanded ? null : option.id);
-                          }}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          )}
-                          {isExpanded
-                            ? t('agent.hitl.action.hide_details', 'Hide details')
-                            : t('agent.hitl.action.view_details', 'View details')}
-                        </button>
-                      )}
-
-                      {isExpanded && optionRisks.length > 0 && (
-                        <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800/50">
-                          <p className="font-medium text-amber-700 dark:text-amber-400 mb-2 text-xs flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            {t('agent.hitl.section.risk_warning_title', 'Risk notice')}
+                        {optionDescription ? (
+                          <p
+                            className={`text-xs mt-1.5 leading-relaxed ${
+                              isOptionSelected
+                                ? 'text-slate-500 dark:text-slate-400'
+                                : 'text-slate-400 dark:text-slate-500'
+                            }`}
+                          >
+                            {optionDescription}
                           </p>
-                          <ul className="list-disc list-inside text-amber-600 dark:text-amber-300 space-y-1 text-xs">
-                            {optionRisks.map((risk, rIdx) => (
-                              <li key={rIdx}>{risk}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                        ) : null}
+
+                        {/* Metadata row - only show when not answered */}
+                        {!isAnswered && (option.estimated_time || option.estimated_cost) && (
+                          <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
+                            {option.estimated_time && (
+                              <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
+                                <Clock className="w-3 h-3" />
+                                {option.estimated_time}
+                              </span>
+                            )}
+                            {option.estimated_cost && (
+                              <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
+                                <DollarSign size={14} className="inline" /> {option.estimated_cost}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+
+                  {/* Expandable risks - only show when not answered */}
+                  {hasDetails && (
+                    <div className="px-4 pb-4 -mt-1">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 rounded"
+                        onClick={() => {
+                          setExpanded(isExpanded ? null : option.id);
+                        }}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        )}
+                        {isExpanded
+                          ? t('agent.hitl.action.hide_details', 'Hide details')
+                          : t('agent.hitl.action.view_details', 'View details')}
+                      </button>
+                    </div>
+                  )}
+
+                  {isExpanded && optionRisks.length > 0 && (
+                    <div className="px-4 pb-4">
+                      <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                        <p className="font-medium text-amber-700 dark:text-amber-400 mb-2 text-xs flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {t('agent.hitl.section.risk_warning_title', 'Risk notice')}
+                        </p>
+                        <ul className="list-disc list-inside text-amber-600 dark:text-amber-300 space-y-1 text-xs">
+                          {optionRisks.map((risk, rIdx) => (
+                            <li key={rIdx}>{risk}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
             {data.allow_custom && !isAnswered && !isMultiSelect && (
               <button
                 type="button"
+                aria-label={t('agent.hitl.option.custom_decision', 'Custom decision')}
+                title={t('agent.hitl.option.custom_decision', 'Custom decision')}
                 className={`p-3 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left w-full ${
                   selected === '__custom__'
                     ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20'
@@ -722,11 +763,12 @@ const DecisionContent: React.FC<{
                   setSelected('__custom__');
                 }}
               >
-                <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
+                <span className="flex items-center gap-2">
+                  <RadioIndicator checked={selected === '__custom__'} tone="amber" />
                   <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
                     {t('agent.hitl.option.custom_decision', 'Custom decision')}
                   </span>
-                </Radio>
+                </span>
               </button>
             )}
           </>

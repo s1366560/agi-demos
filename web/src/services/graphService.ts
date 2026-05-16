@@ -479,7 +479,7 @@ export const graphService = {
   },
 
   async getEpisode(episodeName: string): Promise<EpisodeData> {
-    return await apiClient.get<EpisodeData>(`/episodes/${encodeURIComponent(episodeName)}`);
+    return await apiClient.get<EpisodeData>(`/episodes/by-name/${encodeURIComponent(episodeName)}`);
   },
 
   async listEpisodes(params: {
@@ -514,7 +514,9 @@ export const graphService = {
   },
 
   async deleteEpisode(episodeName: string): Promise<DeleteResult> {
-    return await apiClient.delete<DeleteResult>(`/episodes/${encodeURIComponent(episodeName)}`);
+    return await apiClient.delete<DeleteResult>(
+      `/episodes/by-name/${encodeURIComponent(episodeName)}`
+    );
   },
 
   // Maintenance

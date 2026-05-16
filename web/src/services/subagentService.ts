@@ -126,8 +126,8 @@ export const subagentAPI = {
   /**
    * Create a SubAgent from a template
    */
-  createFromTemplate: async (templateName: string): Promise<SubAgentResponse> => {
-    return await api.post<SubAgentResponse>(`/subagents/templates/${templateName}`);
+  createFromTemplate: async (templateId: string): Promise<SubAgentResponse> => {
+    return await api.post<SubAgentResponse>(`/subagents/templates/${templateId}/install`);
   },
 
   /**

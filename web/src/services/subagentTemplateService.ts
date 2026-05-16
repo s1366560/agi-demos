@@ -5,6 +5,8 @@
 
 import { apiFetch } from './client/urlUtils';
 
+import type { SubAgentResponse } from '../types/agent';
+
 export interface SubAgentTemplateListItem {
   id: string;
   tenant_id: string;
@@ -81,6 +83,11 @@ export interface SubAgentTemplateListResponse {
   page_size: number;
 }
 
+interface BackendSubAgentTemplateListResponse {
+  templates: SubAgentTemplateListItem[];
+  total: number;
+}
+
 export const subagentTemplateService = {
   list: async (params?: {
     category?: string | undefined;
@@ -89,15 +96,22 @@ export const subagentTemplateService = {
     page_size?: number | undefined;
   }): Promise<SubAgentTemplateListResponse> => {
     const query = new URLSearchParams();
+    const pageSize = params?.page_size ?? 50;
+    const page = params?.page ?? 1;
     if (params?.category) query.set('category', params.category);
-    if (params?.search) query.set('search', params.search);
-    if (params?.page) query.set('page', String(params.page));
-    if (params?.page_size) query.set('page_size', String(params.page_size));
+    if (params?.search) query.set('query', params.search);
+    query.set('limit', String(pageSize));
+    query.set('offset', String(Math.max(0, page - 1) * pageSize));
 
     const qs = query.toString();
     const url = `/subagents/templates/list${qs ? `?${qs}` : ''}`;
     const response = await apiFetch.get(url);
-    return (await response.json()) as SubAgentTemplateListResponse;
+    const data = (await response.json()) as BackendSubAgentTemplateListResponse;
+    return {
+      ...data,
+      page,
+      page_size: pageSize,
+    };
   },
 
   getCategories: async (): Promise<string[]> => {
@@ -128,14 +142,9 @@ export const subagentTemplateService = {
     await apiFetch.delete(`/subagents/templates/${templateId}`);
   },
 
-  install: async (
-    templateId: string,
-    projectId: string
-  ): Promise<{ subagent_id: string; name: string }> => {
-    const response = await apiFetch.post(`/subagents/templates/${templateId}/install`, {
-      project_id: projectId,
-    });
-    return (await response.json()) as { subagent_id: string; name: string };
+  install: async (templateId: string): Promise<SubAgentResponse> => {
+    const response = await apiFetch.post(`/subagents/templates/${templateId}/install`);
+    return (await response.json()) as SubAgentResponse;
   },
 
   exportFromSubAgent: async (subagentId: string): Promise<SubAgentTemplateDetail> => {

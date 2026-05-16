@@ -580,6 +580,8 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                         setSelectedEntity(null);
                         setRelationships([]);
                       }}
+                      aria-label={t('project.graph.entities.detail.close', 'Close entity details')}
+                      title={t('project.graph.entities.detail.close', 'Close entity details')}
                       className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
                       <X size={16} />

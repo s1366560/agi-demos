@@ -1,18 +1,24 @@
 export const getStatusColor = (status: string) => {
   switch (status) {
+    case 'creating':
     case 'provisioning':
     case 'pending':
       return 'blue';
+    case 'deploying':
+    case 'restarting':
+    case 'scaling':
+    case 'learning':
+    case 'in_progress':
+      return 'orange';
     case 'running':
     case 'success':
       return 'green';
-    case 'in_progress':
-      return 'orange';
     case 'stopped':
       return 'default';
     case 'error':
     case 'failed':
       return 'red';
+    case 'deleting':
     case 'terminated':
     case 'cancelled':
       return 'gray';

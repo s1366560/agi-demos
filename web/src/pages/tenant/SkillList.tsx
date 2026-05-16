@@ -255,6 +255,7 @@ export const SkillList: FC = () => {
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <SearchIcon size={16} className={mutedText} />
             <Search
+              aria-label={t('tenant.skills.searchPlaceholder')}
               placeholder={t('tenant.skills.searchPlaceholder')}
               value={search}
               enterButton={
@@ -271,6 +272,7 @@ export const SkillList: FC = () => {
             />
           </div>
           <LazySelect
+            aria-label={t('tenant.skills.statusFilterLabel')}
             value={statusFilter}
             onChange={setStatusFilter}
             className="w-full md:w-44"
@@ -324,6 +326,7 @@ export const SkillList: FC = () => {
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
                 <LazySelect
+                  aria-label={t('tenant.skills.statusSelectAria', { name: skill.name })}
                   value={skill.status}
                   onChange={(status: SkillStatus) => handleStatusChange(skill.id, status)}
                   className="w-full sm:w-36"

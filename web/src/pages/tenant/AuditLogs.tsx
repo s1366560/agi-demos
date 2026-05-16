@@ -751,6 +751,7 @@ export const AuditLogs: React.FC = () => {
             <div className="flex-1">
               <Search
                 id="runtime-hook-name-search"
+                aria-label={t('tenant.auditLogs.runtimeHookSummary.filterHookName')}
                 placeholder={t('tenant.auditLogs.runtimeHookSummary.filterHookName')}
                 value={hookNameFilter}
                 onChange={(e) => {
@@ -768,6 +769,7 @@ export const AuditLogs: React.FC = () => {
               />
             </div>
             <LazySelect
+              aria-label={t('tenant.auditLogs.runtimeHookSummary.filterAction')}
               value={runtimeActionFilter}
               onChange={(val: string) => {
                 setCurrentPage(1);
@@ -779,6 +781,7 @@ export const AuditLogs: React.FC = () => {
               placeholder={t('tenant.auditLogs.runtimeHookSummary.filterAction')}
             />
             <LazySelect
+              aria-label={t('tenant.auditLogs.runtimeHookSummary.filterExecutorKind')}
               value={executorKindFilter}
               onChange={(val: string) => {
                 setCurrentPage(1);
@@ -790,6 +793,7 @@ export const AuditLogs: React.FC = () => {
               placeholder={t('tenant.auditLogs.runtimeHookSummary.filterExecutorKind')}
             />
             <LazySelect
+              aria-label={t('tenant.auditLogs.runtimeHookSummary.filterHookFamily')}
               value={hookFamilyFilter}
               onChange={(val: string) => {
                 setCurrentPage(1);
@@ -801,6 +805,7 @@ export const AuditLogs: React.FC = () => {
               placeholder={t('tenant.auditLogs.runtimeHookSummary.filterHookFamily')}
             />
             <LazySelect
+              aria-label={t('tenant.auditLogs.runtimeHookSummary.filterIsolationMode')}
               value={isolationModeFilter}
               onChange={(val: string) => {
                 setCurrentPage(1);
@@ -817,6 +822,7 @@ export const AuditLogs: React.FC = () => {
             <div className="flex-1">
               <Search
                 id="audit-action-search"
+                aria-label={t('tenant.auditLogs.filterActionPlaceholder')}
                 placeholder={t('tenant.auditLogs.filterActionPlaceholder')}
                 value={actionFilter}
                 onChange={(e) => {
@@ -834,6 +840,7 @@ export const AuditLogs: React.FC = () => {
               />
             </div>
             <LazySelect
+              aria-label={t('tenant.auditLogs.filterResourceType')}
               value={resourceTypeFilter}
               onChange={(val: string) => {
                 setCurrentPage(1);
@@ -845,6 +852,7 @@ export const AuditLogs: React.FC = () => {
               placeholder={t('tenant.auditLogs.filterResourceType')}
             />
             <DatePicker
+              aria-label={t('tenant.auditLogs.filterFromDate')}
               placeholder={t('tenant.auditLogs.filterFromDate')}
               className="w-full sm:w-40"
               onChange={(_date, dateString) => {
@@ -854,6 +862,7 @@ export const AuditLogs: React.FC = () => {
               }}
             />
             <DatePicker
+              aria-label={t('tenant.auditLogs.filterToDate')}
               placeholder={t('tenant.auditLogs.filterToDate')}
               className="w-full sm:w-40"
               onChange={(_date, dateString) => {

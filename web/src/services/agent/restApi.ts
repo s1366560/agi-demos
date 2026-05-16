@@ -104,7 +104,7 @@ export const restApi = {
     title: string
   ): Promise<Conversation> {
     return await api.patch<Conversation>(
-      `/agent/conversations/${conversationId}`,
+      `/agent/conversations/${conversationId}/title`,
       { title },
       { params: { project_id: projectId } }
     );

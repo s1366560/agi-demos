@@ -77,6 +77,8 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
             type="button"
             onClick={handleClose}
             disabled={isLoading}
+            aria-label={t('tenant.create_modal.close', 'Close tenant creation')}
+            title={t('tenant.create_modal.close', 'Close tenant creation')}
             className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />

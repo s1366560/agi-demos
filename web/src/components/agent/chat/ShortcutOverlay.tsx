@@ -147,10 +147,13 @@ export const ShortcutOverlay = memo(() => {
             </h2>
           </div>
           <button
+            type="button"
             ref={closeButtonRef}
             onClick={() => {
               setVisible(false);
             }}
+            aria-label={t('agent.shortcuts.close', 'Close keyboard shortcuts')}
+            title={t('agent.shortcuts.close', 'Close keyboard shortcuts')}
             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
             <X size={18} />

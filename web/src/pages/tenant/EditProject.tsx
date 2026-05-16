@@ -167,7 +167,7 @@ export const EditProject: React.FC = () => {
                   setFormData({ ...formData, name: e.target.value });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-                placeholder="e.g. Finance Knowledge Base"
+                placeholder={t('project.edit.namePlaceholder')}
               />
             </div>
             <div className="col-span-1">
@@ -201,9 +201,7 @@ export const EditProject: React.FC = () => {
                   setFormData({ ...formData, description: e.target.value });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform] resize-none"
-                placeholder={t('project.edit.descriptionPlaceholder', {
-                  defaultValue: 'Briefly describe the purpose of this project...',
-                })}
+                placeholder={t('project.edit.descriptionPlaceholder')}
               />
             </div>
           </div>
@@ -427,13 +425,11 @@ export const EditProject: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <Link to={projectListPath}>
-            <button
-              type="button"
-              className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-            >
-              {t('project.edit.actions.cancel')}
-            </button>
+          <Link
+            to={projectListPath}
+            className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            {t('project.edit.actions.cancel')}
           </Link>
           <button
             type="submit"

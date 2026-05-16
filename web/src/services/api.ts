@@ -27,6 +27,7 @@ import type {
   TaskStats,
   QueueDepth,
   ProviderConfig,
+  ProviderHealth,
   RecentTask,
   StatusBreakdown,
   SchemaEntityType,
@@ -35,6 +36,7 @@ import type {
   SystemResilienceStatus,
   ProviderUsageStats,
   ModelCatalogEntry,
+  UserUpdate,
 } from '../types/memory';
 
 // Use centralized HTTP client instead of creating a new axios instance
@@ -147,8 +149,18 @@ export const authAPI = {
       preferred_language: userResponse.preferred_language ?? undefined,
     };
   },
-  updateProfile: async (data: Partial<UserProfile>): Promise<User> => {
-    return await api.put('/users/me', data);
+  updateProfile: async (data: Partial<UserUpdate>): Promise<User> => {
+    const userResponse = await api.put<BackendUserResponse>('/users/me', data);
+    return {
+      id: userResponse.user_id,
+      email: userResponse.email,
+      name: userResponse.name,
+      roles: userResponse.roles,
+      is_active: userResponse.is_active,
+      created_at: userResponse.created_at,
+      profile: userResponse.profile,
+      preferred_language: userResponse.preferred_language ?? undefined,
+    };
   },
   updatePreferredLanguage: async (language: 'en-US' | 'zh-CN'): Promise<User> => {
     const userResponse = await api.put<BackendUserResponse>('/users/me', {
@@ -251,7 +263,7 @@ export const memoryAPI = {
     return await api.get(`/memories/${memoryId}`);
   },
   getGraphData: async (projectId: string, options = {}): Promise<GraphData> => {
-    return await api.get('/memory/graph', { params: { ...options, project_id: projectId } });
+    return await api.get('/graph/memory/graph', { params: { ...options, project_id: projectId } });
   },
   extractEntities: async (projectId: string, text: string): Promise<Entity[]> => {
     return await api.post('/memories/extract-entities', { text, project_id: projectId });
@@ -376,8 +388,11 @@ export const providerAPI = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`/llm-providers/${id}`);
   },
-  checkHealth: async (id: string): Promise<unknown> => {
+  checkHealth: async (id: string): Promise<ProviderHealth> => {
     return await api.post(`/llm-providers/${id}/health-check`);
+  },
+  testConnection: async (data: ProviderCreate): Promise<ProviderHealth> => {
+    return await api.post('/llm-providers/test-connection', data);
   },
   getUsage: async (
     id: string,

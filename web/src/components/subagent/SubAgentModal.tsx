@@ -179,9 +179,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           setAvailableMcpServers(mcpRes);
         } catch (error) {
           console.error('Failed to fetch resources:', error);
-          message.error(
-            t('tenant.subagents.modal.resourceFetchError', 'Failed to load available tools/skills')
-          );
+          message.error(t('tenant.subagents.modal.resourceFetchError'));
         } finally {
           setLoadingResources(false);
         }
@@ -452,7 +450,10 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               },
             ]}
           >
-            <Input placeholder="e.g., code_reviewer" disabled={isEditMode} />
+            <Input
+              placeholder={t('tenant.subagents.modal.namePlaceholder')}
+              disabled={isEditMode}
+            />
           </Form.Item>
 
           <Form.Item
@@ -465,7 +466,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               },
             ]}
           >
-            <Input placeholder="e.g., Code Reviewer" />
+            <Input placeholder={t('tenant.subagents.modal.displayNamePlaceholder')} />
           </Form.Item>
 
           <Form.Item
@@ -609,6 +610,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                     onClick={() => {
                       handleRemoveExample(example);
                     }}
+                    aria-label={t('tenant.subagents.modal.removeExample', {
+                      example,
+                    })}
+                    title={t('tenant.subagents.modal.removeExample', {
+                      example,
+                    })}
                     className="text-slate-400 hover:text-red-500 transition-colors"
                   >
                     <X size={16} />
@@ -626,11 +633,11 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           {/* Keyword Tester */}
           <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              {t('tenant.subagents.modal.testKeywords', 'Test Keyword Match')}
+              {t('tenant.subagents.modal.testKeywords')}
             </label>
             <div className="flex gap-2">
               <Input
-                placeholder="Enter query to test match..."
+                placeholder={t('tenant.subagents.modal.testQueryPlaceholder')}
                 value={testQuery}
                 onChange={(e) => {
                   setTestQuery(e.target.value);
@@ -643,7 +650,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 onClick={handleTestKeyword}
                 className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
               >
-                {t('common.test', 'Test')}
+                {t('common.test')}
               </button>
             </div>
             {testResult && (
@@ -655,12 +662,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 {testResult.matched
                   ? t('tenant.subagents.modal.keywordMatchFound', {
                       keyword: testResult.keyword ?? '',
-                      defaultValue: 'Matches keyword: "{{keyword}}"',
                     })
-                  : t(
-                      'tenant.subagents.modal.noExactKeywordMatch',
-                      'No exact keyword match found. The LLM may still route based on description.'
-                    )}
+                  : t('tenant.subagents.modal.noExactKeywordMatch')}
               </div>
             )}
           </div>
@@ -680,11 +683,11 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           >
             <Select
               mode="multiple"
-              placeholder="Select tools"
+              placeholder={t('tenant.subagents.modal.allowedToolsPlaceholder')}
               loading={loadingResources}
               showSearch={{ filterOption: filterSelectOption }}
               options={[
-                { label: 'All Tools (*)', value: '*' },
+                { label: t('tenant.subagents.modal.allToolsOption'), value: '*' },
                 ...availableTools.map((t) => ({
                   label: t.name,
                   value: t.name,
@@ -701,7 +704,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           >
             <Select
               mode="multiple"
-              placeholder="Select skills (leave empty for none)"
+              placeholder={t('tenant.subagents.modal.allowedSkillsPlaceholder')}
               loading={loadingResources}
               showSearch={{ filterOption: filterSelectOption }}
               options={availableSkills.map((s) => ({
@@ -714,15 +717,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
           <Form.Item
             name="allowed_mcp_servers"
-            label={t('tenant.subagents.modal.allowedMcpServers', 'MCP Servers')}
-            tooltip={t(
-              'tenant.subagents.modal.allowedMcpServersTooltip',
-              'Select MCP servers this SubAgent can access'
-            )}
+            label={t('tenant.subagents.modal.allowedMcpServers')}
+            tooltip={t('tenant.subagents.modal.allowedMcpServersTooltip')}
           >
             <Select
               mode="multiple"
-              placeholder="Select servers (leave empty for none)"
+              placeholder={t('tenant.subagents.modal.allowedMcpServersPlaceholder')}
               loading={loadingResources}
               showSearch={{ filterOption: filterSelectOption }}
               options={availableMcpServers.map((s) => ({
@@ -763,20 +763,17 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     },
     {
       key: 'spawn_policy',
-      label: t('tenant.subagents.modal.spawnPolicy', 'Spawn Policy'),
+      label: t('tenant.subagents.modal.spawnPolicy'),
       children: (
         <div className="space-y-4">
           <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              {t(
-                'tenant.subagents.modal.spawnPolicyDescription',
-                'Configure how this SubAgent can spawn and be spawned by other agents.'
-              )}
+              {t('tenant.subagents.modal.spawnPolicyDescription')}
             </p>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            <Form.Item label={t('tenant.subagents.modal.maxDepth', 'Max Depth')}>
+            <Form.Item label={t('tenant.subagents.modal.maxDepth')}>
               <InputNumber
                 min={0}
                 max={32}
@@ -787,11 +784,11 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 className="w-full"
               />
               <span className="text-xs text-slate-500">
-                {t('tenant.subagents.modal.maxDepthHint', 'Maximum nesting depth (0 = no nesting)')}
+                {t('tenant.subagents.modal.maxDepthHint')}
               </span>
             </Form.Item>
 
-            <Form.Item label={t('tenant.subagents.modal.maxActiveRuns', 'Max Active Runs')}>
+            <Form.Item label={t('tenant.subagents.modal.maxActiveRuns')}>
               <InputNumber
                 min={1}
                 max={32}
@@ -802,16 +799,11 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 className="w-full"
               />
               <span className="text-xs text-slate-500">
-                {t(
-                  'tenant.subagents.modal.maxActiveRunsHint',
-                  'Global cap on concurrent SubAgent runs'
-                )}
+                {t('tenant.subagents.modal.maxActiveRunsHint')}
               </span>
             </Form.Item>
 
-            <Form.Item
-              label={t('tenant.subagents.modal.maxChildren', 'Max Children per Requester')}
-            >
+            <Form.Item label={t('tenant.subagents.modal.maxChildren')}>
               <InputNumber
                 min={1}
                 max={16}
@@ -822,18 +814,15 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 className="w-full"
               />
               <span className="text-xs text-slate-500">
-                {t('tenant.subagents.modal.maxChildrenHint', 'Per-parent cap on active children')}
+                {t('tenant.subagents.modal.maxChildrenHint')}
               </span>
             </Form.Item>
           </div>
 
-          <Form.Item label={t('tenant.subagents.modal.allowedSubagents', 'Allowed SubAgents')}>
+          <Form.Item label={t('tenant.subagents.modal.allowedSubagents')}>
             <Select
               mode="multiple"
-              placeholder={t(
-                'tenant.subagents.modal.allowedSubagentsPlaceholder',
-                'Select SubAgents that can spawn this one (empty = all)'
-              )}
+              placeholder={t('tenant.subagents.modal.allowedSubagentsPlaceholder')}
               value={spawnPolicy.allowed_subagents || []}
               onChange={(v) => {
                 setSpawnPolicy({ ...spawnPolicy, allowed_subagents: v.length > 0 ? v : null });
@@ -852,19 +841,16 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     },
     {
       key: 'tool_policy',
-      label: t('tenant.subagents.modal.toolPolicy', 'Tool Policy'),
+      label: t('tenant.subagents.modal.toolPolicy'),
       children: (
         <div className="space-y-4">
           <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              {t(
-                'tenant.subagents.modal.toolPolicyDescription',
-                'Configure which tools this SubAgent can use. Precedence determines how conflicts are resolved.'
-              )}
+              {t('tenant.subagents.modal.toolPolicyDescription')}
             </p>
           </div>
 
-          <Form.Item label={t('tenant.subagents.modal.precedence', 'Precedence')}>
+          <Form.Item label={t('tenant.subagents.modal.precedence')}>
             <Radio.Group
               value={toolPolicy.precedence}
               onChange={(e: RadioChangeEvent) => {
@@ -873,40 +859,31 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               }}
             >
               <Radio.Button value="deny_first">
-                {t('tenant.subagents.modal.denyFirst', 'Deny First')}
+                {t('tenant.subagents.modal.denyFirst')}
               </Radio.Button>
               <Radio.Button value="allow_first">
-                {t('tenant.subagents.modal.allowFirst', 'Allow First')}
+                {t('tenant.subagents.modal.allowFirst')}
               </Radio.Button>
             </Radio.Group>
             <div className="mt-2 text-xs text-slate-500">
               {toolPolicy.precedence === 'deny_first'
-                ? t(
-                    'tenant.subagents.modal.denyFirstHint',
-                    'Deny wins on conflict; unlisted tools are allowed.'
-                  )
-                : t(
-                    'tenant.subagents.modal.allowFirstHint',
-                    'Allow wins on conflict; unlisted tools are allowed unless in deny.'
-                  )}
+                ? t('tenant.subagents.modal.denyFirstHint')
+                : t('tenant.subagents.modal.allowFirstHint')}
             </div>
           </Form.Item>
 
           <div className="grid grid-cols-2 gap-4">
-            <Form.Item label={t('tenant.subagents.modal.allowList', 'Allow List')}>
+            <Form.Item label={t('tenant.subagents.modal.allowList')}>
               <Select
                 mode="multiple"
-                placeholder={t(
-                  'tenant.subagents.modal.allowListPlaceholder',
-                  'Tools to explicitly allow'
-                )}
+                placeholder={t('tenant.subagents.modal.allowListPlaceholder')}
                 value={toolPolicy.allow}
                 onChange={(v) => {
                   setToolPolicy({ ...toolPolicy, allow: v });
                 }}
                 showSearch={{ filterOption: filterSelectOption }}
                 options={[
-                  { label: 'All Tools (*)', value: '*' },
+                  { label: t('tenant.subagents.modal.allToolsOption'), value: '*' },
                   ...availableTools.map((t) => ({
                     label: t.name,
                     value: t.name,
@@ -916,13 +893,10 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               />
             </Form.Item>
 
-            <Form.Item label={t('tenant.subagents.modal.denyList', 'Deny List')}>
+            <Form.Item label={t('tenant.subagents.modal.denyList')}>
               <Select
                 mode="multiple"
-                placeholder={t(
-                  'tenant.subagents.modal.denyListPlaceholder',
-                  'Tools to explicitly deny'
-                )}
+                placeholder={t('tenant.subagents.modal.denyListPlaceholder')}
                 value={toolPolicy.deny}
                 onChange={(v) => {
                   setToolPolicy({ ...toolPolicy, deny: v });
@@ -940,7 +914,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           {/* Tool Policy Preview */}
           <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
             <div className="text-sm font-medium mb-2">
-              {t('tenant.subagents.modal.policyPreview', 'Policy Preview')}
+              {t('tenant.subagents.modal.policyPreview')}
             </div>
             <div className="text-xs text-slate-600 dark:text-slate-400">
               {(() => {
@@ -956,7 +930,6 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 return t('tenant.subagents.modal.toolsAllowed', {
                   count: allowedCount,
                   total: availableTools.length,
-                  defaultValue: '{{count}} of {{total}} tools allowed',
                 });
               })()}
             </div>
@@ -966,27 +939,19 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     },
     {
       key: 'identity',
-      label: t('tenant.subagents.modal.identity', 'Identity'),
+      label: t('tenant.subagents.modal.identity'),
       children: (
         <div className="space-y-4">
           <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              {t(
-                'tenant.subagents.modal.identityDescription',
-                'Configure the identity this SubAgent uses when spawning child agents. Leave empty to use defaults.'
-              )}
+              {t('tenant.subagents.modal.identityIntro')}
             </p>
           </div>
 
-          <Form.Item
-            label={t('tenant.subagents.modal.identityDescription', 'Identity Description')}
-          >
+          <Form.Item label={t('tenant.subagents.modal.identityDescriptionField')}>
             <TextArea
               rows={3}
-              placeholder={t(
-                'tenant.subagents.modal.identityDescriptionPlaceholder',
-                "Describe this SubAgent's role and personality when spawning child agents..."
-              )}
+              placeholder={t('tenant.subagents.modal.identityDescriptionPlaceholder')}
               value={identityDescription}
               onChange={(e) => {
                 setIdentityDescription(e.target.value);
@@ -994,12 +959,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             />
           </Form.Item>
 
-          <Form.Item label={t('tenant.subagents.modal.metadata', 'Metadata')}>
+          <Form.Item label={t('tenant.subagents.modal.metadata')}>
             <div className="space-y-2">
               {identityMetadata.map(([key, value], index) => (
                 <div key={index} className="flex gap-2 items-center">
                   <Input
-                    placeholder={t('tenant.subagents.modal.metadataKey', 'Key')}
+                    placeholder={t('tenant.subagents.modal.metadataKey')}
                     value={key}
                     onChange={(e) => {
                       const newMeta = [...identityMetadata];
@@ -1009,7 +974,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                     className="flex-1"
                   />
                   <Input
-                    placeholder={t('tenant.subagents.modal.metadataValue', 'Value')}
+                    placeholder={t('tenant.subagents.modal.metadataValue')}
                     value={value}
                     onChange={(e) => {
                       const newMeta = [...identityMetadata];
@@ -1023,6 +988,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                     onClick={() => {
                       setIdentityMetadata(identityMetadata.filter((_, i) => i !== index));
                     }}
+                    aria-label={t('tenant.subagents.modal.removeMetadata', {
+                      index: index + 1,
+                    })}
+                    title={t('tenant.subagents.modal.removeMetadata', {
+                      index: index + 1,
+                    })}
                     className="p-2 text-slate-400 hover:text-red-500 transition-colors"
                   >
                     <X size={16} />
@@ -1036,7 +1007,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 }}
                 className="text-sm text-primary-600 hover:text-primary-700"
               >
-                + {t('tenant.subagents.modal.addMetadata', 'Add Metadata')}
+                + {t('tenant.subagents.modal.addMetadata')}
               </button>
             </div>
           </Form.Item>

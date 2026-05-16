@@ -82,6 +82,7 @@ export const Events: React.FC = () => {
 
       <Space style={{ marginBottom: 16 }}>
         <Select
+          aria-label={t('events.filterByType')}
           allowClear
           placeholder={t('events.filterByType')}
           style={{ width: 200 }}
@@ -92,6 +93,7 @@ export const Events: React.FC = () => {
           options={types.map((t) => ({ label: t, value: t }))}
         />
         <RangePicker
+          aria-label={t('events.filterByDateRange')}
           showTime
           onChange={(dates) => {
             if (dates && dates[0] && dates[1]) {

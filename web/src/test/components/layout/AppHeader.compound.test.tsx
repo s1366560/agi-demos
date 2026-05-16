@@ -110,6 +110,16 @@ describe('AppHeader (Compound Components)', () => {
 
       expect(screen.getByText('Home')).toBeInTheDocument();
     });
+
+    it('should expand mobile search from the default header action', () => {
+      renderWithHeader(<AppHeader basePath="/tenant" />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+      const mobileSearch = screen.getByRole('textbox', { name: 'Search' });
+      fireEvent.change(mobileSearch, { target: { value: 'memory' } });
+
+      expect(mobileSearch).toHaveValue('memory');
+    });
   });
 
   describe('AppHeader.SidebarToggle', () => {
@@ -563,6 +573,19 @@ describe('AppHeader (Compound Components)', () => {
       );
 
       expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    });
+
+    it('should keep search input editable without controlled props', () => {
+      renderWithHeader(
+        <AppHeader basePath="/tenant">
+          <AppHeader.Search />
+        </AppHeader>
+      );
+
+      const input = screen.getByPlaceholderText('Search...');
+      fireEvent.change(input, { target: { value: 'local query' } });
+
+      expect(input).toHaveValue('local query');
     });
   });
 

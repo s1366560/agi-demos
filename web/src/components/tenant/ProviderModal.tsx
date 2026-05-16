@@ -424,7 +424,14 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label={t('components.provider.modal.close', {
+              defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
+            })}
+            title={t('components.provider.modal.close', {
+              defaultValue: isEditing ? 'Close edit provider' : 'Close add provider',
+            })}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <X size={16} />

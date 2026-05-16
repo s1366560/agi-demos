@@ -227,7 +227,7 @@ export const tenantService = {
    * ```
    */
   updateTenant: async (tenantId: string, updates: Partial<Tenant>): Promise<Tenant> => {
-    const response = await apiFetch.patch(`/tenants/${tenantId}`, updates);
+    const response = await apiFetch.put(`/tenants/${tenantId}`, updates);
     return (await response.json()) as Tenant;
   },
 };

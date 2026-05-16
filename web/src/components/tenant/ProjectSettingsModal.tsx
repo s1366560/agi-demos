@@ -114,7 +114,10 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label={t('project.settings.close', 'Close project settings')}
+            title={t('project.settings.close', 'Close project settings')}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           >
             <X className="h-5 w-5" />

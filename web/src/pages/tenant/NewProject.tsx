@@ -8,8 +8,6 @@ import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
-type ProjectFormStatus = 'active' | 'paused' | 'archived';
-
 export const NewProject: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -19,7 +17,6 @@ export const NewProject: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    status: 'active' as ProjectFormStatus,
     memory_rules: {
       max_episodes: 1000,
       retention_days: 30,
@@ -39,11 +36,8 @@ export const NewProject: React.FC = () => {
     if (!currentTenant) return;
 
     try {
-      // Remove status as it's not part of the API payload
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { status, ...projectData } = formData;
       await createProject(currentTenant.id, {
-        ...projectData,
+        ...formData,
         tenant_id: currentTenant.id,
       });
       void navigate(`/tenant/${currentTenant.id}/projects`);
@@ -87,7 +81,7 @@ export const NewProject: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="col-span-1">
+            <div className="col-span-1 md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 {t('common.forms.name')} <span className="text-red-500">*</span>
               </label>
@@ -99,24 +93,8 @@ export const NewProject: React.FC = () => {
                   setFormData({ ...formData, name: e.target.value });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-                placeholder="e.g. Finance Knowledge Base"
+                placeholder={t('tenant.newProject.namePlaceholder')}
               />
-            </div>
-            <div className="col-span-1">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                {t('common.forms.status')}
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => {
-                  setFormData({ ...formData, status: e.target.value as ProjectFormStatus });
-                }}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform]"
-              >
-                <option value="active">{t('common.status.active')}</option>
-                <option value="paused">{t('common.status.paused')}</option>
-                <option value="archived">{t('common.status.archived')}</option>
-              </select>
             </div>
             <div className="col-span-1 md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -129,7 +107,7 @@ export const NewProject: React.FC = () => {
                   setFormData({ ...formData, description: e.target.value });
                 }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-[color,background-color,border-color,box-shadow,opacity,transform] resize-none"
-                placeholder="Briefly describe the purpose of this project..."
+                placeholder={t('tenant.newProject.descriptionPlaceholder')}
               />
             </div>
           </div>
@@ -353,13 +331,11 @@ export const NewProject: React.FC = () => {
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200 dark:border-slate-800">
-          <Link to={currentTenant ? `/tenant/${currentTenant.id}/projects` : '/tenant'}>
-            <button
-              type="button"
-              className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-            >
-              {t('common.cancel')}
-            </button>
+          <Link
+            to={currentTenant ? `/tenant/${currentTenant.id}/projects` : '/tenant'}
+            className="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            {t('common.cancel')}
           </Link>
           <button
             type="submit"

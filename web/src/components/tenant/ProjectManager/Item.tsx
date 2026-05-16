@@ -88,16 +88,30 @@ export const Item: FC<ProjectManagerItemProps> = ({
         </div>
         <div className="flex items-center space-x-1">
           <button
+            type="button"
             data-testid="settings-btn"
             onClick={handleSettingsClick}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            aria-label={t('tenant.projectManager.settingsForProject', {
+              project: project.name,
+              defaultValue: 'Open settings for {{project}}',
+            })}
             title={t('tenant.projectManager.settingsTooltip')}
           >
             <Settings className="h-4 w-4" />
           </button>
           <button
+            type="button"
             data-testid="delete-btn"
             onClick={handleDeleteClick}
+            aria-label={t('tenant.projectManager.deleteProject', {
+              project: project.name,
+              defaultValue: 'Delete {{project}}',
+            })}
+            title={t('tenant.projectManager.deleteProject', {
+              project: project.name,
+              defaultValue: 'Delete {{project}}',
+            })}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors"
           >
             <Trash2 className="h-4 w-4" />

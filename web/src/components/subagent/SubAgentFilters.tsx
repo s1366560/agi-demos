@@ -66,6 +66,7 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
             <input
               type="text"
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+              aria-label={t('tenant.subagents.filter.searchPlaceholder', 'Search subagents...')}
               placeholder={t('tenant.subagents.filter.searchPlaceholder', 'Search subagents...')}
               value={search}
               onChange={handleSearchInput}
@@ -95,6 +96,7 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
 
             {/* Sort */}
             <select
+              aria-label={t('tenant.subagents.sort.label', 'Sort subagents')}
               className="appearance-none text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 pr-8 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
               value={sortField}
               onChange={(e) => {

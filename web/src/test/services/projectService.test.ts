@@ -16,6 +16,7 @@ vi.mock('../../services/client/urlUtils', () => ({
     get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
+    put: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -188,7 +189,7 @@ describe('projectService - Service Tests', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
+      vi.mocked(apiFetch.put).mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -198,18 +199,36 @@ describe('projectService - Service Tests', () => {
 
       const result = await projectService.updateProject(mockProjectId, updates);
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(`/projects/${mockProjectId}`, updates);
+      expect(apiFetch.put).toHaveBeenCalledWith(`/projects/${mockProjectId}`, updates);
       expect(result).toEqual(updatedProject);
     });
 
     it('should propagate ApiError when update project fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
       const mockError = new ApiError(ApiErrorType.VALIDATION, 'BAD_REQUEST', 'Invalid input', 400);
-      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
+      vi.mocked(apiFetch.put).mockRejectedValueOnce(mockError);
 
       await expect(
         projectService.updateProject(mockProjectId, { name: 'New Name' })
       ).rejects.toThrow(ApiError);
+    });
+  });
+
+  describe('listProjects', () => {
+    it('should list projects through the backend tenant_id query parameter', async () => {
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.get).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ projects: [{ id: mockProjectId, name: 'Project' }] }),
+        headers: new Headers(),
+      } as Response);
+
+      const result = await projectService.listProjects('tenant-1');
+
+      expect(apiFetch.get).toHaveBeenCalledWith('/projects/?tenant_id=tenant-1');
+      expect(result).toEqual([{ id: mockProjectId, name: 'Project' }]);
     });
   });
 

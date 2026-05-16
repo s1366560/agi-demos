@@ -396,10 +396,19 @@ export const A2UIButton = memo<A2UIComponentProps>(({ node, surfaceId }) => {
   const props = node.properties ?? {};
   const childNode = resolveNode(props.child);
   const action = props.action;
+  const buttonLabel =
+    helpers.resolveString(props.ariaLabel) ??
+    helpers.resolveString(props.accessibilityLabel) ??
+    helpers.resolveString(props.label) ??
+    helpers.resolveString(props.title) ??
+    undefined;
 
   return (
     <div className="a2ui-button" style={getHostStyle(node.weight)}>
       <button
+        type="button"
+        aria-label={buttonLabel}
+        title={buttonLabel}
         className={classMapToString(theme.components.Button)}
         style={stylesToObject(theme.additionalStyles?.Button)}
         onClick={() => {
@@ -468,16 +477,49 @@ export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
   const activeNode = resolveNode(activeTab?.child);
   const activeTitle = resolveTabTitle(activeTab, safeSelectedIndex, resolveTabString);
 
+  const focusTab = (nextIndex: number) => {
+    requestAnimationFrame(() => {
+      document.getElementById(`${surfaceId}-tab-${String(nextIndex)}`)?.focus();
+    });
+  };
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const lastIndex = tabItems.length - 1;
+    let nextIndex: number | null = null;
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = index === lastIndex ? 0 : index + 1;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = index === 0 ? lastIndex : index - 1;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = lastIndex;
+    }
+
+    if (nextIndex === null) return;
+    event.preventDefault();
+    setSelectedIndex(nextIndex);
+    focusTab(nextIndex);
+  };
+
   return (
     <div className="a2ui-tabs" style={getHostStyle(node.weight)}>
       <section
         className={classMapToString(theme.components.Tabs.container)}
         style={stylesToObject(theme.additionalStyles?.Tabs)}
       >
-        <div id="buttons" className={classMapToString(theme.components.Tabs.element)}>
+        <div
+          id="buttons"
+          role="tablist"
+          aria-label={activeTitle}
+          className={classMapToString(theme.components.Tabs.element)}
+        >
           {tabItems.map((tab, index) => {
             const title = resolveTabTitle(tab, index, resolveTabString);
             const isSelected = index === safeSelectedIndex;
+            const tabId = `${surfaceId}-tab-${String(index)}`;
+            const panelId = `${surfaceId}-tabpanel-${String(index)}`;
             const classes = isSelected
               ? mergeClassMaps(
                   theme.components.Tabs.controls.all,
@@ -488,10 +530,18 @@ export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
             return (
               <button
                 key={`tab-trigger-${String(index)}`}
-                disabled={isSelected}
+                id={tabId}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                aria-controls={panelId}
+                tabIndex={isSelected ? 0 : -1}
                 className={classMapToString(classes)}
                 onClick={() => {
                   setSelectedIndex(index);
+                }}
+                onKeyDown={(event) => {
+                  handleTabKeyDown(event, index);
                 }}
               >
                 {title}
@@ -499,13 +549,19 @@ export const A2UITabs = memo<A2UIComponentProps>(({ node, surfaceId }) => {
             );
           })}
         </div>
-        <A2UIIsolatedNode
-          key={getNodeKey(activeNode, `tab-panel-${String(safeSelectedIndex)}`)}
-          node={activeNode}
-          surfaceId={surfaceId}
-          scopeLabel={`tab "${activeTitle}"`}
-          fallback={<TabFallback title={activeTitle} />}
-        />
+        <div
+          id={`${surfaceId}-tabpanel-${String(safeSelectedIndex)}`}
+          role="tabpanel"
+          aria-labelledby={`${surfaceId}-tab-${String(safeSelectedIndex)}`}
+        >
+          <A2UIIsolatedNode
+            key={getNodeKey(activeNode, `tab-panel-${String(safeSelectedIndex)}`)}
+            node={activeNode}
+            surfaceId={surfaceId}
+            scopeLabel={`tab "${activeTitle}"`}
+            fallback={<TabFallback title={activeTitle} />}
+          />
+        </div>
       </section>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -10,17 +10,13 @@ import { useAuthStore } from '../stores/auth';
 
 export const Login: React.FC = () => {
   const { t } = useTranslation();
-  const translate = useCallback(
-    (key: string, fallback: string) => {
-      const value = t(key, fallback);
-      return value === key ? fallback : value;
-    },
-    [t]
-  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const passwordVisibilityLabel = showPassword
+    ? t('login.form.hide_password')
+    : t('login.form.show_password');
 
   const { login, error, isLoading: authLoading } = useAuthStore();
 
@@ -171,7 +167,7 @@ export const Login: React.FC = () => {
                     setEmail(e.target.value);
                   }}
                   className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
-                  placeholder="name@company.com"
+                  placeholder={t('login.form.email_placeholder')}
                   required
                   disabled={isLoading || authLoading}
                   data-testid="email-input"
@@ -217,6 +213,8 @@ export const Login: React.FC = () => {
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   disabled={isLoading || authLoading}
                   data-testid="toggle-password-visibility"
+                  aria-label={passwordVisibilityLabel}
+                  title={passwordVisibilityLabel}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 transition-colors" />
@@ -282,7 +280,7 @@ export const Login: React.FC = () => {
                 className="flex flex-col gap-1 rounded bg-blue-100/50 p-2 text-blue-800 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 role="button"
                 tabIndex={0}
-                aria-label={translate('login.demo.adminAria', 'Use admin demo credentials')}
+                aria-label={t('login.demo.adminAria')}
               >
                 <span className="font-medium leading-tight">{t('login.demo.admin')}</span>
                 <span className="break-all font-mono text-xs leading-snug">
@@ -299,7 +297,7 @@ export const Login: React.FC = () => {
                 className="flex flex-col gap-1 rounded bg-blue-100/50 p-2 text-blue-800 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 role="button"
                 tabIndex={0}
-                aria-label={translate('login.demo.userAria', 'Use user demo credentials')}
+                aria-label={t('login.demo.userAria')}
               >
                 <span className="font-medium leading-tight">{t('login.demo.user')}</span>
                 <span className="break-all font-mono text-xs leading-snug">

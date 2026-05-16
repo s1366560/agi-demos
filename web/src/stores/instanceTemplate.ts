@@ -55,7 +55,7 @@ interface InstanceTemplateState {
 
   // Actions - Lifecycle
   publishTemplate: (id: string) => Promise<InstanceTemplateResponse>;
-  cloneTemplate: (id: string) => Promise<InstanceTemplateResponse>;
+  cloneTemplate: (id: string, newName?: string) => Promise<InstanceTemplateResponse>;
 
   // Actions - Items
   listTemplateItems: (id: string) => Promise<void>;
@@ -195,10 +195,12 @@ export const useInstanceTemplateStore = create<InstanceTemplateState>()(
         }
       },
 
-      cloneTemplate: async (id: string) => {
+      cloneTemplate: async (id: string, newName?: string) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await instanceTemplateService.clone(id);
+          const source = get().templates.find((template) => template.id === id);
+          const cloneName = newName?.trim() || `Copy of ${source?.name ?? 'Template'}`;
+          const response = await instanceTemplateService.clone(id, cloneName);
           const { templates } = get();
           set({
             templates: [response, ...templates],

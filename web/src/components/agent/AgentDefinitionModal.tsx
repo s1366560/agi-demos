@@ -404,7 +404,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               },
             ]}
           >
-            <Input placeholder="e.g., customer_support" disabled={isEditMode} />
+            <Input
+              placeholder={t('tenant.agentDefinitions.modal.namePlaceholder')}
+              disabled={isEditMode}
+            />
           </Form.Item>
 
           <Form.Item
@@ -420,7 +423,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               },
             ]}
           >
-            <Input placeholder="e.g., Customer Support Agent" />
+            <Input placeholder={t('tenant.agentDefinitions.modal.displayNamePlaceholder')} />
           </Form.Item>
 
           <Form.Item
@@ -592,11 +595,11 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           >
             <Select
               mode="multiple"
-              placeholder="Select tools"
+              placeholder={t('tenant.agentDefinitions.modal.allowedToolsPlaceholder')}
               loading={loadingResources}
               showSearch={{ filterOption: filterSelectOption }}
               options={[
-                { label: 'All Tools (*)', value: '*' },
+                { label: t('tenant.agentDefinitions.modal.allToolsOption'), value: '*' },
                 ...availableTools.map((tool) => ({
                   label: tool.name,
                   value: tool.name,
@@ -616,7 +619,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           >
             <Select
               mode="multiple"
-              placeholder="Select skills (leave empty for none)"
+              placeholder={t('tenant.agentDefinitions.modal.allowedSkillsPlaceholder')}
               loading={loadingResources}
               showSearch={{ filterOption: filterSelectOption }}
               options={availableSkills.map((s) => ({
@@ -637,7 +640,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           >
             <Select
               mode="multiple"
-              placeholder="Select servers (leave empty for none)"
+              placeholder={t('tenant.agentDefinitions.modal.allowedMcpServersPlaceholder')}
               loading={loadingResources}
               showSearch={{ filterOption: filterSelectOption }}
               options={availableMcpServers.map((s) => ({
@@ -752,7 +755,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
                   'Custom workspace directory path'
                 )}
               >
-                <Input placeholder="/path/to/dir" />
+                <Input
+                  placeholder={t('tenant.agentDefinitions.modal.workspaceBaseDirPlaceholder')}
+                />
               </Form.Item>
             </div>
           </div>
@@ -809,7 +814,10 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
     >
       <Form form={form} layout="vertical" className="mt-4">
         {loadingResources ? (
-          <StateDisplay.Loading message="Loading resources..." card={false} />
+          <StateDisplay.Loading
+            message={t('tenant.agentDefinitions.modal.loadingResources')}
+            card={false}
+          />
         ) : (
           <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
         )}

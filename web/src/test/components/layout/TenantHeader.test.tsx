@@ -10,6 +10,10 @@ const logout = vi.fn();
 const listTenants = vi.fn().mockResolvedValue(undefined);
 const setCurrentTenant = vi.fn();
 const mockNavigate = vi.fn();
+const fetchNotifications = vi.fn().mockResolvedValue(undefined);
+const markAsRead = vi.fn().mockResolvedValue(undefined);
+const markAllAsRead = vi.fn().mockResolvedValue(undefined);
+const deleteNotification = vi.fn().mockResolvedValue(undefined);
 
 const tenantState = {
   currentTenant: { id: 'tenant-1', name: 'Tenant One' },
@@ -78,6 +82,29 @@ vi.mock('@/stores/workspace', () => ({
   useWorkspaces: () => [{ id: 'ws-current' }],
 }));
 
+vi.mock('@/stores/notification', () => ({
+  useNotificationStore: (
+    selector: (state: {
+      notifications: unknown[];
+      unreadCount: number;
+      isLoading: boolean;
+      fetchNotifications: typeof fetchNotifications;
+      markAsRead: typeof markAsRead;
+      markAllAsRead: typeof markAllAsRead;
+      deleteNotification: typeof deleteNotification;
+    }) => unknown
+  ) =>
+    selector({
+      notifications: [],
+      unreadCount: 0,
+      isLoading: false,
+      fetchNotifications,
+      markAsRead,
+      markAllAsRead,
+      deleteNotification,
+    }),
+}));
+
 describe('TenantHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -129,6 +156,55 @@ describe('TenantHeader', () => {
 
     expect(container.querySelector('nav')).toHaveClass('overflow-hidden', 'mr-2');
     expect(screen.getByRole('button', { name: 'Search' }).parentElement).toHaveClass('flex-none');
+  });
+
+  it('routes tenant-level search to the project discovery view', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
+  });
+
+  it('routes project-level search to the deep search view', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        projectId="project-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/tenant/tenant-1/project/project-1/advanced-search'
+    );
+  });
+
+  it('opens the notification dropdown from the header action', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+
+    expect(screen.getByRole('dialog', { name: 'Notifications' })).toBeInTheDocument();
+    expect(screen.getByText('No notifications')).toBeInTheDocument();
   });
 
   it('renders project-level contextual navigation instead of tenant destinations', () => {

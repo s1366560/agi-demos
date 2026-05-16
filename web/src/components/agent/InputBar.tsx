@@ -541,6 +541,14 @@ export const InputBar = memo<InputBarProps>(
                 <button
                   type="button"
                   onClick={handleRemoveSkill}
+                  aria-label={t('agent.inputBar.removeSelectedSkill', {
+                    name: selectedSkill.name,
+                    defaultValue: 'Remove /{{name}} skill',
+                  })}
+                  title={t('agent.inputBar.removeSelectedSkill', {
+                    name: selectedSkill.name,
+                    defaultValue: 'Remove /{{name}} skill',
+                  })}
                   className="ml-0.5 p-0.5 hover:bg-primary/10 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={10} />
@@ -558,6 +566,14 @@ export const InputBar = memo<InputBarProps>(
                 <button
                   type="button"
                   onClick={handleRemoveSubAgent}
+                  aria-label={t('agent.inputBar.removeSelectedSubAgent', {
+                    name: selectedSubAgent,
+                    defaultValue: 'Remove @{{name}} subagent',
+                  })}
+                  title={t('agent.inputBar.removeSelectedSubAgent', {
+                    name: selectedSubAgent,
+                    defaultValue: 'Remove @{{name}} subagent',
+                  })}
                   className="ml-0.5 p-0.5 hover:bg-purple-500/10 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={10} />
@@ -706,50 +722,66 @@ const AttachmentChip = memo<{
   file: PendingAttachment;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
-}>(({ file, onRemove, onRetry }) => (
-  <div
-    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
-      file.status === 'error'
-        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
-        : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
-    }`}
-  >
-    {getFileIcon(file.mimeType)}
-    <span className="max-w-[120px] truncate text-slate-700 dark:text-slate-300">
-      {file.filename}
-    </span>
-    <span className="text-slate-400">{formatSize(file.sizeBytes)}</span>
-    {file.status === 'uploading' && (
-      <span className="text-blue-500 font-medium">{file.progress}%</span>
-    )}
-    {file.status === 'error' && (
-      <>
-        <LazyTooltip title={file.error}>
-          <AlertCircle size={13} className="text-red-500 cursor-help" />
-        </LazyTooltip>
-        <button
-          type="button"
-          onClick={() => {
-            onRetry(file.id);
-          }}
-          className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-        >
-          <RotateCw size={12} className="text-red-500" />
-        </button>
-      </>
-    )}
-    <button
-      type="button"
-      onClick={() => {
-        onRemove(file.id);
-      }}
-      disabled={file.status === 'uploading'}
-      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ml-0.5 disabled:opacity-30"
+}>(({ file, onRemove, onRetry }) => {
+  const { t } = useTranslation();
+  const retryLabel = t('agent.inputBar.retryAttachmentUpload', {
+    filename: file.filename,
+    defaultValue: 'Retry upload for {{filename}}',
+  });
+  const removeLabel = t('agent.inputBar.removeAttachment', {
+    filename: file.filename,
+    defaultValue: 'Remove {{filename}} attachment',
+  });
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+        file.status === 'error'
+          ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
+          : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
+      }`}
     >
-      <X size={12} className="text-slate-400 hover:text-slate-600" />
-    </button>
-  </div>
-));
+      {getFileIcon(file.mimeType)}
+      <span className="max-w-[120px] truncate text-slate-700 dark:text-slate-300">
+        {file.filename}
+      </span>
+      <span className="text-slate-400">{formatSize(file.sizeBytes)}</span>
+      {file.status === 'uploading' && (
+        <span className="text-blue-500 font-medium">{file.progress}%</span>
+      )}
+      {file.status === 'error' && (
+        <>
+          <LazyTooltip title={file.error}>
+            <AlertCircle size={13} className="text-red-500 cursor-help" />
+          </LazyTooltip>
+          <button
+            type="button"
+            onClick={() => {
+              onRetry(file.id);
+            }}
+            aria-label={retryLabel}
+            title={retryLabel}
+            className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          >
+            <RotateCw size={12} className="text-red-500" />
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          onRemove(file.id);
+        }}
+        disabled={file.status === 'uploading'}
+        aria-label={removeLabel}
+        title={removeLabel}
+        className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ml-0.5 disabled:opacity-30"
+      >
+        <X size={12} className="text-slate-400 hover:text-slate-600" />
+      </button>
+    </div>
+  );
+});
 
 AttachmentChip.displayName = 'AttachmentChip';
 

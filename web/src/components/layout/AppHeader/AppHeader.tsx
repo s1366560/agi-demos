@@ -26,6 +26,8 @@ import * as React from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { Search as SearchGlyph } from 'lucide-react';
+
 // Import subcomponents
 import { useThemeStore } from '@/stores/theme';
 
@@ -223,6 +225,8 @@ function HeaderContent({
   // Get breadcrumbs from hook if not provided
   const hookBreadcrumbs2 = useBreadcrumbs(context);
   const breadcrumbs = customBreadcrumbs ?? hookBreadcrumbs2;
+  const [mobileSearchOpen, setMobileSearchOpen] = React.useState(false);
+  const [mobileSearchValue, setMobileSearchValue] = React.useState('');
 
   const renderContent = () => {
     switch (variant) {
@@ -282,18 +286,28 @@ function HeaderContent({
                 {/* Search icon button for mobile/tablet */}
                 <button
                   type="button"
+                  onClick={() => {
+                    setMobileSearchOpen((open) => !open);
+                  }}
+                  aria-controls="app-header-mobile-search"
+                  aria-expanded={mobileSearchOpen}
                   className="md:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors flex-shrink-0"
                   aria-label={t('common.search', 'Search')}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
+                  <SearchGlyph className="h-5 w-5" />
                 </button>
+                {mobileSearchOpen && (
+                  <Search
+                    id="app-header-mobile-search"
+                    value={mobileSearchValue}
+                    onChange={setMobileSearchValue}
+                    placeholder={t('common.search', 'Search')}
+                    ariaLabel={t('common.search', 'Search')}
+                    autoFocus
+                    className="relative md:hidden group"
+                    inputClassName="w-36 sm:w-44"
+                  />
+                )}
 
                 {/* Theme toggle - always visible */}
                 <div className="hidden sm:block">

@@ -339,6 +339,17 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
     setSelectedNode(null);
   };
 
+  const handleFocusSelectedNode = () => {
+    if (!selectedNode) return;
+
+    const nextScale = Math.max(scale, 1.6);
+    setScale(nextScale);
+    setOffset({
+      x: dimensions.width / 2 - (selectedNode.x ?? 0) * nextScale,
+      y: dimensions.height / 2 - (selectedNode.y ?? 0) * nextScale,
+    });
+  };
+
   // Memoize availableTypes to avoid recalculating on every render (rerender-memo)
   const availableTypes = useMemo(
     () => Array.from(new Set(nodes.map((node) => node.type))),
@@ -568,11 +579,12 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             </div>
           </div>
           <div className="p-4 border-t border-slate-700 bg-background-dark flex gap-2">
-            <button className="flex-1 py-2 rounded-lg border border-slate-600 bg-surface-dark text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1">
+            <button
+              type="button"
+              onClick={handleFocusSelectedNode}
+              className="flex-1 py-2 rounded-lg border border-slate-600 bg-surface-dark text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-white transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+            >
               {t('project.graph.node_detail.expand')}
-            </button>
-            <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1">
-              {t('project.graph.node_detail.edit')}
             </button>
           </div>
         </div>

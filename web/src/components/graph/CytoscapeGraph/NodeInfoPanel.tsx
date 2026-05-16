@@ -62,6 +62,8 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
               <button
                 type="button"
                 onClick={handleClose}
+                aria-label={t('graph.nodeInfo.close', 'Close node details')}
+                title={t('graph.nodeInfo.close', 'Close node details')}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
               >
                 <X size={20} />

@@ -46,13 +46,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       setAssignments(data);
     } catch (err: unknown) {
       console.error('Failed to load assignments:', err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : t('components.provider.assignment.loadFailed', {
-              defaultValue: 'Failed to load assignments',
-            })
-      );
+      setError(err instanceof Error ? err.message : t('components.provider.assignment.loadFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -68,9 +62,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   ) => {
     if (
       !(await confirmAction({
-        title: t('components.provider.assignment.removeConfirm', {
-          defaultValue: 'Are you sure you want to remove this assignment?',
-        }),
+        title: t('components.provider.assignment.removeConfirm'),
         danger: true,
       }))
     )
@@ -81,11 +73,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
     } catch (err) {
       console.error('Failed to unassign provider:', err);
       message.error(
-        err instanceof Error
-          ? err.message
-          : t('components.provider.assignment.unassignFailed', {
-              defaultValue: 'Failed to unassign provider',
-            })
+        err instanceof Error ? err.message : t('components.provider.assignment.unassignFailed')
       );
     }
   };
@@ -131,12 +119,9 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {items.length === 0
-              ? t('components.provider.assignment.noneAssigned', {
-                  defaultValue: 'No provider assigned',
-                })
+              ? t('components.provider.assignment.noneAssigned')
               : t('components.provider.assignment.configuredCount', {
                   count: items.length,
-                  defaultValue: '{{count}} provider(s) configured',
                 })}
           </p>
         </div>
@@ -155,7 +140,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
         {items.length === 0 ? (
           <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm italic flex flex-col items-center gap-2">
             <GitMerge size={24} className="text-slate-300 dark:text-slate-600" />
-            No provider assigned. System defaults will be used.
+            {t('components.provider.assignment.emptyDescription')}
           </div>
         ) : (
           <div className="flex flex-col">
@@ -191,9 +176,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
                         handleEditClick(assignment);
                       }}
                       className="p-1.5 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                      title={t('components.provider.assignment.editTitle', {
-                        defaultValue: 'Edit Assignment',
-                      })}
+                      title={t('components.provider.assignment.editTitle')}
                     >
                       <Pencil size={16} />
                     </button>
@@ -202,9 +185,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
                         void handleUnassign(assignment.provider_id, type);
                       }}
                       className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      title={t('components.provider.assignment.removeTitle', {
-                        defaultValue: 'Remove Assignment',
-                      })}
+                      title={t('components.provider.assignment.removeTitle')}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -243,17 +224,8 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex gap-3">
         <Info size={20} className="text-blue-600 dark:text-blue-400 shrink-0" />
         <div className="text-sm text-blue-800 dark:text-blue-200">
-          <p className="font-medium mb-1">
-            {t('components.provider.assignment.heading', {
-              defaultValue: 'Provider Routing Configuration',
-            })}
-          </p>
-          <p>
-            {t('components.provider.assignment.description', {
-              defaultValue:
-                'Configure which providers handle specific operations. Requests are routed based on priority (lower number = higher priority). If the primary provider fails, the system automatically falls back to the next available provider in the list.',
-            })}
-          </p>
+          <p className="font-medium mb-1">{t('components.provider.assignment.heading')}</p>
+          <p>{t('components.provider.assignment.description')}</p>
         </div>
       </div>
 
@@ -285,7 +257,6 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           providers={providers}
           title={t('components.provider.assignment.selectorTitle', {
             operation: t(`components.provider.operationTypes.${targetType}`),
-            defaultValue: 'Select Provider for {{operation}}',
           })}
         />
       )}

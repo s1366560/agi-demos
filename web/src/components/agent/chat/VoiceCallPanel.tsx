@@ -165,6 +165,8 @@ const DeviceSettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         <button
           type="button"
           onClick={onClose}
+          aria-label={t('agent.voiceCall.closeDeviceSettings', 'Close device settings')}
+          title={t('agent.voiceCall.closeDeviceSettings', 'Close device settings')}
           className="p-1 text-slate-400 hover:text-white transition-colors"
         >
           <X size={14} />
@@ -481,6 +483,8 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             onClick={() => {
               setMinimized(false);
             }}
+            aria-label={t('agent.voiceCall.expandPanel', 'Expand voice call panel')}
+            title={t('agent.voiceCall.expandPanel', 'Expand voice call panel')}
             className="p-1 text-slate-400 hover:text-white transition-colors"
           >
             <Maximize2 size={14} />
@@ -488,6 +492,8 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
           <button
             type="button"
             onClick={handleEndCall}
+            aria-label={t('agent.voiceCall.endCall', 'End call')}
+            title={t('agent.voiceCall.endCall', 'End call')}
             className="p-1 text-red-400 hover:text-red-300 transition-colors"
           >
             <PhoneOff size={14} />
@@ -531,6 +537,8 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
               onClick={() => {
                 setMinimized(true);
               }}
+              aria-label={t('agent.voiceCall.minimizePanel', 'Minimize voice call panel')}
+              title={t('agent.voiceCall.minimizePanel', 'Minimize voice call panel')}
               className="p-1.5 text-slate-400 hover:text-white transition-colors rounded"
             >
               <Minimize2 size={14} />
@@ -538,6 +546,8 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             <button
               type="button"
               onClick={handleEndCall}
+              aria-label={t('agent.voiceCall.endCall', 'End call')}
+              title={t('agent.voiceCall.endCall', 'End call')}
               className="p-1.5 text-slate-400 hover:text-red-400 transition-colors rounded"
             >
               <X size={14} />

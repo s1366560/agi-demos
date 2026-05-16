@@ -210,7 +210,7 @@ export const projectService = {
    * ```
    */
   updateProject: async (projectId: string, updates: Partial<Project>): Promise<Project> => {
-    const response = await apiFetch.patch(`/projects/${projectId}`, updates);
+    const response = await apiFetch.put(`/projects/${projectId}`, updates);
     return (await response.json()) as Project;
   },
 
@@ -250,7 +250,8 @@ export const projectService = {
    * ```
    */
   listProjects: async (tenantId: string): Promise<Project[]> => {
-    const response = await apiFetch.get(`/tenants/${tenantId}/projects`);
+    const query = new URLSearchParams({ tenant_id: tenantId });
+    const response = await apiFetch.get(`/projects/?${query.toString()}`);
     const data = (await response.json()) as { projects?: Project[] | undefined };
     return data.projects ?? [];
   },

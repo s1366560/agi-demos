@@ -65,9 +65,12 @@ export const TemplateDetail: React.FC = () => {
   }, [fetchData, listGenes]);
 
   const handleClone = async () => {
-    if (!templateId) return;
+    if (!templateId || !template) return;
     try {
-      const cloned = await instanceTemplateService.clone(templateId);
+      const cloned = await instanceTemplateService.clone(
+        templateId,
+        `Copy of ${template.name}`.slice(0, 200)
+      );
       message.success(t('tenant.templateDetail.cloneSuccess', 'Template cloned successfully'));
       void navigate(`../instance-templates/${cloned.id}`);
     } catch {
@@ -78,6 +81,11 @@ export const TemplateDetail: React.FC = () => {
   const getGeneName = (geneId: string): string => {
     const gene = genes.find((g) => g.id === geneId);
     return gene?.name ?? geneId;
+  };
+
+  const handleDeploy = () => {
+    if (!templateId) return;
+    void navigate(`../instances/create?templateId=${encodeURIComponent(templateId)}`);
   };
 
   if (loading && !template) {
@@ -138,8 +146,13 @@ export const TemplateDetail: React.FC = () => {
               {template.id}
             </Paragraph>
           </Descriptions.Item>
-          <Descriptions.Item label={t('tenant.templateDetail.fields.cloneCount', 'Clone Count')}>
-            {template.clone_count}
+          <Descriptions.Item
+            label={t('tenant.templateDetail.fields.installCount', 'Install Count')}
+          >
+            {template.install_count}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('tenant.templateDetail.fields.slug', 'Slug')}>
+            {template.slug}
           </Descriptions.Item>
           <Descriptions.Item
             label={t('tenant.templateDetail.fields.description', 'Description')}
@@ -147,14 +160,10 @@ export const TemplateDetail: React.FC = () => {
           >
             {template.description || '-'}
           </Descriptions.Item>
-          <Descriptions.Item label={t('tenant.templateDetail.fields.tags', 'Tags')}>
-            {template.tags.length > 0
-              ? template.tags.map((tag) => (
-                  <Tag key={tag} color="blue">
-                    {tag}
-                  </Tag>
-                ))
-              : '-'}
+          <Descriptions.Item
+            label={t('tenant.templateDetail.fields.imageVersion', 'Image Version')}
+          >
+            {template.image_version || '-'}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.templateDetail.fields.createdAt', 'Created At')}>
             {new Date(template.created_at).toLocaleString()}
@@ -178,15 +187,12 @@ export const TemplateDetail: React.FC = () => {
                 <List.Item.Meta
                   title={
                     <div className="flex items-center gap-2">
-                      <Text strong>{getGeneName(item.gene_id)}</Text>
-                      <Tag>#{item.order}</Tag>
+                      <Text strong>{getGeneName(item.item_slug)}</Text>
+                      <Tag>{item.item_type}</Tag>
+                      <Tag>#{item.display_order}</Tag>
                     </div>
                   }
-                  description={
-                    Object.keys(item.config_override).length > 0
-                      ? t('tenant.templateDetail.hasConfigOverride', 'Has config override')
-                      : t('tenant.templateDetail.defaultConfig', 'Default config')
-                  }
+                  description={item.item_slug}
                 />
               </List.Item>
             )}
@@ -194,19 +200,19 @@ export const TemplateDetail: React.FC = () => {
         )}
       </Card>
 
-      {Object.keys(template.base_config).length > 0 && (
+      {Object.keys(template.default_config).length > 0 && (
         <Card
           title={t('tenant.templateDetail.baseConfigTitle', 'Base Configuration')}
           className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
         >
           <pre className="bg-slate-50 dark:bg-slate-900 p-4 rounded overflow-auto text-xs">
-            {JSON.stringify(template.base_config, null, 2)}
+            {JSON.stringify(template.default_config, null, 2)}
           </pre>
         </Card>
       )}
 
       <div className="flex gap-4">
-        <Button type="primary" icon={<Rocket size={16} />} disabled>
+        <Button type="primary" icon={<Rocket size={16} />} onClick={handleDeploy}>
           {t('tenant.templateDetail.deployFromTemplate', 'Deploy from Template')}
         </Button>
         <Button

@@ -67,6 +67,7 @@ const createFormatTime = (t: TFunction) => {
 };
 
 type ProjectListProps = Record<string, never>;
+type VisibilityFilter = 'all' | 'public' | 'private';
 
 // Use memo to prevent unnecessary re-renders (rerender-memo)
 const ProjectListInner: React.FC<ProjectListProps> = () => {
@@ -76,6 +77,8 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
   const [search, setSearch] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>('all');
+  const [ownerFilter, setOwnerFilter] = useState('all');
 
   useEffect(() => {
     if (currentTenant) {
@@ -85,6 +88,26 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
 
   // Create formatTime function using translation hook
   const formatTime = createFormatTime(t);
+
+  const ownerOptions = React.useMemo(
+    () =>
+      Array.from(new Set(projects.map((project) => project.owner_id)))
+        .filter(Boolean)
+        .sort(),
+    [projects]
+  );
+
+  const filteredProjects = React.useMemo(
+    () =>
+      projects.filter((project) => {
+        const matchesVisibility =
+          visibilityFilter === 'all' ||
+          (visibilityFilter === 'public' ? project.is_public : !project.is_public);
+        const matchesOwner = ownerFilter === 'all' || project.owner_id === ownerFilter;
+        return matchesVisibility && matchesOwner;
+      }),
+    [ownerFilter, projects, visibilityFilter]
+  );
 
   const handleDelete = async (projectId: string) => {
     if (!currentTenant) return;
@@ -112,11 +135,12 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           </h1>
           <p className="text-sm text-slate-500">{t('tenant.projects.subtitle')}</p>
         </div>
-        <Link to={`/tenant/${currentTenant.id}/projects/new`}>
-          <button className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95">
-            <Plus size={16} />
-            {t('tenant.projects.create')}
-          </button>
+        <Link
+          to={`/tenant/${currentTenant.id}/projects/new`}
+          className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+        >
+          <Plus size={16} />
+          {t('tenant.projects.create')}
         </Link>
       </div>
 
@@ -142,20 +166,51 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
             {t('tenant.projects.filter')}
           </span>
-          <button
-            type="button"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-sm font-medium whitespace-nowrap transition-colors"
-          >
-            {t('common.status.all')}
-            <ChevronDown size={16} />
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm font-medium whitespace-nowrap transition-colors"
-          >
-            {t('common.stats.owner')}
-            <ChevronDown size={16} />
-          </button>
+          <label className="sr-only" htmlFor="project-visibility-filter">
+            {t('tenant.projects.filters.visibilityLabel')}
+          </label>
+          <div className="relative">
+            <select
+              id="project-visibility-filter"
+              value={visibilityFilter}
+              onChange={(event) => {
+                setVisibilityFilter(event.target.value as VisibilityFilter);
+              }}
+              className="appearance-none rounded-lg border border-primary/20 bg-primary/10 py-1.5 pl-3 pr-8 text-sm font-medium text-primary transition-colors hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="all">{t('tenant.projects.filters.allVisibility')}</option>
+              <option value="public">{t('tenant.projects.filters.public')}</option>
+              <option value="private">{t('tenant.projects.filters.private')}</option>
+            </select>
+            <ChevronDown
+              size={16}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-primary"
+            />
+          </div>
+          <label className="sr-only" htmlFor="project-owner-filter">
+            {t('tenant.projects.filters.ownerLabel')}
+          </label>
+          <div className="relative">
+            <select
+              id="project-owner-filter"
+              value={ownerFilter}
+              onChange={(event) => {
+                setOwnerFilter(event.target.value);
+              }}
+              className="appearance-none rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              <option value="all">{t('tenant.projects.filters.allOwners')}</option>
+              {ownerOptions.map((ownerId) => (
+                <option key={ownerId} value={ownerId}>
+                  {ownerId}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={16}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"
+            />
+          </div>
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
             <button
@@ -189,7 +244,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         <div className="text-center py-10 text-slate-500">{t('tenant.projects.loading')}</div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <div
               key={project.id}
               className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-[color,background-color,border-color,box-shadow,opacity,transform] group flex flex-col gap-4"
@@ -347,7 +402,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {projects.map((project) => (
+                {filteredProjects.map((project) => (
                   <tr
                     key={project.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"

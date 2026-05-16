@@ -369,6 +369,14 @@ export interface ProviderConfig {
   secondary_models?: string[] | undefined;
 }
 
+export interface ProviderHealth {
+  provider_id: string;
+  status: ProviderStatus;
+  last_check: string;
+  error_message?: string | null | undefined;
+  response_time_ms?: number | null | undefined;
+}
+
 export interface ProviderCreate {
   name: string;
   provider_type: ProviderType;

@@ -701,6 +701,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
             <Search className="w-5 h-5" />
           </div>
           <input
+            aria-label={entityText(t, 'searchPlaceholder', TEXTS.searchPlaceholder)}
             className="w-full bg-transparent border-none text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-text-muted focus:ring-0 text-sm px-3 outline-none"
             placeholder={entityText(t, 'searchPlaceholder', TEXTS.searchPlaceholder)}
             value={search}
@@ -1122,7 +1123,10 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             </div>
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={onClose}
+                aria-label={entityText(t, 'modal.close', 'Close entity type editor')}
+                title={entityText(t, 'modal.close', 'Close entity type editor')}
                 className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-text-muted hover:bg-slate-200 dark:hover:bg-border-dark hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />

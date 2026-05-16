@@ -6,6 +6,7 @@ export interface InstanceCreate {
   name: string;
   slug: string;
   tenant_id: string;
+  description?: string | null;
   cluster_id?: string | null;
   namespace?: string | null;
   image_version?: string;
@@ -77,6 +78,7 @@ export interface InstanceResponse {
   id: string;
   name: string;
   slug: string;
+  description?: string | null;
   tenant_id: string;
   cluster_id: string | null;
   namespace: string | null;

@@ -453,10 +453,10 @@ export const ClusterDetail: React.FC = () => {
             </Select>
           </Form.Item>
           <Form.Item name="proxy_endpoint" label={t('tenant.clusters.form.apiEndpoint')}>
-            <Input placeholder="https://cluster.example.com" />
+            <Input placeholder={t('tenant.clusters.form.apiEndpointPlaceholder')} />
           </Form.Item>
           <Form.Item name="provider_config" label={t('tenant.clusters.form.metadata')}>
-            <TextArea rows={4} placeholder="{}" />
+            <TextArea rows={4} placeholder={t('tenant.clusters.form.metadataPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>

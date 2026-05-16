@@ -4,7 +4,7 @@
  * Displays the configuration sidebar for search parameters and filters.
  */
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -367,6 +367,7 @@ const StrategySelector = memo<{ value: string; onChange: (value: string) => void
         </label>
         <div className="relative">
           <select
+            aria-label={t('project.search.params.strategy')}
             value={value}
             onChange={(e) => {
               onChange(e.target.value);
@@ -426,6 +427,7 @@ const FocalNodeInput = memo<{
       </div>
       <div className="relative group">
         <input
+          aria-label={t('project.search.params.focal_node')}
           className="w-full text-xs py-2.5 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-shadow disabled:opacity-50"
           placeholder={t('project.search.params.focalPlaceholder', 'e.g. node-1234-uuid...')}
           type="text"
@@ -453,6 +455,7 @@ const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => 
         </label>
         <div className="relative">
           <select
+            aria-label={t('project.search.params.cross_encoder')}
             value={value}
             onChange={(e) => {
               onChange(e.target.value);
@@ -496,6 +499,8 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
               onClick={() => {
                 onMaxDepthChange(Math.max(1, maxDepth - 1));
               }}
+              aria-label={t('project.search.params.decrease_max_depth', 'Decrease max depth')}
+              title={t('project.search.params.decrease_max_depth', 'Decrease max depth')}
               className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
               <Minus className="w-4 h-4" />
@@ -508,6 +513,8 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
               onClick={() => {
                 onMaxDepthChange(Math.min(5, maxDepth + 1));
               }}
+              aria-label={t('project.search.params.increase_max_depth', 'Increase max depth')}
+              title={t('project.search.params.increase_max_depth', 'Increase max depth')}
               className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -677,6 +684,19 @@ interface FacetedFiltersProps {
 const FacetedFilters = memo<FacetedFiltersProps>(
   ({ selectedEntityTypes, selectedTags, availableTags, onToggleEntityType, onToggleTag }) => {
     const { t } = useTranslation();
+    const [isAddingTag, setIsAddingTag] = useState(false);
+    const [newTag, setNewTag] = useState('');
+    const displayTags = Array.from(new Set([...availableTags, ...selectedTags]));
+
+    const submitNewTag = () => {
+      const tag = newTag.trim().replace(/^#+/, '');
+      if (!tag) return;
+      if (!selectedTags.includes(tag)) {
+        onToggleTag(tag);
+      }
+      setNewTag('');
+      setIsAddingTag(false);
+    };
 
     return (
       <>
@@ -710,7 +730,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
             {t('project.search.filters.tags')}
           </h3>
           <div className="flex flex-wrap gap-1.5">
-            {availableTags.map((tag) => (
+            {displayTags.map((tag) => (
               <button
                 key={tag}
                 onClick={() => {
@@ -727,10 +747,63 @@ const FacetedFilters = memo<FacetedFiltersProps>(
             ))}
             <button
               type="button"
+              onClick={() => {
+                setIsAddingTag(true);
+              }}
               className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-blue-600/50 hover:text-blue-600 text-2xs font-medium transition-colors flex items-center gap-1"
             >
               <Plus className="w-3 h-3" /> {t('project.search.filters.add_tag')}
             </button>
+            {isAddingTag && (
+              <span className="inline-flex items-center gap-1">
+                <input
+                  aria-label={t('project.search.filters.new_tag_label', {
+                    defaultValue: 'New tag',
+                  })}
+                  value={newTag}
+                  onChange={(event) => {
+                    setNewTag(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      submitNewTag();
+                    }
+                    if (event.key === 'Escape') {
+                      setNewTag('');
+                      setIsAddingTag(false);
+                    }
+                  }}
+                  className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-2xs text-slate-700 outline-none focus:border-blue-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  placeholder={t('project.search.filters.new_tag_placeholder', {
+                    defaultValue: 'Tag',
+                  })}
+                />
+                <button
+                  type="button"
+                  aria-label={t('project.search.filters.confirm_add_tag', {
+                    defaultValue: 'Add tag',
+                  })}
+                  onClick={submitNewTag}
+                  className="rounded-md bg-blue-600 px-2 py-1 text-2xs font-medium text-white hover:bg-blue-700"
+                >
+                  {t('common.add')}
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('project.search.filters.cancel_add_tag', {
+                    defaultValue: 'Cancel tag entry',
+                  })}
+                  onClick={() => {
+                    setNewTag('');
+                    setIsAddingTag(false);
+                  }}
+                  className="rounded-md px-2 py-1 text-2xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  {t('common.cancel')}
+                </button>
+              </span>
+            )}
           </div>
         </div>
       </>

@@ -113,7 +113,7 @@ export const GeneMarket: FC = () => {
               type="link"
               onClick={(e) => {
                 e.stopPropagation();
-                void rateGene(gene.id, { score: 5, comment: '' }).catch((error: unknown) => {
+                void rateGene(gene.id, { rating: 5, comment: '' }).catch((error: unknown) => {
                   console.error('Failed to rate gene:', error);
                 });
               }}
@@ -205,6 +205,7 @@ export const GeneMarket: FC = () => {
       <div className="flex flex-col gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
           <Search
+            aria-label={t('tenant.genes.searchPlaceholder')}
             placeholder={t('tenant.genes.searchPlaceholder')}
             allowClear
             enterButton={
@@ -217,12 +218,20 @@ export const GeneMarket: FC = () => {
           />
         </div>
         <Space wrap className="w-full lg:w-auto">
-          <Select defaultValue="all" className="w-full sm:w-36">
+          <Select
+            aria-label={t('tenant.genes.filters.categoryLabel')}
+            defaultValue="all"
+            className="w-full sm:w-36"
+          >
             <Option value="all">{t('tenant.genes.filters.allCategories')}</Option>
             <Option value="ai">{t('tenant.genes.filters.catAi')}</Option>
             <Option value="tool">{t('tenant.genes.filters.catTool')}</Option>
           </Select>
-          <Select defaultValue="all" className="w-full sm:w-36">
+          <Select
+            aria-label={t('tenant.genes.filters.visibilityLabel')}
+            defaultValue="all"
+            className="w-full sm:w-36"
+          >
             <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
             <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
             <Option value="private">{t('tenant.genes.filters.visPrivate')}</Option>

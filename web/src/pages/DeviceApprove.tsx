@@ -1,7 +1,7 @@
 /**
  * DeviceApprove Page — CLI device-code approval UI.
  *
- * Entry point: `/device` (optionally `/device?code=ABCD1234`).
+ * Entry point: `/device` (optionally `/device?code=USERCODE`).
  * Used when a user runs `memstack login` on a terminal: they are sent
  * here to enter/confirm the 8-char user_code and approve the session.
  */
@@ -60,10 +60,7 @@ export const DeviceApprove: React.FC = () => {
                 {t('device.signInTitle')}
               </Title>
               <Paragraph type="secondary" style={{ margin: 0 }}>
-                {t(
-                  'device.signInSubtitle',
-                  'You must be signed in to approve a CLI login. After signing in, you will be returned here automatically.'
-                )}
+                {t('device.signInSubtitle')}
               </Paragraph>
             </Space>
             <Space>
@@ -105,10 +102,7 @@ export const DeviceApprove: React.FC = () => {
           icon={<CheckCircle2 size={56} color="#0070f3" strokeWidth={1.5} />}
           status="success"
           title={t('device.approvedTitle')}
-          subTitle={t(
-            'device.approvedSubtitle',
-            'Your terminal should be signed in. You can close this tab.'
-          )}
+          subTitle={t('device.approvedSubtitle')}
           extra={
             <Button type="primary" onClick={() => void navigate('/')}>
               {t('common.goHome')}
@@ -132,10 +126,7 @@ export const DeviceApprove: React.FC = () => {
               {t('device.title')}
             </Title>
             <Paragraph type="secondary" style={{ margin: 0 }}>
-              {t(
-                'device.subtitle',
-                'Enter the 8-character code shown in your terminal to grant access.'
-              )}
+              {t('device.subtitle')}
             </Paragraph>
           </Space>
 
@@ -146,7 +137,7 @@ export const DeviceApprove: React.FC = () => {
             <Input
               autoFocus
               size="large"
-              placeholder="ABCD1234"
+              placeholder={t('device.codePlaceholder')}
               value={code}
               maxLength={CODE_LEN}
               onChange={(e) => {
@@ -175,10 +166,7 @@ export const DeviceApprove: React.FC = () => {
           </Space>
 
           <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
-            {t(
-              'device.footer',
-              'Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI.'
-            )}
+            {t('device.footer')}
           </Paragraph>
         </Space>
       </Card>

@@ -29,9 +29,18 @@ const { Title, Text, Paragraph } = Typography;
 interface CreateFormValues {
   name: string;
   description?: string;
-  tags?: string;
-  base_config?: string;
+  default_config?: string;
 }
+
+const slugifyTemplateName = (name: string): string =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 255) || 'template';
+
+const buildCloneName = (name: string): string => `Copy of ${name}`.slice(0, 200);
 
 export const InstanceTemplateList: FC = () => {
   const navigate = useNavigate();
@@ -81,24 +90,17 @@ export const InstanceTemplateList: FC = () => {
   const handleCreateSubmit = async () => {
     try {
       const values = await form.validateFields();
-      let tagsArray: string[] = [];
-      if (values.tags) {
-        tagsArray = values.tags
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-      }
 
-      let baseConfig: Record<string, unknown> = {};
-      if (values.base_config) {
-        baseConfig = JSON.parse(values.base_config) as Record<string, unknown>;
+      let defaultConfig: Record<string, unknown> = {};
+      if (values.default_config) {
+        defaultConfig = JSON.parse(values.default_config) as Record<string, unknown>;
       }
 
       await createTemplate({
         name: values.name,
+        slug: slugifyTemplateName(values.name),
         description: values.description ?? null,
-        tags: tagsArray,
-        base_config: baseConfig,
+        default_config: defaultConfig,
       });
 
       messageApi?.success(t('tenant.templates.createSuccess'));
@@ -113,9 +115,9 @@ export const InstanceTemplateList: FC = () => {
     }
   };
 
-  const handleClone = async (id: string) => {
+  const handleClone = async (id: string, name: string) => {
     try {
-      await cloneTemplate(id);
+      await cloneTemplate(id, buildCloneName(name));
       messageApi?.success(t('tenant.templates.cloneSuccess'));
       void listTemplates();
     } catch (err) {
@@ -149,7 +151,7 @@ export const InstanceTemplateList: FC = () => {
   };
 
   const handleViewDetail = (id: string) => {
-    void navigate(`./templates/${id}`);
+    void navigate(`./${id}`);
   };
 
   return (
@@ -184,6 +186,7 @@ export const InstanceTemplateList: FC = () => {
           allowClear
         />
         <LazySelect
+          aria-label={t('tenant.templates.statusFilterLabel')}
           value={statusFilter}
           onChange={setStatusFilter}
           options={[
@@ -215,7 +218,7 @@ export const InstanceTemplateList: FC = () => {
                   key="view"
                   type="text"
                   icon={<Eye className="w-4 h-4" />}
-                  aria-label={t('common.view', 'View')}
+                  aria-label={t('tenant.templates.viewTemplate', { name: template.name })}
                   disabled={isSubmitting}
                   onClick={() => {
                     handleViewDetail(template.id);
@@ -225,10 +228,10 @@ export const InstanceTemplateList: FC = () => {
                   key="clone"
                   type="text"
                   icon={<Copy className="w-4 h-4" />}
-                  aria-label={t('common.clone', 'Clone')}
+                  aria-label={t('tenant.templates.cloneTemplate', { name: template.name })}
                   disabled={isSubmitting}
                   onClick={() => {
-                    void handleClone(template.id);
+                    void handleClone(template.id, template.name);
                   }}
                 />,
                 !template.is_published ? (
@@ -240,7 +243,7 @@ export const InstanceTemplateList: FC = () => {
                     <LazyButton
                       type="text"
                       icon={<Upload className="w-4 h-4" />}
-                      aria-label={t('common.publish', 'Publish')}
+                      aria-label={t('tenant.templates.publishTemplate', { name: template.name })}
                       disabled={isSubmitting}
                     />
                   </LazyPopconfirm>
@@ -256,7 +259,7 @@ export const InstanceTemplateList: FC = () => {
                     type="text"
                     danger
                     icon={<Trash2 className="w-4 h-4" />}
-                    aria-label={t('common.delete', 'Delete')}
+                    aria-label={t('tenant.templates.deleteTemplate', { name: template.name })}
                     disabled={isSubmitting}
                   />
                 </LazyPopconfirm>,
@@ -281,19 +284,9 @@ export const InstanceTemplateList: FC = () => {
               </Paragraph>
 
               <div className="mt-auto pt-4 flex flex-col gap-3">
-                {template.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {template.tags.map((tag) => (
-                      <Tag key={tag} className="text-xs">
-                        {tag}
-                      </Tag>
-                    ))}
-                  </div>
-                )}
-
                 <div className="flex justify-between items-center text-xs text-text-muted">
                   <span className="flex items-center gap-1">
-                    <Copy className="w-3 h-3" /> {template.clone_count || 0}
+                    <Copy className="w-3 h-3" /> {template.install_count || 0}
                   </span>
                   <span>{new Date(template.created_at).toLocaleDateString()}</span>
                 </div>
@@ -326,16 +319,12 @@ export const InstanceTemplateList: FC = () => {
             <Input.TextArea rows={3} placeholder={t('tenant.templates.descriptionPlaceholder')} />
           </Form.Item>
 
-          <Form.Item
-            name="tags"
-            label={t('tenant.templates.tags')}
-            tooltip={t('tenant.templates.tagsTooltip')}
-          >
-            <Input placeholder={t('tenant.templates.tagsPlaceholder')} />
-          </Form.Item>
-
-          <Form.Item name="base_config" label={t('tenant.templates.baseConfig')}>
-            <Input.TextArea rows={4} placeholder='{"key": "value"}' className="font-mono text-sm" />
+          <Form.Item name="default_config" label={t('tenant.templates.baseConfig')}>
+            <Input.TextArea
+              rows={4}
+              placeholder={t('tenant.templates.baseConfigPlaceholder')}
+              className="font-mono text-sm"
+            />
           </Form.Item>
         </Form>
       </LazyModal>

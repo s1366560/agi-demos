@@ -292,6 +292,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
+              aria-label={t('tenant.users.searchPlaceholder')}
               placeholder={t('tenant.users.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => {
@@ -302,6 +303,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
           </div>
           <div>
             <select
+              aria-label={t('tenant.users.filterByRole')}
               value={filterRole}
               onChange={(e) => {
                 setFilterRole(e.target.value);
@@ -459,6 +461,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                 </label>
                 <input
                   type="email"
+                  aria-label={t('tenant.users.invite_modal.email')}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                   placeholder={t('tenant.users.invite_modal.email_placeholder')}
                   required
@@ -469,7 +472,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   {t('tenant.users.invite_modal.role')} *
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white">
+                <select
+                  aria-label={t('tenant.users.invite_modal.role')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+                >
                   <option value="member">{t('tenant.users.roles.member')}</option>
                   <option value="admin">{t('tenant.users.roles.admin')}</option>
                   <option value="viewer">{t('tenant.users.roles.viewer')}</option>
@@ -481,6 +487,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                   {t('tenant.users.invite_modal.message')}
                 </label>
                 <textarea
+                  aria-label={t('tenant.users.invite_modal.message')}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                   placeholder={t('tenant.users.invite_modal.message_placeholder')}
                   rows={3}

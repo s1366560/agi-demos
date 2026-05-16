@@ -182,7 +182,7 @@ export const ProviderList: React.FC = () => {
       return;
     try {
       await deleteProvider(providerId);
-      message.success(t('tenant.providers.deleteSuccess', 'Provider deleted'));
+      message.success(t('tenant.providers.deleteSuccess'));
       await loadProviders();
       await loadSystemStatus();
     } catch (err) {
@@ -304,7 +304,7 @@ export const ProviderList: React.FC = () => {
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
-          {t('tenant.providers.tabs.myProviders', { defaultValue: 'My Providers' })}
+          {t('tenant.providers.tabs.myProviders')}
         </button>
         <button
           onClick={() => {
@@ -316,7 +316,7 @@ export const ProviderList: React.FC = () => {
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
-          {t('tenant.providers.tabs.marketplace', { defaultValue: 'Marketplace' })}
+          {t('tenant.providers.tabs.marketplace')}
         </button>
         <button
           onClick={() => {
@@ -328,7 +328,7 @@ export const ProviderList: React.FC = () => {
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
-          {t('tenant.providers.tabs.assignments', { defaultValue: 'Routing & Assignments' })}
+          {t('tenant.providers.tabs.assignments')}
         </button>
       </div>
 
@@ -367,6 +367,7 @@ export const ProviderList: React.FC = () => {
                 </div>
                 <input
                   className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg leading-5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                  aria-label={t('tenant.providers.searchPlaceholder')}
                   placeholder={t('tenant.providers.searchPlaceholder')}
                   type="text"
                   value={search}
@@ -378,6 +379,7 @@ export const ProviderList: React.FC = () => {
               <div className="flex items-center gap-3 w-full lg:w-auto overflow-x-auto">
                 <div className="relative shrink-0">
                   <select
+                    aria-label={t('tenant.providers.typeFilterLabel')}
                     className="appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 py-2.5 pl-4 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
                     value={typeFilter}
                     onChange={(e) => {
@@ -397,6 +399,7 @@ export const ProviderList: React.FC = () => {
                 </div>
                 <div className="relative shrink-0">
                   <select
+                    aria-label={t('tenant.providers.statusFilterLabel')}
                     className="appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 py-2.5 pl-4 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
                     value={statusFilter}
                     onChange={(e) => {
@@ -420,8 +423,9 @@ export const ProviderList: React.FC = () => {
                     onClick={() => {
                       setViewMode('cards');
                     }}
+                    aria-label={t('tenant.providers.view.card')}
                     className={`p-2 transition-colors ${viewMode === 'cards' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                    title={t('tenant.providers.view.card', { defaultValue: 'Card View' })}
+                    title={t('tenant.providers.view.card')}
                   >
                     <LayoutGrid size={18} />
                   </button>
@@ -429,8 +433,9 @@ export const ProviderList: React.FC = () => {
                     onClick={() => {
                       setViewMode('table');
                     }}
+                    aria-label={t('tenant.providers.view.table')}
                     className={`p-2 transition-colors ${viewMode === 'table' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                    title={t('tenant.providers.view.table', { defaultValue: 'Table View' })}
+                    title={t('tenant.providers.view.table')}
                   >
                     <List size={18} />
                   </button>
@@ -458,9 +463,7 @@ export const ProviderList: React.FC = () => {
                       {t('tenant.providers.noProviders')}
                     </p>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      {t('tenant.providers.emptyHint', {
-                        defaultValue: 'Get started by adding your first LLM provider',
-                      })}
+                      {t('tenant.providers.emptyHint')}
                     </p>
                   </div>
                   <button
@@ -511,7 +514,7 @@ export const ProviderList: React.FC = () => {
                         }}
                       >
                         <div className="flex items-center gap-2">
-                          {t('tenant.providers.columns.provider', { defaultValue: 'Provider' })}
+                          {t('tenant.providers.columns.provider')}
                           {sortField === 'name' ||
                           sortField === 'health' ||
                           sortField === 'responseTime' ? (
@@ -571,9 +574,7 @@ export const ProviderList: React.FC = () => {
                         }}
                       >
                         <div className="flex items-center gap-2">
-                          {t('tenant.providers.columns.responseTime', {
-                            defaultValue: 'Response Time',
-                          })}
+                          {t('tenant.providers.columns.responseTime')}
                           {sortField === 'name' ||
                           sortField === 'health' ||
                           sortField === 'responseTime' ? (
@@ -591,9 +592,7 @@ export const ProviderList: React.FC = () => {
                         </div>
                       </th>
                       <th className="relative px-6 py-3" scope="col">
-                        <span className="sr-only">
-                          {t('tenant.providers.columns.actions', { defaultValue: 'Actions' })}
-                        </span>
+                        <span className="sr-only">{t('tenant.providers.columns.actions')}</span>
                       </th>
                     </tr>
                   </thead>
@@ -619,9 +618,7 @@ export const ProviderList: React.FC = () => {
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                                     <Star size={10} fill="currentColor" />
                                     <span className="ml-0.5">
-                                      {t('tenant.providers.defaultBadge', {
-                                        defaultValue: 'Default',
-                                      })}
+                                      {t('tenant.providers.defaultBadge')}
                                     </span>
                                   </span>
                                 )}
@@ -685,7 +682,7 @@ export const ProviderList: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">
                           {provider.response_time_ms
                             ? `${String(provider.response_time_ms)}ms`
-                            : t('tenant.providers.notAvailable', { defaultValue: 'N/A' })}
+                            : t('tenant.providers.notAvailable')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-2">
@@ -760,7 +757,7 @@ export const ProviderList: React.FC = () => {
                   rel="noopener noreferrer"
                   className="text-sm text-slate-500 hover:text-primary flex items-center gap-1"
                 >
-                  {t('tenant.providers.marketplace.docs', { defaultValue: 'Docs' })}
+                  {t('tenant.providers.marketplace.docs')}
                   <ExternalLink size={14} />
                 </a>
                 <button
@@ -770,7 +767,7 @@ export const ProviderList: React.FC = () => {
                   className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
                 >
                   <Plus size={16} />
-                  {t('tenant.providers.marketplace.connect', { defaultValue: 'Connect' })}
+                  {t('tenant.providers.marketplace.connect')}
                 </button>
               </div>
             </div>

@@ -576,7 +576,9 @@ function DeliveryPanel({
 
       {(delivery.warnings?.length ?? 0) > 0 && (
         <div className="mt-3 rounded-md border border-warning-border bg-warning-bg px-3 py-2 text-xs leading-5 text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
-          <div className="font-semibold uppercase">{t('blackboard.planRunWarnings', 'Warnings')}</div>
+          <div className="font-semibold uppercase">
+            {t('blackboard.planRunWarnings', 'Warnings')}
+          </div>
           <ul className="mt-1 space-y-1">
             {delivery.warnings?.map((warning) => (
               <li key={warning} className="break-words">

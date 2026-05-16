@@ -38,7 +38,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
   for (const event of timeline) {
     switch (event.type) {
       case 'user_message':
-        lines.push(`## 🧑 User`);
+        lines.push(`## User`);
         lines.push(`*${formatTimestamp(event.timestamp)}*`);
         lines.push('');
         lines.push(event.content);
@@ -46,7 +46,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
         break;
 
       case 'assistant_message':
-        lines.push(`## 🤖 Assistant`);
+        lines.push(`## Assistant`);
         lines.push(`*${formatTimestamp(event.timestamp)}*`);
         lines.push('');
         lines.push(event.content);
@@ -54,7 +54,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
         break;
 
       case 'thought':
-        lines.push(`<details><summary>💭 Thinking</summary>`);
+        lines.push(`<details><summary>Thinking</summary>`);
         lines.push('');
         lines.push(event.content);
         lines.push('');
@@ -63,7 +63,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
         break;
 
       case 'act':
-        lines.push(`> 🔧 **Tool Call**: \`${event.toolName}\``);
+        lines.push(`> **Tool Call**: \`${event.toolName}\``);
         if (Object.keys(event.toolInput).length > 0) {
           lines.push('> ```json');
           lines.push(`> ${JSON.stringify(event.toolInput, null, 2).split('\n').join('\n> ')}`);
@@ -73,7 +73,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
         break;
 
       case 'observe':
-        lines.push(`> 📋 **Result** (${event.toolName})${event.isError ? ' ❌ Error' : ''}`);
+        lines.push(`> **Result** (${event.toolName})${event.isError ? ' Error' : ''}`);
         if (event.toolOutput) {
           const output =
             event.toolOutput.length > 500
@@ -145,7 +145,7 @@ function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
           `<div style="margin-bottom: 16px; padding: 12px 16px; background: #f1f5f9; border-radius: 8px;">`
         );
         lines.push(
-          `<div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 600;">User &mdash; ${formatTimestamp(event.timestamp)}</div>`
+          `<div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 600;">User - ${formatTimestamp(event.timestamp)}</div>`
         );
         lines.push(
           `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`
@@ -154,10 +154,10 @@ function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
         break;
       case 'assistant_message':
         lines.push(
-          `<div style="margin-bottom: 16px; padding: 12px 16px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px;">`
+          `<div style="margin-bottom: 16px; padding: 12px 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">`
         );
         lines.push(
-          `<div style="font-size: 11px; color: #3b82f6; margin-bottom: 4px; font-weight: 600;">Assistant &mdash; ${formatTimestamp(event.timestamp)}</div>`
+          `<div style="font-size: 11px; color: #2563eb; margin-bottom: 4px; font-weight: 600;">Assistant - ${formatTimestamp(event.timestamp)}</div>`
         );
         lines.push(
           `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`

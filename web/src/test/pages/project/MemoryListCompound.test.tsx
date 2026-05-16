@@ -245,6 +245,25 @@ describe('MemoryList Compound Component', () => {
       fireEvent.change(input, { target: { value: 'Meeting' } });
       expect(onSearchChange).toHaveBeenCalledWith('Meeting');
     });
+
+    it('should call onContentTypeFilterChange when selecting a memory type', async () => {
+      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      const onContentTypeFilterChange = vi.fn();
+      render(
+        <MemoryList.Toolbar
+          search=""
+          onSearchChange={vi.fn()}
+          contentTypeFilter="all"
+          onContentTypeFilterChange={onContentTypeFilterChange}
+        />
+      );
+
+      fireEvent.change(screen.getByLabelText('Memory type'), {
+        target: { value: 'document' },
+      });
+
+      expect(onContentTypeFilterChange).toHaveBeenCalledWith('document');
+    });
   });
 
   // ============================================================================
@@ -429,6 +448,24 @@ describe('MemoryList Compound Component', () => {
       });
       const input = screen.getByPlaceholderText('Search memories...');
       fireEvent.change(input, { target: { value: 'Research' } });
+      await waitFor(() => {
+        expect(screen.queryByText('Meeting Notes')).not.toBeInTheDocument();
+        expect(screen.getByText('Research Findings')).toBeInTheDocument();
+      });
+    });
+
+    it('should filter memories by content type', async () => {
+      const { MemoryList } = await import('../../../pages/project/MemoryList');
+      render(<MemoryList />);
+      await waitFor(() => {
+        expect(screen.getByText('Meeting Notes')).toBeInTheDocument();
+        expect(screen.getByText('Research Findings')).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByLabelText('Memory type'), {
+        target: { value: 'document' },
+      });
+
       await waitFor(() => {
         expect(screen.queryByText('Meeting Notes')).not.toBeInTheDocument();
         expect(screen.getByText('Research Findings')).toBeInTheDocument();

@@ -11,6 +11,8 @@ import { useTranslation } from 'react-i18next';
 import { message } from 'antd';
 import { Check, Copy, Hourglass, FileDown, Share2 } from 'lucide-react';
 
+import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+
 export interface ExportActionsProps {
   /** Content to export */
   content?: string | undefined;
@@ -108,7 +110,7 @@ export function ExportActions({
     if (!conversationId) return;
 
     try {
-      const url = `${window.location.origin}/shared/${conversationId}`;
+      const url = `${window.location.origin}${buildAgentWorkspacePath({ conversationId })}`;
       await navigator.clipboard.writeText(url);
       markCopied('link');
       void message.success(

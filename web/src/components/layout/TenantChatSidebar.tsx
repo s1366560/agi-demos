@@ -658,9 +658,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               <Bot className="text-white" size={24} />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
+              <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
                 {t('agent.sidebar.workspaceTitle', 'Agent Workspace')}
-              </h2>
+              </div>
               <p className="text-xs text-slate-500">{conversationCountText}</p>
             </div>
           </div>
@@ -704,6 +704,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               onClick={() => {
                 setCollapsed(false);
               }}
+              aria-label={t('agent.sidebar.expandProjectSidebar', {
+                project:
+                  projects.find((p) => p.id === selectedProjectId)?.name ||
+                  t('agent.sidebar.selectProjectTitle', 'Select Project'),
+                defaultValue: 'Expand project sidebar for {{project}}',
+              })}
+              title={t('agent.sidebar.expandProjectSidebar', {
+                project:
+                  projects.find((p) => p.id === selectedProjectId)?.name ||
+                  t('agent.sidebar.selectProjectTitle', 'Select Project'),
+                defaultValue: 'Expand project sidebar for {{project}}',
+              })}
               className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
               <FolderOpen size={20} className="text-slate-500" />

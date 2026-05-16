@@ -41,6 +41,8 @@
     "eliminated": "Eliminated",
     "test": "Test",
     "refreshed": "Refreshed",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "actions": {
       "label": "Actions",
       "viewAll": "View All",
@@ -178,7 +180,16 @@
     "open": "Open evidence"
   },
   "playbooks": {
+    "title": "Playbook Library",
     "description": "Reusable operating playbooks for project workflows",
+    "section": {
+      "playbooks": "Distilled playbooks",
+      "verdicts": "Reflection verdicts"
+    },
+    "empty": {
+      "playbooks": "No playbooks yet. The reflector will distill them as friction signals accumulate.",
+      "verdicts": "No verdicts recorded yet."
+    },
     "status": "Status",
     "hits": "Hits",
     "lastUsed": "Last used",
@@ -217,7 +228,10 @@
       "subtitle": "Enterprise LLM Memory Platform"
     },
     "form": {
+      "email_placeholder": "name@company.com",
       "password_placeholder": "Enter your password",
+      "show_password": "Show password",
+      "hide_password": "Hide password",
       "forgot_password": "Forgot password?",
       "forgot_unavailable": "Password reset is handled by your organization administrator.",
       "or": "Or",
@@ -251,7 +265,10 @@
     }
   },
   "nav": {
+    "navigation": "Navigation",
     "dashboard": "Dashboard",
+    "project": "Project",
+    "agent": "Agent",
     "agentWorkspace": "Agent Workspace",
     "projects": "Projects",
     "users": "Users",
@@ -308,6 +325,22 @@
     "blackboard": "Blackboard",
     "tenant": "Tenant"
   },
+  "graph": {
+    "nodeInfo": {
+      "close": "Close node details"
+    },
+    "cytoscapeViewport": {
+      "loadingVisualization": "Loading graph visualization...",
+      "initializeFailed": "Failed to initialize graph visualization",
+      "loadDataFailed": "Failed to load graph data",
+      "loadingGraph": "Loading graph..."
+    }
+  },
+  "search": {
+    "header": {
+      "openMobileFilters": "Open search filters"
+    }
+  },
   "blackboard": {
     "title": "Blackboard",
     "dashboardEyebrow": "Workspace dashboard",
@@ -348,6 +381,8 @@
     "edit": "Edit",
     "save": "Save",
     "reply": "Reply",
+    "replyContent": "Reply content",
+    "editReply": "Edit reply",
     "replies": "Replies",
     "noReplies": "No replies yet",
     "writeReply": "Write a reply...",
@@ -409,6 +444,39 @@
     "planRunHistoryIterationSummary": "Iteration {{current}}/{{max}}",
     "planRunHistoryReadOnly": "Viewing a historical goal. Plan actions are read-only.",
     "planRunHistoryReadOnlyAction": "Select the current goal before running plan actions.",
+    "planRunAutonomyTriggered": "Leader scheduled the next autonomy step.",
+    "planRunAutonomyCoolingDown": "Autonomy is cooling down. Use Force run to bypass the cooldown.",
+    "planRunAutonomyNoRoot": "No open root goal needs progress.",
+    "planRunAutonomyStable": "All root goals are currently stable.",
+    "planRunTitle": "Plan run",
+    "planRunRunAutonomy": "Run",
+    "planRunForceAutonomy": "Force",
+    "planRunRefreshShort": "Refresh",
+    "planRunEmpty": "No durable plan has been started for this workspace.",
+    "planRunStatus": "Plan status",
+    "planRunStage": "Stage",
+    "planRunCompleted": "Done",
+    "planRunCompletion": "Completion",
+    "planRunRootStatus": "Root",
+    "planRunEvidenceGrade": "Evidence",
+    "planRunQueue": "Queue",
+    "planRunEvents": "Events",
+    "planRunNodesTitle": "Execution DAG",
+    "planRunSearch": "Search plan run",
+    "planRunSearchPlaceholder": "Search run",
+    "planRunNoNodes": "No runnable plan nodes match this view.",
+    "planRunOperatorReason": "Operator reason",
+    "planRunOperatorReasonPlaceholder": "Optional reason for replan, reopen, or retry",
+    "planRunOpenAttempt": "Open attempt",
+    "planRunRequestReplan": "Request replan",
+    "planRunAcceptAfterReview": "Accept after review",
+    "planRunReopenNode": "Reopen",
+    "planRunNarrativeTitle": "Execution narrative",
+    "planRunNoEvents": "No plan events.",
+    "planRunOutboxTitle": "Outbox",
+    "planRunNoOutbox": "No queued events.",
+    "planRunBlackboardTitle": "Typed blackboard",
+    "planRunSelectNodeEmpty": "Select a node to inspect it.",
     "iterationLedgerTitle": "Iteration ledger",
     "iterationLedgerDescription": "Review each sprint by tasks, outputs, verification, and interactions.",
     "iterationLedgerTotal": "{{count}} iterations",
@@ -423,6 +491,16 @@
     "iterationMetricRunning": "Running",
     "iterationMetricBlocked": "Blocked",
     "iterationMetricVerify": "Verify",
+    "iterationMetricAttempts": "Attempts",
+    "iterationMetricRejected": "Rejected",
+    "iterationMetricRepair": "Repair",
+    "iterationRunHealthTitle": "Run health",
+    "iterationRunHealthSuccess": "{{value}}% accepted",
+    "iterationMetricVerifyFail": "Verify fail",
+    "iterationFeedbackWorker": "Worker retry",
+    "iterationFeedbackPlanner": "Planner fix",
+    "iterationFeedbackRuntime": "Runtime",
+    "iterationFeedbackStale": "Stale target",
     "iterationPhaseResearch": "Research",
     "iterationPhasePlan": "Plan",
     "iterationPhaseImplement": "Implement",
@@ -485,6 +563,15 @@
     "genesSurfaceHint": "workspace genes",
     "settingsSurfaceHint": "workspace settings",
     "collaborationHint": "Keep the workspace-wide collaboration stream inside the central blackboard so execution and discussion stay in one place.",
+    "collaboration": {
+      "title": "Agent Communication",
+      "subtitle": "Overview of messages exchanged between agents in this workspace.",
+      "allAgents": "All Agents",
+      "messages": "Messages",
+      "activeAgents": "Active Agents",
+      "commGraph": "Communication Frequency",
+      "noMessages": "No agent communication yet. Messages will appear here when agents interact."
+    },
     "tabs": {
       "ariaLabel": "Blackboard sections",
       "goals": "Goals / Tasks",
@@ -600,7 +687,12 @@
       "surfaceHint": "conversation participation projection",
       "loading": "Loading conversations…",
       "error": "Failed to load conversations.",
-      "empty": "No conversations linked to this workspace yet. Start a chat from Agent Workspace with this workspace attached."
+      "empty": "No conversations linked to this workspace yet. Start a chat from Agent Workspace with this workspace attached.",
+      "section": {
+        "mode": "Mode",
+        "participants": "Participants",
+        "hitl": "HITL Center"
+      }
     },
     "planRunFilterNodes": "Filter plan nodes",
     "planRunNodeDetails": "Plan node details",
@@ -614,6 +706,7 @@
     "filesSurfaceHint": "Workspace file authority",
     "files": {
       "newFolder": "New folder",
+      "browserRegion": "Shared files",
       "upload": "Upload",
       "folderName": "Folder name",
       "create": "Create",
@@ -689,7 +782,9 @@
       "createTask": "Failed to create task",
       "updateTask": "Failed to update task",
       "createPost": "Failed to create post",
+      "updatePost": "Failed to update post",
       "createReply": "Failed to create reply",
+      "updateReply": "Failed to update reply",
       "deletePost": "Failed to delete post",
       "pinPost": "Failed to pin post",
       "unpinPost": "Failed to unpin post",
@@ -713,6 +808,7 @@
       "ariaLabel": "Interactive workstation arrangement grid",
       "emptySelectionHint": "Start by selecting an empty hex, an AI employee, or the center board.",
       "shortcutTitle": "Keyboard map",
+      "shortcutsTitle": "Keyboard shortcuts",
       "shortcutTitleMobile": "Key actions",
       "moveHint": "Move mode is active. Choose a free hex or press Esc to cancel.",
       "staticHint": "The center hex always opens the shared blackboard. Workstation edits stay on this surface.",
@@ -724,6 +820,11 @@
       "coordinates": "Hex {{q}}, {{r}}",
       "openWorkspace": "Open workspace",
       "resetView": "Reset view",
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "threeDPreviewNote": "3D view is preview only. Use pointer controls here, or switch back to 2D for keyboard editing.",
+      "keyboardHint": "Use arrow keys to move keyboard focus across the grid, Enter to inspect a hex, Shift and arrow keys to pan, and the action shortcuts only while this grid is focused.",
+      "threeDKeyboardHint": "Three-dimensional view is preview only. Use pointer controls here, or switch back to 2D to move across hexes and edit placements with the keyboard.",
       "modes": {
         "twoD": "2D layout",
         "threeD": "3D view"
@@ -800,12 +901,14 @@
     "logout": "Logout",
     "defaultRole": "User",
     "theme": "Theme",
+    "themeCycleAria": "Switch theme. Current theme: {{theme}}",
     "language": "Language",
     "billing": "Billing"
   },
   "tenant": {
     "create_modal": {
       "title": "Create Tenant",
+      "close": "Close tenant creation",
       "name": "Name",
       "name_placeholder": "Enter tenant name",
       "description": "Description",
@@ -853,6 +956,7 @@
       "subtitle": "Manage user access, assign roles, and control permissions for this tenant.",
       "inviteMember": "Invite Member",
       "searchPlaceholder": "Search by name, email, or role...",
+      "filterByRole": "Filter by role",
       "allRoles": "All Roles",
       "noMembers": "No members found",
       "showingResults": "Showing {{start}} to {{end}} of {{total}} results",
@@ -923,6 +1027,9 @@
       "title": "Agent Definitions",
       "subtitle": "Configure and manage AI agent definitions for your tenant",
       "createNew": "Create Agent",
+      "createFirst": "Create your first agent",
+      "empty": "No agent definitions yet",
+      "noResults": "No agents match your filters",
       "refresh": "Refresh agent definitions",
       "toggleAgent": "Toggle {{name}}",
       "openActions": "Open actions for {{name}}",
@@ -936,6 +1043,7 @@
         "disabled": "Disabled"
       },
       "sort": {
+        "label": "Sort agent definitions",
         "name": "Name",
         "recent": "Recent",
         "invocations": "Invocations"
@@ -943,7 +1051,9 @@
       "messages": {
         "enabled": "Agent enabled",
         "disabled": "Agent disabled",
-        "deleted": "Agent definition deleted"
+        "deleted": "Agent definition deleted",
+        "createSuccess": "Agent definition created",
+        "updateSuccess": "Agent definition updated"
       },
       "noSystemPrompt": "No system prompt",
       "capabilities": {
@@ -954,6 +1064,66 @@
         "success": "{{percent}}% success"
       },
       "modal": {
+        "createTitle": "Create Agent Definition",
+        "editTitle": "Edit Agent Definition",
+        "basicInfo": "Basic Info",
+        "triggerConfig": "Trigger & Routing",
+        "permissions": "Permissions & Resources",
+        "sandboxIsolation": "Sandbox & Isolation",
+        "loadingResources": "Loading resources...",
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "namePattern": "Lowercase letters, digits, underscores. Must start with letter.",
+        "namePlaceholder": "e.g., customer_support",
+        "displayName": "Display Name",
+        "displayNameRequired": "Display name is required",
+        "displayNamePlaceholder": "e.g., Customer Support Agent",
+        "systemPrompt": "System Prompt",
+        "systemPromptRequired": "System prompt is required",
+        "systemPromptPlaceholder": "Define the agent's role, capabilities, and behavior...",
+        "model": "Model",
+        "maxRetries": "Max Retries",
+        "triggerKeywords": "Trigger Keywords",
+        "addKeyword": "Add keyword...",
+        "noKeywords": "No keywords added",
+        "discoverable": "Discoverable",
+        "agentToAgent": "Agent-to-Agent",
+        "agentToAgentAllowlist": "A2A Allowlist",
+        "agentToAgentAllowlistTooltip": "Allowed sender agent IDs or names. Leave untouched on create to use the default trusted built-in senders; use an empty list to deny all.",
+        "agentToAgentAllowlistPlaceholder": "Add agent IDs or names",
+        "canSpawn": "Can Spawn Children",
+        "maxSpawnDepth": "Max Spawn Depth",
+        "allowedTools": "Allowed Tools",
+        "allowedToolsTooltip": "Tools this agent can use. Select * for all.",
+        "allowedToolsPlaceholder": "Select tools",
+        "allToolsOption": "All Tools (*)",
+        "allowedSkills": "Allowed Skills",
+        "allowedSkillsTooltip": "Skills this agent can activate.",
+        "allowedSkillsPlaceholder": "Select skills (leave empty for none)",
+        "allowedMcpServers": "MCP Servers",
+        "allowedMcpServersTooltip": "MCP servers this agent can access.",
+        "allowedMcpServersPlaceholder": "Select servers (leave empty for none)",
+        "maxTokens": "Max Tokens",
+        "temperature": "Temperature",
+        "maxIterations": "Max Iterations",
+        "spawnPolicy": "Spawn Policy",
+        "maxActiveRuns": "Max Active Runs",
+        "maxActiveRunsTooltip": "Maximum number of active subagent runs",
+        "maxChildrenPerRequester": "Max Children Per Requester",
+        "maxChildrenPerRequesterTooltip": "Maximum subagents allowed per requester",
+        "allowedSubagents": "Allowed Subagents",
+        "allowedSubagentsTooltip": "Allowed subagent names or IDs",
+        "workspaceConfig": "Workspace Config",
+        "workspaceType": "Workspace Type",
+        "workspaceBaseDir": "Base Directory",
+        "workspaceBaseDirTooltip": "Custom workspace directory path",
+        "workspaceBaseDirPlaceholder": "/path/to/dir",
+        "toolPolicy": "Tool Policy",
+        "toolPolicyAllow": "Allow List",
+        "toolPolicyAllowTooltip": "Allowed tool patterns",
+        "toolPolicyDeny": "Deny List",
+        "toolPolicyDenyTooltip": "Denied tool patterns",
+        "resourceFetchError": "Failed to load available tools and skills",
         "workspaceTypes": {
           "shared": "Shared",
           "isolated": "Isolated",
@@ -967,6 +1137,7 @@
       "totalStorage": "Total Storage",
       "activeProjects": "Active Projects",
       "newProjectThisWeek": "{{count}} new project this week",
+      "newMembers": "+{{count}} members added",
       "teamMembers": "Team Members",
       "memoryUsageHistory": "Memory Usage History",
       "last30Days": "Last 30 Days",
@@ -983,6 +1154,7 @@
       "projectName": "Project Name",
       "memoryConsumed": "Memory Consumed",
       "actions": "Actions",
+      "openProject": "Open project {{name}}",
       "openProjectActions": "Open actions for {{name}}",
       "loading": "Loading tenant information..."
     },
@@ -992,6 +1164,8 @@
       "addProvider": "Add Provider",
       "searchPlaceholder": "Search by name or model...",
       "allTypes": "All Types",
+      "typeFilterLabel": "Filter providers by type",
+      "statusFilterLabel": "Filter providers by status",
       "noProviders": "No providers configured",
       "addFirstProvider": "Add your first provider",
       "emptyHint": "Get started by adding your first LLM provider",
@@ -1016,13 +1190,23 @@
       "defaultBadge": "Default",
       "notAvailable": "N/A",
       "deleteConfirm": "Are you sure you want to delete this provider?",
-      "deleteSuccess": "Provider deleted"
+      "deleteSuccess": "Provider deleted",
+      "connectionTest": {
+        "savedPrefix": "Saved provider health check",
+        "livePrefix": "Connection test",
+        "passed": "{{prefix}} passed{{responseTime}}.",
+        "returned": "{{prefix}} returned {{status}}{{responseTime}}{{detail}}.",
+        "apiKeyRequired": "API key is required",
+        "failed": "Connection failed. Please check the provider configuration."
+      }
     },
     "skills": {
       "title": "Skill Management",
       "subtitle": "Configure and manage agent skill library",
       "createNew": "Create Skill",
       "searchPlaceholder": "Search skills...",
+      "statusFilterLabel": "Filter skills by status",
+      "statusSelectAria": "Set status for {{name}}",
       "allStatus": "All Status",
       "activeOnly": "Active Only",
       "disabledOnly": "Disabled Only",
@@ -1063,6 +1247,7 @@
         "name": "Skill Name",
         "nameRequired": "Please enter skill name",
         "namePattern": "Name must start with a letter and contain only letters, numbers, underscores, and hyphens",
+        "namePlaceholder": "e.g., data_analysis_skill",
         "description": "Description",
         "descriptionRequired": "Please enter skill description",
         "descriptionPlaceholder": "Describe what this skill does...",
@@ -1192,6 +1377,7 @@
         "disabled": "Disabled"
       },
       "sort": {
+        "label": "Sort subagents",
         "name": "Name",
         "invocations": "Most Runs",
         "successRate": "Success Rate",
@@ -1234,8 +1420,10 @@
         "name": "Name",
         "nameRequired": "Name is required",
         "namePattern": "Must start with lowercase letter, only a-z, 0-9, underscore",
+        "namePlaceholder": "e.g., code_reviewer",
         "displayName": "Display Name",
         "displayNameRequired": "Display name is required",
+        "displayNamePlaceholder": "e.g., Code Reviewer",
         "systemPrompt": "System Prompt",
         "systemPromptRequired": "System prompt is required",
         "systemPromptPlaceholder": "Enter the system prompt for this SubAgent...",
@@ -1252,10 +1440,14 @@
         "noExamples": "No examples added",
         "allowedTools": "Allowed Tools",
         "allowedToolsTooltip": "Comma-separated tool names, or * for all tools",
+        "allowedToolsPlaceholder": "Select tools",
+        "allToolsOption": "All Tools (*)",
         "allowedSkills": "Allowed Skills",
         "allowedSkillsTooltip": "Comma-separated skill names this SubAgent can use",
+        "allowedSkillsPlaceholder": "Select skills (leave empty for none)",
         "allowedMcpServers": "MCP Servers",
         "allowedMcpServersTooltip": "Comma-separated MCP server names this SubAgent can access",
+        "allowedMcpServersPlaceholder": "Select servers (leave empty for none)",
         "maxTokens": "Max Tokens",
         "temperature": "Temperature",
         "maxIterations": "Max Iterations",
@@ -1283,15 +1475,21 @@
         "policyPreview": "Policy Preview",
         "toolsAllowed": "{{count}} of {{total}} tools allowed",
         "identity": "Identity",
-        "identityDescription": "Configure the identity this SubAgent uses when spawning child agents. Leave empty to use defaults.",
+        "identityIntro": "Configure the identity this SubAgent uses when spawning child agents. Leave empty to use defaults.",
+        "identityDescription": "Identity Description",
         "identityDescriptionField": "Identity Description",
         "identityDescriptionPlaceholder": "Describe this SubAgent's role and personality when spawning child agents...",
         "metadata": "Metadata",
         "metadataKey": "Key",
         "metadataValue": "Value",
         "addMetadata": "Add Metadata",
+        "removeExample": "Remove example {{example}}",
+        "removeMetadata": "Remove metadata row {{index}}",
         "testKeywords": "Test Keyword Match",
-        "keywordMatchFound": "Keyword match found"
+        "testQueryPlaceholder": "Enter query to test match...",
+        "keywordMatchFound": "Matches keyword: \"{{keyword}}\"",
+        "noExactKeywordMatch": "No exact keyword match found. The LLM may still route based on description.",
+        "resourceFetchError": "Failed to load available tools and skills"
       }
     },
     "agentBindings": {
@@ -1332,6 +1530,20 @@
         "specificity": "Specificity Score",
         "confidence": "Confidence",
         "noMatch": "No matching binding found for this context"
+      },
+      "trace": {
+        "agentId": "Agent ID",
+        "specificity": "Score",
+        "priority": "Priority",
+        "channelType": "Channel Type",
+        "matchCriteria": "Match Criteria",
+        "channel": "Channel",
+        "account": "Account",
+        "peer": "Peer",
+        "status": "Status",
+        "hide": "Hide Decision Trace",
+        "show": "Show Decision Trace",
+        "candidatesCount": "{{count}} candidates"
       },
       "search": "Search bindings...",
       "empty": "No agent bindings yet",
@@ -1855,12 +2067,19 @@
       },
       "actions": {
         "view": "View",
+        "viewInstance": "View {{name}}",
         "restart": "Restart",
+        "restartInstance": "Restart {{name}}",
         "restartConfirm": "Are you sure you want to restart this instance?",
         "delete": "Delete",
+        "deleteInstance": "Delete {{name}}",
         "deleteConfirm": "Are you sure you want to delete this instance? This action cannot be undone.",
         "scale": "Scale",
         "removeMember": "Remove"
+      },
+      "pagination": {
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
       },
       "stats": {
         "total": "Total Instances",
@@ -1869,14 +2088,22 @@
       },
       "status": {
         "all": "All Status",
+        "creating": "Creating",
         "provisioning": "Provisioning",
+        "deploying": "Deploying",
         "running": "Running",
         "stopped": "Stopped",
+        "restarting": "Restarting",
+        "scaling": "Scaling",
+        "learning": "Learning",
         "error": "Error",
+        "deleting": "Deleting",
         "terminated": "Terminated"
       },
       "detail": {
         "status": "Status",
+        "uptime": "Uptime",
+        "health": "Health",
         "replicas": "Replicas",
         "imageVersion": "Image Version",
         "runtime": "Runtime",
@@ -1892,6 +2119,7 @@
         "advancedConfig": "Advanced Configuration"
       },
       "tabs": {
+        "ariaLabel": "Instance tabs",
         "overview": "Overview",
         "files": "Files",
         "channels": "Channels",
@@ -1903,6 +2131,24 @@
         "title": "Create Instance",
         "success": "Instance created successfully",
         "error": "Failed to create instance",
+        "templateApplied": "Template defaults applied",
+        "templateLoadError": "Failed to load template defaults",
+        "placeholders": {
+          "name": "e.g. My Instance",
+          "slug": "e.g. my-instance",
+          "cpuRequest": "e.g. 100m",
+          "cpuLimit": "e.g. 1",
+          "memRequest": "e.g. 256Mi",
+          "memLimit": "e.g. 1Gi",
+          "storageSize": "e.g. 10Gi",
+          "workspace": "Select a workspace (optional)",
+          "envVars": "{\"KEY\": \"value\"}",
+          "advancedConfig": "{\"key\": \"value\"}",
+          "llmProviders": "{\"openai\": {\"api_key\": \"...\"}}"
+        },
+        "validation": {
+          "jsonObject": "{{field}} must be a valid JSON object"
+        },
         "steps": {
           "basic": {
             "title": "Basic Info"
@@ -1954,6 +2200,7 @@
           "quota_max_pods": "Max Pods"
         },
         "config": {
+          "workspace": "Workspace",
           "env_vars": "Environment Variables",
           "advanced_config": "Advanced Configuration",
           "llm_providers": "LLM Providers"
@@ -1964,6 +2211,23 @@
           "next": "Next",
           "submit": "Create Instance"
         }
+      },
+      "emptyText": "No instances found",
+      "actions": {
+        "scale": "Scale",
+        "scaleSuccess": "Scaled successfully",
+        "scaleFailed": "Scale failed",
+        "restartConfirm": "Are you sure you want to restart this instance?",
+        "restart": "Restart",
+        "restartSuccess": "Restart initiated",
+        "restartFailed": "Restart failed",
+        "deleteConfirm": "Are you sure you want to delete this instance?",
+        "delete": "Delete",
+        "viewInstance": "View instance",
+        "view": "View",
+        "restartInstance": "Restart instance",
+        "deleteInstance": "Delete instance",
+        "scaleTitle": "Scale Instance"
       },
       "members": {
         "title": "Instance Members",
@@ -2080,11 +2344,16 @@
         "config": {
           "title": "Channel Configuration",
           "serverUrl": "Server URL",
+          "serverUrlPlaceholder": "ws://localhost:8080",
           "timeout": "Timeout (ms)",
           "url": "URL",
+          "webhookUrlPlaceholder": "https://example.com/webhook",
           "secret": "Secret",
+          "secretPlaceholder": "********",
           "baseUrl": "Base URL",
-          "apiKey": "API Key"
+          "apiBaseUrlPlaceholder": "https://api.example.com",
+          "apiKey": "API Key",
+          "apiKeyPlaceholder": "********"
         }
       },
       "deleteError": "Failed to delete instance",
@@ -2138,9 +2407,20 @@
       "actions": {
         "back": "Back to List",
         "cancel": "Cancel Deploy",
+        "cancelConfirm": "Are you sure you want to cancel this deploy?",
         "markSuccess": "Mark Success",
+        "markSuccessConfirm": "Are you sure you want to mark this deploy as success?",
         "markFailed": "Mark Failed",
+        "markFailedConfirm": "Are you sure you want to mark this deploy as failed?",
         "new": "New Deploy"
+      },
+      "errors": {
+        "getFailed": "Failed to fetch deploy details",
+        "listFailed": "Failed to fetch deploy history",
+        "createFailed": "Failed to create new deploy",
+        "cancelFailed": "Failed to cancel deploy",
+        "markSuccessFailed": "Failed to update deploy status",
+        "markFailedFailed": "Failed to update deploy status"
       }
     },
     "auditLogs": {
@@ -2261,8 +2541,10 @@
         "provider": "Provider",
         "region": "Region",
         "apiEndpoint": "API Endpoint",
+        "apiEndpointPlaceholder": "https://cluster.example.com",
         "authConfig": "Auth Config (JSON)",
-        "metadata": "Metadata (JSON)"
+        "metadata": "Metadata (JSON)",
+        "metadataPlaceholder": "{}"
       },
       "healthDrawer": {
         "title": "Cluster Health",
@@ -2351,12 +2633,15 @@
       "instanceIdPlaceholder": "Enter instance ID",
       "configOverride": "Config Override (JSON)",
       "configOverrideTooltip": "Optional JSON configuration to override gene defaults",
+      "configOverridePlaceholder": "{\"key\": \"value\"}",
       "rateGene": "Rate Gene",
       "rating": "Rating",
       "ratingRequired": "Rating is required",
       "comment": "Comment",
       "commentPlaceholder": "Leave a comment...",
       "filters": {
+        "categoryLabel": "Filter genes by category",
+        "visibilityLabel": "Filter genes by visibility",
         "allCategories": "All Categories",
         "catAi": "AI",
         "catTool": "Tool",
@@ -2381,6 +2666,7 @@
       "filterAll": "All",
       "filterPublished": "Published",
       "filterDraft": "Draft",
+      "statusFilterLabel": "Filter templates by status",
       "empty": "No templates found",
       "publishConfirm": "Are you sure you want to publish this template?",
       "deleteConfirm": "Are you sure you want to delete this template?",
@@ -2401,7 +2687,12 @@
       "tags": "Tags",
       "tagsTooltip": "Press enter to add tags",
       "tagsPlaceholder": "Add tags...",
-      "baseConfig": "Base Config (JSON)"
+      "baseConfig": "Base Config (JSON)",
+      "baseConfigPlaceholder": "{\"key\": \"value\"}",
+      "viewTemplate": "View {{name}}",
+      "cloneTemplate": "Clone {{name}}",
+      "publishTemplate": "Publish {{name}}",
+      "deleteTemplate": "Delete {{name}}"
     },
     "evolution": {
       "noInstance": "No instance ID provided",
@@ -2437,6 +2728,9 @@
       "fields": {
         "id": "Template ID",
         "cloneCount": "Clone Count",
+        "installCount": "Install Count",
+        "slug": "Slug",
+        "imageVersion": "Image Version",
         "description": "Description",
         "tags": "Tags",
         "createdAt": "Created At"
@@ -2597,14 +2891,19 @@
         "description": "Configure outgoing email server settings",
         "serverSettings": "Server Settings",
         "host": "SMTP Host",
+        "hostPlaceholder": "smtp.example.com",
         "port": "Port",
+        "portPlaceholder": "465",
         "username": "Username",
+        "usernamePlaceholder": "user@example.com",
         "password": "Password",
         "passwordRequired": "Password is required for new configurations",
         "passwordPlaceholder": "Enter SMTP password",
         "passwordHint": "Leave empty to keep current password",
         "fromEmail": "From Email",
+        "fromEmailPlaceholder": "noreply@example.com",
         "fromName": "From Name",
+        "fromNamePlaceholder": "MemStack",
         "useTls": "Use TLS",
         "saveSuccess": "SMTP configuration saved successfully",
         "saveError": "Failed to save SMTP configuration",
@@ -2627,7 +2926,9 @@
         "policyKey": "Policy Key",
         "policyValue": "Policy Value (JSON)",
         "policyDescription": "Description",
+        "policyKeyPlaceholder": "e.g. agent_behavior, memory_retention",
         "descriptionPlaceholder": "Brief description of this policy",
+        "policyValuePlaceholder": "{ \"key\": \"value\" }",
         "empty": "No gene policies configured",
         "emptyHint": "Add a policy to configure agent behavior for your organization.",
         "updatedAt": "Updated",
@@ -2646,6 +2947,7 @@
       "missingTenantContext": "Missing tenant context",
       "selectProject": "Select Project",
       "selectProjectPlaceholder": "Choose a project",
+      "projectSelectorLabel": "Select project for plugin channels",
       "operationTimeline": "Operation Timeline",
       "reloadPlanLabel": "reload",
       "channelCatalogDiagnostics": "Channel Catalog & Diagnostics",
@@ -2654,6 +2956,10 @@
       "tabs": {
         "plugins": "Plugins",
         "channels": "Channels"
+      },
+      "pagination": {
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
       },
       "pluginsLoading": "Loading plugins...",
       "channelsLoading": "Loading channels...",
@@ -2730,6 +3036,7 @@
         "connectionModeWebsocket": "WebSocket (Recommended)",
         "connectionModeWebhook": "Webhook",
         "appId": "App ID",
+        "appIdPlaceholder": "cli_xxx",
         "appSecret": "App Secret",
         "appSecretKeepUnchanged": "App Secret (leave blank to keep unchanged)",
         "enterAppSecret": "Enter app secret",
@@ -2738,6 +3045,7 @@
         "verificationToken": "Verification Token",
         "verificationTokenPlaceholder": "Optional webhook verification token",
         "webhookUrl": "Webhook URL",
+        "webhookUrlPlaceholder": "https://your-domain.com/webhook",
         "domain": "Domain",
         "domainPlaceholder": "feishu / lark / custom",
         "description": "Description",
@@ -2847,13 +3155,16 @@
       "workspacesTitle": "Workspaces",
       "newButton": "New",
       "emptyMessage": "No workspaces yet",
-      "createButton": "Create workspace"
+      "createButton": "Create workspace",
+      "manageTenant": "Manage {{tenant}}"
     },
     "projectManager": {
       "searchPlaceholder": "Search projects...",
       "deleteConfirm": "Delete this project? This action cannot be undone.",
       "filterAll": "All",
       "settingsTooltip": "Project settings",
+      "settingsForProject": "Open settings for {{project}}",
+      "deleteProject": "Delete {{project}}",
       "createdAt": "Created {{date}}",
       "states": {
         "noTenantMessage": "Please select a workspace first",
@@ -2877,6 +3188,14 @@
       "viewGrid": "Grid view",
       "viewList": "List view",
       "openActions": "Open actions for {{name}}",
+      "filters": {
+        "visibilityLabel": "Project visibility",
+        "allVisibility": "All visibility",
+        "public": "Public",
+        "private": "Private",
+        "ownerLabel": "Project owner",
+        "allOwners": "All owners"
+      },
       "columns": {
         "project": "Project",
         "status": "Status"
@@ -2891,6 +3210,8 @@
       "title": "Create New Project",
       "subtitle": "Configure a new workspace for your memories and knowledge graph.",
       "basicInfo": "Basic Information",
+      "namePlaceholder": "e.g. Finance Knowledge Base",
+      "descriptionPlaceholder": "Briefly describe the purpose of this project...",
       "memoryRules": "Memory Rules",
       "graphConfig": "Graph Configuration",
       "maxEpisodes": "Max Episodes",
@@ -3026,6 +3347,7 @@
       "subtitle": "Update workspace configuration for your memories and knowledge graph.",
       "basic_info": "Basic Information",
       "name": "Project Name",
+      "namePlaceholder": "e.g. Finance Knowledge Base",
       "status": "Status",
       "description": "Description",
       "descriptionPlaceholder": "Briefly describe the purpose of this project...",
@@ -3057,6 +3379,7 @@
     },
     "settings": {
       "title": "Project Settings",
+      "close": "Close project settings",
       "noProject": "No project selected",
       "saved": "Settings saved successfully",
       "failed": "Failed to save settings",
@@ -3192,6 +3515,8 @@
         "focalPlaceholder": "e.g. node-1234-uuid...",
         "cross_encoder": "Cross-Encoder Client",
         "max_depth": "Max Depth",
+        "decrease_max_depth": "Decrease max depth",
+        "increase_max_depth": "Increase max depth",
         "relationship_types": "Relationship Types"
       },
       "filters": {
@@ -3205,6 +3530,10 @@
         "entity_types": "Entity Types",
         "tags": "Tags",
         "add_tag": "Add",
+        "new_tag_label": "New tag",
+        "new_tag_placeholder": "Tag",
+        "confirm_add_tag": "Add tag",
+        "cancel_add_tag": "Cancel tag entry",
         "results": "Results",
         "include_episodes": "Include Episodes",
         "community_info": "Enter a Community UUID in the search box to find all entities and episodes within that community."
@@ -3326,7 +3655,15 @@
           "progress": "Progress",
           "communities_count": "Communities",
           "connections_count": "Connections",
-          "error": "Error"
+          "error": "Error",
+          "id": "Task ID",
+          "processing": "Processing...",
+          "completed_message": "Community rebuild completed",
+          "failed_message": "Community rebuild failed",
+          "status_running": "Rebuilding Communities...",
+          "status_completed": "Rebuild Completed Successfully",
+          "status_failed": "Rebuild Failed",
+          "status_scheduled": "Rebuild Scheduled"
         },
         "stats": {
           "showing": "Showing {{count}} of {{total}} communities",
@@ -3337,6 +3674,11 @@
           "title": "No communities found",
           "desc": "Add more episodes to enable community detection, or rebuild communities"
         },
+        "card": {
+          "members": "{{count}} members",
+          "default_name": "Community {{index}}",
+          "created": "Created: {{date}}"
+        },
         "detail": {
           "title": "Community Details",
           "name": "Name",
@@ -3345,7 +3687,10 @@
           "uuid": "UUID",
           "created": "Created",
           "tasks": "Tasks",
+          "close": "Close community details",
+          "unnamed": "Unnamed Community",
           "member_list": "Community Members ({{count}})",
+          "more_members": "...and {{count}} more",
           "no_members": "No members loaded",
           "select_prompt": "Select a community to view details",
           "click_prompt": "Click on any community card to see its members"
@@ -3353,6 +3698,16 @@
         "info": {
           "title": "About Communities",
           "desc": "Communities are automatically detected groups of related entities using the Louvain algorithm. They help organize knowledge and reveal patterns in your data. Click \"Rebuild Communities\" to re-run the detection algorithm after adding new episodes."
+        },
+        "messages": {
+          "load_failed": "Failed to load communities",
+          "unknown_error": "Unknown error",
+          "task_updates_failed": "Failed to connect to task updates. Please refresh the page.",
+          "rebuild_success": "Communities rebuilt successfully",
+          "rebuild_start_failed": "Failed to start community rebuild",
+          "rebuild_failed_with_error": "Failed to rebuild: {{error}}",
+          "task_cancelled": "Task cancelled",
+          "task_cancel_failed": "Failed to cancel task"
         }
       },
       "entities": {
@@ -3386,6 +3741,7 @@
           "relationships": "Relationships ({{count}})",
           "related": "Related to",
           "no_relationships": "No relationships found",
+          "close": "Close entity details",
           "select_prompt": "Select an entity",
           "click_prompt": "Click on an entity from the list to view its details and relationships"
         }
@@ -3565,6 +3921,12 @@
       "processing": "Processing Status",
       "search_placeholder": "Search memories...",
       "searchPlaceholder": "Search memories...",
+      "actions": {
+        "reprocess": "Reprocess"
+      },
+      "errors": {
+        "reprocessFailed": "Failed to start processing. Please try again."
+      },
       "filter": {
         "all_types": "All Types",
         "all_status": "All Status",
@@ -3603,6 +3965,9 @@
         },
         "error": {
           "processing": "Processing Error",
+          "taskUpdatesFailed": "Failed to connect to task updates. Please check if the task completed.",
+          "aiOptimizeFailed": "AI optimization failed. Please try again.",
+          "createFailed": "Failed to create memory",
           "connection": "Failed to connect to task updates. Please check if the task completed.",
           "create": "Failed to create memory"
         },
@@ -3664,6 +4029,8 @@
       "detail": {
         "edit_memory": "Edit Memory",
         "type": "Type",
+        "processing": "Processing Memory",
+        "extracting_knowledge": "Extracting knowledge...",
         "tabs": {
           "content": "Content",
           "metadata": "Metadata",
@@ -3703,6 +4070,14 @@
         "subtitle": "Visual representation of the Pydantic models defining your graph structure. View entities, relationships, and their attribute definitions.",
         "view_json": "View JSON",
         "export_schema": "Export Schema",
+        "json_panel_label": "Schema JSON panel",
+        "json_panel_title": "Schema JSON",
+        "json_panel_description": "Current entity types, relationship types, and mappings as a portable JSON document.",
+        "json_code_label": "Schema JSON source",
+        "copy_json": "Copy JSON",
+        "copy_success": "Schema JSON copied",
+        "copy_failed": "Unable to copy schema JSON",
+        "no_results": "No schema types match this search.",
         "search_placeholder": "Filter schema types by name, attribute, or tag...",
         "entity_types": {
           "title": "Entity Types",
@@ -3943,6 +4318,8 @@
         "subtitle": "Configure the valid relationship types allowed between source and target entity types. Define the \"physics\" of your knowledge graph.",
         "cancel": "Cancel",
         "save": "Save Changes",
+        "refresh": "Refresh",
+        "add_mapping_button": "Add Mapping",
         "all": "All",
         "filter": "Filter",
         "search_placeholder": "Search entity types...",
@@ -4271,6 +4648,7 @@
       "channelType": "Channel Type",
       "channelConfigurationsDescription": "Configure IM platform integrations to enable AI agent communication through chat platforms.",
       "appId": "App ID",
+      "appIdPlaceholder": "cli_xxx",
       "pleaseEnterAppId": "Please enter App ID",
       "appSecret": "App Secret",
       "appSecretKeepUnchanged": "App Secret (leave blank to keep unchanged)",
@@ -4284,6 +4662,7 @@
       "verificationTokenOptional": "Verification Token (Optional)",
       "webhookUrl": "Webhook URL",
       "webhookUrlOptional": "Webhook URL (Optional)",
+      "webhookUrlPlaceholder": "https://your-domain.com/webhook",
       "descriptionOptional": "Description (Optional)",
       "dmPolicy": "DM Policy",
       "dmAllowlist": "DM Allowlist (User IDs)",
@@ -4535,7 +4914,45 @@
       "createProject": "Create Project",
       "changeProject": "Switch Project",
       "currentProject": "Current Project",
-      "loading": "Initializing Agent workspace..."
+      "loading": "Initializing Agent workspace...",
+      "mode": {
+        "single": "Single",
+        "shared": "Shared",
+        "isolated": "Isolated",
+        "autonomous": "Autonomous",
+        "updated": "Mode updated",
+        "updateFailed": "Failed to update mode",
+        "label": "Mode",
+        "summaryLabel": "Actor model",
+        "participantsLabel": "Participants",
+        "coordinatorLabel": "Coordinator",
+        "focusedLabel": "Focused agent",
+        "derivedRoleAutonomous": "Leader/worker runtime role is derived from attempt context and the linked workspace task.",
+        "derivedRoleIsolated": "In isolated mode, routing prefers the focused agent before coordinator fallback.",
+        "derivedRoleShared": "Conversation roles stay conversation-scoped; runtime authority is still derived at execution time."
+      },
+      "task": {
+        "updated": "Linked task updated",
+        "updateFailed": "Failed to update linked task",
+        "label": "Linked workspace task",
+        "placeholder": "Pick a workspace task...",
+        "hint": "Goal, budget and termination are driven by the linked task.",
+        "summaryLabel": "Linked task"
+      }
+    },
+    "groupChat": {
+      "title": "Workspace Chat",
+      "subtitle": "Collaborate with team members and agents"
+    },
+    "selectAgent": "Select Agent",
+    "availableAgents": "Available Agents",
+    "noAgentsAvailable": "No agents available",
+    "enabled": "Enabled",
+    "graph": {
+      "title": "Agent Graph",
+      "clear": "Clear",
+      "noActiveRun": "No active graph run",
+      "noNodes": "Waiting for nodes to start..."
     },
     "multiAgent": {
       "status": {
@@ -4607,7 +5024,8 @@
       "approveAll": "Approve All",
       "rejectAll": "Reject All",
       "newToolInput": "New Tool Input",
-      "empty": "No adjustments to review"
+      "empty": "No adjustments to review",
+      "listLabel": "Step adjustments"
     },
     "activityTimeline": {
       "title": "Activity Timeline",
@@ -4977,10 +5395,27 @@
       "switchToVideo": "Switch to video",
       "switchToAudio": "Switch to audio",
       "deviceSettings": "Device settings",
-      "endCall": "End call"
+      "endCall": "End call",
+      "noDevices": "No devices found",
+      "closeDeviceSettings": "Close device settings",
+      "microphone": "Microphone",
+      "speaker": "Speaker",
+      "camera": "Camera",
+      "expandPanel": "Expand voice call panel",
+      "connecting": "Connecting...",
+      "error": "Error",
+      "minimizePanel": "Minimize voice call panel"
     },
     "layout": {
-      "resizePanels": "Resize panels"
+      "resizePanels": "Resize panels",
+      "searchCurrentConversation": "Search current conversation",
+      "searchCurrentConversationPlaceholder": "Search current conversation...",
+      "online": "Agent Online",
+      "viewExecutionHistory": "View execution history",
+      "viewWorkflowPatterns": "View workflow patterns"
+    },
+    "collab": {
+      "noWorkspace": "No workspace selected"
     },
     "lifecycle": {
       "states": {
@@ -5192,6 +5627,7 @@
       "edit": "Edit",
       "bookmark": "Bookmark",
       "share": "Share",
+      "export": "Export",
       "exportMarkdown": "Export as Markdown",
       "exportPdf": "Export as PDF",
       "pin": "Pin",
@@ -5212,7 +5648,8 @@
     "thread": {
       "reply": "Reply",
       "replies": "{{count}} replies",
-      "replyPlaceholder": "Write a reply..."
+      "replyPlaceholder": "Write a reply...",
+      "sendReply": "Send reply"
     },
     "thinking": {
       "title": "Thinking",
@@ -5319,11 +5756,16 @@
       "newLabel": "New label",
       "labels": "Labels",
       "removeLabel": "Remove",
-      "menu": "Menu"
+      "menu": "Menu",
+      "selectLabelColor": "Select {{color}} label color",
+      "openConversation": "Open {{title}}",
+      "expandProjectSidebar": "Expand project sidebar for {{project}}",
+      "cancelNewLabel": "Cancel new label"
     },
     "summary": {
       "title": "Conversation Summary",
       "showSummary": "Show summary",
+      "collapse": "Collapse summary",
       "regenerate": "Regenerate summary",
       "generating": "Generating summary..."
     },
@@ -5340,7 +5782,10 @@
       "steps": "{{count}} steps",
       "noDescription": "No description",
       "fileGenerated": "File Generated",
+      "imageLoadFailed": "Failed to load image",
       "download": "Download",
+      "refreshing": "Refreshing...",
+      "refreshLink": "Refresh",
       "uploading": "Uploading...",
       "uploadFailed": "Upload failed",
       "openInCanvas": "Canvas",
@@ -5351,8 +5796,11 @@
       "planPlaceholder": "Describe what you want to plan in detail...",
       "planModeActive": "Plan Mode Active",
       "attachFiles": "Attach files (or drag & drop)",
+      "attachNotSupported": "Current model does not support file attachments",
       "enterPlanMode": "Enter Plan Mode",
       "exitPlanMode": "Exit Plan Mode",
+      "planModeLabel": "Plan Mode",
+      "planModeHint": "Read-only analysis. Agent will plan without making changes.",
       "plan": "Plan",
       "stop": "Stop",
       "send": "Send",
@@ -5363,12 +5811,21 @@
       "modeToggle": "Toggle input mode",
       "chatMode": "Chat",
       "commandMode": "Command",
-      "commandPlaceholder": "Enter a command..."
+      "commandPlaceholder": "Enter a command...",
+      "removeSelectedSkill": "Remove /{{name}} skill",
+      "removeSelectedSubAgent": "Remove @{{name}} subagent",
+      "retryAttachmentUpload": "Retry upload for {{filename}}",
+      "removeAttachment": "Remove {{filename}} attachment",
+      "advancedSettings": "Advanced settings"
+    },
+    "mention": {
+      "label": "Mention an agent"
     },
     "mentions": {
       "title": "Mention entities or memories",
       "noResults": "No results found",
       "typeToSearch": "Type to search...",
+      "coordinator": "Coordinator",
       "loadSubAgentsFailed": "Failed to load sub-agents",
       "searchFailed": "Failed to search mentions"
     },
@@ -5377,7 +5834,10 @@
       "loading": "Loading skills...",
       "matching": "Skills matching \"{{query}}\"",
       "noMatch": "No skills matching \"{{query}}\"",
-      "noSkills": "No active skills available"
+      "noSkills": "No active skills available",
+      "noItems": "No commands or skills available",
+      "groupCommands": "Commands",
+      "groupSkills": "Skills"
     },
     "shortcuts": {
       "title": "Keyboard Shortcuts",
@@ -5397,7 +5857,8 @@
       "canvasMode": "Canvas mode (split)",
       "searchChat": "Search in conversation",
       "focusInput": "Focus input / Slash commands",
-      "navMessages": "Navigate messages"
+      "navMessages": "Navigate messages",
+      "close": "Close keyboard shortcuts"
     },
     "canvas": {
       "emptyTitle": "Canvas",
@@ -5431,6 +5892,9 @@
       "newCode": "New Code",
       "newMarkdown": "New Markdown",
       "newNote": "New Note",
+      "pinTab": "Pin {{title}}",
+      "unpinTab": "Unpin {{title}}",
+      "closeTab": "Close {{title}}",
       "selectOption": "Select an option",
       "readOnlyFormPreview": "Read-only form preview",
       "actions": {
@@ -5524,7 +5988,10 @@
       "title": "Background Tasks",
       "empty": "No background tasks",
       "clear": "Clear",
-      "clearAll": "Clear all"
+      "clearAll": "Clear all",
+      "kill": "Stop execution",
+      "hideDetails": "Hide details",
+      "showDetails": "Show details"
     },
     "undo": {
       "title": "Undo Action",
@@ -5587,7 +6054,10 @@
     },
     "search": {
       "placeholder": "Search in conversation...",
-      "noResults": "0 results"
+      "noResults": "0 results",
+      "previousResult": "Previous result",
+      "nextResult": "Next result",
+      "closeSearch": "Close search"
     },
     "state": {
       "thinking": "Thinking",
@@ -5615,8 +6085,8 @@
       "layoutDesc": "Switch between Chat, Code, Desktop, Focus, and Canvas modes with Cmd+1-5.",
       "templateTip": "Quick-start templates",
       "templateDesc": "Browse pre-built prompts for common tasks.",
-      "searchTip": "Search conversations",
-      "searchDesc": "Use Cmd+F to search within any conversation.",
+      "searchTip": "Search within a conversation",
+      "searchDesc": "Open a conversation, then use the header search control or Cmd+F.",
       "ariaLabel": "Onboarding tour",
       "next": "Next",
       "skip": "Skip tour",
@@ -5628,6 +6098,17 @@
       "highContrastDescription": "Enhanced visibility with stronger colors and borders"
     },
     "hitl": {
+      "center": {
+        "aria": "Pending HITL requests",
+        "title": "HITL Center",
+        "filterAria": "Filter by HITL type",
+        "loading": "Loading...",
+        "error": "Failed to load HITL requests",
+        "empty": "No pending requests.",
+        "accept": "Accept",
+        "reject": "Reject",
+        "open": "Open"
+      },
       "title": {
         "clarification": "Needs clarification",
         "decision": "Needs decision",
@@ -5719,18 +6200,27 @@
       "status": {
         "not_started": "Not started",
         "waiting": "Waiting",
+        "pending_desc": "Sandbox is queued for startup",
         "creating": "Creating",
+        "creating_desc": "Creating sandbox container",
         "running": "Running",
+        "running_desc": "Sandbox is running normally",
         "unhealthy": "Unhealthy",
+        "unhealthy_desc": "Sandbox health checks are failing",
         "stopped": "Stopped",
+        "stopped_desc": "Sandbox stopped, click to restart",
         "terminated": "Terminated",
-        "error": "Error"
+        "terminated_desc": "Sandbox has been terminated",
+        "error": "Error",
+        "error_desc": "Sandbox encountered an error",
+        "starting": "Starting"
       },
       "label": "Sandbox environment",
       "click_to_start": "Click to start sandbox",
       "toast": {
         "started": "Sandbox started",
         "start_failed": "Failed to start sandbox",
+        "unknown_error": "Unknown error",
         "restarted": "Sandbox restarted",
         "restart_failed": "Failed to restart sandbox",
         "stopped": "Sandbox stopped",
@@ -5782,9 +6272,25 @@
       "updatedAt": "Updated: {{time}}"
     },
     "participants": {
+      "aria": "Conversation participants",
+      "title": "Participants",
+      "loading": "Loading roster...",
+      "error": "Failed to load roster",
+      "empty": "No agents in this conversation.",
+      "sourceWorkspace": "workspace",
+      "sourceConversation": "conversation",
+      "coordinator": "coordinator",
+      "focused": "focused",
+      "setFocused": "Set as focused agent",
       "setFocusedFor": "Set {{name}} as focused agent",
+      "setCoordinator": "Set as coordinator",
       "setCoordinatorFor": "Set {{name}} as coordinator",
-      "remove": "Remove {{name}}"
+      "remove": "Remove {{name}}",
+      "autonomousRequiresCoordinator": "Autonomous mode requires a coordinator. Click ★ on a participant to assign.",
+      "isolatedSuggestsFocused": "Isolated mode works best with one focused agent. Click ◎ on a participant to set it.",
+      "noneAvailable": "No more agents available. Add agents to the linked workspace to see them here.",
+      "addLabel": "Add agent",
+      "addPlaceholder": "Select an agent..."
     }
   },
   "user_profile": {
@@ -5796,6 +6302,9 @@
     "no_location": "No Location",
     "member_since": "Member since {{date}}",
     "profile_completion": "Profile Completion",
+    "avatar": {
+      "change": "Change avatar"
+    },
     "tabs": {
       "label": "Tabs",
       "basic": "Basic Info",
@@ -5809,6 +6318,8 @@
       "full_name": "Full Name",
       "job_title": "Job Title",
       "department": "Department",
+      "avatar_url": "Avatar URL",
+      "avatar_url_placeholder": "https://example.com/avatar.png",
       "departments": {
         "engineering": "Engineering",
         "product": "Product",
@@ -5829,8 +6340,7 @@
       "language": "Language",
       "languages": {
         "enUS": "English (US)",
-        "zhSimplified": "Chinese (Simplified)",
-        "japanese": "Japanese"
+        "zhSimplified": "Chinese (Simplified)"
       },
       "timezone": "Timezone",
       "timezones": {
@@ -5838,6 +6348,12 @@
         "eastern": "Eastern Time (US & Canada)",
         "london": "London (UTC)"
       }
+    },
+    "security": {
+      "title": "Security",
+      "password_title": "Password",
+      "password_desc": "Review your current password and change it from the dedicated security flow.",
+      "change_password": "Change password"
     },
     "buttons": {
       "cancel": "Cancel",
@@ -6124,6 +6640,9 @@
     "taskExperience": {
       "title": "Task experience",
       "close": "Close task details",
+      "loadFailed": "Task experience could not be loaded.",
+      "recoveryQueued": "Recovery action has been recorded.",
+      "recoveryFailed": "Recovery action could not be applied.",
       "tabs": {
         "overview": "Overview",
         "contract": "Goal Contract",
@@ -6224,6 +6743,7 @@
     },
     "objectives": {
       "title": "Objectives & Key Results",
+      "emptySummary": "Start with one shared objective so the blackboard has a clear outcome to anchor tasks and discussion.",
       "addObjective": "Add Objective",
       "noObjectives": "No objectives found",
       "createFirst": "Create Your First Objective",
@@ -6398,7 +6918,10 @@
       "actions": {
         "pause": "Pause",
         "resume": "Resume",
-        "terminate": "Terminate"
+        "terminate": "Terminate",
+        "pauseInstance": "Pause {{instance}}",
+        "resumeInstance": "Resume {{instance}}",
+        "terminateInstance": "Terminate {{instance}}"
       },
       "confirm": {
         "terminateInstance": "Terminate this instance?"
@@ -6589,12 +7112,14 @@
     "source": "Source",
     "date": "Date",
     "filterByType": "Filter by type",
+    "filterByDateRange": "Filter by date range",
     "noEvents": "No events found"
   },
   "device": {
     "title": "Connect a device",
     "subtitle": "Enter the 8-character code shown in your terminal to grant access.",
     "codeLabel": "Device code",
+    "codePlaceholder": "ABCD1234",
     "approve": "Approve",
     "invalidCode": "Enter the 8-character code shown in your terminal.",
     "approvedTitle": "Device approved",
@@ -6846,6 +7371,9 @@
       "runtimeError": "Error",
       "runtimeDisabled": "Disabled",
       "runtimeUnknown": "Unknown",
+      "enabledFilterLabel": "Filter servers by enabled state",
+      "typeFilterLabel": "Filter servers by transport type",
+      "runtimeFilterLabel": "Filter servers by runtime status",
       "refreshTooltip": "Refresh list",
       "reconcileTooltip": "Reconcile runtime with sandbox",
       "reconcileButton": "Reconcile",
@@ -6909,6 +7437,8 @@
       "saveFailed": "Save failed, please try again later",
       "linkCopied": "Link copied to clipboard!",
       "linkCopyFailed": "Failed to copy link",
+      "exportSuccess": "Memory exported",
+      "exportFailed": "Failed to export memory",
       "titlePlaceholder": "Memory Title",
       "userPrefix": "User:",
       "createdPrefix": "Created:",
@@ -6943,7 +7473,9 @@
       "createMemory": "Create Memory",
       "deleteConfirm": "Are you sure you want to delete this memory? This action cannot be undone.",
       "entitiesLabel": "Entities",
-      "relationshipsLabel": "Relationships"
+      "relationshipsLabel": "Relationships",
+      "viewMemory": "View {{title}}",
+      "deleteMemory": "Delete {{title}}"
     },
     "create": {
       "title": "Create Memory",
@@ -7187,6 +7719,7 @@
         "removeConfirm": "Are you sure you want to remove this assignment?",
         "unassignFailed": "Failed to unassign provider",
         "noneAssigned": "No provider assigned",
+        "emptyDescription": "No provider assigned. System defaults will be used.",
         "configuredCount": "{{count}} provider(s) configured",
         "editTitle": "Edit Assignment",
         "removeTitle": "Remove Assignment",
@@ -7198,7 +7731,8 @@
         "setDefaultProvider": "Set as default provider",
         "type": "Type:",
         "created": "Created:",
-        "updated": "Updated:"
+        "updated": "Updated:",
+        "close": "Close provider dialog"
       },
       "config": {
         "usePresetModel": "Use preset model",
@@ -7223,7 +7757,8 @@
         "secretKey": "Secret Key:",
         "speechAppId": "Speech App ID:",
         "speechAccessToken": "Speech Access Token:",
-        "endpointId": "Endpoint ID:"
+        "endpointId": "Endpoint ID:",
+        "close": "Close provider configuration"
       },
       "modelCatalog": {
         "providerIconAria": "provider",

@@ -227,4 +227,42 @@ describe('MemoryList', () => {
       expect(screen.queryByText('Banana Memory')).not.toBeInTheDocument();
     });
   });
+
+  it('filters memories by content type', async () => {
+    vi.mocked(memoryAPI.list).mockResolvedValue({
+      memories: [
+        {
+          id: 'm1',
+          title: 'Text Memory',
+          content: 'Plain note',
+          content_type: 'text',
+          processing_status: 'COMPLETED',
+        } as Memory,
+        {
+          id: 'm2',
+          title: 'Document Memory',
+          content: 'Uploaded document',
+          content_type: 'document',
+          processing_status: 'COMPLETED',
+        } as Memory,
+      ],
+      total: 2,
+      page: 1,
+      page_size: 100,
+    });
+
+    renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Text Memory')).toBeInTheDocument();
+      expect(screen.getByText('Document Memory')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('Memory type'), {
+      target: { value: 'document' },
+    });
+
+    expect(screen.queryByText('Text Memory')).not.toBeInTheDocument();
+    expect(screen.getByText('Document Memory')).toBeInTheDocument();
+  });
 });

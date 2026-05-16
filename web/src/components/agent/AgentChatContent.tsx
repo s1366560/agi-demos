@@ -58,6 +58,7 @@ import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
+import { subscribeToAgentChatSearchRequests } from './chat/searchEvents';
 import { ShortcutOverlay } from './chat/ShortcutOverlay';
 import { ConversationCompareView } from './comparison/ConversationCompareView';
 import { ConversationPickerModal } from './comparison/ConversationPickerModal';
@@ -326,6 +327,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         // Don't auto-switch, just let the user know via the layout selector
       }
     }, [tasks.length, layoutMode]);
+
+    useEffect(() => {
+      return subscribeToAgentChatSearchRequests(() => {
+        setChatSearchVisible(true);
+      });
+    }, []);
 
     // Cmd+F to open chat search, / to focus input, Shift+Tab to toggle plan mode
     useEffect(() => {

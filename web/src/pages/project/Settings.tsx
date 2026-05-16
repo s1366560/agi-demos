@@ -139,6 +139,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
           </label>
           <input
             type="text"
+            aria-label={t('project.settings.basicName')}
             value={data.name}
             onChange={(e) => {
               onNameChange(e.target.value);
@@ -152,6 +153,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
             {t('project.settings.basicDescription')}
           </label>
           <textarea
+            aria-label={t('project.settings.basicDescription')}
             value={data.description}
             onChange={(e) => {
               onDescriptionChange(e.target.value);
@@ -221,6 +223,7 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             </label>
             <input
               type="number"
+              aria-label={t('project.settings.memoryMaxEpisodes')}
               value={data.maxEpisodes}
               onChange={(e) => {
                 onMaxEpisodesChange(Number(e.target.value));
@@ -234,6 +237,7 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             </label>
             <input
               type="number"
+              aria-label={t('project.settings.memoryRetention')}
               value={data.retentionDays}
               onChange={(e) => {
                 onRetentionDaysChange(Number(e.target.value));
@@ -265,6 +269,7 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
             </label>
             <input
               type="number"
+              aria-label={t('project.settings.memoryInterval')}
               value={data.refreshInterval}
               onChange={(e) => {
                 onRefreshIntervalChange(Number(e.target.value));
@@ -319,6 +324,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             </label>
             <input
               type="number"
+              aria-label={t('project.settings.graphMaxNodes')}
               value={data.maxNodes}
               onChange={(e) => {
                 onMaxNodesChange(Number(e.target.value));
@@ -332,6 +338,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             </label>
             <input
               type="number"
+              aria-label={t('project.settings.graphMaxEdges')}
               value={data.maxEdges}
               onChange={(e) => {
                 onMaxEdgesChange(Number(e.target.value));
@@ -347,6 +354,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
           </label>
           <input
             type="range"
+            aria-label={t('project.settings.graphThreshold')}
             min="0"
             max="1"
             step="0.05"
@@ -854,7 +862,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
 
     setMessage(null);
     try {
-      await api.post('/communities/rebuild');
+      await api.post('/graph/communities/rebuild');
       setMessage({ type: 'success', text: t('project.settings.advancedRebuildSuccess') });
     } catch (error) {
       console.error('Failed to rebuild communities:', error);
@@ -867,7 +875,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
 
     setMessage(null);
     try {
-      const response = await api.post('/export', {
+      const data = await api.post('/data/export', {
         tenant_id: currentProject.tenant_id,
         include_episodes: true,
         include_entities: true,
@@ -875,8 +883,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
         include_communities: true,
       });
 
-      const data = response as { data: unknown };
-      const jsonString = JSON.stringify(data.data, null, 2);
+      const jsonString = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

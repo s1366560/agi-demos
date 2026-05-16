@@ -1,28 +1,80 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Steps, Form, Input, InputNumber, Space, Descriptions } from 'antd';
 
 import { LazyButton, LazySelect, useLazyMessage } from '@/components/ui/lazyAntd';
 
+import { instanceTemplateService } from '../../services/instanceTemplateService';
 import { useClusters, useClusterActions } from '../../stores/cluster';
 import { useInstanceActions } from '../../stores/instance';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 import { useWorkspaces, useWorkspaceStore } from '../../stores/workspace';
 
+import { parseInstanceJsonObject } from './utils/createInstanceUtils';
+
 import type { InstanceCreate } from '../../services/instanceService';
+import type { InstanceTemplateResponse } from '../../services/instanceTemplateService';
+
+type InstanceFormValues = Partial<
+  Omit<InstanceCreate, 'advanced_config' | 'env_vars' | 'llm_providers'>
+> & {
+  advanced_config?: Record<string, unknown> | string | undefined;
+  env_vars?: Record<string, unknown> | string | undefined;
+  llm_providers?: Record<string, unknown> | string | undefined;
+};
+
+const slugifyInstanceName = (name: string): string =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 255) || 'instance';
+
+const stringifyJsonField = (value: unknown): unknown =>
+  value && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value, null, 2) : value;
+
+const buildTemplateInitialValues = (
+  template: InstanceTemplateResponse
+): InstanceFormValues => {
+  const values = Object.entries(template.default_config).reduce<Record<string, unknown>>(
+    (acc, [key, value]) => {
+      acc[key] =
+        key === 'env_vars' || key === 'advanced_config' || key === 'llm_providers'
+          ? stringifyJsonField(value)
+          : value;
+      return acc;
+    },
+    {}
+  );
+
+  if (!values.name) {
+    values.name = `${template.name} Instance`;
+  }
+  if (!values.slug) {
+    values.slug = slugifyInstanceName(`${template.slug || template.name}-instance`);
+  }
+  if (!values.image_version && template.image_version) {
+    values.image_version = template.image_version;
+  }
+
+  return values as InstanceFormValues;
+};
 
 export const CreateInstance: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [form] = Form.useForm<Partial<InstanceCreate>>();
+  const [searchParams] = useSearchParams();
+  const [form] = Form.useForm<InstanceFormValues>();
   const messageApi = useLazyMessage();
 
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<Partial<InstanceCreate>>({});
+  const [formData, setFormData] = useState<InstanceFormValues>({});
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
 
   const { createInstance } = useInstanceActions();
   const clusters = useClusters();
@@ -31,6 +83,7 @@ export const CreateInstance: React.FC = () => {
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
   const tenantId = useTenantStore((s) => s.currentTenant?.id);
   const projectId = useProjectStore((s) => s.currentProject?.id);
+  const templateId = searchParams.get('templateId');
 
   useEffect(() => {
     listClusters().catch((err: unknown) => {
@@ -42,6 +95,37 @@ export const CreateInstance: React.FC = () => {
       });
     }
   }, [listClusters, loadWorkspaces, tenantId, projectId]);
+
+  useEffect(() => {
+    if (!templateId || appliedTemplateId === templateId) return;
+
+    let cancelled = false;
+
+    instanceTemplateService
+      .getById(templateId)
+      .then((template) => {
+        if (cancelled) return;
+        const values = buildTemplateInitialValues(template);
+        form.setFieldsValue(values);
+        setFormData((previous) => ({ ...values, ...previous }));
+        setAppliedTemplateId(templateId);
+        messageApi?.success(
+          t('tenant.instances.create.templateApplied', 'Template defaults applied')
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error('Failed to load instance template:', err);
+        messageApi?.error(
+          t('tenant.instances.create.templateLoadError', 'Failed to load template defaults')
+        );
+        setAppliedTemplateId(templateId);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedTemplateId, form, messageApi, t, templateId]);
 
   const handleNameChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,6 +141,28 @@ export const CreateInstance: React.FC = () => {
       }
     },
     [form]
+  );
+
+  const getJsonObjectRule = useCallback(
+    (fieldLabel: string) => ({
+      validator: (_: unknown, value: unknown) => {
+        if (!value) return Promise.resolve();
+        try {
+          parseInstanceJsonObject(value);
+        } catch {
+          return Promise.reject(
+            new Error(
+              t('tenant.instances.create.validation.jsonObject', {
+                field: fieldLabel,
+                defaultValue: '{{field}} must be a valid JSON object',
+              })
+            )
+          );
+        }
+        return Promise.resolve();
+      },
+    }),
+    [t]
   );
 
   const formatReviewValue = useCallback((value: unknown): string => {
@@ -294,6 +400,11 @@ export const CreateInstance: React.FC = () => {
             <Form.Item
               name="env_vars"
               label={t('tenant.instances.create.config.env_vars', 'Environment Variables (JSON)')}
+              rules={[
+                getJsonObjectRule(
+                  t('tenant.instances.create.config.env_vars', 'Environment Variables (JSON)')
+                ),
+              ]}
             >
               <Input.TextArea
                 rows={4}
@@ -303,6 +414,11 @@ export const CreateInstance: React.FC = () => {
             <Form.Item
               name="advanced_config"
               label={t('tenant.instances.create.config.advanced_config', 'Advanced Config (JSON)')}
+              rules={[
+                getJsonObjectRule(
+                  t('tenant.instances.create.config.advanced_config', 'Advanced Config (JSON)')
+                ),
+              ]}
             >
               <Input.TextArea
                 rows={4}
@@ -315,6 +431,11 @@ export const CreateInstance: React.FC = () => {
             <Form.Item
               name="llm_providers"
               label={t('tenant.instances.create.config.llm_providers', 'LLM Providers (JSON)')}
+              rules={[
+                getJsonObjectRule(
+                  t('tenant.instances.create.config.llm_providers', 'LLM Providers (JSON)')
+                ),
+              ]}
             >
               <Input.TextArea
                 rows={4}
@@ -411,24 +532,11 @@ export const CreateInstance: React.FC = () => {
         ),
       },
     ],
-    [t, clusters, handleNameChange, formData, workspaces, formatReviewValue]
+    [t, clusters, handleNameChange, formData, workspaces, formatReviewValue, getJsonObjectRule]
   );
 
   const parseJsonField = useCallback((val: unknown): Record<string, unknown> | undefined => {
-    if (!val) return undefined;
-    if (typeof val === 'string') {
-      try {
-        const parsed: unknown = JSON.parse(val);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? (parsed as Record<string, unknown>)
-          : undefined;
-      } catch {
-        return undefined;
-      }
-    }
-    return typeof val === 'object' && !Array.isArray(val)
-      ? (val as Record<string, unknown>)
-      : undefined;
+    return parseInstanceJsonObject(val);
   }, []);
 
   const handleNext = useCallback(() => {
@@ -440,7 +548,7 @@ export const CreateInstance: React.FC = () => {
         .validateFields(fieldsToValidate)
         .then((values: unknown) => {
           const nextValues =
-            values && typeof values === 'object' ? (values as Partial<InstanceCreate>) : {};
+            values && typeof values === 'object' ? (values as InstanceFormValues) : {};
           setFormData((prev) => ({ ...prev, ...nextValues }));
           setCurrentStep((prev) => prev + 1);
         })
@@ -457,33 +565,47 @@ export const CreateInstance: React.FC = () => {
   }, []);
 
   const handleSubmit = useCallback(() => {
-    const finalData: InstanceCreate = {
-      name: String(formData.name),
-      slug: String(formData.slug),
-      tenant_id: tenantId || 'default',
-      ...formData,
-    };
+    form
+      .validateFields()
+      .then((values: InstanceFormValues) => {
+        const finalFormData = { ...formData, ...values };
+        const finalData: InstanceCreate = {
+          ...finalFormData,
+          name: String(finalFormData.name),
+          slug: String(finalFormData.slug),
+          tenant_id: tenantId || 'default',
+        } as InstanceCreate;
 
-    if (finalData.env_vars)
-      finalData.env_vars = parseJsonField(finalData.env_vars) as Record<string, unknown>;
-    if (finalData.advanced_config)
-      finalData.advanced_config = parseJsonField(finalData.advanced_config) as Record<
-        string,
-        unknown
-      >;
-    if (finalData.llm_providers)
-      finalData.llm_providers = parseJsonField(finalData.llm_providers) as Record<string, unknown>;
+        if (finalData.env_vars) {
+          finalData.env_vars = parseJsonField(finalData.env_vars) as Record<string, unknown>;
+        }
+        if (finalData.advanced_config) {
+          finalData.advanced_config = parseJsonField(finalData.advanced_config) as Record<
+            string,
+            unknown
+          >;
+        }
+        if (finalData.llm_providers) {
+          finalData.llm_providers = parseJsonField(finalData.llm_providers) as Record<
+            string,
+            unknown
+          >;
+        }
 
-    createInstance(finalData)
+        return createInstance(finalData);
+      })
       .then(() => {
         messageApi?.success(t('tenant.instances.create.success', 'Instance created successfully'));
         void navigate('..');
       })
       .catch((err: unknown) => {
+        if (err && typeof err === 'object' && 'errorFields' in err) {
+          return;
+        }
         console.error('Failed to create instance:', err);
         messageApi?.error(t('tenant.instances.create.error', 'Failed to create instance'));
       });
-  }, [formData, createInstance, navigate, t, parseJsonField, messageApi, tenantId]);
+  }, [form, formData, createInstance, navigate, t, parseJsonField, messageApi, tenantId]);
 
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-8">

@@ -50,6 +50,7 @@ export interface MemoryTaskProgress {
 }
 
 type MemoryApiItem = Partial<Memory> & Pick<Memory, 'id'>;
+type MemoryTypeFilter = Memory['content_type'] | 'all';
 
 // ============================================================================
 // Constants
@@ -62,6 +63,13 @@ const TEXTS = {
   searchPlaceholder: 'Search memories...',
   filterLabel: 'Filter',
   allTypes: 'All Types',
+  contentTypeLabel: 'Memory type',
+  contentTypes: {
+    text: 'Text',
+    document: 'Document',
+    image: 'Image',
+    video: 'Video',
+  },
   noMemories: 'No memories yet. Create your first memory to get started.',
   loading: 'Loading...',
   projectNotFound: 'Project not found',
@@ -165,6 +173,7 @@ interface MemoryListState {
   fetchError: string | null;
   search: string;
   debouncedSearch: string;
+  contentTypeFilter: MemoryTypeFilter;
   deletingId: string | null;
   isDeleteModalOpen: boolean;
   memoryToDelete: Memory | null;
@@ -173,6 +182,7 @@ interface MemoryListState {
 
 interface MemoryListActions {
   setSearch: (search: string) => void;
+  setContentTypeFilter: (contentType: MemoryTypeFilter) => void;
   confirmDelete: (memory: Memory) => void;
   handleDelete: () => Promise<void>;
   handleReprocess: (id: string) => Promise<void>;
@@ -219,6 +229,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
+  const [contentTypeFilter, setContentTypeFilter] = useState<MemoryTypeFilter>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
@@ -228,14 +239,15 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
 
   // Filter memories
   const filteredMemories = useMemo(() => {
-    if (!debouncedSearch) return memories;
     const lowerSearch = debouncedSearch.toLowerCase();
     return memories.filter(
       (m) =>
-        m.title.toLowerCase().includes(lowerSearch) ||
-        m.content_type.toLowerCase().includes(lowerSearch)
+        (contentTypeFilter === 'all' || m.content_type === contentTypeFilter) &&
+        (!lowerSearch ||
+          m.title.toLowerCase().includes(lowerSearch) ||
+          m.content_type.toLowerCase().includes(lowerSearch))
     );
-  }, [memories, debouncedSearch]);
+  }, [memories, debouncedSearch, contentTypeFilter]);
 
   // Virtual list
   const virtualizer = useVirtualizer({
@@ -316,6 +328,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
     fetchError,
     search,
     debouncedSearch,
+    contentTypeFilter,
     deletingId,
     isDeleteModalOpen,
     memoryToDelete,
@@ -324,6 +337,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
 
   const actions: MemoryListActions = {
     setSearch,
+    setContentTypeFilter,
     confirmDelete,
     handleDelete,
     handleReprocess,
@@ -400,14 +414,12 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
         </h1>
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
       </div>
-      <Link to={`${projectBasePath}/memories/new`}>
-        <button
-          type="button"
-          className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
-        >
-          <Plus size={18} />
-          <span>{TEXTS.addMemory}</span>
-        </button>
+      <Link
+        to={`${projectBasePath}/memories/new`}
+        className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+      >
+        <Plus size={18} />
+        <span>{TEXTS.addMemory}</span>
       </Link>
     </div>
   );
@@ -423,16 +435,23 @@ interface ToolbarProps {
   className?: string | undefined;
   search?: string | undefined;
   onSearchChange?: ((value: string) => void) | undefined;
+  contentTypeFilter?: MemoryTypeFilter | undefined;
+  onContentTypeFilterChange?: ((value: MemoryTypeFilter) => void) | undefined;
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = ({
   className = '',
   search: propSearch,
   onSearchChange: propOnSearchChange,
+  contentTypeFilter: propContentTypeFilter,
+  onContentTypeFilterChange: propOnContentTypeFilterChange,
 }) => {
   const context = useMemoryListContextOptional();
   const search = propSearch ?? context?.state.search ?? '';
   const onSearchChange = propOnSearchChange ?? context?.actions.setSearch;
+  const contentTypeFilter = propContentTypeFilter ?? context?.state.contentTypeFilter ?? 'all';
+  const onContentTypeFilterChange =
+    propOnContentTypeFilterChange ?? context?.actions.setContentTypeFilter;
 
   return (
     <div
@@ -454,13 +473,29 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
           {TEXTS.filterLabel}
         </span>
-        <button
-          type="button"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 text-sm font-medium whitespace-nowrap transition-colors"
-        >
-          {TEXTS.allTypes}
-          <ChevronDown size={18} />
-        </button>
+        <label className="sr-only" htmlFor="memory-type-filter">
+          {TEXTS.contentTypeLabel}
+        </label>
+        <div className="relative">
+          <select
+            id="memory-type-filter"
+            value={contentTypeFilter}
+            onChange={(event) => {
+              onContentTypeFilterChange?.(event.target.value as MemoryTypeFilter);
+            }}
+            className="appearance-none rounded-lg border border-blue-600/20 bg-blue-600/10 py-1.5 pl-3 pr-8 text-sm font-medium text-blue-600 transition-colors hover:border-blue-600/40 focus:outline-none focus:ring-2 focus:ring-blue-600/20 dark:text-blue-400"
+          >
+            <option value="all">{TEXTS.allTypes}</option>
+            <option value="text">{TEXTS.contentTypes.text}</option>
+            <option value="document">{TEXTS.contentTypes.document}</option>
+            <option value="image">{TEXTS.contentTypes.image}</option>
+            <option value="video">{TEXTS.contentTypes.video}</option>
+          </select>
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 dark:text-blue-400"
+          />
+        </div>
       </div>
     </div>
   );

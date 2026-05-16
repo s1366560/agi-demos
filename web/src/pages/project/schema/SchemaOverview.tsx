@@ -1,10 +1,11 @@
-import { useMemo, memo } from 'react';
+import { useCallback, useMemo, useState, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 
 import {
   Code,
+  Copy,
   Download,
   Search,
   Plus,
@@ -16,6 +17,8 @@ import {
 } from 'lucide-react';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
+
+import { message } from '@/components/ui/lazyAntd';
 
 import { useSchemaData } from '../../../hooks/useSwr';
 
@@ -46,6 +49,78 @@ function schemaValueLabel(value: unknown): string {
     if (typeof typeValue === 'string') return typeValue;
   }
   return 'unknown';
+}
+
+function schemaValueSearchText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value === null || value === undefined) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+function schemaRecordSearchText(schema?: Record<string, unknown>): string {
+  return schemaEntries(schema)
+    .map(([key, value]) => `${key} ${schemaValueSearchText(value)}`)
+    .join(' ');
+}
+
+function matchesEntity(entity: SchemaEntityOverview, query: string): boolean {
+  const haystack = [
+    entity.name,
+    entity.display_name,
+    entity.description,
+    entity.source,
+    entity.status,
+    schemaRecordSearchText(entity.schema ?? entity.properties),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
+function matchesEdge(
+  edge: SchemaEdgeOverview,
+  mappings: SchemaMappingOverview[],
+  query: string
+): boolean {
+  const edgeMappings = mappings
+    .filter((mapping) => mapping.edge_type === edge.name)
+    .map((mapping) => `${mapping.source_type} ${mapping.target_type} ${mapping.source ?? ''}`)
+    .join(' ');
+  const haystack = [
+    edge.name,
+    edge.display_name,
+    edge.description,
+    edge.source,
+    edge.status,
+    edge.source_entity_type,
+    edge.target_entity_type,
+    schemaRecordSearchText(edge.schema ?? edge.properties),
+    edgeMappings,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
+function downloadJson(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 // Memoized entity card component to prevent unnecessary re-renders
@@ -81,9 +156,12 @@ const EntityCard = memo(({ entity, t }: EntityCardProps) => {
             </p>
           </div>
         </div>
-        <button className="text-slate-400 dark:text-text-muted-light hover:text-slate-900 dark:hover:text-white transition-colors">
+        <span
+          aria-hidden="true"
+          className="text-slate-400 dark:text-text-muted-light transition-colors"
+        >
           <MoreVertical className="w-5 h-5" />
-        </button>
+        </span>
       </div>
       <div className="h-px w-full bg-slate-100 dark:bg-surface-dark-alt"></div>
       <div className="flex flex-col gap-2">
@@ -146,9 +224,12 @@ const EdgeCard = memo(({ edge, mappings, t }: EdgeCardProps) => (
           </p>
         </div>
       </div>
-      <button className="text-slate-400 dark:text-text-muted-light hover:text-slate-900 dark:hover:text-white transition-colors">
+      <span
+        aria-hidden="true"
+        className="text-slate-400 dark:text-text-muted-light transition-colors"
+      >
         <MoreVertical className="w-5 h-5" />
-      </button>
+      </span>
     </div>
     <EdgeMappings edgeName={edge.name} mappings={mappings} t={t} />
     <EdgeAttributes edge={edge} t={t} />
@@ -247,6 +328,51 @@ export default function SchemaOverview() {
   const { t } = useTranslation();
   const { projectBasePath } = useProjectBasePath();
   const { entities = [], edges = [], mappings = [], isLoading } = useSchemaData(projectId);
+  const [isJsonVisible, setIsJsonVisible] = useState(false);
+  const [isCopyingJson, setIsCopyingJson] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const schemaJson = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          project_id: projectId ?? null,
+          generated_at: new Date().toISOString(),
+          entities,
+          edges,
+          mappings,
+        },
+        null,
+        2
+      ),
+    [edges, entities, mappings, projectId]
+  );
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredEntities = useMemo(() => {
+    if (normalizedSearchQuery.length === 0) return entities;
+    return entities.filter((entity) => matchesEntity(entity, normalizedSearchQuery));
+  }, [entities, normalizedSearchQuery]);
+  const filteredEdges = useMemo(() => {
+    if (normalizedSearchQuery.length === 0) return edges;
+    return edges.filter((edge) => matchesEdge(edge, mappings, normalizedSearchQuery));
+  }, [edges, mappings, normalizedSearchQuery]);
+
+  const handleCopyJson = useCallback(async () => {
+    setIsCopyingJson(true);
+    try {
+      await navigator.clipboard.writeText(schemaJson);
+      void message.success(t('project.schema.overview.copy_success'));
+    } catch {
+      void message.error(t('project.schema.overview.copy_failed'));
+    } finally {
+      setIsCopyingJson(false);
+    }
+  }, [schemaJson, t]);
+
+  const handleDownloadJson = useCallback(() => {
+    downloadJson(`memstack-schema-${projectId ?? 'project'}.json`, schemaJson);
+  }, [projectId, schemaJson]);
 
   if (isLoading) {
     return (
@@ -269,16 +395,84 @@ export default function SchemaOverview() {
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 dark:border-surface-dark-alt bg-white dark:bg-background-dark text-slate-700 dark:text-white text-sm font-semibold hover:bg-slate-50 dark:hover:bg-surface-dark-alt transition-colors shadow-sm">
+              <button
+                type="button"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 dark:border-surface-dark-alt bg-white dark:bg-background-dark text-slate-700 dark:text-white text-sm font-semibold hover:bg-slate-50 dark:hover:bg-surface-dark-alt transition-colors shadow-sm"
+                aria-controls="schema-json-panel"
+                aria-expanded={isJsonVisible}
+                onClick={() => {
+                  setIsJsonVisible((visible) => !visible);
+                }}
+              >
                 <Code className="w-5 h-5" />
                 {t('project.schema.overview.view_json')}
               </button>
-              <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 dark:bg-primary text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20">
+              <button
+                type="button"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 dark:bg-primary text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
+                onClick={handleDownloadJson}
+              >
                 <Download className="w-5 h-5" />
                 {t('project.schema.overview.export_schema')}
               </button>
             </div>
           </div>
+
+          {isJsonVisible && (
+            <section
+              id="schema-json-panel"
+              aria-label={t('project.schema.overview.json_panel_label')}
+              className="rounded-xl border border-slate-200 dark:border-surface-dark-alt bg-white dark:bg-surface-dark shadow-sm overflow-hidden"
+            >
+              <div className="flex flex-col gap-3 border-b border-slate-200 dark:border-surface-dark-alt px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {t('project.schema.overview.json_panel_title')}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-text-muted">
+                    {t('project.schema.overview.json_panel_description')}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-surface-dark-alt px-3 py-2 text-sm font-semibold text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-surface-dark-alt disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isCopyingJson}
+                    onClick={() => {
+                      void handleCopyJson();
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                    {t('project.schema.overview.copy_json')}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-surface-dark-alt px-3 py-2 text-sm font-semibold text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-surface-dark-alt"
+                    onClick={handleDownloadJson}
+                  >
+                    <Download className="w-4 h-4" />
+                    {t('common.download')}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-lg border border-transparent px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-text-muted dark:hover:bg-background-dark dark:hover:text-white"
+                    onClick={() => {
+                      setIsJsonVisible(false);
+                    }}
+                  >
+                    {t('common.close')}
+                  </button>
+                </div>
+              </div>
+              <pre
+                tabIndex={0}
+                aria-label={t('project.schema.overview.json_code_label')}
+                className="max-h-[420px] overflow-auto bg-slate-950 p-4 text-xs leading-relaxed text-slate-100 sm:text-sm"
+              >
+                <code>{schemaJson}</code>
+              </pre>
+            </section>
+          )}
 
           {/* Search & Filters */}
           <div className="w-full">
@@ -287,14 +481,21 @@ export default function SchemaOverview() {
                 <Search className="text-slate-400 dark:text-text-muted group-focus-within:text-slate-600 dark:group-focus-within:text-white transition-colors w-5 h-5" />
               </div>
               <input
-                className="w-full h-12 pl-12 pr-4 bg-white dark:bg-surface-dark-alt border border-slate-200 dark:border-transparent focus:border-blue-500 dark:focus:border-primary/50 focus:ring-0 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-text-muted text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none shadow-sm"
+                className="w-full h-12 pl-12 pr-24 bg-white dark:bg-surface-dark-alt border border-slate-200 dark:border-transparent focus:border-blue-500 dark:focus:border-primary/50 focus:ring-0 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-text-muted text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none shadow-sm"
                 placeholder={t('project.schema.overview.search_placeholder')}
                 type="text"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                }}
               />
               <div className="absolute inset-y-0 right-2 flex items-center">
-                <button className="px-2 py-1 text-xs font-medium text-slate-500 dark:text-text-muted bg-slate-100 dark:bg-background-dark rounded border border-slate-200 dark:border-surface-dark-alt">
+                <kbd
+                  aria-hidden="true"
+                  className="px-2 py-1 text-xs font-medium text-slate-500 dark:text-text-muted bg-slate-100 dark:bg-background-dark rounded border border-slate-200 dark:border-surface-dark-alt"
+                >
                   CMD + K
-                </button>
+                </kbd>
               </div>
             </div>
           </div>
@@ -312,7 +513,9 @@ export default function SchemaOverview() {
                     {t('project.schema.overview.entity_types.title')}
                   </h3>
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-surface-dark-alt text-slate-500 dark:text-text-muted text-xs font-mono">
-                    {t('project.schema.overview.entity_types.defined', { count: entities.length })}
+                    {t('project.schema.overview.entity_types.defined', {
+                      count: filteredEntities.length,
+                    })}
                   </span>
                 </div>
                 <Link
@@ -323,12 +526,14 @@ export default function SchemaOverview() {
                 </Link>
               </div>
               <div className="flex flex-col gap-4">
-                {entities.map((entity) => (
+                {filteredEntities.map((entity) => (
                   <EntityCard key={entity.id} entity={entity} t={t} />
                 ))}
-                {entities.length === 0 && (
+                {filteredEntities.length === 0 && (
                   <div className="text-center p-8 text-slate-500 dark:text-text-muted bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-surface-dark-alt">
-                    {t('project.schema.overview.entity_types.empty')}
+                    {normalizedSearchQuery.length > 0
+                      ? t('project.schema.overview.no_results')
+                      : t('project.schema.overview.entity_types.empty')}
                   </div>
                 )}
               </div>
@@ -346,7 +551,7 @@ export default function SchemaOverview() {
                   </h3>
                   <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-surface-dark-alt text-slate-500 dark:text-text-muted text-xs font-mono">
                     {t('project.schema.overview.relationship_types.defined', {
-                      count: edges.length,
+                      count: filteredEdges.length,
                     })}
                   </span>
                 </div>
@@ -358,12 +563,14 @@ export default function SchemaOverview() {
                 </Link>
               </div>
               <div className="flex flex-col gap-4">
-                {edges.map((edge) => (
+                {filteredEdges.map((edge) => (
                   <EdgeCard key={edge.id} edge={edge} mappings={mappings} t={t} />
                 ))}
-                {edges.length === 0 && (
+                {filteredEdges.length === 0 && (
                   <div className="text-center p-8 text-slate-500 dark:text-text-muted bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-surface-dark-alt">
-                    {t('project.schema.overview.relationship_types.empty')}
+                    {normalizedSearchQuery.length > 0
+                      ? t('project.schema.overview.no_results')
+                      : t('project.schema.overview.relationship_types.empty')}
                   </div>
                 )}
               </div>

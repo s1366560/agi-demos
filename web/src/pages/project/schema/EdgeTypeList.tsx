@@ -1018,7 +1018,10 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             </div>
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={onClose}
+                aria-label={edgeText(t, 'modal.close', 'Close relationship type editor')}
+                title={edgeText(t, 'modal.close', 'Close relationship type editor')}
                 className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-text-muted hover:bg-slate-200 dark:hover:bg-border-dark hover:text-slate-900 dark:hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -1026,10 +1029,17 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
-              <button className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 transition-colors bg-blue-50 dark:bg-blue-500/5">
+            <div
+              role="tablist"
+              className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2"
+            >
+              <div
+                role="tab"
+                aria-selected="true"
+                className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 transition-colors bg-blue-50 dark:bg-blue-500/5"
+              >
                 {edgeText(t, 'modalTabAttributes', TEXTS.modal.tabAttributes)}
-              </button>
+              </div>
             </div>
             <div className="p-6 flex flex-col gap-8">
               {/* Basic Info */}

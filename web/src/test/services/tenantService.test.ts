@@ -16,6 +16,7 @@ vi.mock('../../services/client/urlUtils', () => ({
     get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
+    put: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -245,7 +246,7 @@ describe('tenantService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
+      vi.mocked(apiFetch.put).mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
@@ -255,7 +256,7 @@ describe('tenantService', () => {
 
       await tenantService.updateTenant(tenantId, updates);
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(`/tenants/${tenantId}`, updates);
+      expect(apiFetch.put).toHaveBeenCalledWith(`/tenants/${tenantId}`, updates);
     });
 
     it('should propagate ApiError on failed update', async () => {
@@ -266,7 +267,7 @@ describe('tenantService', () => {
         'Failed to update tenant',
         400
       );
-      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
+      vi.mocked(apiFetch.put).mockRejectedValueOnce(mockError);
 
       await expect(tenantService.updateTenant('tenant-1', { name: 'Test' })).rejects.toThrow(
         ApiError

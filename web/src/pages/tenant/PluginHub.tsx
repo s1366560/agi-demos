@@ -658,6 +658,7 @@ export const PluginHub: React.FC = () => {
               {...(rules != null ? { rules } : {})}
             >
               <Select
+                aria-label={label}
                 options={schema.enum.map((value) => ({
                   value,
                   label: String(value),
@@ -710,6 +711,51 @@ export const PluginHub: React.FC = () => {
       })
       .filter(Boolean);
   }, [activeChannelSchema, editingConfig, t]);
+
+  const renderPaginationItem = useCallback(
+    (_page: number, type: string, originalElement: React.ReactNode) => {
+      const label =
+        type === 'prev'
+          ? t('tenant.pluginHub.pagination.previousPage')
+          : type === 'next'
+            ? t('tenant.pluginHub.pagination.nextPage')
+            : undefined;
+
+      if (!label || !React.isValidElement(originalElement)) {
+        return originalElement;
+      }
+
+      return React.cloneElement(originalElement, {
+        'aria-label': label,
+        title: label,
+      } as React.AriaAttributes & { title: string });
+    },
+    [t]
+  );
+
+  const pluginPagination = useMemo(
+    () =>
+      plugins.length > 8
+        ? {
+            pageSize: 8,
+            showSizeChanger: false,
+            itemRender: renderPaginationItem,
+          }
+        : false,
+    [plugins.length, renderPaginationItem]
+  );
+
+  const channelPagination = useMemo(
+    () =>
+      channelConfigs.length > 8
+        ? {
+            pageSize: 8,
+            showSizeChanger: false,
+            itemRender: renderPaginationItem,
+          }
+        : false,
+    [channelConfigs.length, renderPaginationItem]
+  );
 
   const pluginColumns = [
     {
@@ -926,6 +972,7 @@ export const PluginHub: React.FC = () => {
 
           <Space wrap>
             <Select
+              aria-label={t('tenant.pluginHub.projectSelectorLabel')}
               style={{ minWidth: 240 }}
               placeholder={t('tenant.pluginHub.selectProjectPlaceholder')}
               value={selectedProjectId || undefined}
@@ -1031,7 +1078,7 @@ export const PluginHub: React.FC = () => {
             rowKey="name"
             loading={pluginsLoading}
             scroll={{ x: 'max-content' }}
-            pagination={{ pageSize: 8 }}
+            pagination={pluginPagination}
           />
         </div>
       </section>
@@ -1058,7 +1105,7 @@ export const PluginHub: React.FC = () => {
               rowKey="id"
               loading={configsLoading}
               scroll={{ x: 'max-content' }}
-              pagination={{ pageSize: 8 }}
+              pagination={channelPagination}
             />
           ) : (
             <Empty description={t('tenant.pluginHub.channelsList.selectProjectToConfigure')} />
@@ -1140,6 +1187,7 @@ export const PluginHub: React.FC = () => {
             rules={[{ required: true }]}
           >
             <Select
+              aria-label={t('tenant.pluginHub.channelsList.selectChannelType')}
               options={channelTypeOptions.map((option) => ({
                 value: option.value,
                 label: option.label,
@@ -1179,6 +1227,7 @@ export const PluginHub: React.FC = () => {
                 label={t('tenant.pluginHub.configModal.connectionMode')}
               >
                 <Select
+                  aria-label={t('tenant.pluginHub.configModal.connectionMode')}
                   options={[
                     {
                       label: t('tenant.pluginHub.configModal.connectionModeWebsocket'),
@@ -1193,7 +1242,7 @@ export const PluginHub: React.FC = () => {
               </Form.Item>
 
               <Form.Item name="app_id" label={t('tenant.pluginHub.configModal.appId')}>
-                <Input placeholder="cli_xxx" />
+                <Input placeholder={t('tenant.pluginHub.configModal.appIdPlaceholder')} />
               </Form.Item>
 
               <Form.Item
@@ -1223,7 +1272,7 @@ export const PluginHub: React.FC = () => {
               </Form.Item>
 
               <Form.Item name="webhook_url" label={t('tenant.pluginHub.configModal.webhookUrl')}>
-                <Input placeholder="https://your-domain.com/webhook" />
+                <Input placeholder={t('tenant.pluginHub.configModal.webhookUrlPlaceholder')} />
               </Form.Item>
 
               <Form.Item name="domain" label={t('tenant.pluginHub.configModal.domain')}>

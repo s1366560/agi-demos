@@ -176,15 +176,6 @@ export const InstanceOverview: React.FC = () => {
       key: 'created_at',
       render: (date: string) => new Date(date).toLocaleString(),
     },
-    {
-      title: t('tenant.instances.columns.actions'),
-      key: 'actions',
-      render: () => (
-        <LazyButton type="link" danger className="p-0">
-          {t('tenant.instances.actions.removeMember')}
-        </LazyButton>
-      ),
-    },
   ];
 
   if (!instance) {

@@ -79,7 +79,7 @@ interface SubAgentState {
 
   // Actions - Templates
   listTemplates: () => Promise<void>;
-  createFromTemplate: (templateName: string) => Promise<SubAgentResponse>;
+  createFromTemplate: (templateId: string) => Promise<SubAgentResponse>;
 
   // Actions - Filesystem
   importFilesystem: (name: string) => Promise<SubAgentResponse>;
@@ -266,10 +266,10 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      createFromTemplate: async (templateName: string) => {
+      createFromTemplate: async (templateId: string) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await subagentAPI.createFromTemplate(templateName);
+          const response = await subagentAPI.createFromTemplate(templateId);
           const { subagents } = get();
           set({
             subagents: [response, ...subagents],

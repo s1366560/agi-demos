@@ -220,7 +220,7 @@ export const OrgSmtp: React.FC = () => {
                 setHost(e.target.value);
               }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
-              placeholder="smtp.example.com"
+              placeholder={t('tenant.orgSettings.smtp.hostPlaceholder')}
             />
           </div>
 
@@ -239,7 +239,7 @@ export const OrgSmtp: React.FC = () => {
                 setPort(parseInt(e.target.value, 10));
               }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
-              placeholder="465"
+              placeholder={t('tenant.orgSettings.smtp.portPlaceholder')}
             />
           </div>
 
@@ -258,7 +258,7 @@ export const OrgSmtp: React.FC = () => {
                 setUsername(e.target.value);
               }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
-              placeholder="user@example.com"
+              placeholder={t('tenant.orgSettings.smtp.usernamePlaceholder')}
             />
           </div>
 
@@ -287,16 +287,8 @@ export const OrgSmtp: React.FC = () => {
               <button
                 type="button"
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                aria-label={
-                  showPassword
-                    ? t('common.hidePassword', 'Hide password')
-                    : t('common.showPassword', 'Show password')
-                }
-                title={
-                  showPassword
-                    ? t('common.hidePassword', 'Hide password')
-                    : t('common.showPassword', 'Show password')
-                }
+                aria-label={showPassword ? t('common.hidePassword') : t('common.showPassword')}
+                title={showPassword ? t('common.hidePassword') : t('common.showPassword')}
                 onClick={() => {
                   setShowPassword(!showPassword);
                 }}
@@ -326,7 +318,7 @@ export const OrgSmtp: React.FC = () => {
                 setFromEmail(e.target.value);
               }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
-              placeholder="noreply@example.com"
+              placeholder={t('tenant.orgSettings.smtp.fromEmailPlaceholder')}
             />
           </div>
 
@@ -345,7 +337,7 @@ export const OrgSmtp: React.FC = () => {
                 setFromName(e.target.value);
               }}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
-              placeholder="MemStack"
+              placeholder={t('tenant.orgSettings.smtp.fromNamePlaceholder')}
             />
           </div>
 

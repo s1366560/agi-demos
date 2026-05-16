@@ -19,6 +19,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 
 import { Search, History, GitBranch, Home, ChevronRight } from 'lucide-react';
@@ -35,7 +36,10 @@ import { AgentSidebar } from '@/components/layout/AppSidebar';
 import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
+import { requestOpenAgentChatSearch } from '../components/agent/chat/searchEvents';
+
 export const AgentLayout: React.FC = () => {
+  const { t } = useTranslation();
   const { projectId, conversationId } = useParams<{
     projectId: string;
     conversationId?: string | undefined;
@@ -115,17 +119,26 @@ export const AgentLayout: React.FC = () => {
                 to={projectBasePath}
                 className="text-slate-500 hover:text-primary transition-colors font-medium"
               >
-                {currentProject?.name || 'Project'}
+                {currentProject?.name ||
+                  t('nav.project', {
+                    defaultValue: 'Project',
+                  })}
               </Link>
               <ChevronRight size={16} className="text-slate-300 dark:text-slate-600" />
-              <span className="text-slate-900 dark:text-white font-bold">Agent</span>
+              <span className="text-slate-900 dark:text-white font-bold">
+                {t('nav.agent', {
+                  defaultValue: 'Agent',
+                })}
+              </span>
             </nav>
 
             {/* Agent Status Badge */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-full">
               <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse motion-reduce:animate-none"></div>
               <span className="text-2xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">
-                Agent Online
+                {t('agent.layout.online', {
+                  defaultValue: 'Agent Online',
+                })}
               </span>
             </div>
 
@@ -154,21 +167,37 @@ export const AgentLayout: React.FC = () => {
             {/* Search */}
             <div className="relative hidden md:block group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary w-4 h-4 transition-colors" />
-              <input
+              <button
                 id="conversation-search"
-                name="conversation-search"
-                className="w-56 bg-slate-100 dark:bg-surface-dark border border-transparent focus:border-primary/30 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] placeholder:text-text-muted text-slate-900 dark:text-white"
-                placeholder="Search conversations..."
-                type="text"
-              />
+                type="button"
+                disabled={!conversationId}
+                onClick={requestOpenAgentChatSearch}
+                aria-label={t('agent.layout.searchCurrentConversation', {
+                  defaultValue: 'Search current conversation',
+                })}
+                className="w-56 bg-slate-100 dark:bg-surface-dark border border-transparent focus:border-primary/30 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] text-left text-text-muted disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="block truncate">
+                  {t('agent.layout.searchCurrentConversationPlaceholder', {
+                    defaultValue: 'Search current conversation...',
+                  })}
+                </span>
+              </button>
             </div>
 
             {/* Quick Actions */}
             <div className="flex items-center gap-1">
               <AppLauncher />
-              <LazyTooltip title="View execution history">
+              <LazyTooltip
+                title={t('agent.layout.viewExecutionHistory', {
+                  defaultValue: 'View execution history',
+                })}
+              >
                 <button
                   type="button"
+                  aria-label={t('agent.layout.viewExecutionHistory', {
+                    defaultValue: 'View execution history',
+                  })}
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
                   onClick={() => {
                     const tab = topTabs[1];
@@ -178,9 +207,16 @@ export const AgentLayout: React.FC = () => {
                   <History className="w-5 h-5" />
                 </button>
               </LazyTooltip>
-              <LazyTooltip title="View workflow patterns">
+              <LazyTooltip
+                title={t('agent.layout.viewWorkflowPatterns', {
+                  defaultValue: 'View workflow patterns',
+                })}
+              >
                 <button
                   type="button"
+                  aria-label={t('agent.layout.viewWorkflowPatterns', {
+                    defaultValue: 'View workflow patterns',
+                  })}
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
                   onClick={() => {
                     const tab = topTabs[2];

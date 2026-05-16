@@ -311,10 +311,10 @@ export const ClusterList: FC = () => {
             </Select>
           </Form.Item>
           <Form.Item name="proxy_endpoint" label={t('tenant.clusters.form.apiEndpoint')}>
-            <Input placeholder="https://cluster.example.com" />
+            <Input placeholder={t('tenant.clusters.form.apiEndpointPlaceholder')} />
           </Form.Item>
           <Form.Item name="provider_config" label={t('tenant.clusters.form.metadata')}>
-            <TextArea rows={4} placeholder="{}" />
+            <TextArea rows={4} placeholder={t('tenant.clusters.form.metadataPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
@@ -339,17 +339,17 @@ export const ClusterList: FC = () => {
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.cpuUsage')}>
               {clusterHealth.cpu_usage !== null
                 ? `${clusterHealth.cpu_usage.toFixed(2)}%`
-                : t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+                : t('tenant.clusters.detail.notAvailable')}
             </Descriptions.Item>
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.memoryUsage')}>
               {clusterHealth.memory_usage !== null
                 ? `${clusterHealth.memory_usage.toFixed(2)}%`
-                : t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+                : t('tenant.clusters.detail.notAvailable')}
             </Descriptions.Item>
             <Descriptions.Item label={t('tenant.clusters.healthDrawer.checkedAt')}>
               {clusterHealth.checked_at
                 ? new Date(clusterHealth.checked_at).toLocaleString()
-                : t('tenant.clusters.detail.notAvailable', { defaultValue: 'N/A' })}
+                : t('tenant.clusters.detail.notAvailable')}
             </Descriptions.Item>
           </Descriptions>
         ) : (

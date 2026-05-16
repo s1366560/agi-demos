@@ -1774,15 +1774,18 @@ img[loading='lazy'] {
 
 /* --- Blockquotes --- */
 .memstack-prose blockquote {
-  border-left: 3px solid var(--color-primary-200);
-  padding-left: 1rem;
+  border: 1px solid var(--color-primary-200);
+  border-radius: 0.5rem;
+  background-color: var(--color-primary-50);
+  padding: 0.75rem 1rem;
   margin-left: 0;
   color: var(--color-text-secondary);
   font-style: italic;
 }
 
 :is(.dark .memstack-prose) blockquote {
-  border-left-color: var(--color-primary-400);
+  border-color: var(--color-primary-400);
+  background-color: rgba(129, 140, 248, 0.08);
   color: var(--color-text-muted);
 }
 

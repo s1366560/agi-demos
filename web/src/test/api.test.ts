@@ -98,6 +98,42 @@ describe('API Services', () => {
         profile: undefined,
       });
     });
+
+    it('updateProfile should send user update payload and map the response', async () => {
+      const payload = {
+        name: 'Updated User',
+        profile: {
+          job_title: 'Staff Engineer',
+          location: 'Remote',
+        },
+      };
+      const mockBackendUser = {
+        user_id: 'user-1',
+        email: 'updated@example.com',
+        name: 'Updated User',
+        roles: ['user'],
+        is_active: true,
+        created_at: '2024-01-01T00:00:00Z',
+        profile: payload.profile,
+        preferred_language: 'en-US' as const,
+      };
+
+      mockApiInstance.put.mockResolvedValue({ data: mockBackendUser });
+
+      const result = await authAPI.updateProfile(payload);
+
+      expect(mockApiInstance.put).toHaveBeenCalledWith('/users/me', payload, undefined);
+      expect(result).toEqual({
+        id: 'user-1',
+        email: 'updated@example.com',
+        name: 'Updated User',
+        roles: ['user'],
+        is_active: true,
+        created_at: '2024-01-01T00:00:00Z',
+        profile: payload.profile,
+        preferred_language: 'en-US',
+      });
+    });
   });
 
   describe('tenantAPI', () => {
@@ -294,7 +330,7 @@ describe('API Services', () => {
       const mockData = {};
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       await memoryAPI.getGraphData('p1');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/memory/graph', {
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/graph/memory/graph', {
         params: { project_id: 'p1' },
       });
     });

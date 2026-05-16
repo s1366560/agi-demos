@@ -894,7 +894,7 @@ const ChannelConfigPage: React.FC = () => {
                 label={t('project.channelConfig.appId')}
                 rules={[{ required: true, message: t('project.channelConfig.pleaseEnterAppId') }]}
               >
-                <Input placeholder="cli_xxx" />
+                <Input placeholder={t('project.channelConfig.appIdPlaceholder')} />
               </Form.Item>
 
               <Form.Item
@@ -925,7 +925,7 @@ const ChannelConfigPage: React.FC = () => {
               </Form.Item>
 
               <Form.Item name="webhook_url" label={t('project.channelConfig.webhookUrlOptional')}>
-                <Input placeholder="https://your-domain.com/webhook" />
+                <Input placeholder={t('project.channelConfig.webhookUrlPlaceholder')} />
               </Form.Item>
 
               <Form.Item

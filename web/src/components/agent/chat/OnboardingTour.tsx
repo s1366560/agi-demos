@@ -61,10 +61,10 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     titleKey: 'agent.onboarding.searchTip',
-    titleFallback: 'Search conversations',
+    titleFallback: 'Search within a conversation',
     descKey: 'agent.onboarding.searchDesc',
-    descFallback: 'Use Cmd+F to search within any conversation.',
-    targetSelector: null,
+    descFallback: 'Open a conversation, then use the header search control or Cmd+F.',
+    targetSelector: '#conversation-search',
   },
 ];
 

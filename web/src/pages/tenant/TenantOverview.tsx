@@ -195,90 +195,80 @@ export const TenantOverview: React.FC = () => {
         <p className="text-slate-500 dark:text-slate-400">{t('tenant.overview.subtitle')}</p>
       </div>
 
-      {/* Stats Cards (Gradient) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card 1 */}
-        <div className="relative overflow-hidden rounded-xl p-6 shadow-lg bg-gradient-to-br from-[#1e3fae] to-[#3b82f6] text-white group hover:shadow-xl transition-shadow duration-300">
-          <div className="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 -mr-10"></div>
-          <div className="relative z-10 flex flex-col justify-between h-full gap-4">
-            <div className="flex items-start justify-between">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Database size={16} className="text-white" />
-              </div>
-              <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
-                {getStorageTrendLabel(memoryHistory)}
-              </span>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="flex min-h-44 flex-col justify-between rounded-lg border border-slate-200 bg-surface-light p-5 shadow-sm transition-colors duration-150 hover:border-slate-300 dark:border-slate-800 dark:bg-surface-dark dark:hover:border-slate-700">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <Database size={16} />
             </div>
-            <div>
-              <p className="text-blue-100 text-sm font-medium mb-1">
-                {t('tenant.overview.totalStorage')}
-              </p>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold tracking-tight">
-                  {formatStorage(stats.storage.used)}
-                </h3>
-                <span className="text-blue-200 text-sm">
-                  / {formatStorage(stats.storage.total)}
-                </span>
-              </div>
-            </div>
-            <div className="w-full bg-black/20 rounded-full h-1.5 mt-1">
-              <div
-                className="bg-white h-1.5 rounded-full"
-                style={{ width: `${storagePercentage.toString()}%` }}
-              ></div>
-            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {getStorageTrendLabel(memoryHistory)}
+            </span>
           </div>
-        </div>
-
-        {/* Card 2 */}
-        <div className="relative overflow-hidden rounded-xl p-6 shadow-lg bg-gradient-to-br from-indigo-600 to-violet-500 text-white group hover:shadow-xl transition-shadow duration-300">
-          <div className="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 -mr-10"></div>
-          <div className="relative z-10 flex flex-col justify-between h-full gap-4">
-            <div className="flex items-start justify-between">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <FolderOpen size={16} className="text-white" />
-              </div>
-              <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
-                {stats.projects.active} {t('common.status.active')}
-              </span>
-            </div>
-            <div>
-              <p className="text-indigo-100 text-sm font-medium mb-1">
-                {t('tenant.overview.activeProjects')}
-              </p>
-              <h3 className="text-3xl font-bold tracking-tight">{stats.projects.active}</h3>
-            </div>
-            <p className="text-indigo-100 text-sm">
-              {t('tenant.overview.newProjectThisWeek', { count: stats.projects.new_this_week })}
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+              {t('tenant.overview.totalStorage')}
             </p>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <h3 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                {formatStorage(stats.storage.used)}
+              </h3>
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                / {formatStorage(stats.storage.total)}
+              </span>
+            </div>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800">
+            <div
+              className="h-1.5 rounded-full bg-primary"
+              style={{ width: `${storagePercentage.toString()}%` }}
+            ></div>
           </div>
         </div>
 
-        {/* Card 3 */}
-        <div className="relative overflow-hidden rounded-xl p-6 shadow-lg bg-gradient-to-br from-slate-700 to-slate-600 text-white group hover:shadow-xl transition-shadow duration-300">
-          <div className="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 -mr-10"></div>
-          <div className="relative z-10 flex flex-col justify-between h-full gap-4">
-            <div className="flex items-start justify-between">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Users size={16} className="text-white" />
-              </div>
-              <span className="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">
-                {t('common.stats.total')} {stats.members.total}
-              </span>
+        <div className="flex min-h-44 flex-col justify-between rounded-lg border border-slate-200 bg-surface-light p-5 shadow-sm transition-colors duration-150 hover:border-slate-300 dark:border-slate-800 dark:bg-surface-dark dark:hover:border-slate-700">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <FolderOpen size={16} />
             </div>
-            <div>
-              <p className="text-slate-200 text-sm font-medium mb-1">
-                {t('tenant.overview.teamMembers')}
-              </p>
-              <h3 className="text-3xl font-bold tracking-tight">{stats.members.total}</h3>
-            </div>
-            <div className="flex -space-x-2 overflow-hidden mt-1">
-              <div className="h-6 w-6 rounded-full bg-slate-500 ring-2 ring-slate-600 flex items-center justify-center text-2xs font-medium">
-                +{stats.members.new_added}
-              </div>
-            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {stats.projects.active} {t('common.status.active')}
+            </span>
           </div>
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+              {t('tenant.overview.activeProjects')}
+            </p>
+            <h3 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+              {stats.projects.active}
+            </h3>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t('tenant.overview.newProjectThisWeek', { count: stats.projects.new_this_week })}
+          </p>
+        </div>
+
+        <div className="flex min-h-44 flex-col justify-between rounded-lg border border-slate-200 bg-surface-light p-5 shadow-sm transition-colors duration-150 hover:border-slate-300 dark:border-slate-800 dark:bg-surface-dark dark:hover:border-slate-700">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <Users size={16} />
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {t('common.stats.total')} {stats.members.total}
+            </span>
+          </div>
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+              {t('tenant.overview.teamMembers')}
+            </p>
+            <h3 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+              {stats.members.total}
+            </h3>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t('tenant.overview.newMembers', { count: stats.members.new_added })}
+          </p>
         </div>
       </div>
 
@@ -521,18 +511,18 @@ export const TenantOverview: React.FC = () => {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
-                    <button
-                      type="button"
-                      aria-label={t('tenant.overview.openProjectActions', {
+                    <Link
+                      to={`/tenant/${currentTenant.id}/project/${project.id}`}
+                      aria-label={t('tenant.overview.openProject', {
                         name: project.name,
                       })}
-                      title={t('tenant.overview.openProjectActions', {
+                      title={t('tenant.overview.openProject', {
                         name: project.name,
                       })}
-                      className="text-slate-400 hover:text-primary transition-colors"
+                      className="inline-flex justify-end text-slate-400 transition-colors hover:text-primary"
                     >
                       <MoreVertical size={20} />
-                    </button>
+                    </Link>
                   </td>
                 </tr>
               ))}

@@ -74,12 +74,13 @@ describe('A2UISurfaceRenderer subtree isolation', () => {
 
     render(<A2UISurfaceRenderer surfaceId="s1" messages={messages} />);
 
-    expect(await screen.findByRole('button', { name: 'Broken' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Healthy' })).toBeInTheDocument();
+    const brokenTab = await screen.findByRole('tab', { name: 'Broken' });
+    expect(brokenTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Healthy' })).toHaveAttribute('aria-selected', 'false');
     expect(await screen.findByText('This tab could not be rendered.')).toBeInTheDocument();
     expect(screen.queryByText('A2UI Text Preview')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Healthy' }));
+    fireEvent.keyDown(brokenTab, { key: 'ArrowRight' });
 
     expect(await screen.findByText('Healthy tab content')).toBeInTheDocument();
     expect(screen.queryByText('This tab could not be rendered.')).not.toBeInTheDocument();

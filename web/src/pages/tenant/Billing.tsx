@@ -100,6 +100,22 @@ export const Billing: FC = memo(() => {
     };
   }, []);
 
+  const formatInvoiceStatus = useCallback(
+    (status: string): string => {
+      switch (status) {
+        case 'paid':
+          return t('tenant.billing.history.paid');
+        case 'pending':
+          return t('tenant.billing.history.pending');
+        case 'failed':
+          return t('tenant.billing.history.failed');
+        default:
+          return status;
+      }
+    },
+    [t]
+  );
+
   // Calculate usage percentages
   const usageStats = useMemo(() => {
     if (!billingInfo) {
@@ -276,26 +292,40 @@ export const Billing: FC = memo(() => {
         </div>
 
         {/* Upgrade Promo */}
-        <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-6 md:p-8 text-white flex flex-col justify-between">
+        <div className="bg-white dark:bg-surface-dark rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8 flex flex-col justify-between">
           <div>
-            <h3 className="text-xl font-bold mb-2">{t('tenant.billing.enterprise.title')}</h3>
-            <p className="text-indigo-100 text-sm mb-6">
+            <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <CreditCard size={18} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              {t('tenant.billing.enterprise.title')}
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
               {t('tenant.billing.enterprise.description')}
             </p>
             <ul className="space-y-3 mb-8">
-              <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <Check size={16} /> {t('tenant.billing.enterprise.features.projects')}
+              <li className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <Check size={13} />
+                </span>
+                {t('tenant.billing.enterprise.features.projects')}
               </li>
-              <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <Check size={16} /> {t('tenant.billing.enterprise.features.security')}
+              <li className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <Check size={13} />
+                </span>
+                {t('tenant.billing.enterprise.features.security')}
               </li>
-              <li className="flex items-center gap-2 text-sm text-indigo-50">
-                <Check size={16} /> {t('tenant.billing.enterprise.features.support')}
+              <li className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <Check size={13} />
+                </span>
+                {t('tenant.billing.enterprise.features.support')}
               </li>
             </ul>
           </div>
           <button
-            className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-3 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
+            className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 font-bold py-3 rounded-lg transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
             disabled={currentPlan === 'enterprise' || actionLoading !== null}
             type="button"
             onClick={() => {
@@ -360,7 +390,7 @@ export const Billing: FC = memo(() => {
                               : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                         }`}
                       >
-                        {invoice.status}
+                        {formatInvoiceStatus(invoice.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

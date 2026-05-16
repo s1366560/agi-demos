@@ -181,6 +181,15 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
                 onClick={() => {
                   setSelectedColor(c.name);
                 }}
+                aria-label={t('agent.sidebar.selectLabelColor', {
+                  color: c.name,
+                  defaultValue: 'Select {{color}} label color',
+                })}
+                aria-pressed={selectedColor === c.name}
+                title={t('agent.sidebar.selectLabelColor', {
+                  color: c.name,
+                  defaultValue: 'Select {{color}} label color',
+                })}
                 className={`w-5 h-5 rounded-full ${c.dot} transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                   selectedColor === c.name
                     ? 'ring-2 ring-offset-1 ring-slate-400 dark:ring-offset-slate-800'
@@ -200,6 +209,8 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
             </LazyButton>
             <LazyButton
               size="small"
+              aria-label={t('agent.sidebar.cancelNewLabel', 'Cancel new label')}
+              title={t('agent.sidebar.cancelNewLabel', 'Cancel new label')}
               onClick={() => {
                 setShowNewForm(false);
               }}
@@ -282,15 +293,18 @@ const ConversationItem = memo<ConversationItemProps>(
     // Determine status indicator
     const hasHITL = status?.pendingHITL != null;
     const isStreaming = status?.isStreaming ?? false;
+    const conversationTitle = conversation.title || t('agent.sidebar.untitled', 'Untitled');
+    const openConversationLabel = t('agent.sidebar.openConversation', {
+      title: conversationTitle,
+      defaultValue: 'Open {{title}}',
+    });
 
     if (compact) {
       return (
         <LazyTooltip
           title={
             <div>
-              <div className="font-medium">
-                {conversation.title || t('agent.sidebar.untitled', 'Untitled')}
-              </div>
+              <div className="font-medium">{conversationTitle}</div>
               {hasHITL && (
                 <div className="text-amber-400 text-xs mt-1 flex items-center gap-1">
                   <AlertCircle size={10} /> {t('agent.sidebar.needsInput', 'Needs input')}
@@ -309,6 +323,8 @@ const ConversationItem = memo<ConversationItemProps>(
           <button
             type="button"
             onClick={onSelect}
+            aria-label={openConversationLabel}
+            title={openConversationLabel}
             className={`
             w-full p-3 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
             flex items-center justify-center relative
@@ -395,7 +411,7 @@ const ConversationItem = memo<ConversationItemProps>(
               <p
                 className={`font-medium text-sm truncate ${isActive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
               >
-                {conversation.title || t('agent.sidebar.untitled', 'Untitled')}
+                {conversationTitle}
               </p>
             </div>
             {conversation.summary && (
@@ -659,7 +675,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
             >
               <Users className="h-4 w-4 flex-shrink-0" />
               <span className="truncate text-sm font-medium">
-                {t('agent.groupChat', 'Workspace Chat')}
+                {t('agent.groupChat.title', 'Workspace Chat')}
               </span>
             </button>
           )}

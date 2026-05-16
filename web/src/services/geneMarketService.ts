@@ -82,7 +82,7 @@ export interface GenomeListResponse {
 }
 
 export interface GeneRatingCreate {
-  score: number;
+  rating: number;
   comment?: string | null;
 }
 
@@ -90,13 +90,13 @@ export interface GeneRatingResponse {
   id: string;
   gene_id: string;
   user_id: string;
-  score: number;
+  rating: number;
   comment: string | null;
   created_at: string;
 }
 
 export interface GenomeRatingCreate {
-  score: number;
+  rating: number;
   comment?: string | null;
 }
 
@@ -104,7 +104,7 @@ export interface GenomeRatingResponse {
   id: string;
   genome_id: string;
   user_id: string;
-  score: number;
+  rating: number;
   comment: string | null;
   created_at: string;
 }
@@ -242,6 +242,11 @@ export const geneMarketService = {
   listEvolutionEvents: (instanceId: string, params?: { page?: number; page_size?: number }) =>
     httpClient.get<EvolutionEventListResponse>(`${BASE_URL}/evolution`, {
       params: { instance_id: instanceId, ...params },
+    }),
+
+  listGeneEvolutionEvents: (geneId: string, params?: { page?: number; page_size?: number }) =>
+    httpClient.get<EvolutionEventListResponse>(`${BASE_URL}/evolution`, {
+      params: { gene_id: geneId, ...params },
     }),
 
   createEvolutionEvent: (data: EvolutionEventCreate) =>

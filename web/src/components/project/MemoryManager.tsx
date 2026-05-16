@@ -308,19 +308,37 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleViewMemory(memory);
                         }}
+                        aria-label={t('memory.manager.viewMemory', {
+                          title: memory.title,
+                          defaultValue: 'View {{title}}',
+                        })}
+                        title={t('memory.manager.viewMemory', {
+                          title: memory.title,
+                          defaultValue: 'View {{title}}',
+                        })}
                         className="p-1 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleDeleteMemory(memory.id);
                         }}
+                        aria-label={t('memory.manager.deleteMemory', {
+                          title: memory.title,
+                          defaultValue: 'Delete {{title}}',
+                        })}
+                        title={t('memory.manager.deleteMemory', {
+                          title: memory.title,
+                          defaultValue: 'Delete {{title}}',
+                        })}
                         className="p-1 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors"
                       >
                         <Trash2 className="h-4 w-4" />

@@ -70,10 +70,9 @@ export const InstanceSettings: React.FC = () => {
         .then((inst) => {
           setCurrentInstance(inst);
           if (lastSyncedId.current !== inst.id) {
-            const descriptionValue = (inst as unknown as Record<string, unknown>).description;
             lastSyncedId.current = inst.id;
             setName(inst.name);
-            setDescription(typeof descriptionValue === 'string' ? descriptionValue : '');
+            setDescription(inst.description ?? '');
             setIsDirty(false);
           }
         })

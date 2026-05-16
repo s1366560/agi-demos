@@ -62,7 +62,7 @@ describe('BackgroundSubAgentPanel', () => {
   it('renders background subagents when panel is open', () => {
     render(<BackgroundSubAgentPanel />);
 
-    expect(screen.getByText('agent.background.title')).toBeInTheDocument();
+    expect(screen.getByText('Background Tasks')).toBeInTheDocument();
 
     // Shows agent names
     expect(screen.getByText('Agent 1')).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('BackgroundSubAgentPanel', () => {
   it('calls kill action when stop button is clicked on running agent', () => {
     render(<BackgroundSubAgentPanel />);
 
-    const killButton = screen.getByTitle('agent.background.kill');
+    const killButton = screen.getByTitle('Stop execution');
     fireEvent.click(killButton);
 
     expect(mockKill).toHaveBeenCalledWith('exec-1');
@@ -88,7 +88,7 @@ describe('BackgroundSubAgentPanel', () => {
   it('calls clear action when clear button is clicked on completed agent', () => {
     render(<BackgroundSubAgentPanel />);
 
-    const clearButton = screen.getByTitle('agent.background.clear');
+    const clearButton = screen.getByTitle('Clear');
     fireEvent.click(clearButton);
 
     expect(mockClear).toHaveBeenCalledWith('exec-2');
@@ -97,7 +97,7 @@ describe('BackgroundSubAgentPanel', () => {
   it('calls clearAll action when clear all button is clicked', () => {
     render(<BackgroundSubAgentPanel />);
 
-    const clearAllButton = screen.getByText('agent.background.clearAll');
+    const clearAllButton = screen.getByText('Clear all');
     fireEvent.click(clearAllButton);
 
     expect(mockClearAll).toHaveBeenCalled();
@@ -107,16 +107,16 @@ describe('BackgroundSubAgentPanel', () => {
     (useBackgroundExecutions as any).mockReturnValue([]);
     render(<BackgroundSubAgentPanel />);
 
-    expect(screen.getByText('agent.background.empty')).toBeInTheDocument();
+    expect(screen.getByText('No background tasks')).toBeInTheDocument();
   });
 
   it('toggles execution details when show details button is clicked', () => {
     render(<BackgroundSubAgentPanel />);
 
-    const showDetailsBtn = screen.getByText('agent.background.showDetails');
+    const showDetailsBtn = screen.getByText('Show details');
     fireEvent.click(showDetailsBtn);
 
-    expect(screen.getByText('agent.background.hideDetails')).toBeInTheDocument();
+    expect(screen.getByText('Hide details')).toBeInTheDocument();
     // Because it is expanded, the summary should be visible
     expect(screen.getByText('Completed successfully')).toBeInTheDocument();
   });

@@ -429,6 +429,8 @@ export function WorkstationArrangementBoard({
                 setZoom((current) => Math.max(0.55, current - 0.15));
               }}
               disabled={viewMode !== '2d'}
+              aria-label={t('blackboard.arrangement.zoomOut', 'Zoom out')}
+              title={t('blackboard.arrangement.zoomOut', 'Zoom out')}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-border-light bg-surface-muted text-text-secondary transition-colors duration-150 hover:bg-surface-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
             >
               <ZoomOut className="h-3.5 w-3.5" />
@@ -440,6 +442,8 @@ export function WorkstationArrangementBoard({
                 setZoom((current) => Math.min(2.2, current + 0.15));
               }}
               disabled={viewMode !== '2d'}
+              aria-label={t('blackboard.arrangement.zoomIn', 'Zoom in')}
+              title={t('blackboard.arrangement.zoomIn', 'Zoom in')}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-border-light bg-surface-muted text-text-secondary transition-colors duration-150 hover:bg-surface-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-secondary dark:hover:bg-surface-elevated"
             >
               <ZoomIn className="h-3.5 w-3.5" />

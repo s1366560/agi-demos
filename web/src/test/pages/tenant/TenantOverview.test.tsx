@@ -119,9 +119,10 @@ describe('TenantOverview', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Unavailable')).toHaveLength(3);
       expect(screen.getByText('12.0 KB')).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: 'Open actions for Project One' })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Open project Project One' })).toHaveAttribute(
+        'href',
+        '/tenant/t1/project/project-1'
+      );
     });
   });
 

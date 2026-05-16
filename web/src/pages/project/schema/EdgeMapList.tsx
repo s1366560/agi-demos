@@ -6,7 +6,6 @@ import { useParams } from 'react-router-dom';
 import { message } from 'antd';
 import {
   Search,
-  Filter,
   Download,
   RotateCcw,
   ArrowRight,
@@ -34,6 +33,7 @@ export default function EdgeMapList() {
   const [filterSource, setFilterSource] = useState<string>('All');
   const [filterTarget, setFilterTarget] = useState<string>('All');
   const [hideEmpty, setHideEmpty] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Add Mapping State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -41,6 +41,7 @@ export default function EdgeMapList() {
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
+    setLoading(true);
     try {
       const [maps, entities, edges] = await Promise.all([
         schemaAPI.listEdgeMaps(projectId),
@@ -78,6 +79,31 @@ export default function EdgeMapList() {
     }
   };
 
+  const handleExport = () => {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            project_id: projectId,
+            mappings,
+            exported_at: new Date().toISOString(),
+          },
+          null,
+          2
+        ),
+      ],
+      { type: 'application/json;charset=utf-8' }
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `edge-mappings-${projectId ?? 'project'}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleDelete = async (id: string) => {
     if (
       !(await confirmAction({ title: t('project.schema.mappings.delete_confirm'), danger: true }))
@@ -105,10 +131,36 @@ export default function EdgeMapList() {
   // Combine system types and user types
   const systemTypes = ['Entity']; // Base type
   const allEntityNames = Array.from(new Set([...systemTypes, ...entityTypes.map((e) => e.name)]));
+  const searchedEntityNames = searchQuery.trim()
+    ? allEntityNames.filter((name) => name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : allEntityNames;
 
   // Filter rows and columns
-  const filteredRows = filterSource === 'All' ? allEntityNames : [filterSource];
-  const filteredCols = filterTarget === 'All' ? allEntityNames : [filterTarget];
+  const filteredRows =
+    filterSource === 'All'
+      ? searchedEntityNames
+      : searchedEntityNames.includes(filterSource)
+        ? [filterSource]
+        : [];
+  const filteredCols =
+    filterTarget === 'All'
+      ? searchedEntityNames
+      : searchedEntityNames.includes(filterTarget)
+        ? [filterTarget]
+        : [];
+
+  const handleResetDefaults = () => {
+    setFilterSource('All');
+    setFilterTarget('All');
+    setHideEmpty(false);
+    setSearchQuery('');
+  };
+
+  const openDefaultAddModal = () => {
+    const entityName = allEntityNames[0] ?? '';
+    if (!entityName || edgeTypes.length === 0) return;
+    openAddModal(entityName, entityName);
+  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
@@ -127,15 +179,20 @@ export default function EdgeMapList() {
             <div className="flex flex-wrap gap-2 sm:gap-3">
               <button
                 type="button"
+                onClick={() => {
+                  void loadData();
+                }}
                 className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-4 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:border-border-dark dark:bg-surface-dark dark:text-white dark:hover:bg-surface-dark-alt"
               >
-                {t('project.schema.mappings.cancel')}
+                {t('project.schema.mappings.refresh', 'Refresh')}
               </button>
               <button
                 type="button"
+                disabled={edgeTypes.length === 0}
+                onClick={openDefaultAddModal}
                 className="flex h-10 items-center justify-center rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-colors hover:bg-blue-700 dark:bg-primary"
               >
-                {t('project.schema.mappings.save')}
+                {t('project.schema.mappings.add_mapping_button', 'Add Mapping')}
               </button>
             </div>
           </div>
@@ -154,6 +211,11 @@ export default function EdgeMapList() {
                     <Search className="text-slate-400 dark:text-text-muted w-5 h-5" />
                   </div>
                   <input
+                    aria-label={t('project.schema.mappings.search_placeholder')}
+                    value={searchQuery}
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                    }}
                     className="block w-full rounded-md border-none bg-transparent py-2 pl-10 pr-3 text-sm text-slate-900 outline-none placeholder-slate-400 focus:ring-1 focus:ring-blue-600 dark:text-white dark:placeholder-text-muted dark:focus:ring-primary sm:w-64"
                     placeholder={t('project.schema.mappings.search_placeholder')}
                     type="text"
@@ -162,13 +224,8 @@ export default function EdgeMapList() {
                 <div className="hidden h-6 w-px bg-slate-200 dark:bg-border-dark sm:block"></div>
                 <button
                   type="button"
-                  className="p-2 text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
-                  title={t('project.schema.mappings.filter', 'Filter')}
-                >
-                  <Filter className="w-5 h-5" />
-                </button>
-                <button
-                  type="button"
+                  onClick={handleExport}
+                  aria-label={t('project.schema.overview.export_schema')}
                   className="p-2 text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
                   title={t('project.schema.overview.export_schema')}
                 >
@@ -177,11 +234,7 @@ export default function EdgeMapList() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setFilterSource('All');
-                  setFilterTarget('All');
-                  setHideEmpty(false);
-                }}
+                onClick={handleResetDefaults}
                 className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-text-muted dark:hover:bg-surface-dark dark:hover:text-white"
               >
                 <RotateCcw className="w-5 h-5" />
@@ -201,6 +254,7 @@ export default function EdgeMapList() {
                     </h2>
                   </div>
                   <select
+                    aria-label={t('project.schema.mappings.filter_source.title')}
                     value={filterSource}
                     onChange={(e) => {
                       setFilterSource(e.target.value);
@@ -230,6 +284,7 @@ export default function EdgeMapList() {
                     </h2>
                   </div>
                   <select
+                    aria-label={t('project.schema.mappings.filter_target.title')}
                     value={filterTarget}
                     onChange={(e) => {
                       setFilterTarget(e.target.value);
@@ -463,6 +518,7 @@ export default function EdgeMapList() {
                   {t('project.schema.mappings.modal.select_edge')}
                 </label>
                 <select
+                  aria-label={t('project.schema.mappings.modal.select_edge')}
                   className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none focus:border-blue-600 dark:focus:border-primary"
                   value={newMapData.edge}
                   onChange={(e) => {

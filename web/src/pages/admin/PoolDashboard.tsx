@@ -278,6 +278,9 @@ const PoolDashboard: React.FC = () => {
                 type="text"
                 size="small"
                 icon={<PauseCircle size={16} />}
+                aria-label={t('admin.poolDashboard.actions.pauseInstance', {
+                  instance: record.instance_key,
+                })}
                 onClick={() => void handlePause(record.instance_key)}
               />
             </Tooltip>
@@ -287,6 +290,9 @@ const PoolDashboard: React.FC = () => {
                 type="text"
                 size="small"
                 icon={<PlayCircle size={16} />}
+                aria-label={t('admin.poolDashboard.actions.resumeInstance', {
+                  instance: record.instance_key,
+                })}
                 onClick={() => void handleResume(record.instance_key)}
               />
             </Tooltip>
@@ -298,7 +304,15 @@ const PoolDashboard: React.FC = () => {
             cancelText={t('common.no')}
           >
             <Tooltip title={t('admin.poolDashboard.actions.terminate')}>
-              <Button type="text" size="small" danger icon={<Square size={16} />} />
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<Square size={16} />}
+                aria-label={t('admin.poolDashboard.actions.terminateInstance', {
+                  instance: record.instance_key,
+                })}
+              />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -515,6 +529,7 @@ const PoolDashboard: React.FC = () => {
         extra={
           <Space>
             <Select
+              aria-label={t('admin.poolDashboard.filterByTier')}
               placeholder={t('admin.poolDashboard.filterByTier')}
               allowClear
               style={{ width: 120 }}

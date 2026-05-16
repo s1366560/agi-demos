@@ -71,4 +71,56 @@ describe('EdgeMapList', () => {
 
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('filters the matrix with the search input', async () => {
+    vi.mocked(schemaAPI.listEntityTypes).mockResolvedValue([
+      {
+        id: 'entity-1',
+        name: 'Person',
+        project_id: 'project-1',
+      } as any,
+    ]);
+
+    render(<EdgeMapList />);
+
+    expect(
+      await screen.findByRole('button', { name: 'Add mapping from Entity to Entity' })
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('project.schema.mappings.search_placeholder'), {
+      target: { value: 'Person' },
+    });
+
+    expect(
+      screen.queryByRole('button', { name: 'Add mapping from Entity to Entity' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add mapping from Person to Person' })
+    ).toBeInTheDocument();
+  });
+
+  it('exports the current edge mappings as JSON', async () => {
+    const createObjectURL = vi.fn(() => 'blob:edge-mappings');
+    const revokeObjectURL = vi.fn();
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    render(<EdgeMapList />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Export Schema' }));
+
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:edge-mappings');
+    clickSpy.mockRestore();
+  });
 });

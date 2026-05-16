@@ -1,8 +1,9 @@
 import { Route, Routes, MemoryRouter } from 'react-router-dom';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import { OPEN_AGENT_CHAT_SEARCH_EVENT } from '@/components/agent/chat/searchEvents';
 import { AgentLayout } from '@/layouts/AgentLayout';
 
 vi.mock('@/stores/project', () => {
@@ -126,6 +127,48 @@ describe('AgentLayout', () => {
       expect(screen.getByText('Dashboard')).toBeInTheDocument();
       expect(screen.getByText('Activity Logs')).toBeInTheDocument();
       expect(screen.getByText('Patterns')).toBeInTheDocument();
+    });
+
+    it('should expose accessible names for header controls', () => {
+      renderWithRouter(
+        <Routes>
+          <Route path="/tenant/:tenantId/project/:projectId/agent" element={<AgentLayout />}>
+            <Route path="" element={<div>Content</div>} />
+          </Route>
+        </Routes>
+      );
+
+      expect(
+        screen.getByRole('button', { name: /search current conversation/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /view execution history/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /view workflow patterns/i })
+      ).toBeInTheDocument();
+    });
+
+    it('dispatches a chat search request from the header search action', () => {
+      const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+      renderWithRouter(
+        <Routes>
+          <Route
+            path="/tenant/:tenantId/project/:projectId/agent/:conversationId"
+            element={<AgentLayout />}
+          >
+            <Route path="" element={<div>Content</div>} />
+          </Route>
+        </Routes>,
+        ['/tenant/tenant-123/project/proj-123/agent/conv-1']
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /search current conversation/i }));
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ type: OPEN_AGENT_CHAT_SEARCH_EVENT })
+      );
     });
   });
 

@@ -39,7 +39,7 @@ export const WorkspaceGroupChat: React.FC<WorkspaceGroupChatProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('agent.groupChat', 'Workspace Chat')}
+              {t('agent.groupChat.title', 'Workspace Chat')}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {t('agent.groupChat.subtitle', 'Collaborate with team members and agents')}

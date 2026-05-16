@@ -142,7 +142,7 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
               },
             ]}
           >
-            <Input placeholder="e.g., data_analysis_skill" disabled={isEditMode} />
+            <Input placeholder={t('tenant.skills.modal.namePlaceholder')} disabled={isEditMode} />
           </Form.Item>
 
           <Form.Item

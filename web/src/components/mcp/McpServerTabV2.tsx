@@ -285,6 +285,7 @@ export const McpServerTabV2: React.FC = () => {
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-slate-400 flex-shrink-0" />
               <Select
+                aria-label={t('mcp.servers.enabledFilterLabel')}
                 value={filters.enabled}
                 onChange={(value) => {
                   setFilters({ ...filters, enabled: value });
@@ -299,6 +300,7 @@ export const McpServerTabV2: React.FC = () => {
               />
             </div>
             <Select
+              aria-label={t('mcp.servers.typeFilterLabel')}
               value={filters.type}
               onChange={(value) => {
                 setFilters({ ...filters, type: value });
@@ -315,6 +317,7 @@ export const McpServerTabV2: React.FC = () => {
               ]}
             />
             <Select
+              aria-label={t('mcp.servers.runtimeFilterLabel')}
               value={filters.runtime}
               onChange={(value) => {
                 setFilters({ ...filters, runtime: value });

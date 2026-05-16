@@ -40,6 +40,15 @@ function getMemoryMetadataTags(metadata: Record<string, unknown>): string[] {
   return Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : [];
 }
 
+function buildMemoryExportFilename(memory: Memory): string {
+  const baseName = memory.title || memory.id || 'memory';
+  const safeName = baseName
+    .trim()
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${safeName || 'memory'}.json`;
+}
+
 export const MemoryDetail: React.FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
@@ -197,6 +206,36 @@ export const MemoryDetail: React.FC = () => {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      message?.success(t('memory.detail.linkCopied'));
+    } catch (error) {
+      console.error('Failed to copy memory link:', error);
+      message?.error(t('memory.detail.linkCopyFailed'));
+    }
+  };
+
+  const handleExport = () => {
+    try {
+      const blob = new Blob([JSON.stringify(memory, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = buildMemoryExportFilename(memory);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      message?.success(t('memory.detail.exportSuccess', { defaultValue: 'Memory exported' }));
+    } catch (error) {
+      console.error('Failed to export memory:', error);
+      message?.error(t('memory.detail.exportFailed', { defaultValue: 'Failed to export memory' }));
+    }
+  };
+
   return (
     <div className="flex h-full overflow-hidden">
       {deleteModalOpen && (
@@ -313,6 +352,10 @@ export const MemoryDetail: React.FC = () => {
             <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
             <button
               type="button"
+              aria-label={t('memory.detail.shareAria')}
+              onClick={() => {
+                void handleShare();
+              }}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title={t('memory.detail.shareTitle', 'Share')}
             >
@@ -320,6 +363,8 @@ export const MemoryDetail: React.FC = () => {
             </button>
             <button
               type="button"
+              aria-label={t('memory.detail.downloadAria')}
+              onClick={handleExport}
               className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
               title={t('memory.detail.exportTitle', 'Export')}
             >
