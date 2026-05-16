@@ -344,6 +344,7 @@ async def scale_instance(
     instance_id: str,
     data: ScaleRequest,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceResponse:
     """Scale an instance to a desired replica count."""
@@ -354,7 +355,7 @@ async def scale_instance(
         await service.scale_instance(
             instance_id=instance_id,
             replicas=data.desired_replicas,
-            triggered_by=tenant_id,
+            triggered_by=current_user.id,
         )
         await db.commit()
         instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
@@ -382,6 +383,7 @@ async def restart_instance(
     request: Request,
     instance_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceResponse:
     """Restart an instance."""
@@ -391,7 +393,7 @@ async def restart_instance(
         await _get_owned_instance_or_404(service, instance_id, tenant_id)
         await service.restart_instance(
             instance_id=instance_id,
-            triggered_by=tenant_id,
+            triggered_by=current_user.id,
         )
         await db.commit()
         instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
@@ -529,6 +531,7 @@ async def apply_pending_config(
     request: Request,
     instance_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Apply the pending configuration and create a deploy record."""
@@ -538,7 +541,7 @@ async def apply_pending_config(
         await _get_owned_instance_or_404(service, instance_id, tenant_id)
         result = await service.apply_pending_config(
             instance_id=instance_id,
-            triggered_by=tenant_id,
+            triggered_by=current_user.id,
         )
         await db.commit()
         return DeployResponse.model_validate(result, from_attributes=True)

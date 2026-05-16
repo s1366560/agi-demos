@@ -100,3 +100,61 @@ class TestInstanceChannelConnectionTest:
 
         with pytest.raises(ValueError, match="Channel not found"):
             await service.test_connection("missing")
+
+    async def test_update_rejects_channel_from_different_instance(self) -> None:
+        entity = InstanceChannelConfig(
+            id="channel-1",
+            instance_id="instance-1",
+            channel_type="webhook",
+            name="Webhook",
+            config={},
+        )
+        repo = AsyncMock()
+        repo.find_by_id.return_value = entity
+
+        service = InstanceChannelService(repo)
+
+        with pytest.raises(ValueError, match="Channel not found"):
+            await service.update_channel(
+                "channel-1",
+                expected_instance_id="instance-2",
+                name="Renamed",
+            )
+
+        repo.update.assert_not_awaited()
+
+    async def test_delete_rejects_channel_from_different_instance(self) -> None:
+        entity = InstanceChannelConfig(
+            id="channel-1",
+            instance_id="instance-1",
+            channel_type="webhook",
+            name="Webhook",
+            config={},
+        )
+        repo = AsyncMock()
+        repo.find_by_id.return_value = entity
+
+        service = InstanceChannelService(repo)
+
+        with pytest.raises(ValueError, match="Channel not found"):
+            await service.delete_channel("channel-1", expected_instance_id="instance-2")
+
+        repo.delete.assert_not_awaited()
+
+    async def test_connection_rejects_channel_from_different_instance(self) -> None:
+        entity = InstanceChannelConfig(
+            id="channel-1",
+            instance_id="instance-1",
+            channel_type="webhook",
+            name="Webhook",
+            config={"url": "https://example.com/webhook"},
+        )
+        repo = AsyncMock()
+        repo.find_by_id.return_value = entity
+
+        service = InstanceChannelService(repo)
+
+        with pytest.raises(ValueError, match="Channel not found"):
+            await service.test_connection("channel-1", expected_instance_id="instance-2")
+
+        repo.update.assert_not_awaited()

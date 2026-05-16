@@ -29,7 +29,7 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     return DIContainer(
         db=db,
         graph_service=app_container.graph_service,
-        redis_client=app_container._redis_client,
+        redis_client=app_container.redis_client,
     )
 
 
@@ -358,7 +358,7 @@ async def create_subagent(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=_("Invalid subagent request"),
         ) from e
 
 

@@ -6,12 +6,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_graphiti_client,
 )
+from src.infrastructure.adapters.primary.web.routers.graph import _graph_project_scope
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
@@ -27,6 +30,7 @@ class ShortTermRecallQuery(BaseModel):
     window_minutes: int = 1440  # Default 24 hours
     limit: int = 100
     tenant_id: str | None = None
+    project_id: str | None = None
 
 
 class MemoryItem(BaseModel):
@@ -50,6 +54,7 @@ class ShortTermRecallResponse(BaseModel):
 async def short_term_recall(
     payload: ShortTermRecallQuery,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graphiti_client: Any = Depends(get_graphiti_client),
 ) -> ShortTermRecallResponse:
     """
@@ -58,7 +63,7 @@ async def short_term_recall(
     try:
         logger.info(
             f"Short-term recall by user {current_user.id}: "
-            f"window={payload.window_minutes}m tenant={payload.tenant_id}"
+            f"window={payload.window_minutes}m project={payload.project_id}"
         )
 
         # Calculate time window
@@ -66,7 +71,27 @@ async def short_term_recall(
 
         # Build query
         conditions = ["e.created_at >= datetime($since_date)"]
-        params = {"since_date": since_date.isoformat(), "limit": payload.limit}
+        params: dict[str, Any] = {
+            "since_date": since_date.isoformat(),
+            "limit": payload.limit,
+        }
+
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            payload.project_id, current_user, db
+        )
+        if not is_superuser and not allowed_project_ids:
+            return ShortTermRecallResponse(
+                results=[],
+                total=0,
+                window_minutes=payload.window_minutes,
+            )
+
+        if payload.project_id:
+            conditions.append("e.project_id = $project_id")
+            params["project_id"] = payload.project_id
+        elif not is_superuser:
+            conditions.append("e.project_id IN $project_ids")
+            params["project_ids"] = allowed_project_ids
 
         if payload.tenant_id:
             conditions.append("e.tenant_id = $tenant_id")
@@ -111,6 +136,8 @@ async def short_term_recall(
             results=items, total=len(items), window_minutes=payload.window_minutes
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Short-term recall failed: {e}")
         raise HTTPException(status_code=500, detail=_(f"Short-term recall failed: {e!s}")) from e

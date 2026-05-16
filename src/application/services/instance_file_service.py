@@ -96,9 +96,11 @@ class InstanceFileService:
         self._validate_path(relative_path)
         root = self._instance_root(instance_id)
         resolved = (root / relative_path).resolve()
-        # Ensure resolved path is under root
-        if not str(resolved).startswith(str(root.resolve())):
-            raise ValueError("Path traversal not allowed")
+        # Ensure resolved path is under root, including sibling-prefix and symlink cases.
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            raise ValueError("Path traversal not allowed") from None
         return resolved
 
     async def list_tree(

@@ -121,8 +121,8 @@ async def cancel_subagent_execution(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error cancelling SubAgent execution: {e}", exc_info=True)
+        logger.exception("Error cancelling SubAgent execution")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to cancel SubAgent execution: {e!s}"),
+            detail=_("Failed to cancel SubAgent execution"),
         ) from e

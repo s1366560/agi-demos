@@ -102,14 +102,14 @@ async def create_binding(
         return cast(dict[str, Any], created.to_dict())
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=_("Invalid binding request")) from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error creating binding: %s", e, exc_info=True)
+        logger.exception("Error creating binding")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to create binding: {e!s}"),
+            detail=_("Failed to create binding"),
         ) from e
 
 
@@ -140,10 +140,10 @@ async def list_bindings(
         return [b.to_dict() for b in bindings]
 
     except Exception as e:
-        logger.error("Error listing bindings: %s", e, exc_info=True)
+        logger.exception("Error listing bindings")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to list bindings: {e!s}"),
+            detail=_("Failed to list bindings"),
         ) from e
 
 
@@ -173,10 +173,10 @@ async def delete_binding(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error deleting binding: %s", e, exc_info=True)
+        logger.exception("Error deleting binding")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to delete binding: {e!s}"),
+            detail=_("Failed to delete binding"),
         ) from e
 
 
@@ -207,12 +207,12 @@ async def set_binding_enabled(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=_("Invalid binding update")) from e
     except Exception as e:
-        logger.error("Error updating binding: %s", e, exc_info=True)
+        logger.exception("Error updating binding")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to update binding: {e!s}"),
+            detail=_("Failed to update binding"),
         ) from e
 
 
@@ -236,10 +236,10 @@ async def list_group_bindings(
         return [b.to_dict() for b in bindings]
 
     except Exception as e:
-        logger.error("Error listing group bindings: %s", e, exc_info=True)
+        logger.exception("Error listing group bindings")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to list group bindings: {e!s}"),
+            detail=_("Failed to list group bindings"),
         ) from e
 
 
@@ -309,8 +309,8 @@ async def test_binding_match(
         )
 
     except Exception as e:
-        logger.error("Error testing binding match: %s", e, exc_info=True)
+        logger.exception("Error testing binding match")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to test binding: {e!s}"),
+            detail=_("Failed to test binding"),
         ) from e

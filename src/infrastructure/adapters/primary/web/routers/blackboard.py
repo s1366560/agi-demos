@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote
 
 from fastapi import (
     APIRouter,
@@ -41,6 +41,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_actor,
     get_current_user,
 )
+from src.infrastructure.adapters.primary.web.routers.http_headers import (
+    content_disposition_attachment,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_blackboard_outbox_repository import (
@@ -56,6 +59,7 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard",
     tags=["blackboard"],
 )
+logger = logging.getLogger(__name__)
 
 
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
@@ -63,7 +67,7 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     return DIContainer(
         db=db,
         graph_service=app_container.graph_service,
-        redis_client=app_container._redis_client,
+        redis_client=app_container.redis_client,
     )
 
 
@@ -153,7 +157,11 @@ def _map_error(exc: Exception) -> HTTPException:
         if "not found" in message:
             return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    logger.exception("Blackboard route failed")
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=_("Internal server error"),
+    )
 
 
 class BlackboardPostCreateRequest(BaseModel):
@@ -705,9 +713,7 @@ async def download_file(
                 )
 
         headers = {
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{quote(stream.filename)}"
-            ),
+            "Content-Disposition": content_disposition_attachment(stream.filename),
             "Content-Length": str(stream.file_size),
             "Cache-Control": "private, no-cache",
             "ETag": etag,

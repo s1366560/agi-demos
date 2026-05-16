@@ -60,6 +60,7 @@ def mock_provider_service():
     service.check_provider_health = AsyncMock()
     service.test_provider_connection = AsyncMock()
     service.assign_provider_to_tenant = AsyncMock()
+    service.get_tenant_providers = AsyncMock(return_value=[])
     service.unassign_provider_from_tenant = AsyncMock(return_value=True)
     service.resolve_provider_for_tenant = AsyncMock()
     service.get_usage_statistics = AsyncMock(return_value=[])
@@ -89,7 +90,7 @@ def admin_user():
     user.email = "admin@example.com"
     user.full_name = "Admin User"
     user.is_active = True
-    user.tenant_id = str(uuid4())
+    user.tenants = []
 
     # Mock admin role
     mock_role = Mock()
@@ -108,7 +109,9 @@ def regular_user():
     user.email = "user@example.com"
     user.full_name = "Regular User"
     user.is_active = True
-    user.tenant_id = str(uuid4())
+    tenant_membership = Mock()
+    tenant_membership.tenant_id = str(uuid4())
+    user.tenants = [tenant_membership]
 
     # Mock regular user role
     mock_role = Mock()
@@ -519,6 +522,42 @@ class TestLLMProvidersRouterTenantAssignment:
     """Test cases for tenant-provider assignment endpoints."""
 
     @pytest.mark.asyncio
+    async def test_list_tenant_assignments_for_member_tenant(
+        self, llm_providers_app, mock_provider_service, regular_user
+    ):
+        """Test that a regular user can list assignments for a tenant they belong to."""
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
+
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
+        client = TestClient(llm_providers_app)
+        tenant_id = regular_user.tenants[0].tenant_id
+
+        response = client.get(f"/api/v1/llm-providers/tenants/{tenant_id}/assignments")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == []
+        mock_provider_service.get_tenant_providers.assert_called_once_with(tenant_id, None)
+
+    @pytest.mark.asyncio
+    async def test_list_tenant_assignments_for_other_tenant_forbidden(
+        self, llm_providers_app, mock_provider_service, regular_user
+    ):
+        """Test that a regular user cannot list another tenant's assignments."""
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
+
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
+        client = TestClient(llm_providers_app)
+
+        response = client.get("/api/v1/llm-providers/tenants/other-tenant/assignments")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        mock_provider_service.get_tenant_providers.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_assign_provider_to_tenant_success(self, llm_client, mock_provider_service):
         """Test assigning a provider to a tenant."""
         provider_id = str(uuid4())
@@ -621,6 +660,23 @@ class TestLLMProvidersRouterTenantAssignment:
         response = llm_client.get(f"/api/v1/llm-providers/tenants/{tenant_id}/provider")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_tenant_provider_for_other_tenant_forbidden(
+        self, llm_providers_app, mock_provider_service, regular_user
+    ):
+        """Test that a regular user cannot resolve another tenant's provider."""
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
+
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
+        client = TestClient(llm_providers_app)
+
+        response = client.get("/api/v1/llm-providers/tenants/other-tenant/provider")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        mock_provider_service.resolve_provider_for_tenant.assert_not_called()
 
 
 @pytest.mark.unit
@@ -784,7 +840,7 @@ class TestLLMProvidersRouterUsage:
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["tenant_id"] == regular_user.tenant_id
+        assert data["tenant_id"] == regular_user.tenants[0].tenant_id
 
     @pytest.mark.asyncio
     async def test_get_provider_usage_with_filters(self, llm_client, mock_provider_service):
@@ -801,3 +857,23 @@ class TestLLMProvidersRouterUsage:
 
         assert response.status_code == status.HTTP_200_OK
         mock_provider_service.get_usage_statistics.assert_called_once()
+
+
+@pytest.mark.unit
+class TestLLMProvidersRouterSystem:
+    """Test cases for provider system maintenance endpoints."""
+
+    def test_reset_circuit_breaker_sanitizes_internal_errors(self, llm_client, monkeypatch):
+        """Registry failures should not leak backend exception details."""
+        import src.infrastructure.llm.resilience as resilience
+
+        def raise_registry_error():
+            raise RuntimeError("redis://secret-host/provider-registry")
+
+        monkeypatch.setattr(resilience, "get_circuit_breaker_registry", raise_registry_error)
+
+        response = llm_client.post("/api/v1/llm-providers/system/reset-circuit-breaker/openai")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Failed to reset circuit breaker"
+        assert "secret-host" not in response.text

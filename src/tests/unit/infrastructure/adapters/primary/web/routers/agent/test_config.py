@@ -30,18 +30,18 @@ from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
 )
 
 
-def _make_user(*, is_global_admin: bool = False) -> SimpleNamespace:
+def _make_user(*, is_global_admin: bool = False, is_superuser: bool = False) -> SimpleNamespace:
     """Create a minimal current_user stub for access checks."""
     roles = []
     if is_global_admin:
         roles.append(SimpleNamespace(tenant_id=None, role=SimpleNamespace(name="system_admin")))
-    return SimpleNamespace(id="user-1", roles=roles, is_superuser=False)
+    return SimpleNamespace(id="user-1", roles=roles, is_superuser=is_superuser)
 
 
 @pytest.mark.unit
 class TestAccessHelpers:
-    def test_is_global_admin_ignores_is_superuser_flag_without_roles(self) -> None:
-        assert is_global_admin(SimpleNamespace(id="user-1", is_superuser=True)) is False
+    def test_is_global_admin_supports_is_superuser_flag_without_roles(self) -> None:
+        assert is_global_admin(SimpleNamespace(id="user-1", is_superuser=True)) is True
 
     def test_is_global_admin_supports_preloaded_roles(self) -> None:
         user = SimpleNamespace(
@@ -142,6 +142,17 @@ class TestRequireTenantAccess:
         db.execute = AsyncMock(return_value=tenant_exists_result)
 
         await _require_tenant_access(db, _make_user(is_global_admin=True), "tenant-1")
+
+        db.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_superuser_bypasses_membership_lookup(self) -> None:
+        db = MagicMock()
+        tenant_exists_result = MagicMock()
+        tenant_exists_result.scalar_one_or_none.return_value = "tenant-1"
+        db.execute = AsyncMock(return_value=tenant_exists_result)
+
+        await _require_tenant_access(db, _make_user(is_superuser=True), "tenant-1")
 
         db.execute.assert_awaited_once()
 

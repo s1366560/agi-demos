@@ -91,8 +91,14 @@ async def create_share(
     if share_data.get("expires_at"):
         try:
             expires_at = datetime.fromisoformat(share_data["expires_at"])
-        except Exception:
-            expires_at = datetime.now(UTC) + timedelta(days=7)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=_(
+                    f"Invalid expires_at format: {share_data['expires_at']}. "
+                    "Use ISO 8601 format (e.g., 2024-12-31T23:59:59)."
+                ),
+            ) from None
     elif "expires_in_days" in share_data:
         days = share_data["expires_in_days"]
         if isinstance(days, int) and days > 0:

@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.episode import Episode, SourceType
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
@@ -17,12 +19,21 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_graphiti_client,
     get_workflow_engine,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
+    User,
+    UserProject,
+    UserTenant,
+)
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/episodes", tags=["episodes"])
+
+EPISODE_SORT_FIELDS = frozenset({"created_at", "valid_at", "name"})
 
 
 # --- Schemas ---
@@ -63,6 +74,92 @@ class EpisodeDetail(BaseModel):
     status: str | None = None
 
 
+async def _resolve_episode_scope(
+    *,
+    db: AsyncSession,
+    current_user: User,
+    default_tenant_id: str | None,
+    requested_tenant_id: str | None,
+    requested_project_id: str | None,
+) -> tuple[str, str | None]:
+    tenant_id = requested_tenant_id or default_tenant_id
+    if tenant_id is None and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("User does not belong to any tenant. Please contact administrator."),
+        )
+    if requested_project_id is None:
+        if (
+            requested_tenant_id
+            and default_tenant_id is not None
+            and requested_tenant_id != default_tenant_id
+            and not current_user.is_superuser
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_("Access denied to tenant"),
+            )
+        return tenant_id or requested_tenant_id or "neo4j", None
+
+    if tenant_id is None and current_user.is_superuser:
+        project_result = await db.execute(
+            refresh_select_statement(select(Project).where(Project.id == requested_project_id))
+        )
+    else:
+        project_result = await db.execute(
+            refresh_select_statement(
+                select(Project).where(
+                    and_(Project.id == requested_project_id, Project.tenant_id == tenant_id)
+                )
+            )
+        )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
+
+    if current_user.is_superuser:
+        return project.tenant_id or tenant_id or "neo4j", requested_project_id
+
+    membership_result = await db.execute(
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == requested_project_id,
+                )
+            )
+        )
+    )
+    if not membership_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to project")
+        )
+
+    if tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("User does not belong to any tenant. Please contact administrator."),
+        )
+    return tenant_id, requested_project_id
+
+
+async def _get_default_episode_tenant_id(db: AsyncSession, current_user: User) -> str | None:
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1)
+        )
+    )
+    tenant_id = result.scalar_one_or_none()
+    if tenant_id:
+        return str(tenant_id)
+    if current_user.is_superuser:
+        return None
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("User does not belong to any tenant. Please contact administrator."),
+    )
+
+
 # --- Endpoints ---
 
 
@@ -73,6 +170,7 @@ async def create_episode(
         False, description="Process in background (returns task_id for SSE streaming)"
     ),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graphiti_client: Any = Depends(get_graphiti_client),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> EpisodeResponse:
@@ -94,7 +192,16 @@ async def create_episode(
             episode.name = episode.content[:50] + "..."
 
         # Create episode in Graphiti (let Graphiti generate the UUID)
-        group_id = episode.project_id or "neo4j"  # Use "neo4j" for CE
+        default_tenant_id = await _get_default_episode_tenant_id(db, current_user)
+        resolved_tenant_id, resolved_project_id = await _resolve_episode_scope(
+            db=db,
+            current_user=current_user,
+            default_tenant_id=default_tenant_id,
+            requested_tenant_id=episode.tenant_id,
+            requested_project_id=episode.project_id,
+        )
+        actor_user_id = str(current_user.id)
+        group_id = resolved_project_id or "neo4j"  # Use "neo4j" for CE
         episode_uuid = str(uuid4())
 
         if background:
@@ -108,9 +215,9 @@ async def create_episode(
             task_payload = {
                 "uuid": episode_uuid,
                 "group_id": group_id,
-                "project_id": episode.project_id,
-                "tenant_id": episode.tenant_id,
-                "user_id": episode.user_id or str(current_user.id),
+                "project_id": resolved_project_id,
+                "tenant_id": resolved_tenant_id,
+                "user_id": actor_user_id,
                 "name": episode.name,
                 "content": episode.content,
                 "source_description": episode.source_description,
@@ -177,9 +284,9 @@ async def create_episode(
                 source_type=source_type,
                 valid_at=datetime.now(UTC),
                 metadata=episode.metadata or {},
-                tenant_id=episode.tenant_id,
-                project_id=episode.project_id,
-                user_id=episode.user_id or str(current_user.id),
+                tenant_id=resolved_tenant_id,
+                project_id=resolved_project_id,
+                user_id=actor_user_id,
             )
             result = await graphiti_client.add_episode(graph_episode)
             result_id = getattr(result, "id", None)
@@ -204,6 +311,8 @@ async def create_episode(
                 created_at=datetime.now(UTC).isoformat(),
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create episode: {e}")
         raise HTTPException(
@@ -216,18 +325,38 @@ async def create_episode(
 async def get_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graphiti_client: Any = Depends(get_graphiti_client),
 ) -> EpisodeDetail:
     """
     Get episode details by name.
     """
     try:
-        query = """
-        MATCH (e:Episodic {name: $name})
+        tenant_id = await _get_default_episode_tenant_id(db, current_user)
+        tenant_filter = "" if tenant_id is None else "e.tenant_id = $tenant_id"
+        project_filter = "" if current_user.is_superuser else "e.project_id IN $project_ids"
+        where_parts = [part for part in (tenant_filter, project_filter) if part]
+        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        query = f"""
+        MATCH (e:Episodic {{name: $name}})
+        {where_clause}
         RETURN properties(e) as props
         """
+        project_ids: list[str] = []
+        if not current_user.is_superuser:
+            project_result = await db.execute(
+                refresh_select_statement(
+                    select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+                )
+            )
+            project_ids = list(project_result.scalars().all())
 
-        result = await graphiti_client.driver.execute_query(query, name=episode_name)
+        result = await graphiti_client.driver.execute_query(
+            query,
+            name=episode_name,
+            tenant_id=tenant_id,
+            project_ids=project_ids,
+        )
 
         if not result.records:
             raise HTTPException(status_code=404, detail=_("Episode not found"))
@@ -251,7 +380,7 @@ async def get_episode(
         raise
     except Exception as e:
         logger.error(f"Failed to get episode: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get episode")) from e
 
 
 @router.get("/")
@@ -264,27 +393,59 @@ async def list_episodes(
     sort_by: str = Query("created_at", description="Sort field"),
     sort_desc: bool = Query(True, description="Sort descending if True"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graphiti_client: Any = Depends(get_graphiti_client),
 ) -> dict[str, Any]:
     """
     List episodes with filtering and pagination.
     """
     try:
-        conditions = []
-        if tenant_id:
+        if sort_by not in EPISODE_SORT_FIELDS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_("Invalid sort field"),
+            )
+
+        default_tenant_id = await _get_default_episode_tenant_id(db, current_user)
+        resolved_tenant_id, resolved_project_id = await _resolve_episode_scope(
+            db=db,
+            current_user=current_user,
+            default_tenant_id=default_tenant_id,
+            requested_tenant_id=tenant_id,
+            requested_project_id=project_id,
+        )
+
+        conditions: list[str] = []
+        query_params: dict[str, Any] = {}
+        if (
+            resolved_tenant_id != "neo4j"
+            or tenant_id
+            or project_id
+            or not current_user.is_superuser
+        ):
             conditions.append("e.tenant_id = $tenant_id")
-        if project_id:
+            query_params["tenant_id"] = resolved_tenant_id
+        if resolved_project_id:
             conditions.append("e.project_id = $project_id")
+            query_params["project_id"] = resolved_project_id
+        elif not current_user.is_superuser:
+            project_result = await db.execute(
+                refresh_select_statement(
+                    select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+                )
+            )
+            project_ids = list(project_result.scalars().all())
+            conditions.append("e.project_id IN $project_ids")
+            query_params["project_ids"] = project_ids
         if user_id:
             conditions.append("e.user_id = $user_id")
+            query_params["user_id"] = user_id
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
         # Count
         count_query = f"MATCH (e:Episodic) {where_clause} RETURN count(e) as total"
-        count_result = await graphiti_client.driver.execute_query(
-            count_query, tenant_id=tenant_id, project_id=project_id, user_id=user_id
-        )
+        count_result = await graphiti_client.driver.execute_query(count_query, **query_params)
         total = count_result.records[0]["total"] if count_result.records else 0
 
         # List
@@ -300,9 +461,7 @@ async def list_episodes(
 
         result = await graphiti_client.driver.execute_query(
             list_query,
-            tenant_id=tenant_id,
-            project_id=project_id,
-            user_id=user_id,
+            **query_params,
             offset=offset,
             limit=limit,
         )
@@ -333,15 +492,18 @@ async def list_episodes(
             "has_more": offset + len(episodes) < total,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list episodes: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to list episodes")) from e
 
 
 @router.delete("/by-name/{episode_name}")
 async def delete_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graphiti_client: Any = Depends(get_graphiti_client),
 ) -> dict[str, Any]:
     """
@@ -351,13 +513,33 @@ async def delete_episode(
     associated relationships. Entities will be preserved.
     """
     try:
-        query = """
-        MATCH (e:Episodic {name: $name})
+        tenant_id = await _get_default_episode_tenant_id(db, current_user)
+        tenant_filter = "" if tenant_id is None else "e.tenant_id = $tenant_id"
+        project_filter = "" if current_user.is_superuser else "e.project_id IN $project_ids"
+        where_parts = [part for part in (tenant_filter, project_filter) if part]
+        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        project_ids: list[str] = []
+        if not current_user.is_superuser:
+            project_result = await db.execute(
+                refresh_select_statement(
+                    select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+                )
+            )
+            project_ids = list(project_result.scalars().all())
+
+        query = f"""
+        MATCH (e:Episodic {{name: $name}})
+        {where_clause}
         DETACH DELETE e
         RETURN count(e) as deleted
         """
 
-        result = await graphiti_client.driver.execute_query(query, name=episode_name)
+        result = await graphiti_client.driver.execute_query(
+            query,
+            name=episode_name,
+            tenant_id=tenant_id,
+            project_ids=project_ids,
+        )
         deleted = result.records[0]["deleted"] if result.records else 0
 
         if deleted == 0:
@@ -369,7 +551,7 @@ async def delete_episode(
         raise
     except Exception as e:
         logger.error(f"Failed to delete episode: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to delete episode")) from e
 
 
 @router.get("/health", response_model=dict)

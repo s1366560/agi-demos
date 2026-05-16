@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -18,13 +18,16 @@ from src.application.schemas.deploy_schemas import (
     DeployResponse,
 )
 from src.configuration.di_container import DIContainer
+from src.domain.model.deploy.enums import DeployAction
 from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
     get_current_user_from_header_or_query,
-    get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    DeployRecordModel,
+    InstanceModel,
     User as DBUser,
     UserTenant,
 )
@@ -58,6 +61,74 @@ class DeployFailedRequest(BaseModel):
     message: str = Field(..., description="Failure message")
 
 
+async def _ensure_tenant_access(db: AsyncSession, current_user: DBUser, tenant_id: str) -> None:
+    if current_user.is_superuser:
+        return
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant.id).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to tenant"),
+        )
+
+
+async def _require_instance_tenant_access(
+    db: AsyncSession,
+    current_user: DBUser,
+    instance_id: str,
+) -> str:
+    tenant_id = (
+        await db.execute(
+            refresh_select_statement(
+                select(InstanceModel.tenant_id).where(
+                    InstanceModel.id == instance_id,
+                    InstanceModel.deleted_at.is_(None),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Instance not found"),
+        )
+    await _ensure_tenant_access(db, current_user, str(tenant_id))
+    return str(tenant_id)
+
+
+async def _require_deploy_tenant_access(
+    db: AsyncSession,
+    current_user: DBUser,
+    deploy_id: str,
+) -> None:
+    instance_tenant_id = (
+        await db.execute(
+            refresh_select_statement(
+                select(InstanceModel.tenant_id)
+                .join(DeployRecordModel, DeployRecordModel.instance_id == InstanceModel.id)
+                .where(
+                    DeployRecordModel.id == deploy_id,
+                    DeployRecordModel.deleted_at.is_(None),
+                    InstanceModel.deleted_at.is_(None),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if instance_tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Deploy not found"),
+        )
+    await _ensure_tenant_access(db, current_user, str(instance_tenant_id))
+
+
 @router.post(
     "/",
     response_model=DeployResponse,
@@ -66,17 +137,18 @@ class DeployFailedRequest(BaseModel):
 async def create_deploy(
     request: Request,
     data: DeployCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Create a new deploy record."""
     try:
+        await _require_instance_tenant_access(db, current_user, data.instance_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         result = await service.create_deploy(
             instance_id=data.instance_id,
-            action=cast(Any, data.action),
-            triggered_by=data.triggered_by or tenant_id,
+            action=DeployAction(data.action),
+            triggered_by=current_user.id,
             image_version=data.image_version,
             replicas=data.replicas,
             config_snapshot=data.config_snapshot,
@@ -101,11 +173,12 @@ async def list_deploys(
     instance_id: str = Query(..., description="Instance ID to filter by"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployListResponse:
     """List deploy records for an instance."""
     try:
+        await _require_instance_tenant_access(db, current_user, instance_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         offset = (page - 1) * page_size
@@ -134,11 +207,12 @@ async def list_deploys(
 async def get_latest_deploy(
     request: Request,
     instance_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Get the most recent deploy record for an instance."""
     try:
+        await _require_instance_tenant_access(db, current_user, instance_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         result = await service.get_latest_deploy(instance_id=instance_id)
@@ -159,11 +233,12 @@ async def get_latest_deploy(
 async def get_deploy(
     request: Request,
     deploy_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Get a specific deploy record by ID."""
     try:
+        await _require_deploy_tenant_access(db, current_user, deploy_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         result = await service.get_deploy(deploy_id=deploy_id)
@@ -188,11 +263,12 @@ async def mark_deploy_success(
     request: Request,
     deploy_id: str,
     data: DeploySuccessRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Mark a deploy as successful."""
     try:
+        await _require_deploy_tenant_access(db, current_user, deploy_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         result = await service.mark_deploy_success(
@@ -221,11 +297,12 @@ async def mark_deploy_failed(
     request: Request,
     deploy_id: str,
     data: DeployFailedRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Mark a deploy as failed."""
     try:
+        await _require_deploy_tenant_access(db, current_user, deploy_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         result = await service.mark_deploy_failed(
@@ -253,11 +330,12 @@ async def mark_deploy_failed(
 async def cancel_deploy(
     request: Request,
     deploy_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DeployResponse:
     """Cancel a deploy that has not yet reached a terminal state."""
     try:
+        await _require_deploy_tenant_access(db, current_user, deploy_id)
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         result = await service.cancel_deploy(deploy_id=deploy_id)
@@ -283,17 +361,6 @@ async def stream_deploy_progress(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """SSE endpoint for real-time deploy progress via Redis pub/sub."""
-    # Derive tenant_id from user (supports both header and query-param auth for EventSource)
-    result = await db.execute(
-        refresh_select_statement(select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1))
-    )
-    tenant_id = result.scalar_one_or_none()
-    if not tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("User does not belong to any tenant"),
-        )
-
     container = get_container_with_db(request, db)
     service = container.deploy_service()
 
@@ -303,6 +370,7 @@ async def stream_deploy_progress(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_(f"Deploy {deploy_id} not found"),
         )
+    await _require_deploy_tenant_access(db, current_user, deploy_id)
 
     rc: Any = container.redis_client
 

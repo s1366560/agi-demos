@@ -49,23 +49,61 @@ async def get_current_user_with_roles(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
-    Get current user with roles eagerly loaded.
+    Get current user with roles and tenant memberships eagerly loaded.
 
-    This is needed because the base get_current_user doesn't load roles
-    to reduce query overhead, but this router needs role checks.
+    This is needed because the base get_current_user doesn't load roles or
+    tenant memberships to reduce query overhead, but this router needs both
+    role and tenant-scope checks.
     """
     result = await db.execute(
-        refresh_select_statement(select(User)
-        .where(User.id == current_user.id)
-        .options(selectinload(User.roles).selectinload(UserRole.role)))
+        refresh_select_statement(
+            select(User)
+            .where(User.id == current_user.id)
+            .options(
+                selectinload(User.roles).selectinload(UserRole.role),
+                selectinload(User.tenants),
+            )
+        )
     )
     return cast(User, result.scalar_one())
 
 
+def _is_admin(current_user: User) -> bool:
+    return any(user_role.role.name == "admin" for user_role in current_user.roles)
+
+
+def _tenant_ids_for_user(current_user: User) -> list[str]:
+    tenant_ids: list[str] = []
+    for membership in current_user.tenants:
+        if membership.tenant_id not in tenant_ids:
+            tenant_ids.append(membership.tenant_id)
+    return tenant_ids
+
+
+def _require_tenant_access(current_user: User, tenant_id: str) -> None:
+    if _is_admin(current_user):
+        return
+
+    if tenant_id not in _tenant_ids_for_user(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to tenant assignments"),
+        )
+
+
+def _default_tenant_id_for_user(current_user: User) -> str:
+    tenant_ids = _tenant_ids_for_user(current_user)
+    if not tenant_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("User does not belong to any tenant"),
+        )
+    return tenant_ids[0]
+
+
 async def require_admin(current_user: User = Depends(get_current_user_with_roles)) -> User:
     """Dependency to require admin role."""
-    is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    if not is_admin:
+    if not _is_admin(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Admin access required"),
@@ -114,8 +152,7 @@ async def list_providers(
     Regular users can only view active providers.
     Admins can view all providers.
     """
-    is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    if not is_admin:
+    if not _is_admin(current_user):
         include_inactive = False
 
     providers = await service.list_providers(include_inactive=include_inactive)
@@ -418,8 +455,7 @@ async def get_provider(
         )
 
     # Check if provider is active (non-admins can't see inactive providers)
-    is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    if not is_admin and not provider_response.is_active:
+    if not _is_admin(current_user) and not provider_response.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Provider not found"),
@@ -559,13 +595,7 @@ async def list_tenant_assignments(
     """
     List all provider assignments for a tenant.
     """
-    # Check permissions: admin or user belongs to tenant
-    is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    if not is_admin and current_user.tenant_id != tenant_id:  # type: ignore[attr-defined]
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied to tenant assignments"),
-        )
+    _require_tenant_access(current_user, tenant_id)
 
     return await service.get_tenant_providers(tenant_id, operation_type)
 
@@ -616,7 +646,7 @@ async def get_tenant_provider(
         OperationType.LLM,
         description="Operation type to resolve: llm, embedding, rerank",
     ),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
 ) -> ProviderConfigResponse | None:
     """
@@ -624,6 +654,8 @@ async def get_tenant_provider(
 
     Returns the resolved provider based on fallback hierarchy.
     """
+    _require_tenant_access(current_user, tenant_id)
+
     try:
         provider = await service.resolve_provider_for_tenant(tenant_id, operation_type)
         return await service.get_provider_response(provider.id)
@@ -681,8 +713,7 @@ async def get_provider_usage(
     Regular users can only see usage for their tenant.
     Admins can see all usage.
     """
-    is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    tenant_id = None if is_admin else current_user.tenant_id  # type: ignore[attr-defined]
+    tenant_id = None if _is_admin(current_user) else _default_tenant_id_for_user(current_user)
 
     stats = await service.get_usage_statistics(
         provider_id=provider_id,
@@ -779,7 +810,8 @@ async def reset_circuit_breaker(
             "new_state": circuit_breaker.get_status(),
         }
     except Exception as e:
+        logger.exception("Failed to reset circuit breaker")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_(f"Failed to reset circuit breaker: {e}"),
+            detail=_("Failed to reset circuit breaker"),
         ) from e

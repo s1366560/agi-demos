@@ -53,9 +53,14 @@ async def connect_mcp(
 
         return {"status": "connected", "sandbox_id": sandbox_id}
 
-    except Exception as e:
-        logger.error(f"MCP connection error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("MCP connection error")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to connect MCP client"),
+        ) from exc
 
 
 @router.get("/{sandbox_id}/tools", response_model=ListToolsResponse)
@@ -83,9 +88,14 @@ async def list_tools(
             ]
         )
 
-    except Exception as e:
-        logger.error(f"Failed to list tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to list tools")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to list sandbox tools"),
+        ) from exc
 
 
 @router.get("/{sandbox_id}/tools/agent")
@@ -137,9 +147,14 @@ async def list_agent_tools(
             "count": len(tools),
         }
 
-    except Exception as e:
-        logger.error(f"Failed to list agent tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to list agent tools")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to list agent tools"),
+        ) from exc
 
 
 @router.post("/{sandbox_id}/call", response_model=ToolCallResponse)
@@ -177,9 +192,14 @@ async def call_tool(
             is_error=result.get("is_error", False),
         )
 
-    except Exception as e:
-        logger.error(f"Tool call error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Tool call error")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to call sandbox tool"),
+        ) from exc
 
 
 @router.post("/{sandbox_id}/read")

@@ -28,6 +28,9 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers.agent.utils import (
     get_container_with_db,
 )
+from src.infrastructure.adapters.primary.web.routers.workspace_access import (
+    require_workspace_access,
+)
 from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
     schedule_autonomy_tick,
 )
@@ -161,6 +164,14 @@ async def create_objective(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveResponse:
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     container = get_container_with_db(request, db)
     repo = container.cyber_objective_repository()
     objective = CyberObjective(
@@ -203,6 +214,7 @@ async def list_objectives(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveListResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     container = get_container_with_db(request, db)
     repo = container.cyber_objective_repository()
     obj_type_str = obj_type.value if obj_type is not None else None
@@ -229,6 +241,7 @@ async def get_objective(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     container = get_container_with_db(request, db)
     repo = container.cyber_objective_repository()
     obj = await repo.find_by_id(objective_id)
@@ -251,6 +264,14 @@ async def update_objective(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberObjectiveResponse:
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     container = get_container_with_db(request, db)
     repo = container.cyber_objective_repository()
     obj = await repo.find_by_id(objective_id)
@@ -288,6 +309,14 @@ async def delete_objective(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     container = get_container_with_db(request, db)
     repo = container.cyber_objective_repository()
     obj = await repo.find_by_id(objective_id)
@@ -316,7 +345,14 @@ async def project_objective_to_task(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceTaskResponse:
-    del tenant_id, project_id
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     container = get_container_with_db(request, db)
     objective_repo = container.cyber_objective_repository()
     task_repo = container.workspace_task_repository()

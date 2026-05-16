@@ -17,9 +17,11 @@ from src.configuration.di_container import DIContainer
 from src.domain.model.cluster.cluster import Cluster
 from src.domain.model.cluster.enums import ClusterStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
 
 
@@ -29,7 +31,7 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     return DIContainer(
         db=db,
         graph_service=app_container.graph_service,
-        redis_client=app_container._redis_client,
+        redis_client=app_container.redis_client,
     )
 
 
@@ -119,6 +121,7 @@ async def create_cluster(
     request: Request,
     data: ClusterCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ClusterResponse:
     """Create a new cluster."""
@@ -128,7 +131,7 @@ async def create_cluster(
         result = await service.create_cluster(
             name=data.name,
             tenant_id=tenant_id,
-            created_by=tenant_id,
+            created_by=current_user.id,
             compute_provider=data.compute_provider,
             proxy_endpoint=data.proxy_endpoint,
             provider_config=data.provider_config,

@@ -16,9 +16,9 @@ from src.application.services.smtp_config_service import (
     SmtpConfigService,
     mask_password,
 )
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user_tenant,
-)
+from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_smtp_config_repository import (
     SqlSmtpConfigRepository,
@@ -37,12 +37,25 @@ def _build_service(db: AsyncSession) -> SmtpConfigService:
     return SmtpConfigService(repo=SqlSmtpConfigRepository(db))
 
 
+async def _require_tenant_access(
+    db: AsyncSession,
+    current_user: User,
+    tenant_id: str,
+    *,
+    require_admin: bool = False,
+) -> None:
+    if getattr(current_user, "is_superuser", False):
+        return
+    await require_tenant_access(db, current_user, tenant_id, require_admin=require_admin)
+
+
 @router.get("", response_model=SmtpConfigResponse | None)
 async def get_smtp_config(
     tenant_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SmtpConfigResponse | None:
+    await _require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
     config = await service.get_config(tenant_id)
     if config is None:
@@ -64,9 +77,10 @@ async def get_smtp_config(
 async def upsert_smtp_config(
     tenant_id: str,
     body: SmtpConfigCreate,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SmtpConfigResponse:
+    await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
     service = _build_service(db)
     config = await service.upsert_config(
         tenant_id,
@@ -95,9 +109,10 @@ async def upsert_smtp_config(
 @router.delete("", status_code=204)
 async def delete_smtp_config(
     tenant_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
     service = _build_service(db)
     config = await service.get_config(tenant_id)
     if config is None:
@@ -110,9 +125,10 @@ async def delete_smtp_config(
 async def test_smtp_config(
     tenant_id: str,
     body: SmtpTestRequest,
-    _current_tenant: str = Depends(get_current_user_tenant),  # noqa: PT019
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
     service = _build_service(db)
     try:
         await service.test_smtp(tenant_id, body.recipient_email)

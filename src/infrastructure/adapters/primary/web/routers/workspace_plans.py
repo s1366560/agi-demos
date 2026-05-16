@@ -2916,7 +2916,10 @@ def _map_error(exc: Exception) -> HTTPException:
         if "not found" in message.lower():
             return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=_("Workspace plan operation failed"),
+    )
 
 
 async def _load_plan_for_workspace(db: AsyncSession, workspace_id: str) -> Plan:

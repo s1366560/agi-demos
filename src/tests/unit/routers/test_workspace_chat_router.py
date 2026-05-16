@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import status
 
 from src.application.services.workspace_surface_contract import (
     HOSTED,
@@ -65,6 +66,15 @@ async def _seed_workspace(test_db) -> None:
 
 @pytest.mark.unit
 class TestWorkspaceChatRouter:
+    def test_map_error_sanitizes_internal_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import workspace_chat
+
+        exc = workspace_chat._map_error(RuntimeError("internal chat backend secret"))
+
+        assert exc.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc.detail == "Internal server error"
+        assert "internal" not in exc.detail
+
     @pytest.mark.asyncio
     async def test_send_message_publishes_hosted_sensing_contract(
         self, test_db, client, test_user, monkeypatch

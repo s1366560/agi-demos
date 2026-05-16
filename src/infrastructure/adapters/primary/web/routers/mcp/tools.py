@@ -162,9 +162,11 @@ async def call_mcp_tool(
             execution_time_ms=execution_time_ms,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to call MCP tool: {e}")
+        logger.exception("Failed to call MCP tool")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_(f"Failed to call MCP tool: {e!s}"),
+            detail=_("Failed to call MCP tool"),
         ) from e

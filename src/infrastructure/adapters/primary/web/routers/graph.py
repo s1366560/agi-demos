@@ -12,6 +12,8 @@ from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
@@ -21,13 +23,59 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_neo4j_client,
     get_workflow_engine,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/graph", tags=["graph"])
+
+
+async def _graph_project_scope(
+    project_id: str | None,
+    current_user: User,
+    db: AsyncSession,
+) -> tuple[bool, list[str]]:
+    """Return whether the caller is global admin plus the allowed project IDs."""
+    if getattr(current_user, "is_superuser", False):
+        return True, [project_id] if project_id else []
+
+    if project_id:
+        statement = select(UserProject.id).where(
+            and_(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == project_id,
+            )
+        )
+        result = await db.execute(refresh_select_statement(statement))
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=403, detail=_("Access denied to project"))
+        return False, [project_id]
+
+    statement = select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+    result = await db.execute(refresh_select_statement(statement))
+    return False, list(result.scalars().all())
+
+
+async def _ensure_graph_project_access(
+    project_id: str | None,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
+    if getattr(current_user, "is_superuser", False):
+        return
+
+    if not project_id:
+        raise HTTPException(status_code=403, detail=_("Access denied to project"))
+
+    await _graph_project_scope(project_id, current_user, db)
+
+
+def _empty_graph_elements() -> dict[str, Any]:
+    return {"elements": {"nodes": [], "edges": []}}
 
 
 def _serialize_datetime(value: Any) -> str | None:
@@ -119,6 +167,7 @@ async def list_communities(
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -130,6 +179,10 @@ async def list_communities(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        if not is_superuser and not allowed_project_ids:
+            return {"communities": [], "total": 0, "limit": limit, "offset": offset}
+
         conditions = ["coalesce(c.member_count, 0) >= 0"]  # Always include base condition
         params: dict[str, Any] = {"limit": limit, "offset": offset}
 
@@ -137,6 +190,9 @@ async def list_communities(
         if project_id:
             conditions.append("c.project_id = $project_id")
             params["project_id"] = project_id
+        elif not is_superuser:
+            conditions.append("c.project_id IN $project_ids")
+            params["project_ids"] = allowed_project_ids
 
         if min_members is not None:
             conditions.append("coalesce(c.member_count, 0) >= $min_members")
@@ -186,9 +242,11 @@ async def list_communities(
         logger.info(f"Returning {len(communities)} communities (offset={offset}, limit={limit})")
 
         return {"communities": communities, "total": total, "limit": limit, "offset": offset}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list communities: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to list communities")) from e
 
 
 @router.get("/entities/")
@@ -198,12 +256,17 @@ async def list_entities(
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """List entities in the knowledge graph with filtering and pagination."""
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        if not is_superuser and not allowed_project_ids:
+            return {"entities": [], "total": 0, "limit": limit, "offset": offset}
+
         conditions = []
         params: dict[str, Any] = {"limit": limit, "offset": offset}
 
@@ -219,10 +282,22 @@ async def list_entities(
             """
             conditions.append(project_condition)
             params["project_id"] = project_id
+        elif not is_superuser:
+            project_condition = """
+            (
+                e.project_id IN $project_ids OR
+                EXISTS {
+                    MATCH (e)<-[:MENTIONS]-(ep:Episodic)
+                    WHERE ep.project_id IN $project_ids
+                }
+            )
+            """
+            conditions.append(project_condition)
+            params["project_ids"] = allowed_project_ids
 
         if entity_type:
             # Filter by entity type using label filtering
-            conditions.append("'$entity_type' IN labels(e)")
+            conditions.append("$entity_type IN labels(e)")
             params["entity_type"] = entity_type
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
@@ -263,15 +338,18 @@ async def list_entities(
             )
 
         return {"entities": entities, "total": total, "limit": limit, "offset": offset}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list entities: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to list entities")) from e
 
 
 @router.get("/entities/types")
 async def get_entity_types(
     project_id: str | None = None,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -282,6 +360,10 @@ async def get_entity_types(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        if not is_superuser and not allowed_project_ids:
+            return {"entity_types": [], "total": 0}
+
         conditions = []
         params: dict[str, Any] = {}
 
@@ -290,6 +372,11 @@ async def get_entity_types(
                 "(e.project_id = $project_id OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) WHERE ep.project_id = $project_id })"
             )
             params["project_id"] = project_id
+        elif not is_superuser:
+            conditions.append(
+                "(e.project_id IN $project_ids OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) WHERE ep.project_id IN $project_ids })"
+            )
+            params["project_ids"] = allowed_project_ids
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -310,15 +397,18 @@ async def get_entity_types(
             entity_types.append({"entity_type": r["entity_type"], "count": r["entity_count"]})
 
         return {"entity_types": entity_types, "total": len(entity_types)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get entity types: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get entity types")) from e
 
 
 @router.get("/entities/{entity_id}")
 async def get_entity(
     entity_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -344,6 +434,7 @@ async def get_entity(
             raise HTTPException(status_code=404, detail=_("Entity not found"))
 
         props = result.records[0]["props"]
+        await _ensure_graph_project_access(props.get("project_id"), current_user, db)
 
         # Get entity_type from props (not from labels - entity_type is a property)
         e_type = props.get("entity_type", "Entity")
@@ -378,7 +469,7 @@ async def get_entity(
         raise
     except Exception as e:
         logger.error(f"Failed to get entity {entity_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get entity")) from e
 
 
 @router.get("/entities/{entity_id}/relationships")
@@ -387,6 +478,7 @@ async def get_entity_relationships(
     relationship_type: str | None = Query(None, description="Filter by relationship type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -405,9 +497,27 @@ async def get_entity_relationships(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        entity_result = await neo4j_client.execute_query(
+            """
+            MATCH (e:Entity {uuid: $uuid})
+            RETURN properties(e) as props
+            """,
+            uuid=entity_id,
+        )
+        if not entity_result.records:
+            raise HTTPException(status_code=404, detail=_("Entity not found"))
+
+        entity_project_id = entity_result.records[0]["props"].get("project_id")
+        await _ensure_graph_project_access(entity_project_id, current_user, db)
+
         # Build relationship type filter
         rel_filter = ""
-        params: dict[str, Any] = {"uuid": entity_id, "limit": limit}
+        params: dict[str, Any] = {
+            "uuid": entity_id,
+            "limit": limit,
+            "project_id": entity_project_id,
+            "is_superuser": getattr(current_user, "is_superuser", False),
+        }
 
         if relationship_type:
             rel_filter = "AND type(r) = $relationship_type"
@@ -418,6 +528,7 @@ async def get_entity_relationships(
         MATCH (e:Entity {{uuid: $uuid}})
         OPTIONAL MATCH (e)-[r]-(related:Entity)
         WHERE related IS NOT NULL {rel_filter}
+        AND ($is_superuser OR related.project_id = $project_id)
         RETURN
             elementId(r) as edge_id,
             type(r) as relation_type,
@@ -468,9 +579,11 @@ async def get_entity_relationships(
             )
 
         return {"relationships": relationships, "total": len(relationships)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get relationships for entity {entity_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get entity relationships")) from e
 
 
 @router.get("/memory/graph")
@@ -478,19 +591,31 @@ async def get_graph(
     project_id: str | None = None,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """Get graph data for visualization."""
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        if not is_superuser and not allowed_project_ids:
+            return _empty_graph_elements()
+
         query = """
         MATCH (n)
         WHERE ('Entity' IN labels(n) OR 'Episodic' IN labels(n) OR 'Community' IN labels(n))
-        AND ($project_id IS NULL OR n.project_id = $project_id)
+        AND (
+            ($project_id IS NOT NULL AND n.project_id = $project_id) OR
+            ($project_id IS NULL AND ($is_superuser OR n.project_id IN $project_ids))
+        )
 
         OPTIONAL MATCH (n)-[r]->(m)
         WHERE ('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))
+        AND (
+            ($project_id IS NOT NULL AND m.project_id = $project_id) OR
+            ($project_id IS NULL AND ($is_superuser OR m.project_id IN $project_ids))
+        )
 
         RETURN
             elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
@@ -499,7 +624,13 @@ async def get_graph(
         LIMIT $limit
         """
 
-        result = await neo4j_client.execute_query(query, project_id=project_id, limit=limit)
+        result = await neo4j_client.execute_query(
+            query,
+            project_id=project_id,
+            project_ids=allowed_project_ids,
+            is_superuser=is_superuser,
+            limit=limit,
+        )
 
         nodes_map = {}
         edges_list = []
@@ -554,15 +685,18 @@ async def get_graph(
                     )
 
         return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get graph: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get graph")) from e
 
 
 @router.post("/memory/graph/subgraph")
 async def get_subgraph(
     params: SubgraphRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """Get subgraph for specific nodes."""
@@ -570,11 +704,17 @@ async def get_subgraph(
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         project_id = params.project_id
+        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        if not is_superuser and not allowed_project_ids:
+            return _empty_graph_elements()
 
         query = """
         MATCH (n)
         WHERE n.uuid IN $node_uuids
-        AND ($project_id IS NULL OR n.project_id = $project_id)
+        AND (
+            ($project_id IS NOT NULL AND n.project_id = $project_id) OR
+            ($project_id IS NULL AND ($is_superuser OR n.project_id IN $project_ids))
+        )
 
         WITH n
         """
@@ -583,6 +723,10 @@ async def get_subgraph(
             query += """
             OPTIONAL MATCH (n)-[r]-(m)
             WHERE ('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))
+            AND (
+                ($project_id IS NOT NULL AND m.project_id = $project_id) OR
+                ($project_id IS NULL AND ($is_superuser OR m.project_id IN $project_ids))
+            )
             RETURN
                 elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
                 elementId(r) as edge_id, type(r) as edge_type, properties(r) as edge_props,
@@ -599,7 +743,12 @@ async def get_subgraph(
             """
 
         result = await neo4j_client.execute_query(
-            query, node_uuids=params.node_uuids, project_id=project_id, limit=params.limit
+            query,
+            node_uuids=params.node_uuids,
+            project_id=project_id,
+            project_ids=allowed_project_ids,
+            is_superuser=is_superuser,
+            limit=params.limit,
         )
 
         nodes_map = {}
@@ -658,9 +807,11 @@ async def get_subgraph(
                     )
 
         return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get subgraph: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get subgraph")) from e
 
 
 # --- Community Detail Endpoints ---
@@ -670,6 +821,7 @@ async def get_subgraph(
 async def get_community(
     community_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -695,6 +847,7 @@ async def get_community(
             raise HTTPException(status_code=404, detail=_("Community not found"))
 
         props = result.records[0]["props"]
+        await _ensure_graph_project_access(props.get("project_id"), current_user, db)
 
         return {
             "uuid": props.get("uuid", ""),
@@ -711,7 +864,7 @@ async def get_community(
         raise
     except Exception as e:
         logger.error(f"Failed to get community {community_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get community")) from e
 
 
 @router.get("/communities/{community_id}/members")
@@ -719,6 +872,7 @@ async def get_community_members(
     community_id: str,
     limit: int = Query(100, ge=1, le=500, description="Maximum members to return"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -734,14 +888,34 @@ async def get_community_members(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        community_result = await neo4j_client.execute_query(
+            """
+            MATCH (c:Community {uuid: $uuid})
+            RETURN properties(c) as props
+            """,
+            uuid=community_id,
+        )
+        if not community_result.records:
+            raise HTTPException(status_code=404, detail=_("Community not found"))
+
+        community_project_id = community_result.records[0]["props"].get("project_id")
+        await _ensure_graph_project_access(community_project_id, current_user, db)
+
         # Note: Entity-[:BELONGS_TO]->Community (not Community-[:HAS_MEMBER]->Entity)
         query = """
         MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
+        WHERE $is_superuser OR e.project_id = $project_id
         RETURN properties(e) as props
         LIMIT $limit
         """
 
-        result = await neo4j_client.execute_query(query, uuid=community_id, limit=limit)
+        result = await neo4j_client.execute_query(
+            query,
+            uuid=community_id,
+            project_id=community_project_id,
+            is_superuser=getattr(current_user, "is_superuser", False),
+            limit=limit,
+        )
 
         members = []
         for r in result.records:
@@ -760,9 +934,11 @@ async def get_community_members(
             )
 
         return {"members": members, "total": len(members)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get members for community {community_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to get community members")) from e
 
 
 @router.post("/communities/rebuild")
@@ -770,6 +946,7 @@ async def rebuild_communities(
     background: bool = Query(False, description="Run in background mode"),
     project_id: str | None = Query(None, description="Project ID to rebuild communities for"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
     graph_service: GraphServicePort | None = Depends(get_graph_service),
@@ -796,6 +973,7 @@ async def rebuild_communities(
 
     # Get project_id from query parameter, or fall back to user's default project
     target_project_id = project_id or getattr(current_user, "project_id", None) or "neo4j"
+    await _ensure_graph_project_access(target_project_id, current_user, db)
 
     # Execute either synchronously or submit to background workflow
     if background:
@@ -908,7 +1086,7 @@ async def rebuild_communities(
                 "entities_processed": len(entities),
             }
         except Exception as e:
-            logger.error(f"Failed to rebuild communities: {e}")
+            logger.exception("Failed to rebuild communities")
             raise HTTPException(
-                status_code=500, detail=_(f"Failed to rebuild communities: {e!s}")
+                status_code=500, detail=_("Failed to rebuild communities")
             ) from e

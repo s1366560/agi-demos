@@ -654,7 +654,7 @@ async def proxy_resource_read(
     except Exception as e:
         logger.error("resources/read proxy failed: uri=%s, err=%s", body.uri, e)
         raise HTTPException(
-            status_code=502, detail=_(f"Failed to read resource from MCP server: {e!s}")
+            status_code=502, detail=_("Failed to read resource from MCP server")
         ) from e
 
 
@@ -695,5 +695,5 @@ async def proxy_resource_list(
     except Exception as e:
         logger.error("resources/list proxy failed: err=%s", e)
         raise HTTPException(
-            status_code=502, detail=_(f"Failed to list resources from MCP server: {e!s}")
+            status_code=502, detail=_("Failed to list resources from MCP server")
         ) from e

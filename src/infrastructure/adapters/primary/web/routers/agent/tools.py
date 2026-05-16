@@ -181,11 +181,11 @@ async def get_tool_capabilities(
             domain_breakdown=domain_breakdown,
             plugin_runtime=plugin_runtime,
         )
-    except Exception as e:
-        logger.error(f"Error getting tool capabilities: {e}")
+    except Exception as exc:
+        logger.exception("Error getting tool capabilities")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to get tool capabilities: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to get tool capabilities")
+        ) from exc
 
 
 @router.get("/tools/compositions", response_model=ToolCompositionsListResponse)
@@ -231,11 +231,11 @@ async def list_tool_compositions(
             total=len(compositions),
         )
 
-    except Exception as e:
-        logger.error(f"Error listing tool compositions: {e}")
+    except Exception as exc:
+        logger.exception("Error listing tool compositions")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to list tool compositions: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to list tool compositions")
+        ) from exc
 
 
 @router.get("/tools/compositions/{composition_id}", response_model=ToolCompositionResponse)
@@ -274,9 +274,11 @@ async def get_tool_composition(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting tool composition: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to get tool composition: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error getting tool composition")
+        raise HTTPException(
+            status_code=500, detail=_("Failed to get tool composition")
+        ) from exc
 
 
 @router.post("/debug/tool-policy", response_model=ToolPolicyDebugResponse)

@@ -334,11 +334,11 @@ async def get_pending_hitl_requests(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting pending HITL requests: {e}", exc_info=True)
+    except Exception as exc:
+        logger.exception("Error getting pending HITL requests")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to get pending HITL requests: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to get pending HITL requests")
+        ) from exc
 
 
 @router.get("/projects/{project_id}/pending", response_model=PendingHITLResponse)
@@ -398,11 +398,11 @@ async def get_project_pending_hitl_requests(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting project pending HITL requests: {e}", exc_info=True)
+    except Exception as exc:
+        logger.exception("Error getting project pending HITL requests")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to get pending HITL requests: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to get pending HITL requests")
+        ) from exc
 
 
 # =============================================================================
@@ -519,12 +519,12 @@ async def respond_to_hitl(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error responding to HITL request: {e}", exc_info=True)
+    except Exception as exc:
+        logger.exception("Error responding to HITL request")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to respond to HITL request: {e!s}"),
-        ) from e
+            detail=_("Failed to respond to HITL request"),
+        ) from exc
 
 
 @router.post("/cancel", response_model=HumanInteractionResponse)
@@ -578,12 +578,12 @@ async def cancel_hitl_request(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error cancelling HITL request: {e}", exc_info=True)
+    except Exception as exc:
+        logger.exception("Error cancelling HITL request")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to cancel HITL request: {e!s}"),
-        ) from e
+            detail=_("Failed to cancel HITL request"),
+        ) from exc
 
 
 async def _publish_hitl_response_to_redis(

@@ -20,6 +20,9 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers.agent.utils import (
     get_container_with_db,
 )
+from src.infrastructure.adapters.primary.web.routers.workspace_access import (
+    require_workspace_access,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
@@ -84,6 +87,14 @@ async def create_gene(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     _validate_config_json(payload.config_json)
     container = get_container_with_db(request, db)
     repo = container.cyber_gene_repository()
@@ -115,6 +126,7 @@ async def list_genes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberGeneListResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     container = get_container_with_db(request, db)
     repo = container.cyber_gene_repository()
     category_str = category.value if category is not None else None
@@ -141,6 +153,7 @@ async def get_gene(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     container = get_container_with_db(request, db)
     repo = container.cyber_gene_repository()
     gene = await repo.find_by_id(gene_id)
@@ -163,6 +176,14 @@ async def update_gene(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CyberGeneResponse:
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     container = get_container_with_db(request, db)
     repo = container.cyber_gene_repository()
     gene = await repo.find_by_id(gene_id)
@@ -203,6 +224,14 @@ async def delete_gene(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     container = get_container_with_db(request, db)
     repo = container.cyber_gene_repository()
     gene = await repo.find_by_id(gene_id)

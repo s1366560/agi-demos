@@ -214,7 +214,7 @@ async def create_project(
         raise
     except Exception as e:
         logger.exception("Error creating project")
-        raise HTTPException(status_code=500, detail=_("Internal Error: {error}").format(error=str(e))) from e
+        raise HTTPException(status_code=500, detail=_("Failed to create project")) from e
 
 
 @router.get("/", response_model=ProjectListResponse)

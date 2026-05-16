@@ -206,9 +206,9 @@ async def list_conversations(
             limit=limit,
         )
 
-    except Exception as e:
-        logger.error(f"Error listing conversations: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to list conversations: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error listing conversations")
+        raise HTTPException(status_code=500, detail=_("Failed to list conversations")) from exc
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -240,9 +240,9 @@ async def get_conversation(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting conversation: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to get conversation: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error getting conversation")
+        raise HTTPException(status_code=500, detail=_("Failed to get conversation")) from exc
 
 
 @router.get("/conversations/{conversation_id}/context-status")
@@ -307,9 +307,9 @@ async def get_context_status(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting context status: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to get context status: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error getting context status")
+        raise HTTPException(status_code=500, detail=_("Failed to get context status")) from exc
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -345,9 +345,9 @@ async def delete_conversation(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error deleting conversation: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to delete conversation: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error deleting conversation")
+        raise HTTPException(status_code=500, detail=_("Failed to delete conversation")) from exc
 
 
 @router.patch("/conversations/{conversation_id}/title", response_model=ConversationResponse)
@@ -388,11 +388,11 @@ async def update_conversation_title(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error updating conversation title: {e}")
+    except Exception as exc:
+        logger.exception("Error updating conversation title")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to update conversation title: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to update conversation title")
+        ) from exc
 
 
 @router.patch("/conversations/{conversation_id}/config", response_model=ConversationResponse)
@@ -436,12 +436,12 @@ async def update_conversation_config(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         await db.rollback()
-        logger.error(f"Error updating conversation config: {e}")
+        logger.exception("Error updating conversation config")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to update conversation config: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to update conversation config")
+        ) from exc
 
 
 @router.patch("/conversations/{conversation_id}/mode", response_model=ConversationResponse)
@@ -519,12 +519,12 @@ async def update_conversation_mode(
         await db.rollback()
         logger.warning(f"Invalid conversation mode update for {conversation_id}: {e}")
         raise HTTPException(status_code=422, detail=str(e)) from e
-    except Exception as e:
+    except Exception as exc:
         await db.rollback()
-        logger.error(f"Error updating conversation mode: {e}")
+        logger.exception("Error updating conversation mode")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to update conversation mode: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to update conversation mode")
+        ) from exc
 
 
 @router.post(
@@ -600,11 +600,11 @@ async def generate_conversation_title(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error generating conversation title: {e}")
+    except Exception as exc:
+        logger.exception("Error generating conversation title")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to generate conversation title: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to generate conversation title")
+        ) from exc
 
 
 @router.post(
@@ -684,12 +684,12 @@ async def generate_summary(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error generating conversation summary: {e}")
+    except Exception as exc:
+        logger.exception("Error generating conversation summary")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to generate conversation summary: {e!s}"),
-        ) from e
+            detail=_("Failed to generate conversation summary"),
+        ) from exc
 
 
 @router.post("/conversations/{conversation_id}/fork")
@@ -752,13 +752,13 @@ async def fork_conversation(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         await db.rollback()
-        logger.error(f"Error forking conversation: {e}")
+        logger.exception("Error forking conversation")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to fork conversation: {e!s}"),
-        ) from e
+            detail=_("Failed to fork conversation"),
+        ) from exc
 
 
 @router.put("/conversations/{conversation_id}/messages/{message_id}")
@@ -791,13 +791,13 @@ async def edit_message(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         await db.rollback()
-        logger.error(f"Error editing message: {e}")
+        logger.exception("Error editing message")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to edit message: {e!s}"),
-        ) from e
+            detail=_("Failed to edit message"),
+        ) from exc
 
 
 @router.post("/conversations/{conversation_id}/tools/{execution_id}/undo")
@@ -841,10 +841,10 @@ async def request_tool_undo(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
         await db.rollback()
-        logger.error(f"Error requesting tool undo: {e}")
+        logger.exception("Error requesting tool undo")
         raise HTTPException(
             status_code=500,
-            detail=_(f"Failed to request tool undo: {e!s}"),
-        ) from e
+            detail=_("Failed to request tool undo"),
+        ) from exc

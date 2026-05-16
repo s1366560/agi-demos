@@ -96,6 +96,8 @@ class TestAIToolsRouter:
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.json()["detail"] == "Failed to optimize content"
+        assert "LLM error" not in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_generate_title_success(self, client, ai_tools_llm):
@@ -185,6 +187,8 @@ class TestAIToolsRouter:
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.json()["detail"] == "Failed to generate title"
+        assert "API error" not in response.json()["detail"]
 
 
 @pytest.mark.unit

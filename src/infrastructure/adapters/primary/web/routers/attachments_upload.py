@@ -7,11 +7,21 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any, cast
+from typing import Any, Self, cast
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status as http_status,
+)
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.attachment_service import AttachmentService
@@ -26,8 +36,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
     SqlAttachmentRepository,
 )
@@ -101,14 +112,30 @@ class UploadPartResponse(BaseModel):
     etag: str = Field(..., description="ETag of the uploaded part")
 
 
+class CompleteUploadPart(BaseModel):
+    """Uploaded multipart part descriptor."""
+
+    part_number: int = Field(..., ge=1, description="Part number that was uploaded")
+    etag: str = Field(..., min_length=1, description="ETag returned by object storage")
+
+
 class CompleteUploadRequest(BaseModel):
     """Request model for completing multipart upload."""
 
     attachment_id: str = Field(..., description="ID of the attachment")
-    parts: list[dict[str, Any]] = Field(
+    parts: list[CompleteUploadPart] = Field(
         ...,
+        min_length=1,
         description="List of uploaded parts with 'part_number' and 'etag'",
     )
+
+    @model_validator(mode="after")
+    def validate_unique_parts(self) -> Self:
+        """Ensure the same part is not submitted twice."""
+        part_numbers = [part.part_number for part in self.parts]
+        if len(part_numbers) != len(set(part_numbers)):
+            raise ValueError("Duplicate part numbers are not allowed")
+        return self
 
 
 class AttachmentResponse(BaseModel):
@@ -165,6 +192,77 @@ def _parse_purpose(purpose: str) -> AttachmentPurpose:
         ) from None
 
 
+async def _verify_project_access(project_id: str, user: User, db: AsyncSession) -> None:
+    """Verify the current user can access the attachment's project."""
+    if user.is_superuser:
+        return
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == user.id,
+                    UserProject.project_id == project_id,
+                )
+            )
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        )
+
+
+async def _get_authorized_attachment(
+    attachment_id: str,
+    user: User,
+    tenant_id: str,
+    db: AsyncSession,
+    attachment_service: AttachmentService,
+) -> Attachment:
+    """Load an attachment and verify tenant/project access before side effects."""
+    attachment = await attachment_service.get(attachment_id)
+    if not attachment:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=_("Attachment not found"),
+        )
+
+    if not user.is_superuser and attachment.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to attachment"),
+        )
+
+    await _verify_project_access(attachment.project_id, user, db)
+    return attachment
+
+
+def _validate_part_upload(attachment: Attachment, part_number: int, data: bytes) -> None:
+    """Validate a part upload request against attachment metadata."""
+    if attachment.total_parts is None or attachment.total_parts <= 0:
+        raise HTTPException(status_code=400, detail=_("Invalid upload state"))
+    if part_number > attachment.total_parts:
+        raise HTTPException(status_code=400, detail=_("Part number exceeds total parts"))
+    if not data:
+        raise HTTPException(status_code=400, detail=_("Uploaded part cannot be empty"))
+
+
+def _validate_complete_upload(attachment: Attachment, parts: list[CompleteUploadPart]) -> None:
+    """Validate completion request before passing it to object storage."""
+    if attachment.total_parts is None or attachment.total_parts <= 0:
+        raise HTTPException(status_code=400, detail=_("Invalid upload state"))
+
+    expected_part_numbers = list(range(1, attachment.total_parts + 1))
+    submitted_part_numbers = sorted(part.part_number for part in parts)
+    if submitted_part_numbers != expected_part_numbers:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Uploaded parts do not match expected part count"),
+        )
+
+
 # === API Endpoints ===
 
 
@@ -173,6 +271,7 @@ async def initiate_multipart_upload(
     request: InitiateUploadRequest,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> InitiateUploadResponse:
     """
@@ -183,6 +282,7 @@ async def initiate_multipart_upload(
     """
     try:
         purpose = _parse_purpose(request.purpose)
+        await _verify_project_access(request.project_id, current_user, db)
 
         attachment = await attachment_service.initiate_multipart_upload(
             tenant_id=tenant_id,
@@ -203,6 +303,8 @@ async def initiate_multipart_upload(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to initiate multipart upload: {e}")
         raise HTTPException(status_code=500, detail=_("Failed to initiate upload")) from e
@@ -214,6 +316,8 @@ async def upload_part(
     part_number: int = Form(..., ge=1, description="Part number (1-indexed)"),
     file: UploadFile = File(..., description="Part data"),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> UploadPartResponse:
     """
@@ -223,7 +327,15 @@ async def upload_part(
     Each part (except the last) should be exactly part_size bytes.
     """
     try:
+        attachment = await _get_authorized_attachment(
+            attachment_id=attachment_id,
+            user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+            attachment_service=attachment_service,
+        )
         data = await file.read()
+        _validate_part_upload(attachment, part_number, data)
 
         result = await attachment_service.upload_part(
             attachment_id=attachment_id,
@@ -237,16 +349,20 @@ async def upload_part(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Failed to upload part: {e}")
-        raise HTTPException(status_code=500, detail=_("Failed to upload part")) from e
+        raise HTTPException(status_code=400, detail=_("Invalid upload part")) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to upload part")
+        raise HTTPException(status_code=500, detail=_("Failed to upload part")) from exc
 
 
 @router.post("/upload/complete", response_model=AttachmentResponse)
 async def complete_multipart_upload(
     request: CompleteUploadRequest,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentResponse:
     """
@@ -256,13 +372,22 @@ async def complete_multipart_upload(
     The 'parts' array must contain all uploaded parts with their part_number and etag.
     """
     try:
+        attachment = await _get_authorized_attachment(
+            attachment_id=request.attachment_id,
+            user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+            attachment_service=attachment_service,
+        )
+        _validate_complete_upload(attachment, request.parts)
+
         # Convert parts to PartUploadResult
         parts = [
             PartUploadResult(
-                part_number=p["part_number"],
-                etag=p["etag"],
+                part_number=part.part_number,
+                etag=part.etag,
             )
-            for p in request.parts
+            for part in sorted(request.parts, key=lambda part: part.part_number)
         ]
 
         attachment = await attachment_service.complete_multipart_upload(
@@ -273,16 +398,20 @@ async def complete_multipart_upload(
         return _attachment_to_response(attachment)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Failed to complete multipart upload: {e}")
-        raise HTTPException(status_code=500, detail=_("Failed to complete upload")) from e
+        raise HTTPException(status_code=400, detail=_("Invalid upload completion request")) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to complete multipart upload")
+        raise HTTPException(status_code=500, detail=_("Failed to complete upload")) from exc
 
 
 @router.post("/upload/abort")
 async def abort_multipart_upload(
     attachment_id: str = Form(..., description="ID of the attachment"),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> dict[str, Any]:
     """
@@ -291,6 +420,13 @@ async def abort_multipart_upload(
     Use this to cancel an in-progress multipart upload and clean up resources.
     """
     try:
+        await _get_authorized_attachment(
+            attachment_id=attachment_id,
+            user=current_user,
+            tenant_id=tenant_id,
+            db=db,
+            attachment_service=attachment_service,
+        )
         success = await attachment_service.abort_multipart_upload(attachment_id)
 
         if not success:
@@ -300,9 +436,9 @@ async def abort_multipart_upload(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Failed to abort multipart upload: {e}")
-        raise HTTPException(status_code=500, detail=_("Failed to abort upload")) from e
+    except Exception as exc:
+        logger.exception("Failed to abort multipart upload")
+        raise HTTPException(status_code=500, detail=_("Failed to abort upload")) from exc
 
 
 @router.post("/upload/simple", response_model=AttachmentResponse)
@@ -313,6 +449,7 @@ async def upload_simple(
     file: UploadFile = File(..., description="File to upload"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentResponse:
     """
@@ -322,6 +459,7 @@ async def upload_simple(
     """
     try:
         purpose_enum = _parse_purpose(purpose)
+        await _verify_project_access(project_id, current_user, db)
         data = await file.read()
 
         attachment = await attachment_service.upload_simple(
@@ -338,11 +476,11 @@ async def upload_simple(
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        import traceback
-
-        logger.error(f"Failed to upload file: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=_("Failed to upload file")) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to upload file")
+        raise HTTPException(status_code=500, detail=_("Failed to upload file")) from exc
 
 
 @router.get("", response_model=AttachmentListResponse)
@@ -350,6 +488,8 @@ async def list_attachments(
     conversation_id: str = Query(..., description="Conversation ID to list attachments for"),
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentListResponse:
     """
@@ -364,10 +504,19 @@ async def list_attachments(
         conversation_id=conversation_id,
         status=status_enum,
     )
+    visible_attachments: list[Attachment] = []
+    for attachment in attachments:
+        if not current_user.is_superuser and attachment.tenant_id != tenant_id:
+            continue
+        try:
+            await _verify_project_access(attachment.project_id, current_user, db)
+        except HTTPException:
+            continue
+        visible_attachments.append(attachment)
 
     return AttachmentListResponse(
-        attachments=[_attachment_to_response(a) for a in attachments],
-        total=len(attachments),
+        attachments=[_attachment_to_response(a) for a in visible_attachments],
+        total=len(visible_attachments),
     )
 
 
@@ -375,15 +524,20 @@ async def list_attachments(
 async def get_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentResponse:
     """
     Get attachment details by ID.
     """
-    attachment = await attachment_service.get(attachment_id)
-
-    if not attachment:
-        raise HTTPException(status_code=404, detail=_("Attachment not found"))
+    attachment = await _get_authorized_attachment(
+        attachment_id=attachment_id,
+        user=current_user,
+        tenant_id=tenant_id,
+        db=db,
+        attachment_service=attachment_service,
+    )
 
     return _attachment_to_response(attachment)
 
@@ -392,11 +546,20 @@ async def get_attachment(
 async def download_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> RedirectResponse:
     """
     Download an attachment via presigned URL redirect.
     """
+    await _get_authorized_attachment(
+        attachment_id=attachment_id,
+        user=current_user,
+        tenant_id=tenant_id,
+        db=db,
+        attachment_service=attachment_service,
+    )
     url = await attachment_service.get_download_url(attachment_id)
 
     if not url:
@@ -409,11 +572,20 @@ async def download_attachment(
 async def delete_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> dict[str, Any]:
     """
     Delete an attachment.
     """
+    await _get_authorized_attachment(
+        attachment_id=attachment_id,
+        user=current_user,
+        tenant_id=tenant_id,
+        db=db,
+        attachment_service=attachment_service,
+    )
     success = await attachment_service.delete(attachment_id)
 
     if not success:

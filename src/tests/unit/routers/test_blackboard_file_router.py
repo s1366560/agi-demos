@@ -118,7 +118,9 @@ def test_download_file_passes_current_user_to_service(
 
     assert response.status_code == status.HTTP_200_OK
     assert response.content == b"hello"
-    assert response.headers["content-disposition"] == "attachment; filename*=UTF-8''hello.txt"
+    assert response.headers["content-disposition"] == (
+        "attachment; filename=\"hello.txt\"; filename*=UTF-8''hello.txt"
+    )
     # Weak ETag fallback when checksum is missing.
     assert response.headers["etag"].startswith('W/"sz-5-id-file-1"')
     assert response.headers["accept-ranges"] == "bytes"

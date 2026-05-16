@@ -3,7 +3,10 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException, status
+from sqlalchemy import select
 
+from src.infrastructure.adapters.primary.web.routers.notifications import create_notification
 from src.infrastructure.adapters.secondary.persistence.models import Notification
 
 
@@ -358,11 +361,12 @@ class TestCreateNotification:
     @pytest.mark.asyncio
     async def test_create_notification_with_expires_at(self, test_db, client, test_user):
         """Test creating notification with expiration."""
+        expires_at = datetime.now(UTC) + timedelta(hours=1)
         notif_data = {
             "user_id": test_user.id,
             "title": "Temporary",
             "message": "Expires soon",
-            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            "expires_at": expires_at.isoformat(),
         }
 
         response = client.post("/api/v1/notifications/create", json=notif_data)
@@ -370,3 +374,59 @@ class TestCreateNotification:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
+        result = await test_db.execute(
+            select(Notification).where(Notification.id == response.json()["id"])
+        )
+        notification = result.scalar_one()
+        assert notification.expires_at is not None
+
+    @pytest.mark.asyncio
+    async def test_create_notification_rejects_other_user_for_non_superuser(
+        self, test_db, test_user, another_user
+    ):
+        """Test non-superusers cannot create notifications for another user."""
+        with pytest.raises(HTTPException) as exc_info:
+            await create_notification(
+                {
+                    "user_id": another_user.id,
+                    "title": "Cross-user",
+                    "message": "Should be rejected",
+                },
+                current_user=test_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_create_notification_allows_other_user_for_superuser(
+        self, test_db, test_user, another_user
+    ):
+        """Test superusers can create notifications for another user."""
+        test_user.is_superuser = True
+
+        response = await create_notification(
+            {
+                "user_id": another_user.id,
+                "title": "Admin notice",
+                "message": "Created by admin",
+            },
+            current_user=test_user,
+            db=test_db,
+        )
+
+        result = await test_db.execute(select(Notification).where(Notification.id == response["id"]))
+        notification = result.scalar_one()
+        assert notification.user_id == another_user.id
+
+    @pytest.mark.asyncio
+    async def test_create_notification_rejects_invalid_expires_at(self, test_db, test_user):
+        """Test invalid expires_at values return a 400 error."""
+        with pytest.raises(HTTPException) as exc_info:
+            await create_notification(
+                {"message": "Bad expiry", "expires_at": "not-a-date"},
+                current_user=test_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST

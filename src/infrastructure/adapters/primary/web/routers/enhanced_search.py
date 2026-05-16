@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.services.graph_service_port import GraphServicePort
 
@@ -14,6 +15,11 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_graph_service,
     get_neo4j_client,
 )
+from src.infrastructure.adapters.primary.web.routers.graph import (
+    _ensure_graph_project_access,
+    _graph_project_scope,
+)
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.i18n import gettext as _
@@ -28,6 +34,100 @@ memory_router = APIRouter(prefix="/api/v1", tags=["memory-search"])
 
 # Hybrid router
 hybrid_router = APIRouter(prefix="/api/v1/hybrid", tags=["hybrid-search"])
+
+
+async def _search_graph_service_for_scope(
+    graph_service: GraphServicePort,
+    query: str,
+    project_id: str | None,
+    limit: int,
+    current_user: User,
+    db: AsyncSession,
+) -> list[Any]:
+    is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+
+    if is_superuser or project_id:
+        return await graph_service.search(query=query, project_id=project_id, limit=limit)
+
+    if not allowed_project_ids:
+        return []
+
+    results: list[Any] = []
+    seen_keys: set[tuple[str, str]] = set()
+    for allowed_project_id in allowed_project_ids:
+        project_results = await graph_service.search(
+            query=query,
+            project_id=allowed_project_id,
+            limit=limit,
+        )
+        for item in project_results:
+            item_type = str(item.get("type", ""))
+            item_uuid = str(item.get("uuid", item.get("memory_id", item.get("name", ""))))
+            key = (item_type, item_uuid)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            results.append(item)
+            if len(results) >= limit:
+                return results
+
+    return results
+
+
+def _parse_optional_datetime(value: str | None, error_detail: str) -> datetime | None:
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=error_detail) from None
+
+
+async def _graph_project_filter(
+    node_alias: str,
+    project_id: str | None,
+    current_user: User,
+    db: AsyncSession,
+) -> tuple[list[str], dict[str, Any], bool]:
+    is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+    if not is_superuser and not allowed_project_ids:
+        return [], {}, True
+
+    if project_id:
+        return [f"{node_alias}.project_id = $project_id"], {"project_id": project_id}, False
+
+    if not is_superuser:
+        return (
+            [f"{node_alias}.project_id IN $project_ids"],
+            {"project_ids": allowed_project_ids},
+            False,
+        )
+
+    return [], {}, False
+
+
+def _empty_temporal_response(since: str | None, until: str | None) -> dict[str, Any]:
+    return {
+        "results": [],
+        "total": 0,
+        "search_type": "temporal",
+        "time_range": {
+            "since": since,
+            "until": until,
+        },
+    }
+
+
+def _empty_faceted_response(limit: int, offset: int) -> dict[str, Any]:
+    return {
+        "results": [],
+        "facets": {"entity_types": {}, "total": 0},
+        "total": 0,
+        "limit": limit,
+        "offset": offset,
+        "search_type": "faceted",
+    }
 
 
 # --- Endpoints ---
@@ -46,6 +146,7 @@ async def search_advanced(
     project_id: str | None = Body(None, description="Project filter"),
     since: str | None = Body(None, description="Filter by creation date (ISO format)"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> dict[str, Any]:
     """
@@ -59,10 +160,13 @@ async def search_advanced(
             raise HTTPException(status_code=503, detail=_("Graph service not available"))
 
         # Use NativeGraphAdapter's search method
-        results = await graph_service.search(
+        results = await _search_graph_service_for_scope(
+            graph_service,
             query=query,
             project_id=project_id,
             limit=limit,
+            current_user=current_user,
+            db=db,
         )
 
         # Convert results to response format
@@ -111,7 +215,7 @@ async def search_advanced(
         raise
     except Exception as e:
         logger.error(f"Advanced search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Advanced search failed")) from e
 
 
 @router.post("/graph-traversal")
@@ -121,7 +225,9 @@ async def search_by_graph_traversal(
     relationship_types: list[str] | None = Body(None, description="Relationship types to follow"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
+    project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -134,22 +240,44 @@ async def search_by_graph_traversal(
         if not neo4j_client:
             raise HTTPException(status_code=503, detail=_("Neo4j client not available"))
 
-        # Build relationship type filter
-        rel_filter = ""
-        if relationship_types:
-            rel_filter = "AND type(r) IN [{}]".format(
-                ", ".join([f'"{t}"' for t in relationship_types])
-            )
+        start_result = await neo4j_client.execute_query(
+            """
+            MATCH (start:Entity {uuid: $uuid})
+            RETURN properties(start) as props
+            """,
+            uuid=start_entity_uuid,
+        )
+        if not start_result.records:
+            raise HTTPException(status_code=404, detail=_("Entity not found"))
+
+        start_project_id = start_result.records[0]["props"].get("project_id")
+        effective_project_id = project_id or start_project_id
+        if project_id:
+            await _ensure_graph_project_access(project_id, current_user, db)
+            if start_project_id != project_id:
+                return {"results": [], "total": 0, "search_type": "graph_traversal"}
+        else:
+            await _ensure_graph_project_access(effective_project_id, current_user, db)
 
         query = f"""
         MATCH path = (start:Entity {{uuid: $uuid}})-[*1..{max_depth}]-(related)
         WHERE ('Entity' IN labels(related) OR 'Episodic' IN labels(related) OR 'Community' IN labels(related))
-        {rel_filter}
+        AND related.project_id = $project_id
+        AND (
+            size($relationship_types) = 0 OR
+            all(rel IN relationships(path) WHERE type(rel) IN $relationship_types)
+        )
         RETURN DISTINCT related, properties(related) as props, labels(related) as labels
         LIMIT $limit
         """
 
-        result = await neo4j_client.execute_query(query, uuid=start_entity_uuid, limit=limit)
+        result = await neo4j_client.execute_query(
+            query,
+            uuid=start_entity_uuid,
+            project_id=effective_project_id,
+            relationship_types=relationship_types or [],
+            limit=limit,
+        )
 
         items = []
         for r in result.records:
@@ -190,9 +318,11 @@ async def search_by_graph_traversal(
             "search_type": "graph_traversal",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Graph traversal search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Graph traversal search failed")) from e
 
 
 @router.post("/community")
@@ -201,6 +331,7 @@ async def search_by_community(
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     include_episodes: bool = Body(True, description="Include episodes in results"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -212,14 +343,32 @@ async def search_by_community(
         if not neo4j_client:
             raise HTTPException(status_code=503, detail=_("Neo4j client not available"))
 
+        community_result = await neo4j_client.execute_query(
+            """
+            MATCH (c:Community {uuid: $uuid})
+            RETURN properties(c) as props
+            """,
+            uuid=community_uuid,
+        )
+        if not community_result.records:
+            raise HTTPException(status_code=404, detail=_("Community not found"))
+
+        community_project_id = community_result.records[0]["props"].get("project_id")
+        await _ensure_graph_project_access(community_project_id, current_user, db)
+
         # Get entities in community
         entity_query = """
         MATCH (c:Community {uuid: $uuid})
         MATCH (e:Entity)-[:BELONGS_TO]->(c)
+        WHERE e.project_id = $project_id
         RETURN properties(e) as props, 'Entity' as type
         """
 
-        result = await neo4j_client.execute_query(entity_query, uuid=community_uuid)
+        result = await neo4j_client.execute_query(
+            entity_query,
+            uuid=community_uuid,
+            project_id=community_project_id,
+        )
 
         items = []
         for r in result.records:
@@ -240,12 +389,16 @@ async def search_by_community(
             MATCH (c:Community {uuid: $uuid})
             MATCH (e:Entity)-[:BELONGS_TO]->(c)
             MATCH (ep:Episodic)-[:MENTIONS]->(e)
+            WHERE ep.project_id = $project_id
             RETURN DISTINCT properties(ep) as props, 'Episodic' as type
             LIMIT $limit
             """
 
             ep_result = await neo4j_client.execute_query(
-                episode_query, uuid=community_uuid, limit=limit
+                episode_query,
+                uuid=community_uuid,
+                project_id=community_project_id,
+                limit=limit,
             )
 
             for r in ep_result.records:
@@ -266,9 +419,11 @@ async def search_by_community(
             "search_type": "community",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Community search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Community search failed")) from e
 
 
 @router.post("/temporal")
@@ -278,7 +433,9 @@ async def search_temporal(
     until: str | None = Body(None, description="End of time range (ISO format)"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
+    project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -290,28 +447,17 @@ async def search_temporal(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        parsed_since = None
-        parsed_until = None
-
-        if since:
-            try:
-                parsed_since = datetime.fromisoformat(since)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400, detail=_("Invalid 'since' datetime format")
-                ) from None
-
-        if until:
-            try:
-                parsed_until = datetime.fromisoformat(until)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400, detail=_("Invalid 'until' datetime format")
-                ) from None
+        parsed_since = _parse_optional_datetime(since, _("Invalid 'since' datetime format"))
+        parsed_until = _parse_optional_datetime(until, _("Invalid 'until' datetime format"))
 
         # Build temporal filter
-        conditions = []
-        params: dict[str, Any] = {"query": query, "limit": limit}
+        conditions, scope_params, scope_empty = await _graph_project_filter(
+            "e", project_id, current_user, db
+        )
+        if scope_empty:
+            return _empty_temporal_response(since, until)
+
+        params: dict[str, Any] = {"query": query, "limit": limit, **scope_params}
 
         if parsed_since:
             conditions.append("e.created_at >= datetime($since)")
@@ -364,7 +510,7 @@ async def search_temporal(
         raise
     except Exception as e:
         logger.error(f"Temporal search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Temporal search failed")) from e
 
 
 @router.post("/faceted")
@@ -376,7 +522,9 @@ async def search_with_facets(
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     offset: int = Body(0, ge=0, description="Pagination offset"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
+    project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
 ) -> dict[str, Any]:
     """
@@ -388,18 +536,16 @@ async def search_with_facets(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        parsed_since = None
-        if since:
-            try:
-                parsed_since = datetime.fromisoformat(since)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400, detail=_("Invalid 'since' datetime format")
-                ) from None
+        parsed_since = _parse_optional_datetime(since, _("Invalid 'since' datetime format"))
 
         # Build filters
-        conditions = []
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        conditions, scope_params, scope_empty = await _graph_project_filter(
+            "e", project_id, current_user, db
+        )
+        if scope_empty:
+            return _empty_faceted_response(limit, offset)
+
+        params: dict[str, Any] = {"limit": limit, "offset": offset, **scope_params}
 
         if entity_types:
             conditions.append("e.entity_type IN $entity_types")
@@ -477,7 +623,7 @@ async def search_with_facets(
         raise
     except Exception as e:
         logger.error(f"Faceted search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Faceted search failed")) from e
 
 
 @router.get("/capabilities")
@@ -571,6 +717,7 @@ async def get_search_capabilities(current_user: User = Depends(get_current_user)
 async def memory_search(
     params: dict[str, Any],
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> dict[str, Any]:
     """
@@ -582,7 +729,7 @@ async def memory_search(
     try:
         query = params.get("query", "")
         limit = params.get("limit", 10)
-        project_id = params.get("project_id") or params.get("tenant_id")
+        project_id = params.get("project_id")
 
         if not query:
             raise HTTPException(status_code=400, detail=_("Query is required"))
@@ -591,10 +738,13 @@ async def memory_search(
             raise HTTPException(status_code=503, detail=_("Graph service not available"))
 
         # Use NativeGraphAdapter's search method
-        results = await graph_service.search(
+        results = await _search_graph_service_for_scope(
+            graph_service,
             query=query,
             project_id=project_id,
             limit=limit,
+            current_user=current_user,
+            db=db,
         )
 
         # Convert results to response format
@@ -644,4 +794,4 @@ async def memory_search(
         raise
     except Exception as e:
         logger.error(f"Search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Search failed")) from e

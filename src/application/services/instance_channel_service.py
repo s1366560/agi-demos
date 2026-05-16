@@ -54,12 +54,16 @@ class InstanceChannelService:
     async def update_channel(
         self,
         channel_id: str,
+        expected_instance_id: str | None = None,
         name: str | None = None,
         config: dict[str, object] | None = None,
     ) -> InstanceChannelConfig:
         """Update an existing channel config."""
         entity = await self._channel_repo.find_by_id(channel_id)
         if not entity:
+            msg = f"Channel not found: {channel_id}"
+            raise ValueError(msg)
+        if expected_instance_id is not None and entity.instance_id != expected_instance_id:
             msg = f"Channel not found: {channel_id}"
             raise ValueError(msg)
         if name is not None:
@@ -69,18 +73,32 @@ class InstanceChannelService:
         entity.updated_at = datetime.now(UTC)
         return await self._channel_repo.update(entity)
 
-    async def delete_channel(self, channel_id: str) -> None:
+    async def delete_channel(
+        self,
+        channel_id: str,
+        expected_instance_id: str | None = None,
+    ) -> None:
         """Soft-delete a channel config."""
         entity = await self._channel_repo.find_by_id(channel_id)
         if not entity:
             msg = f"Channel not found: {channel_id}"
             raise ValueError(msg)
+        if expected_instance_id is not None and entity.instance_id != expected_instance_id:
+            msg = f"Channel not found: {channel_id}"
+            raise ValueError(msg)
         await self._channel_repo.delete(channel_id)
 
-    async def test_connection(self, channel_id: str) -> dict[str, str]:
+    async def test_connection(
+        self,
+        channel_id: str,
+        expected_instance_id: str | None = None,
+    ) -> dict[str, str]:
         """Test a channel connection and persist the observed status."""
         entity = await self._channel_repo.find_by_id(channel_id)
         if not entity:
+            msg = f"Channel not found: {channel_id}"
+            raise ValueError(msg)
+        if expected_instance_id is not None and entity.instance_id != expected_instance_id:
             msg = f"Channel not found: {channel_id}"
             raise ValueError(msg)
 

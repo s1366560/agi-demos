@@ -192,6 +192,21 @@ class TestWorkspacesRouter:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    def test_get_workspace_sanitizes_internal_errors(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        mock_workspace_service.get_workspace.side_effect = RuntimeError(
+            "internal workspace backend secret"
+        )
+
+        response = workspaces_client.get(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1"
+        )
+
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.json()["detail"] == "Internal server error"
+        assert "internal" not in response.json()["detail"]
+
     def test_update_workspace_maps_forbidden_and_rolls_back(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:

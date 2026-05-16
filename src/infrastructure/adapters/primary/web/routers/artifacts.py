@@ -13,11 +13,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import ArtifactCategory, ArtifactStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -42,6 +46,22 @@ def get_artifact_service() -> ArtifactService:
     if service is None:
         raise RuntimeError("Artifact service initialization failed")
     return service
+
+
+async def verify_project_access(project_id: str, user: User, db: AsyncSession) -> None:
+    """Verify that the authenticated user is a project member."""
+    if user.is_superuser:
+        return
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(UserProject.user_id == user.id, UserProject.project_id == project_id)
+            )
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail=_("Access denied to project"))
 
 
 # === Request/Response Models ===
@@ -113,6 +133,7 @@ async def list_artifacts(
     tool_execution_id: str | None = Query(None, description="Filter by tool execution"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of artifacts to return"),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ArtifactListResponse:
     """
     List artifacts for a project.
@@ -121,6 +142,7 @@ async def list_artifacts(
     Returns artifacts sorted by creation time, newest first.
     """
     service = get_artifact_service()
+    await verify_project_access(project_id, current_user, db)
 
     # Validate category if provided
     category_filter = None
@@ -135,7 +157,11 @@ async def list_artifacts(
 
     # Get artifacts
     if tool_execution_id:
-        artifacts = await service.get_artifacts_by_tool_execution(tool_execution_id)
+        artifacts = [
+            artifact
+            for artifact in await service.get_artifacts_by_tool_execution(tool_execution_id)
+            if artifact.project_id == project_id and artifact.status == ArtifactStatus.READY
+        ]
         if category_filter:
             artifacts = [a for a in artifacts if a.category == category_filter]
         artifacts = artifacts[:limit]
@@ -181,6 +207,7 @@ async def list_artifacts(
 async def get_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ArtifactResponse:
     """
     Get a single artifact by ID.
@@ -190,6 +217,8 @@ async def get_artifact(
 
     if not artifact:
         raise HTTPException(status_code=404, detail=_("Artifact not found"))
+
+    await verify_project_access(artifact.project_id, current_user, db)
 
     return ArtifactResponse(
         id=artifact.id,
@@ -217,6 +246,7 @@ async def get_artifact(
 async def download_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     """
     Download an artifact.
@@ -229,6 +259,8 @@ async def download_artifact(
 
     if not artifact:
         raise HTTPException(status_code=404, detail=_("Artifact not found"))
+
+    await verify_project_access(artifact.project_id, current_user, db)
 
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
@@ -249,6 +281,7 @@ async def download_artifact(
 async def refresh_artifact_url(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> RefreshUrlResponse:
     """
     Refresh the presigned URL for an artifact.
@@ -260,6 +293,8 @@ async def refresh_artifact_url(
 
     if not artifact:
         raise HTTPException(status_code=404, detail=_("Artifact not found"))
+
+    await verify_project_access(artifact.project_id, current_user, db)
 
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
@@ -279,6 +314,7 @@ async def update_artifact_content(
     artifact_id: str,
     request: UpdateContentRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> UpdateContentResponse:
     """
     Update the text content of an artifact (canvas save-back).
@@ -291,6 +327,8 @@ async def update_artifact_content(
 
     if not artifact:
         raise HTTPException(status_code=404, detail=_("Artifact not found"))
+
+    await verify_project_access(artifact.project_id, current_user, db)
 
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
@@ -313,6 +351,7 @@ async def update_artifact_content(
 async def delete_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Delete an artifact.
@@ -324,6 +363,8 @@ async def delete_artifact(
 
     if not artifact:
         raise HTTPException(status_code=404, detail=_("Artifact not found"))
+
+    await verify_project_access(artifact.project_id, current_user, db)
 
     success = await service.delete_artifact(artifact_id)
     if not success:

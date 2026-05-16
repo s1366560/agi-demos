@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import status
 
 from src.application.services.workspace_surface_contract import (
     AUTHORITATIVE,
@@ -74,6 +75,15 @@ async def _seed_workspace_membership(test_db, role: str = "editor") -> None:
 
 @pytest.mark.unit
 class TestBlackboardRouter:
+    def test_map_error_sanitizes_internal_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import blackboard
+
+        exc = blackboard._map_error(RuntimeError("internal blackboard backend secret"))
+
+        assert exc.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc.detail == "Internal server error"
+        assert "internal" not in exc.detail
+
     @pytest.mark.asyncio
     async def test_create_and_list_posts(self, test_db, client, test_user, monkeypatch):
         publish_mock = AsyncMock()

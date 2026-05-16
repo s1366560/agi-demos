@@ -2,9 +2,25 @@
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import pytest
-from fastapi import status
+from fastapi import HTTPException, status
+
+from src.infrastructure.adapters.primary.web.routers.episodes import (
+    delete_episode,
+    get_episode,
+    list_episodes,
+)
+from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
+
+
+def _without_scope(payload: dict) -> dict:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in {"tenant_id", "project_id", "user_id"}
+    }
 
 
 @pytest.mark.unit
@@ -27,7 +43,7 @@ class TestEpisodesRouter:
         # Make request
         response = client.post(
             "/api/v1/episodes/",
-            json=sample_episode_data,
+            json=_without_scope(sample_episode_data),
         )
 
         # Assert
@@ -39,6 +55,74 @@ class TestEpisodesRouter:
         assert "created_at" in data
 
     @pytest.mark.asyncio
+    async def test_create_episode_uses_authenticated_scope(
+        self,
+        client,
+        mock_graphiti_client,
+        test_project_db,
+        sample_episode_data,
+    ):
+        """Episode creation ignores spoofed tenant/user IDs from the body."""
+        mock_result = Mock()
+        mock_result.episode = Mock(uuid=str(uuid4()))
+        mock_graphiti_client.add_episode = AsyncMock(return_value=mock_result)
+
+        payload = {
+            **sample_episode_data,
+            "tenant_id": test_project_db.tenant_id,
+            "project_id": test_project_db.id,
+            "user_id": "spoofed-user",
+        }
+
+        response = client.post("/api/v1/episodes/", json=payload)
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        added_episode = mock_graphiti_client.add_episode.call_args.args[0]
+        assert added_episode.tenant_id == test_project_db.tenant_id
+        assert added_episode.project_id == test_project_db.id
+        assert added_episode.user_id == "550e8400-e29b-41d4-a716-446655440000"
+
+    @pytest.mark.asyncio
+    async def test_create_episode_rejects_project_outside_requested_tenant(
+        self,
+        client,
+        mock_graphiti_client,
+        test_db,
+        test_project_db,
+        sample_episode_data,
+    ):
+        """A body cannot attach an episode to a project under another tenant."""
+        other_project = Project(
+            id=f"project-{uuid4().hex}",
+            tenant_id="other-tenant",
+            name="Other Tenant Project",
+            owner_id="550e8400-e29b-41d4-a716-446655440000",
+            memory_rules={},
+            graph_config={},
+        )
+        test_db.add(other_project)
+        test_db.add(
+            UserProject(
+                id=str(uuid4()),
+                user_id="550e8400-e29b-41d4-a716-446655440000",
+                project_id=other_project.id,
+                role="owner",
+            )
+        )
+        await test_db.commit()
+
+        payload = {
+            **sample_episode_data,
+            "tenant_id": test_project_db.tenant_id,
+            "project_id": other_project.id,
+        }
+
+        response = client.post("/api/v1/episodes/", json=payload)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        mock_graphiti_client.add_episode.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_create_episode_auto_generate_name(
         self, client, mock_graphiti_client, sample_episode_data
     ):
@@ -47,7 +131,7 @@ class TestEpisodesRouter:
         from uuid import uuid4
 
         # Remove name from data
-        episode_data = sample_episode_data.copy()
+        episode_data = _without_scope(sample_episode_data)
         del episode_data["name"]
 
         # Mock response - return a proper result object
@@ -74,7 +158,7 @@ class TestEpisodesRouter:
         mock_graphiti_client.add_episode = AsyncMock(side_effect=Exception("Database error"))
 
         # Make request
-        response = client.post("/api/v1/episodes/", json=sample_episode_data)
+        response = client.post("/api/v1/episodes/", json=_without_scope(sample_episode_data))
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -174,7 +258,12 @@ class TestEpisodesRouter:
         assert data["offset"] == 0
 
     @pytest.mark.asyncio
-    async def test_list_episodes_with_filters(self, client, mock_graphiti_client):
+    async def test_list_episodes_with_filters(
+        self,
+        client,
+        mock_graphiti_client,
+        test_project_db,
+    ):
         """Test episode listing with filters."""
         # Mock count response
         count_record = Mock()
@@ -191,12 +280,24 @@ class TestEpisodesRouter:
         )
 
         # Make request with filters
-        response = client.get("/api/v1/episodes/?tenant_id=tenant_123&project_id=proj_123&limit=10")
+        response = client.get(
+            "/api/v1/episodes/"
+            f"?tenant_id={test_project_db.tenant_id}&project_id={test_project_db.id}&limit=10"
+        )
 
         # Assert
         assert response.status_code == status.HTTP_200_OK
         # Verify query was called with filters
         assert mock_graphiti_client.driver.execute_query.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_list_episodes_rejects_invalid_sort_field(self, client, mock_graphiti_client):
+        """Sort fields are whitelisted before interpolation into Cypher."""
+        response = client.get("/api/v1/episodes/?sort_by=name) DETACH DELETE e //")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Invalid sort field"
+        mock_graphiti_client.driver.execute_query.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_delete_episode_success(self, client, mock_graphiti_client):
@@ -216,6 +317,113 @@ class TestEpisodesRouter:
         data = response.json()
         assert data["status"] == "success"
         assert "deleted successfully" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_delete_episode_scopes_query_to_current_user_projects(
+        self,
+        test_db,
+        test_project_db,
+        test_user,
+        mock_graphiti_client,
+    ):
+        """Direct delete calls include tenant and project membership filters."""
+        record = Mock()
+        record.__getitem__ = lambda self, key: 1
+        mock_result = Mock()
+        mock_result.records = [record]
+        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+
+        response = await delete_episode(
+            "Test Episode",
+            current_user=test_user,
+            db=test_db,
+            graphiti_client=mock_graphiti_client,
+        )
+
+        query = mock_graphiti_client.driver.execute_query.call_args.args[0]
+        kwargs = mock_graphiti_client.driver.execute_query.call_args.kwargs
+        assert response["status"] == "success"
+        assert "e.tenant_id = $tenant_id" in query
+        assert "e.project_id IN $project_ids" in query
+        assert kwargs["tenant_id"] == test_project_db.tenant_id
+        assert test_project_db.id in kwargs["project_ids"]
+
+    @pytest.mark.asyncio
+    async def test_get_episode_failure_returns_sanitized_error(
+        self,
+        test_db,
+        test_project_db,
+        test_user,
+        mock_graphiti_client,
+    ):
+        """Episode retrieval failures do not expose internal exception text."""
+        mock_graphiti_client.driver.execute_query = AsyncMock(
+            side_effect=RuntimeError("internal connection secret")
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_episode(
+                "Test Episode",
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=mock_graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to get episode"
+
+    @pytest.mark.asyncio
+    async def test_list_episodes_failure_returns_sanitized_error(
+        self,
+        test_db,
+        test_project_db,
+        test_user,
+        mock_graphiti_client,
+    ):
+        """Episode list failures do not expose internal exception text."""
+        mock_graphiti_client.driver.execute_query = AsyncMock(
+            side_effect=RuntimeError("internal list secret")
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_episodes(
+                tenant_id=None,
+                project_id=None,
+                limit=50,
+                offset=0,
+                sort_by="created_at",
+                sort_desc=True,
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=mock_graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to list episodes"
+
+    @pytest.mark.asyncio
+    async def test_delete_episode_failure_returns_sanitized_error(
+        self,
+        test_db,
+        test_project_db,
+        test_user,
+        mock_graphiti_client,
+    ):
+        """Episode deletion failures do not expose internal exception text."""
+        mock_graphiti_client.driver.execute_query = AsyncMock(
+            side_effect=RuntimeError("internal delete secret")
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await delete_episode(
+                "Test Episode",
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=mock_graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to delete episode"
 
     @pytest.mark.asyncio
     async def test_delete_episode_not_found(self, client, mock_graphiti_client):
@@ -284,7 +492,8 @@ class TestEpisodesRouterIntegration:
         mock_result.episode = mock_episode
         mock_graphiti_client.add_episode = AsyncMock(return_value=mock_result)
 
-        create_response = client.post("/api/v1/episodes/", json=sample_episode_data)
+        episode_payload = _without_scope(sample_episode_data)
+        create_response = client.post("/api/v1/episodes/", json=episode_payload)
         assert create_response.status_code == status.HTTP_202_ACCEPTED
         episode_id = create_response.json()["id"]
 
@@ -292,8 +501,8 @@ class TestEpisodesRouterIntegration:
         mock_records = []
         props = {
             "uuid": episode_id,
-            "name": sample_episode_data["name"],
-            "content": sample_episode_data["content"],
+            "name": episode_payload["name"],
+            "content": episode_payload["content"],
             "created_at": datetime.now(UTC).isoformat(),
             "status": "processing",
         }
@@ -305,7 +514,7 @@ class TestEpisodesRouterIntegration:
         mock_result.records = mock_records
         mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
 
-        get_response = client.get(f"/api/v1/episodes/by-name/{sample_episode_data['name']}")
+        get_response = client.get(f"/api/v1/episodes/by-name/{episode_payload['name']}")
         assert get_response.status_code == status.HTTP_200_OK
 
         # 3. List episodes
@@ -331,5 +540,5 @@ class TestEpisodesRouterIntegration:
         delete_result.records = [delete_record]
         mock_graphiti_client.driver.execute_query = AsyncMock(return_value=delete_result)
 
-        delete_response = client.delete(f"/api/v1/episodes/by-name/{sample_episode_data['name']}")
+        delete_response = client.delete(f"/api/v1/episodes/by-name/{episode_payload['name']}")
         assert delete_response.status_code == status.HTTP_200_OK

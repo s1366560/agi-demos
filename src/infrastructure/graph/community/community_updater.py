@@ -350,12 +350,20 @@ class CommunityUpdater:
                 response_format="json",
             )
             content = self._response_content(generated_response)
-        elif hasattr(self._llm_client, "_generate_response"):
-            legacy_response = await self._llm_client._generate_response(
+        elif hasattr(self._llm_client, "generate_response") or hasattr(
+            self._llm_client,
+            "_generate_response",
+        ):
+            generate_response = getattr(
+                self._llm_client,
+                "generate_response",
+                None,
+            ) or self._llm_client._generate_response
+            generated_response = await generate_response(
                 messages=messages,
                 response_model=None,
             )
-            content = self._response_content(legacy_response)
+            content = self._response_content(generated_response)
         else:
             raise NotImplementedError(f"Unsupported LLM client type: {type(self._llm_client)}")
 

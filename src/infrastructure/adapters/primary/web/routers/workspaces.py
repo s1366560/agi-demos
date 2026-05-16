@@ -25,6 +25,7 @@ from src.domain.model.workspace.workspace_role import WorkspaceRole
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces",
@@ -69,7 +70,11 @@ def _map_error(exc: Exception) -> HTTPException:
         if "not found" in message.lower():
             return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    logger.exception("Workspace route failed")
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=_("Internal server error"),
+    )
 
 
 def _ensure_workspace_scope(workspace: Workspace, tenant_id: str, project_id: str) -> None:

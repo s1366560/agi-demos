@@ -51,7 +51,11 @@ async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
         ]
     )
 
-    response = await get_graph(project_id="project-1", current_user=object(), neo4j_client=client)
+    response = await get_graph(
+        project_id="project-1",
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
 
     node = response["elements"]["nodes"][0]["data"]
     assert node["created_at"] == "2026-05-16T04:58:00+00:00"
@@ -94,7 +98,7 @@ async def test_get_subgraph_serializes_node_and_edge_neo4j_datetime_properties()
 
     response = await get_subgraph(
         SubgraphRequest(node_uuids=["source-1"], project_id="project-1"),
-        current_user=object(),
+        current_user=SimpleNamespace(is_superuser=True),
         neo4j_client=client,
     )
 

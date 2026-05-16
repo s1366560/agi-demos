@@ -1394,8 +1394,8 @@ async def ensure_project_sandbox(
         return ProjectSandboxResponse.from_info(info)
 
     except Exception as e:
-        logger.error(f"Failed to ensure sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to create sandbox: {e!s}")) from e
+        logger.exception("Failed to ensure sandbox for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Failed to create sandbox")) from e
 
 
 @router.get("/{project_id}/sandbox/health", response_model=HealthCheckResponse)
@@ -1429,8 +1429,8 @@ async def check_project_sandbox_health(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Health check failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Health check failed: {e!s}")) from e
+        logger.exception("Health check failed for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Health check failed")) from e
 
 
 @router.get("/{project_id}/sandbox/stats", response_model=SandboxStatsResponse)
@@ -1491,8 +1491,8 @@ async def get_project_sandbox_stats(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get sandbox stats for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Stats query failed: {e!s}")) from e
+        logger.exception("Failed to get sandbox stats for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Stats query failed")) from e
 
 
 @router.post("/{project_id}/sandbox/execute", response_model=ExecuteToolResponse)
@@ -1525,8 +1525,8 @@ async def execute_tool_in_project_sandbox(
         )
 
     except Exception as e:
-        logger.error(f"Tool execution failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Execution failed: {e!s}")) from e
+        logger.exception("Tool execution failed for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Execution failed")) from e
 
 
 @router.post("/{project_id}/sandbox/restart", response_model=SandboxActionResponse)
@@ -1586,8 +1586,8 @@ async def restart_project_sandbox(
         )
 
     except Exception as e:
-        logger.error(f"Failed to restart sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Restart failed: {e!s}")) from e
+        logger.exception("Failed to restart sandbox for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Restart failed")) from e
 
 
 @router.delete("/{project_id}/sandbox", response_model=SandboxActionResponse)
@@ -1649,8 +1649,8 @@ async def terminate_project_sandbox(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to terminate sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Termination failed: {e!s}")) from e
+        logger.exception("Failed to terminate sandbox for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Termination failed")) from e
 
 
 @router.get("/{project_id}/sandbox/sync", response_model=ProjectSandboxResponse)
@@ -1671,8 +1671,8 @@ async def sync_project_sandbox_status(
         return ProjectSandboxResponse.from_info(info)
 
     except Exception as e:
-        logger.error(f"Failed to sync sandbox status for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Sync failed: {e!s}")) from e
+        logger.exception("Failed to sync sandbox status for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Sync failed")) from e
 
 
 # ============================================================================
@@ -1781,8 +1781,8 @@ async def start_project_desktop(
         }
 
     except Exception as e:
-        logger.error(f"Failed to start desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to start desktop: {e!s}")) from e
+        logger.exception("Failed to start desktop for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Failed to start desktop")) from e
 
 
 @router.delete("/{project_id}/sandbox/desktop")
@@ -1806,8 +1806,8 @@ async def stop_project_desktop(
         return {"success": success}
 
     except Exception as e:
-        logger.error(f"Failed to stop desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to stop desktop: {e!s}")) from e
+        logger.exception("Failed to stop desktop for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Failed to stop desktop")) from e
 
 
 @router.post("/{project_id}/sandbox/terminal")
@@ -1838,8 +1838,8 @@ async def start_project_terminal(
         }
 
     except Exception as e:
-        logger.error(f"Failed to start terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to start terminal: {e!s}")) from e
+        logger.exception("Failed to start terminal for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Failed to start terminal")) from e
 
 
 @router.delete("/{project_id}/sandbox/terminal")
@@ -1863,8 +1863,8 @@ async def stop_project_terminal(
         return {"success": success}
 
     except Exception as e:
-        logger.error(f"Failed to stop terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to stop terminal: {e!s}")) from e
+        logger.exception("Failed to stop terminal for project %s", project_id)
+        raise HTTPException(status_code=500, detail=_("Failed to stop terminal")) from e
 
 
 # ============================================================================
@@ -2606,7 +2606,7 @@ async def proxy_project_http_service(
         )
         raise HTTPException(
             status_code=502,
-            detail=_(f"Failed to connect to HTTP service {service_id}: {error_detail}"),
+            detail=_("Failed to connect to HTTP service"),
         ) from e
 
 
@@ -2828,7 +2828,7 @@ async def proxy_project_http_service_preview_host(
         )
         raise HTTPException(
             status_code=502,
-            detail=_(f"Failed to connect to HTTP service {service_info.service_id}: {error_detail}"),
+            detail=_("Failed to connect to HTTP service"),
         ) from e
 
 
@@ -2995,10 +2995,10 @@ async def proxy_project_desktop(
             return response_obj
     except httpx.RequestError as e:
         error_detail = str(e) or type(e).__name__
-        logger.error(f"Failed to proxy desktop request to {target_url}: {error_detail}")
+        logger.error("Failed to proxy desktop request to %s: %s", target_url, error_detail)
         raise HTTPException(
             status_code=502,
-            detail=_(f"Failed to connect to desktop service at {target_url}: {error_detail}"),
+            detail=_("Failed to connect to desktop service"),
         ) from e
 
 

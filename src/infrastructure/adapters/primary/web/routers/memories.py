@@ -1,7 +1,7 @@
 """Memories API endpoints."""
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
 
@@ -114,14 +114,18 @@ async def _get_memory_write_project(
 ) -> Project:
     """Load a project after verifying the current user can create memories in it."""
     membership_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            UserProject.user_id == current_user.id,
-            UserProject.project_id == project_id,
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == project_id,
+            )
+        )
     )
     user_project = membership_result.scalar_one_or_none()
 
-    project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+    project_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == project_id))
+    )
     project = project_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
@@ -141,6 +145,79 @@ async def _get_memory_write_project(
         )
 
     return cast(Project, project)
+
+
+async def _verify_memory_read_access(
+    memory: Memory,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
+    """Require that the current user can read the memory's project."""
+    membership_result = await db.execute(
+        refresh_select_statement(
+            select(UserProject).where(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == memory.project_id,
+            )
+        )
+    )
+    if membership_result.scalar_one_or_none():
+        return
+
+    project_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+    )
+    project = project_result.scalar_one_or_none()
+    if project is not None and (project.owner_id == current_user.id or project.is_public):
+        return
+
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
+
+
+async def _has_memory_share_edit_permission(
+    memory_id: str,
+    user_id: str,
+    db: AsyncSession,
+) -> bool:
+    """Return whether a direct memory share grants edit permission."""
+    share_result = await db.execute(
+        refresh_select_statement(
+            select(MemoryShare).where(
+                MemoryShare.memory_id == memory_id,
+                MemoryShare.shared_with_user_id == user_id,
+            )
+        )
+    )
+    return any(
+        (share.permissions or {}).get("edit") is True for share in share_result.scalars().all()
+    )
+
+
+async def _resolve_extraction_content(
+    payload: dict[str, Any],
+    current_user: User,
+    db: AsyncSession,
+) -> str:
+    """Resolve extraction text from direct content/text or an accessible memory."""
+    content = payload.get("content")
+    if content is None:
+        content = payload.get("text")
+    if isinstance(content, str) and content:
+        return content
+
+    memory_id = payload.get("memory_id")
+    if not isinstance(memory_id, str) or not memory_id:
+        return ""
+
+    result = await db.execute(
+        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
+    )
+    mem = result.scalar_one_or_none()
+    if not mem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Memory not found"))
+
+    await _verify_memory_read_access(cast(Memory, mem), current_user, db)
+    return cast(Memory, mem).content or ""
 
 
 router = APIRouter(prefix="/api/v1", tags=["memories"])
@@ -217,32 +294,6 @@ class MemoryUpdate(BaseModel):
     version: int  # Required for optimistic locking
 
 
-class MemoryShareCreate(BaseModel):
-    """Schema for creating a memory share."""
-
-    target_type: str  # 'user' or 'project'
-    target_id: str  # User ID or Project ID
-    permission_level: str  # 'view' or 'edit'
-    expires_at: datetime | None = None
-
-
-class MemoryShareResponse(BaseModel):
-    """Schema for memory share response."""
-
-    id: str
-    memory_id: str
-    shared_with_user_id: str | None
-    shared_with_project_id: str | None
-    permissions: dict[str, Any]
-    shared_by: str
-    created_at: datetime
-    expires_at: datetime | None
-    access_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-
 # --- Endpoints ---
 @router.post("/memories/extract-entities")
 async def extract_entities(
@@ -250,15 +301,7 @@ async def extract_entities(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    content = payload.get("content")
-    memory_id = payload.get("memory_id")
-    if not content and memory_id:
-        result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-        mem = result.scalar_one_or_none()
-        if not mem:
-            raise HTTPException(status_code=404, detail=_("Memory not found"))
-        content = mem.content
-    content = content or ""
+    content = await _resolve_extraction_content(payload, current_user, db)
     tokens = [t for t in content.split() if t[:1].isupper()]
     entities = [{"name": t.strip(",.()"), "type": "Entity", "confidence": 0.5} for t in tokens[:10]]
     return {"entities": entities, "source": "rule_based"}
@@ -270,15 +313,7 @@ async def extract_relationships(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    content = payload.get("content")
-    memory_id = payload.get("memory_id")
-    if not content and memory_id:
-        result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-        mem = result.scalar_one_or_none()
-        if not mem:
-            raise HTTPException(status_code=404, detail=_("Memory not found"))
-        content = mem.content
-    content = content or ""
+    content = await _resolve_extraction_content(payload, current_user, db)
     words = [w.strip(",.()") for w in content.split() if w]
     relationships = []
     for i in range(0, min(len(words), 6), 3):
@@ -456,11 +491,8 @@ async def create_memory(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating memory: {e}")
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Error creating memory")
+        raise HTTPException(status_code=500, detail=_("Failed to create memory")) from e
 
 
 @router.get("/memories/", response_model=MemoryListResponse)
@@ -475,14 +507,18 @@ async def list_memories(
     """List memories for a project."""
     # Verify access
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            UserProject.user_id == current_user.id,
-            UserProject.project_id == project_id,
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == project_id,
+            )
+        )
     )
     if not user_project_result.scalar_one_or_none():
         # Check ownership
-        project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+        project_result = await db.execute(
+            refresh_select_statement(select(Project).where(Project.id == project_id))
+        )
         project = project_result.scalar_one_or_none()
         if not project or (project.owner_id != current_user.id and not project.is_public):
             raise HTTPException(status_code=403, detail=_("Access denied"))
@@ -530,7 +566,9 @@ async def get_memory(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Get a specific memory."""
-    result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
+    )
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -539,14 +577,18 @@ async def get_memory(
     # Check access
     # Simplified: Check if user has access to project
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            UserProject.user_id == current_user.id,
-            UserProject.project_id == memory.project_id,
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == memory.project_id,
+            )
+        )
     )
     if not user_project_result.scalar_one_or_none():
         # Check ownership
-        project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == memory.project_id)))
+        project_result = await db.execute(
+            refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+        )
         project = project_result.scalar_one_or_none()
         if not project or project.owner_id != current_user.id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
@@ -563,7 +605,9 @@ async def delete_memory(
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     # 1. Get memory to check permissions and project_id
-    result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
+    )
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -573,11 +617,13 @@ async def delete_memory(
     if memory.author_id != current_user.id:
         # Check if user is project owner/admin
         user_project_result = await db.execute(
-            refresh_select_statement(select(UserProject).where(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == memory.project_id,
-                UserProject.role.in_(["owner", "admin"]),
-            ))
+            refresh_select_statement(
+                select(UserProject).where(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == memory.project_id,
+                    UserProject.role.in_(["owner", "admin"]),
+                )
+            )
         )
         if not user_project_result.scalar_one_or_none():
             # Check if user is tenant owner? (Optional, skipping for now)
@@ -651,7 +697,9 @@ async def reprocess_memory(
 ) -> Any:
     """Manually trigger re-processing of a memory."""
     # 1. Get memory
-    result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
+    )
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -666,22 +714,16 @@ async def reprocess_memory(
 
     # 2. Check permissions
     if memory.author_id != current_user.id:
-        # Check shared edit permission
-        share_result = await db.execute(
-            refresh_select_statement(select(MemoryShare).where(
-                MemoryShare.memory_id == memory_id,
-                MemoryShare.shared_with_user_id == current_user.id,
-                MemoryShare.permission_level == "edit",  # type: ignore[attr-defined]  # ORM column
-            ))
-        )
-        if not share_result.scalar_one_or_none():
+        if not await _has_memory_share_edit_permission(memory_id, current_user.id, db):
             # Check project owner
             user_project_result = await db.execute(
-                refresh_select_statement(select(UserProject).where(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == memory.project_id,
-                    UserProject.role.in_(["owner", "admin"]),
-                ))
+                refresh_select_statement(
+                    select(UserProject).where(
+                        UserProject.user_id == current_user.id,
+                        UserProject.project_id == memory.project_id,
+                        UserProject.role.in_(["owner", "admin"]),
+                    )
+                )
             )
             if not user_project_result.scalar_one_or_none():
                 raise HTTPException(status_code=403, detail=_("Permission denied"))
@@ -698,7 +740,9 @@ async def reprocess_memory(
     # 4. Trigger processing
     try:
         # Get project for tenant_id
-        project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == memory.project_id)))
+        project_result = await db.execute(
+            refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+        )
         project = project_result.scalar_one_or_none()
         if not project:
             raise HTTPException(status_code=404, detail=_("Project not found"))
@@ -777,23 +821,17 @@ async def _check_memory_edit_permission(memory: Any, current_user: User, db: Asy
     if memory.author_id == current_user.id:
         return
     # Check if user has edit permission through share
-    share_result = await db.execute(
-        refresh_select_statement(select(MemoryShare).where(
-            MemoryShare.memory_id == memory.id,
-            MemoryShare.shared_with_user_id == current_user.id,
-            MemoryShare.permission_level == "edit",  # type: ignore[attr-defined]  # ORM column
-        ))
-    )
-    has_edit_share = share_result.scalar_one_or_none()
-    if has_edit_share:
+    if await _has_memory_share_edit_permission(memory.id, current_user.id, db):
         return
     # Check if user is project owner/admin
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            UserProject.user_id == current_user.id,
-            UserProject.project_id == memory.project_id,
-            UserProject.role.in_(["owner", "admin"]),
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == memory.project_id,
+                UserProject.role.in_(["owner", "admin"]),
+            )
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(status_code=403, detail=_("Permission denied"))
@@ -808,7 +846,9 @@ async def _submit_reprocessing_workflow(
     """Submit memory for reprocessing via Temporal workflow."""
     try:
         # Get project for tenant_id
-        project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == memory.project_id)))
+        project_result = await db.execute(
+            refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+        )
         project = project_result.scalar_one_or_none()
         if not project:
             logger.error(f"Project {memory.project_id} not found for memory {memory.id}")
@@ -884,7 +924,9 @@ async def update_memory(
 ) -> Any:
     """Update an existing memory with optimistic locking."""
     # 1. Get memory
-    result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Memory).where(Memory.id == memory_id))
+    )
     memory = result.scalar_one_or_none()
 
     if not memory:
@@ -897,7 +939,9 @@ async def update_memory(
     if memory.version != memory_data.version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_("Version conflict: Memory was modified by another user. Please refresh and try again."),
+            detail=_(
+                "Version conflict: Memory was modified by another user. Please refresh and try again."
+            ),
         )
 
     original_content = memory.content
@@ -934,8 +978,7 @@ async def update_memory(
     await db.refresh(memory)
 
     should_sync_chunks = (
-        memory.content != original_content
-        or dict(memory.meta or {}) != original_meta
+        memory.content != original_content or dict(memory.meta or {}) != original_meta
     )
     if should_sync_chunks:
         task_session_factory = _build_request_session_factory(db)
@@ -953,125 +996,3 @@ async def update_memory(
     logger.info(f"Updated memory {memory_id} to version {memory.version}")
 
     return MemoryResponse.from_orm(memory)
-
-
-@router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
-async def create_memory_share(
-    memory_id: str,
-    share_data: dict[str, Any],
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Share a memory - accepts both strict and lenient payloads."""
-    result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-    memory = result.scalar_one_or_none()
-    if not memory:
-        raise HTTPException(status_code=404, detail=_("Memory not found"))
-    if memory.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-    # Strict payload support
-    target_type = share_data.get("target_type")
-    permission_level = share_data.get("permission_level")
-    target_id = share_data.get("target_id")
-    if target_type:
-        if target_type not in ["user", "project"]:
-            raise HTTPException(status_code=400, detail=_("target_type must be 'user' or 'project'"))
-        if permission_level not in ["view", "edit"]:
-            raise HTTPException(status_code=400, detail=_("permission_level must be 'view' or 'edit'"))
-        # Duplicate check
-        if target_type == "user":
-            existing_share = await db.execute(
-                refresh_select_statement(select(MemoryShare).where(
-                    MemoryShare.memory_id == memory_id, MemoryShare.shared_with_user_id == target_id
-                ))
-            )
-        else:
-            existing_share = await db.execute(
-                refresh_select_statement(select(MemoryShare).where(
-                    MemoryShare.memory_id == memory_id,
-                    MemoryShare.shared_with_project_id == target_id,
-                ))
-            )
-        if existing_share.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail=_("Memory already shared with this target"))
-
-    # Parse expires_at - throw error on invalid format instead of silent fallback
-    expires_at = None
-    if share_data.get("expires_at"):
-        try:
-            expires_at = datetime.fromisoformat(share_data["expires_at"])
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=_(f"Invalid expires_at format: {share_data['expires_at']}. Use ISO 8601 format (e.g., 2024-12-31T23:59:59)."),
-            ) from None
-    elif "expires_in_days" in share_data:
-        days = share_data["expires_in_days"]
-        if isinstance(days, int) and days > 0:
-            expires_at = datetime.now(UTC) + timedelta(days=days)
-    share = MemoryShare(
-        id=str(uuid4()),
-        memory_id=memory_id,
-        shared_with_user_id=target_id if target_type == "user" else None,
-        shared_with_project_id=target_id if target_type == "project" else None,
-        permissions=share_data.get(
-            "permissions", {"view": True, "edit": permission_level == "edit"}
-        )
-        if permission_level
-        else share_data.get("permissions", {"view": True, "edit": False}),
-        shared_by=current_user.id,
-        created_at=datetime.now(UTC),
-        expires_at=expires_at,
-        access_count=0,
-    )
-    db.add(share)
-    await db.commit()
-    return {
-        "id": share.id,
-        "share_token": share.id,
-        "memory_id": memory_id,
-        "shared_with_user_id": share.shared_with_user_id,
-        "shared_with_project_id": share.shared_with_project_id,
-        "permissions": share.permissions,
-        "expires_at": share.expires_at.isoformat() if share.expires_at else None,
-        "created_at": share.created_at.isoformat(),
-        "access_count": share.access_count,
-    }
-
-
-@router.delete("/memories/{memory_id}/shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_memory_share(
-    memory_id: str,
-    share_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    """Delete a memory share."""
-    # 1. Get memory and verify ownership
-    result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == memory_id)))
-    memory = result.scalar_one_or_none()
-
-    if not memory:
-        raise HTTPException(status_code=404, detail=_("Memory not found"))
-
-    # Only owner can delete shares
-    if memory.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-
-    # 2. Get share
-    result = await db.execute(refresh_select_statement(select(MemoryShare).where(MemoryShare.id == share_id)))
-    share = result.scalar_one_or_none()
-
-    if not share:
-        raise HTTPException(status_code=404, detail=_("Share not found"))
-
-    # 3. Verify share belongs to this memory
-    if share.memory_id != memory_id:
-        raise HTTPException(status_code=400, detail=_("Share does not belong to this memory"))
-
-    # 4. Delete share
-    await db.delete(share)
-    await db.commit()
-
-    logger.info(f"Deleted share {share_id} for memory {memory_id}")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

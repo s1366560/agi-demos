@@ -63,20 +63,22 @@ class TestCreateShare:
         assert data["expires_at"] is None
 
     @pytest.mark.asyncio
-    async def test_create_share_invalid_expires_at_defaults_to_7_days(
+    async def test_create_share_invalid_expires_at_returns_400(
         self, test_db, client, test_memory_with_project
     ):
-        """Test that invalid expires_at format defaults to 7 days."""
+        """Test that invalid expires_at format is rejected."""
         share_data = {"permissions": {"view": True}, "expires_at": "invalid-date-format"}
 
         response = client.post(
             f"/api/v1/memories/{test_memory_with_project.id}/shares", json=share_data
         )
 
-        assert response.status_code == 201
-        data = response.json()
-        # Should default to 7 days
-        assert data["expires_at"] is not None
+        assert response.status_code == 400
+        assert "Invalid expires_at format" in response.json()["detail"]
+        result = await test_db.execute(
+            select(MemoryShare).where(MemoryShare.memory_id == test_memory_with_project.id)
+        )
+        assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
     async def test_create_share_memory_not_found(self, test_db, client):

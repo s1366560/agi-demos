@@ -18,9 +18,9 @@ from src.application.schemas.trust_schemas import (
     TrustPolicyResponse,
 )
 from src.application.services.trust_service import TrustService
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user_tenant,
-)
+from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.sql_decision_record_repository import (
     SqlDecisionRecordRepository,
@@ -45,6 +45,18 @@ def _build_service(db: AsyncSession) -> TrustService:
     )
 
 
+async def _require_tenant_access(
+    db: AsyncSession,
+    current_user: User,
+    tenant_id: str,
+    *,
+    require_admin: bool = False,
+) -> None:
+    if getattr(current_user, "is_superuser", False):
+        return
+    await require_tenant_access(db, current_user, tenant_id, require_admin=require_admin)
+
+
 # ---------------------------------------------------------------------------
 # Trust Policies
 # ---------------------------------------------------------------------------
@@ -53,11 +65,12 @@ def _build_service(db: AsyncSession) -> TrustService:
 @router.get("/policies", response_model=TrustPolicyListResponse)
 async def list_trust_policies(
     tenant_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
     agent_instance_id: str | None = Query(default=None),
 ) -> TrustPolicyListResponse:
+    await _require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
     items = await service.list_policies(workspace_id, agent_instance_id=agent_instance_id)
     return TrustPolicyListResponse(
@@ -82,16 +95,17 @@ async def list_trust_policies(
 async def create_trust_policy(
     tenant_id: str,
     body: TrustPolicyCreate,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TrustPolicyResponse:
+    await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
     service = _build_service(db)
     policy = await service.create_policy(
         tenant_id=tenant_id,
         workspace_id=body.workspace_id,
         agent_instance_id=body.agent_instance_id,
         action_type=body.action_type,
-        granted_by=_current_tenant,
+        granted_by=current_user.id,
         grant_type=body.grant_type,
     )
     await db.commit()
@@ -111,12 +125,13 @@ async def create_trust_policy(
 @router.get("/policies/check", response_model=TrustCheckResponse)
 async def check_trust(
     tenant_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
     agent_instance_id: str = Query(...),
     action_type: str = Query(...),
 ) -> TrustCheckResponse:
+    await _require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
     trusted = await service.check_trust(workspace_id, agent_instance_id, action_type)
     return TrustCheckResponse(trusted=trusted)
@@ -135,9 +150,10 @@ async def check_trust(
 async def submit_approval_request(
     tenant_id: str,
     body: ApprovalRequestCreate,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DecisionRecordResponse:
+    await _require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
     record = await service.submit_approval(
         tenant_id=tenant_id,
@@ -159,16 +175,17 @@ async def resolve_approval_request(
     tenant_id: str,
     record_id: str,
     body: ApprovalResolveRequest,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DecisionRecordResponse:
+    await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
     service = _build_service(db)
     try:
         record = await service.resolve_approval(
-            record_id,
-            reviewer_id=_current_tenant,
-            decision=body.decision,
-        )
+        record_id,
+        reviewer_id=current_user.id,
+        decision=body.decision,
+    )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     await db.commit()
@@ -178,12 +195,13 @@ async def resolve_approval_request(
 @router.get("/decision-records", response_model=DecisionRecordListResponse)
 async def list_decision_records(
     tenant_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
     agent_id: str | None = Query(default=None),
     decision_type: str | None = Query(default=None),
 ) -> DecisionRecordListResponse:
+    await _require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
     items = await service.list_decision_records(
         workspace_id, agent_id=agent_id, decision_type=decision_type
@@ -198,10 +216,11 @@ async def list_decision_records(
 async def get_decision_record(
     tenant_id: str,
     record_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_id: str = Query(...),
 ) -> DecisionRecordResponse:
+    await _require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
     record = await service.get_decision_record(record_id)
     if record is None:

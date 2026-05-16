@@ -51,6 +51,8 @@ def _get_user_id(current_user: User) -> str:
 def is_global_admin(current_user: User) -> bool:
     """Return whether the current user has global admin access."""
     user_state = _get_user_state(current_user)
+    if user_state.get("is_superuser") is True:
+        return True
 
     loaded_roles = user_state.get("roles")
     if not isinstance(loaded_roles, (list, tuple)):

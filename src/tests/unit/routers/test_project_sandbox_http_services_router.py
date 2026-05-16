@@ -84,6 +84,29 @@ def test_register_list_stop_external_http_service(sandbox_http_client: TestClien
 
 
 @pytest.mark.unit
+def test_ensure_project_sandbox_sanitizes_internal_errors(
+    sandbox_http_client: TestClient,
+) -> None:
+    """Sandbox lifecycle failures should not leak backend exception details."""
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_or_create_sandbox = AsyncMock(
+        side_effect=RuntimeError("docker://secret-host/sandbox-create")
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox",
+        json={"profile": "standard"},
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == "Failed to create sandbox"
+    assert "secret-host" not in response.text
+
+
+@pytest.mark.unit
 def test_http_services_list_and_proxy_load_from_redis_when_memory_empty(
     sandbox_http_client: TestClient,
 ) -> None:
@@ -272,6 +295,9 @@ def test_http_proxy_returns_502_when_upstream_fails(
         "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/"
     )
     assert response.status_code == status.HTTP_502_BAD_GATEWAY
+    assert response.json()["detail"] == "Failed to connect to HTTP service"
+    assert "127.0.0.1" not in response.text
+    assert "connection refused" not in response.text
     event_publisher.publish_http_service_error.assert_awaited_once()
     error_kwargs = event_publisher.publish_http_service_error.await_args.kwargs
     assert error_kwargs["project_id"] == "proj-1"
@@ -448,3 +474,66 @@ def test_host_preview_proxy_keeps_root_relative_assets_unmodified(
     assert "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/main.js" not in (
         response.text
     )
+
+
+@pytest.mark.unit
+def test_host_preview_proxy_sanitizes_upstream_connection_errors(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host-based preview should not leak upstream URL or connection details."""
+    event_publisher = AsyncMock()
+    event_publisher.publish_http_service_error = AsyncMock()
+    sandbox_http_client.app.dependency_overrides[router_mod.get_event_publisher] = (
+        lambda: event_publisher
+    )
+
+    token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url=router_mod._build_http_preview_proxy_url("proj-1", "svc-int"),
+            ws_preview_url=router_mod._build_http_preview_ws_proxy_url("proj-1", "svc-int"),
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
+    )
+
+    class _FailingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, *args, **kwargs):
+            req = httpx.Request("GET", "http://127.0.0.1:3000")
+            raise httpx.RequestError("connection refused", request=req)
+
+    monkeypatch.setattr("httpx.AsyncClient", _FailingAsyncClient)
+
+    async def _raise_exec_fetch(*args, **kwargs):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(router_mod, "_request_http_service_via_sandbox_exec", _raise_exec_fetch)
+
+    response = sandbox_http_client.get(
+        "/",
+        headers={"host": "svc-int.proj-1.preview.localhost:8000"},
+        cookies={router_mod._PREVIEW_SESSION_COOKIE_NAME: token},
+    )
+
+    assert response.status_code == status.HTTP_502_BAD_GATEWAY
+    assert response.json()["detail"] == "Failed to connect to HTTP service"
+    assert "127.0.0.1" not in response.text
+    assert "connection refused" not in response.text
+    event_publisher.publish_http_service_error.assert_awaited_once()

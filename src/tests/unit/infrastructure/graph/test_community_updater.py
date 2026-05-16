@@ -22,10 +22,21 @@ class GenerateOnlyLLMClient:
 
 
 class GenerateResponseOnlyLLMClient:
+    """LLM client exposing the public generate_response() surface."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def generate_response(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(kwargs)
+        return {"content": '{"name": "Memory Graph", "summary": "Graph operations."}'}
+
+
+class PrivateGenerateResponseOnlyLLMClient:
     """LLM client exposing the Graphiti-compatible private response surface."""
 
     async def _generate_response(self, **_kwargs: Any) -> dict[str, Any]:
-        return {"content": '{"name": "Memory Graph", "summary": "Graph operations."}'}
+        return {"content": '{"name": "Legacy Graph", "summary": "Legacy graph operations."}'}
 
 
 def build_updater(llm_client: Any) -> CommunityUpdater:
@@ -52,7 +63,8 @@ class TestCommunityUpdaterLLMResponseHandling:
         assert llm_client.calls[0]["response_format"] == "json"
 
     async def test_call_llm_with_json_extraction_supports_generate_response_client(self) -> None:
-        updater = build_updater(GenerateResponseOnlyLLMClient())
+        llm_client = GenerateResponseOnlyLLMClient()
+        updater = build_updater(llm_client)
 
         result = await updater._call_llm_with_json_extraction(
             [Message.system("Summarize"), Message.user("Members")]
@@ -60,3 +72,16 @@ class TestCommunityUpdaterLLMResponseHandling:
 
         assert result.name == "Memory Graph"
         assert result.summary == "Graph operations."
+        assert llm_client.calls[0]["response_model"] is None
+
+    async def test_call_llm_with_json_extraction_supports_private_generate_response_client(
+        self,
+    ) -> None:
+        updater = build_updater(PrivateGenerateResponseOnlyLLMClient())
+
+        result = await updater._call_llm_with_json_extraction(
+            [Message.system("Summarize"), Message.user("Members")]
+        )
+
+        assert result.name == "Legacy Graph"
+        assert result.summary == "Legacy graph operations."

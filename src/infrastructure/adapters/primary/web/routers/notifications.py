@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -145,14 +145,41 @@ async def create_notification(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a new notification (for internal use)."""
+    target_user_id = notification_data.get("user_id") or current_user.id
+    if target_user_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Cannot create notifications for another user"),
+        )
+
+    expires_at = None
+    raw_expires_at = notification_data.get("expires_at")
+    if raw_expires_at:
+        if isinstance(raw_expires_at, datetime):
+            expires_at = raw_expires_at
+        elif isinstance(raw_expires_at, str):
+            try:
+                expires_at = datetime.fromisoformat(raw_expires_at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=_("Invalid notification expiration timestamp"),
+                ) from exc
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_("Invalid notification expiration timestamp"),
+            )
+
     notification = Notification(
         id=str(uuid4()),
-        user_id=notification_data.get("user_id", current_user.id),
+        user_id=target_user_id,
         type=notification_data.get("type", "general"),
         title=notification_data.get("title", "Notification"),
         message=notification_data.get("message", ""),
         data=notification_data.get("data", {}),
         action_url=notification_data.get("action_url"),
+        expires_at=expires_at,
     )
 
     db.add(notification)

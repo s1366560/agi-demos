@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import User, UserTenant
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +108,11 @@ async def optimize_content(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to optimize content: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Failed to optimize content")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to optimize content"),
+        ) from e
 
 
 @router.post("/generate-title", response_model=TitleResponse)
@@ -142,5 +146,8 @@ async def generate_title(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to generate title: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Failed to generate title")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to generate title"),
+        ) from e

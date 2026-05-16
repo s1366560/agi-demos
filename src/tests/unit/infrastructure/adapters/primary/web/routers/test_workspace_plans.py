@@ -222,6 +222,14 @@ def _make_plan_variant(
     return plan
 
 
+def test_map_error_sanitizes_internal_errors() -> None:
+    exc = workspace_plans._map_error(RuntimeError("postgres://secret-host/workspace-plan"))
+
+    assert exc.status_code == 500
+    assert exc.detail == "Workspace plan operation failed"
+    assert "secret-host" not in str(exc.detail)
+
+
 def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> None:
     plan = _make_plan("workspace-plan-api")
     task = plan.nodes[PlanNodeId("task-api")]

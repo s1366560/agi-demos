@@ -33,9 +33,11 @@ from src.configuration.di_container import DIContainer
 from src.domain.model.gene.enums import EvolutionEventType
 from src.domain.model.gene.instance_gene import EvolutionEvent
 from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
 
 
@@ -174,6 +176,7 @@ async def create_gene(
     request: Request,
     data: GeneCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Create a new gene in the marketplace."""
@@ -183,7 +186,7 @@ async def create_gene(
         gene = await service.create_gene(
             name=data.name,
             slug=data.slug,
-            created_by=tenant_id,
+            created_by=current_user.id,
             tenant_id=data.tenant_id or tenant_id,
             description=data.description,
             short_description=data.short_description,
@@ -339,6 +342,7 @@ async def create_genome(
     request: Request,
     data: GenomeCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Create a new genome (curated gene bundle)."""
@@ -348,7 +352,7 @@ async def create_genome(
         genome = await service.create_genome(
             name=data.name,
             slug=data.slug,
-            created_by=tenant_id,
+            created_by=current_user.id,
             tenant_id=data.tenant_id or tenant_id,
             description=data.description,
             short_description=data.short_description,
@@ -641,6 +645,7 @@ async def rate_gene(
     gene_id: str,
     data: GeneRatingCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneRatingResponse:
     """Rate a gene (creates or updates the user's rating)."""
@@ -649,7 +654,7 @@ async def rate_gene(
         service = container.gene_service()
         rating = await service.rate_gene(
             gene_id=gene_id,
-            user_id=tenant_id,
+            user_id=current_user.id,
             rating=data.rating,
             comment=data.comment,
         )
@@ -718,6 +723,7 @@ async def rate_genome(
     genome_id: str,
     data: GenomeRatingCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeRatingResponse:
     """Rate a genome (creates or updates the user's rating)."""
@@ -726,7 +732,7 @@ async def rate_genome(
         service = container.gene_service()
         rating = await service.rate_genome(
             genome_id=genome_id,
-            user_id=tenant_id,
+            user_id=current_user.id,
             rating=data.rating,
             comment=data.comment,
         )
@@ -892,6 +898,7 @@ async def create_gene_review(
     gene_id: str,
     data: GeneReviewCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneReviewResponse:
     try:
@@ -899,7 +906,7 @@ async def create_gene_review(
         service = container.gene_service()
         review = await service.create_gene_review(
             gene_id=gene_id,
-            user_id=tenant_id,
+            user_id=current_user.id,
             rating=data.rating,
             content=data.content,
             tenant_id=tenant_id,
@@ -923,6 +930,7 @@ async def delete_gene_review(
     gene_id: str,
     review_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     try:
@@ -930,7 +938,7 @@ async def delete_gene_review(
         service = container.gene_service()
         await service.delete_gene_review(
             review_id=review_id,
-            user_id=tenant_id,
+            user_id=current_user.id,
             tenant_id=tenant_id,
         )
         await db.commit()

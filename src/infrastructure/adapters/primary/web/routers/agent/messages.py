@@ -26,6 +26,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation as DBConversation,
     Message as DBMessage,
     User,
 )
@@ -86,6 +87,18 @@ _NON_DISPLAYABLE_EVENT_TYPES: set[AgentEventType] = (
 _DISPLAYABLE_EVENTS: set[str] = {
     et.value for et in AgentEventType if et not in _NON_DISPLAYABLE_EVENT_TYPES
 }
+
+
+async def _verify_conversation_access(
+    conversation_id: str, current_user: User, db: AsyncSession
+) -> None:
+    query = select(DBConversation.user_id).where(DBConversation.id == conversation_id).limit(1)
+    result = await db.execute(refresh_select_statement(query))
+    owner_id = result.scalar_one_or_none()
+    if owner_id is None:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+    if owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail=_("Access denied"))
 
 # Legacy alias event-type strings that the agent has historically emitted but
 # are not first-class members of ``AgentEventType``.  Preserve replay parity.
@@ -772,11 +785,9 @@ async def get_conversation_messages(
 
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-
-        logger.error(f"Error getting conversation messages: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to get messages: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error getting conversation messages")
+        raise HTTPException(status_code=500, detail=_("Failed to get messages")) from exc
 
 
 @router.get("/conversations/{conversation_id}/execution")
@@ -818,11 +829,11 @@ async def get_conversation_execution(
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Error getting conversation execution history: {e}")
+    except Exception as exc:
+        logger.exception("Error getting conversation execution history")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to get execution history: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to get execution history")
+        ) from exc
 
 
 @router.get("/conversations/{conversation_id}/tool-executions")
@@ -853,7 +864,11 @@ async def get_conversation_tool_executions(
         tool_execution_repo = container.tool_execution_record_repository()
 
         if message_id:
-            records = await tool_execution_repo.list_by_message(message_id, limit=limit)
+            records = [
+                record
+                for record in await tool_execution_repo.list_by_message(message_id, limit=limit)
+                if record.conversation_id == conversation_id
+            ]
         else:
             records = await tool_execution_repo.list_by_conversation(conversation_id, limit=limit)
 
@@ -865,11 +880,11 @@ async def get_conversation_tool_executions(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting tool execution history: {e}")
+    except Exception as exc:
+        logger.exception("Error getting tool execution history")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to get tool execution history: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to get tool execution history")
+        ) from exc
 
 
 @router.get("/conversations/{conversation_id}/status")
@@ -941,9 +956,12 @@ async def get_conversation_execution_status(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting conversation execution status: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to get execution status: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error getting conversation execution status")
+        raise HTTPException(
+            status_code=500,
+            detail=_("Failed to get execution status"),
+        ) from exc
 
 
 async def _get_recovery_info(
@@ -1100,11 +1118,11 @@ async def get_execution_stats(
 
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Error getting execution statistics: {e}")
+    except Exception as exc:
+        logger.exception("Error getting execution statistics")
         raise HTTPException(
-            status_code=500, detail=_(f"Failed to get execution statistics: {e!s}")
-        ) from e
+            status_code=500, detail=_("Failed to get execution statistics")
+        ) from exc
 
 
 @router.get("/conversations/{conversation_id}/messages/{message_id}/replies")
@@ -1116,6 +1134,8 @@ async def get_message_replies(
 ) -> list[dict[str, Any]]:
     """Get replies to a specific message."""
     try:
+        await _verify_conversation_access(conversation_id, current_user, db)
+
         query = (
             select(DBMessage)
             .where(
@@ -1136,6 +1156,8 @@ async def get_message_replies(
             }
             for m in messages
         ]
-    except Exception as e:
-        logger.error(f"Error getting message replies: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Failed to get message replies: {e!s}")) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error getting message replies")
+        raise HTTPException(status_code=500, detail=_("Failed to get message replies")) from exc

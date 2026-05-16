@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, cast
@@ -17,13 +18,20 @@ from src.application.services.workspace_surface_contract import (
 )
 from src.domain.model.workspace.workspace_message import MessageSenderType, WorkspaceMessage
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.workspace_access import (
+    require_workspace_access,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages",
     tags=["workspace-chat"],
 )
+
 
 def get_message_service(
     request: Request, db: AsyncSession = Depends(get_db)
@@ -66,7 +74,11 @@ def _map_error(exc: Exception) -> HTTPException:
         if "not found" in message.lower():
             return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
         return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    logger.exception("Workspace chat route failed")
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=_("Internal server error"),
+    )
 
 
 class SendMessageRequest(BaseModel):
@@ -115,6 +127,7 @@ async def send_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     service = get_message_service(request, db)
     try:
         sender_type = MessageSenderType(payload.sender_type)
@@ -245,6 +258,7 @@ async def list_messages(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageListResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     service = get_message_service(request, db)
     try:
         messages = await service.list_messages(
@@ -268,6 +282,7 @@ async def get_mentions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageListResponse:
+    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
     service = get_message_service(request, db)
     try:
         messages = await service.get_mentions(

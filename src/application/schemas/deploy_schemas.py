@@ -22,7 +22,8 @@ class DeployCreate(BaseModel):
         description="Configuration snapshot at deploy time",
     )
     triggered_by: str | None = Field(
-        default=None, description="User or system that triggered the deploy"
+        default=None,
+        description="Deprecated input; the API records the authenticated user instead.",
     )
 
     model_config = ConfigDict(
@@ -36,7 +37,6 @@ class DeployCreate(BaseModel):
                     "cpu_limit": "1000m",
                     "mem_limit": "1Gi",
                 },
-                "triggered_by": "user_123",
             }
         }
     )

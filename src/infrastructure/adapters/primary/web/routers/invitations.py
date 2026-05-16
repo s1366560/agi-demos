@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,10 +16,8 @@ from src.application.schemas.invitation_schemas import (
     InvitationVerifyResponse,
 )
 from src.application.services.invitation_service import InvitationService
-from src.infrastructure.adapters.primary.web.dependencies import (
-    get_current_user,
-    get_current_user_tenant,
-)
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -46,14 +45,29 @@ def _build_service(db: AsyncSession) -> InvitationService:
     return InvitationService(invitation_repo=SqlInvitationRepository(db))
 
 
+async def _require_invitation_admin(
+    db: AsyncSession,
+    current_user: DBUser,
+    tenant_id: str,
+) -> None:
+    if getattr(current_user, "is_superuser", False):
+        return
+    await require_tenant_access(
+        db,
+        cast(Any, current_user),
+        tenant_id,
+        require_admin=True,
+    )
+
+
 @router.post("", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
 async def create_invitation(
     tenant_id: str,
     body: CreateInvitationRequest,
     current_user: DBUser = Depends(get_current_user),
-    _current_tenant: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> InvitationResponse:
+    await _require_invitation_admin(db, current_user, tenant_id)
     service = _build_service(db)
     try:
         invitation = await service.create_invitation(
@@ -80,11 +94,12 @@ async def create_invitation(
 @router.get("", response_model=InvitationListResponse)
 async def list_pending_invitations(
     tenant_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> InvitationListResponse:
+    await _require_invitation_admin(db, current_user, tenant_id)
     service = _build_service(db)
     items, total = await service.list_pending(tenant_id, limit=limit, offset=offset)
     return InvitationListResponse(
@@ -111,9 +126,10 @@ async def list_pending_invitations(
 async def cancel_invitation(
     tenant_id: str,
     invitation_id: str,
-    _current_tenant: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    await _require_invitation_admin(db, current_user, tenant_id)
     service = _build_service(db)
     try:
         await service.cancel(invitation_id, tenant_id)

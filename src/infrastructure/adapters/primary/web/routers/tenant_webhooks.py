@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.primary.web.routers.agent.utils import get_container_with_db
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.i18n import gettext as _
@@ -42,6 +43,22 @@ class WebhookResponse(BaseModel):
     updated_at: datetime | None
 
 
+async def _require_webhook_tenant_admin(
+    webhook_id: str,
+    request: Request,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
+    container = get_container_with_db(request, db)
+    service = container.webhook_service()
+
+    webhook = await service.get_webhook(webhook_id)
+    if not webhook:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Webhook not found"))
+
+    await require_tenant_access(db, current_user, webhook.tenant_id, require_admin=True)
+
+
 @router.post("/{tenant_id}", response_model=WebhookResponse)
 async def create_webhook(
     tenant_id: str,
@@ -50,6 +67,7 @@ async def create_webhook(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WebhookResponse:
+    await require_tenant_access(db, current_user, tenant_id, require_admin=True)
     container = get_container_with_db(request, db)
     service = container.webhook_service()
 
@@ -71,6 +89,7 @@ async def list_webhooks(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[WebhookResponse]:
+    await require_tenant_access(db, current_user, tenant_id, require_admin=True)
     container = get_container_with_db(request, db)
     service = container.webhook_service()
 
@@ -85,6 +104,7 @@ async def update_webhook(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WebhookResponse:
+    await _require_webhook_tenant_admin(webhook_id, request, current_user, db)
     container = get_container_with_db(request, db)
     service = container.webhook_service()
 
@@ -109,6 +129,7 @@ async def delete_webhook(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    await _require_webhook_tenant_admin(webhook_id, request, current_user, db)
     container = get_container_with_db(request, db)
     service = container.webhook_service()
 

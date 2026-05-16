@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -144,6 +144,14 @@ class CancelRunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class _GraphRepository(Protocol):
+    async def find_by_id(self, entity_id: str) -> AgentGraph | None: ...
+
+
+class _GraphOrchestrator(Protocol):
+    async def get_run_status(self, run_id: str) -> GraphRun | None: ...
+
+
 def _graph_to_response(graph: AgentGraph) -> GraphResponse:
     return GraphResponse(
         id=graph.id,
@@ -217,6 +225,28 @@ def _run_to_response(run: GraphRun, *, include_executions: bool = False) -> Grap
         created_at=run.created_at.isoformat() if run.created_at else "",
         node_executions=node_executions,
     )
+
+
+async def _get_accessible_graph(
+    repo: _GraphRepository,
+    graph_id: str,
+    user_tenant_id: str,
+) -> AgentGraph:
+    graph = await repo.find_by_id(graph_id)
+    if graph is None or graph.tenant_id != user_tenant_id:
+        raise HTTPException(status_code=404, detail=_("Graph not found"))
+    return graph
+
+
+async def _get_accessible_graph_run(
+    orchestrator: _GraphOrchestrator,
+    run_id: str,
+    user_tenant_id: str,
+) -> GraphRun:
+    run = await orchestrator.get_run_status(run_id)
+    if run is None or run.tenant_id != user_tenant_id:
+        raise HTTPException(status_code=404, detail=_("Graph run not found"))
+    return run
 
 
 # ---------------------------------------------------------------------------
@@ -492,9 +522,11 @@ async def list_graph_runs(
     db: AsyncSession = Depends(get_db),
 ) -> GraphRunListResponse:
     container = get_container_with_db(request, db)
+    repo = container.graph_repository()
     orchestrator = container.graph_orchestrator()
     try:
-        runs = await orchestrator.list_runs_for_graph(graph_id)
+        access_checked_graph = await _get_accessible_graph(repo, graph_id, user_tenant_id)
+        runs = await orchestrator.list_runs_for_graph(access_checked_graph.id)
         return GraphRunListResponse(
             runs=[_run_to_response(r) for r in runs],
             total=len(runs),
@@ -517,12 +549,12 @@ async def get_graph_run(
     container = get_container_with_db(request, db)
     orchestrator = container.graph_orchestrator()
     try:
-        run = await orchestrator.get_run_status(run_id)
+        run = await _get_accessible_graph_run(orchestrator, run_id, user_tenant_id)
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Failed to get run %s", run_id)
         raise HTTPException(status_code=500, detail=_("Failed to get graph run")) from None
-    if run is None or run.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail=_("Graph run not found"))
     return _run_to_response(run, include_executions=True)
 
 
@@ -539,7 +571,8 @@ async def cancel_graph_run(
     orchestrator = container.graph_orchestrator()
     reason = body.reason if body else "User requested cancellation"
     try:
-        run, _events = await orchestrator.cancel_run(run_id, reason=reason)
+        access_checked_run = await _get_accessible_graph_run(orchestrator, run_id, user_tenant_id)
+        run, _events = await orchestrator.cancel_run(access_checked_run.id, reason=reason)
         await db.commit()
         if run.tenant_id != user_tenant_id:
             raise HTTPException(status_code=404, detail=_("Graph run not found"))

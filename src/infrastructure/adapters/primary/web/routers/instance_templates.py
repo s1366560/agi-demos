@@ -20,9 +20,11 @@ from src.application.schemas.instance_template_schemas import (
 )
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
 
 
@@ -69,6 +71,7 @@ async def create_template(
     request: Request,
     data: InstanceTemplateCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceTemplateResponse:
     """Create a new instance template."""
@@ -79,7 +82,7 @@ async def create_template(
         template = await service.create_template(
             name=data.name,
             slug=data.slug,
-            created_by=tenant_id,
+            created_by=current_user.id,
             tenant_id=data.tenant_id or tenant_id,
             description=data.description,
             icon=data.icon,
@@ -316,6 +319,7 @@ async def clone_template(
     template_id: str,
     data: CloneTemplateRequest,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceTemplateResponse:
     """Clone an existing template with a new name."""
@@ -334,7 +338,7 @@ async def clone_template(
         cloned = await service.create_template(
             name=data.new_name,
             slug=slug,
-            created_by=tenant_id,
+            created_by=current_user.id,
             tenant_id=tenant_id,
             description=source.description,
             icon=source.icon,

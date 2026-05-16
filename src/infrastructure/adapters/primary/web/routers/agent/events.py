@@ -14,13 +14,15 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User, UserTenant
 from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
@@ -99,6 +101,37 @@ async def _get_resume_service(db: AsyncSession) -> Any:
     return ExecutionResumeService(checkpoint_repo=checkpoint_repo)
 
 
+async def _get_accessible_conversation(
+    conversation_id: str, user: User, db: AsyncSession
+) -> Any:
+    from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+        SqlConversationRepository,
+    )
+
+    conversation_repo = SqlConversationRepository(db)
+    conversation = await conversation_repo.find_by_id(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
+
+    await _verify_tenant_access(conversation.tenant_id, user, db)
+    return conversation
+
+
+async def _verify_tenant_access(tenant_id: str, user: User, db: AsyncSession) -> None:
+    if user.is_superuser:
+        return
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == user.id, UserTenant.tenant_id == tenant_id)
+            )
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
+
+
 router = APIRouter()
 
 
@@ -121,6 +154,8 @@ async def get_conversation_events(
     """
     try:
         assert request is not None
+        await _get_accessible_conversation(conversation_id, current_user, db)
+
         container = get_container_with_db(request, db)
         event_repo = container.agent_execution_event_repository()
 
@@ -143,9 +178,11 @@ async def get_conversation_events(
             has_more=len(events) == limit,
         )
 
-    except Exception as e:
-        logger.error(f"Error getting conversation events: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=_(f"Failed to get events: {e!s}")) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error getting conversation events")
+        raise HTTPException(status_code=500, detail=_("Failed to get events")) from exc
 
 
 @router.get(
@@ -174,6 +211,8 @@ async def get_execution_status(
     - missed_events_count: Events missed since from_time_us
     """
     try:
+        await _get_accessible_conversation(conversation_id, current_user, db)
+
         assert request is not None
         container = get_container_with_db(request, db)
         event_repo = container.agent_execution_event_repository()
@@ -229,9 +268,11 @@ async def get_execution_status(
 
         return response
 
-    except Exception as e:
-        logger.error(f"Error getting execution status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=_(f"Failed to get execution status: {e!s}")) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error getting execution status")
+        raise HTTPException(status_code=500, detail=_("Failed to get execution status")) from exc
 
 
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
@@ -259,6 +300,8 @@ async def resume_execution(
         - resume_request: Request payload that can be used to continue execution
     """
     try:
+        await _get_accessible_conversation(conversation_id, current_user, db)
+
         resume_service = await _get_resume_service(db)
 
         # Check if resumable
@@ -293,9 +336,9 @@ async def resume_execution(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error resuming execution: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=_(f"Failed to resume execution: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error resuming execution")
+        raise HTTPException(status_code=500, detail=_("Failed to resume execution")) from exc
 
 
 @router.get(
@@ -312,19 +355,10 @@ async def get_workflow_status(
     Get the Ray Actor status for an agent execution.
     """
     try:
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
         from src.infrastructure.adapters.secondary.ray.client import await_ray
         from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
-        conversation_repo = SqlConversationRepository(db)
-        conversation = await conversation_repo.find_by_id(conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
-
-        if conversation.tenant_id != current_user.tenant_id:  # type: ignore[attr-defined]
-            raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
+        conversation = await _get_accessible_conversation(conversation_id, current_user, db)
 
         actor = await get_actor_if_exists(
             tenant_id=conversation.tenant_id,
@@ -366,6 +400,6 @@ async def get_workflow_status(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting workflow status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=_(f"Failed to get workflow status: {e!s}")) from e
+    except Exception as exc:
+        logger.exception("Error getting workflow status")
+        raise HTTPException(status_code=500, detail=_("Failed to get workflow status")) from exc

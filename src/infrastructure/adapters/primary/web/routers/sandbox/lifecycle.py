@@ -221,9 +221,11 @@ async def create_sandbox(
             terminal_url=sandbox_info.terminal_url,
         )
 
-    except Exception as e:
-        logger.error(f"Failed to create sandbox: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to create sandbox")
+        raise HTTPException(status_code=500, detail=_("Failed to create sandbox")) from exc
 
 
 @router.get("/list", response_model=ListSandboxesResponse)
