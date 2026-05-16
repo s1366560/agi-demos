@@ -4,10 +4,11 @@ TDD approach: Write tests first, expect failures, then implement.
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.server.web_terminal import WebTerminalManager, TerminalStatus
+import pytest
+
+from src.server.web_terminal import TerminalStatus, WebTerminalManager
 
 
 def create_mock_process(pid: int = 12345, returncode: int = None) -> MagicMock:
@@ -99,13 +100,11 @@ class TestWebTerminalManager:
     async def test_stop_force_kill_after_timeout(self, manager):
         """Test that force kill is used if graceful shutdown fails."""
         mock_process = create_mock_process()
-        mock_process.wait.side_effect = asyncio.TimeoutError()
+        mock_process.wait.side_effect = [asyncio.TimeoutError(), None]
 
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
             await manager.start()
-
-            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
-                await manager.stop(force_timeout=0.1)
+            await manager.stop(force_timeout=0.1)
 
             mock_process.terminate.assert_called_once()
             mock_process.kill.assert_called_once()

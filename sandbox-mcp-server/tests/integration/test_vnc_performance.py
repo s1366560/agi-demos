@@ -5,10 +5,9 @@ TDD Phase: RED - Write tests first, expect failures, then implement.
 """
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import time
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from typing import Dict, Any
 
 from src.server.desktop_manager import DesktopManager
 
@@ -401,6 +400,7 @@ class TestSessionPersistence:
 
                 # Verify xstartup was created
                 xstartup_path = os.path.join(vnc_dir, "xstartup")
+                assert xstartup_path.endswith("xstartup")
                 # Note: In test environment, template might not exist
                 # so xstartup should be created with default content
 
@@ -415,6 +415,7 @@ class TestSessionPersistence:
             workspace_dir=workspace_dir,
             display=":1",
         )
+        assert manager.workspace_dir == workspace_dir
 
         # TigerVNC writes session files to ~/.vnc/
         # Verify manager allows this by setting up directory

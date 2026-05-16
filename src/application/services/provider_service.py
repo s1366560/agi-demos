@@ -8,7 +8,7 @@ Handles business logic and coordinates between domain and infrastructure layers.
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
     import httpx
@@ -245,6 +245,42 @@ class ProviderService:
         await self.repository.create_health_check(health)
         logger.info(f"Health check complete for {provider_id}: {status}")
         return health
+
+    async def test_provider_connection(self, config: ProviderConfigCreate) -> ProviderHealth:
+        """Run a live provider health check from form data without persisting it."""
+        import time
+
+        provider_id = uuid4()
+        start_time = time.time()
+        now = datetime.now(UTC)
+        status = "healthy"
+        error_message = None
+        response_time_ms = None
+
+        provider = ProviderConfig(
+            id=provider_id,
+            api_key_encrypted="",
+            created_at=now,
+            updated_at=now,
+            **config.model_dump(exclude={"api_key"}),
+        )
+
+        try:
+            status, error_message = await self._check_provider_endpoint(provider, config.api_key or "")
+            response_time_ms = int((time.time() - start_time) * 1000)
+        except Exception as e:
+            logger.error("Provider connection test failed for %s: %s", config.provider_type, e)
+            status = "unhealthy"
+            error_message = str(e)
+            response_time_ms = int((time.time() - start_time) * 1000)
+
+        return ProviderHealth(
+            provider_id=provider_id,
+            status=ProviderStatus(status),
+            last_check=datetime.now(UTC),
+            error_message=error_message,
+            response_time_ms=response_time_ms,
+        )
 
     async def _check_provider_endpoint(
         self,

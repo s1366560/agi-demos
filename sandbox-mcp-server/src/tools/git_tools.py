@@ -66,13 +66,9 @@ async def git_diff(
         files_changed = 0
         hunks = []
 
-        current_file = None
         for line in lines:
             if line.startswith("diff --git"):
                 files_changed += 1
-                parts = line.split()
-                if len(parts) >= 4:
-                    current_file = parts[3].lstrip("b/")
             elif line.startswith("@@"):
                 hunks.append(line)
 

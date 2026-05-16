@@ -60,17 +60,16 @@ class WebTerminalManager:
 
     def is_running(self) -> bool:
         """Check if ttyd process is running.
-        
+
         Checks both the managed process and system-wide for ttyd processes.
         This handles cases where ttyd was started by container entrypoint.
         """
         # First check our managed process
         if self.process is not None and self.process.returncode is None:
             return True
-        
+
         # Check for system-wide process on our port using methods that don't require root
-        import subprocess
-        
+
         # Method 1: Check if port is in use via /proc/net/tcp (no root needed)
         try:
             # Convert port to hex for /proc/net/tcp lookup
@@ -88,7 +87,7 @@ class WebTerminalManager:
                                 return True
         except (FileNotFoundError, PermissionError, Exception):
             pass
-        
+
         # Method 2: Try to connect to the port to see if it's accepting connections
         try:
             import socket
@@ -100,7 +99,7 @@ class WebTerminalManager:
                 return True
         except Exception:
             pass
-        
+
         return False
 
     async def start(self) -> None:
@@ -131,7 +130,7 @@ class WebTerminalManager:
             # Give it a moment to start and verify it's running
             await asyncio.sleep(0.5)
             if not self.is_running():
-                raise RuntimeError(f"ttyd process exited immediately")
+                raise RuntimeError("ttyd process exited immediately")
 
         except FileNotFoundError:
             raise RuntimeError(
@@ -182,17 +181,17 @@ class WebTerminalManager:
         """
         running = self.is_running()
         pid = self.process.pid if self.process else None
-        
+
         # If no managed process but ttyd is running, try to get system PID
         if running and pid is None:
             pid = self._get_system_ttyd_pid()
-        
+
         return TerminalStatus(
             running=running,
             port=self.port,
             pid=pid,
         )
-    
+
     def _get_system_ttyd_pid(self) -> Optional[int]:
         """Get PID of system-wide ttyd process on our port."""
         import subprocess

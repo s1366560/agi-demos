@@ -13,6 +13,10 @@ class EvolutionEventRepository(ABC):
         """Save an evolution event. Returns the saved event."""
 
     @abstractmethod
+    async def find_by_id(self, entity_id: str) -> EvolutionEvent | None:
+        """Find an evolution event by ID."""
+
+    @abstractmethod
     async def find_by_instance(
         self, instance_id: str, limit: int = 100, offset: int = 0
     ) -> list[EvolutionEvent]:

@@ -742,13 +742,93 @@ class GeneService:
             offset=offset,
         )
 
+    async def list_genome_ratings(
+        self,
+        genome_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[GenomeRating]:
+        """
+        List ratings for a genome.
+
+        Args:
+            genome_id: Genome ID.
+            limit: Maximum results.
+            offset: Pagination offset.
+
+        Returns:
+            List of GenomeRating records.
+        """
+        return await self._gene_rating_repo.find_genome_ratings(
+            genome_id,
+            limit=limit,
+            offset=offset,
+        )
+
     # ------------------------------------------------------------------
     # Evolution events
     # ------------------------------------------------------------------
 
-    async def list_evolution_events(
+    async def create_evolution_event(
         self,
         instance_id: str,
+        *,
+        gene_id: str | None = None,
+        genome_id: str | None = None,
+        event_type: EvolutionEventType | str = EvolutionEventType.learned,
+        gene_name: str = "",
+        gene_slug: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> EvolutionEvent:
+        """
+        Create an evolution event record.
+
+        Args:
+            instance_id: Agent instance ID.
+            gene_id: Optional gene ID.
+            genome_id: Optional genome ID.
+            event_type: Evolution event type.
+            gene_name: Human-readable gene name snapshot.
+            gene_slug: Optional gene slug snapshot.
+            details: Additional event payload.
+
+        Returns:
+            Saved EvolutionEvent record.
+        """
+        event_type_value = (
+            event_type
+            if isinstance(event_type, EvolutionEventType)
+            else EvolutionEventType(event_type)
+        )
+        event = EvolutionEvent(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            genome_id=genome_id,
+            event_type=event_type_value,
+            gene_name=gene_name,
+            gene_slug=gene_slug,
+            details=details or {},
+        )
+        return await self._evolution_event_repo.save(event)
+
+    async def get_evolution_event(self, event_id: str) -> EvolutionEvent | None:
+        """
+        Get a single evolution event by ID.
+
+        Args:
+            event_id: Evolution event ID.
+
+        Returns:
+            EvolutionEvent or None if not found.
+        """
+        return await self._evolution_event_repo.find_by_id(event_id)
+
+    async def list_evolution_events(
+        self,
+        instance_id: str | None = None,
+        *,
+        gene_id: str | None = None,
+        event_type: EvolutionEventType | str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[EvolutionEvent]:
@@ -757,17 +837,37 @@ class GeneService:
 
         Args:
             instance_id: Agent instance ID.
+            gene_id: Optional gene ID.
+            event_type: Optional event type filter.
             limit: Maximum results.
             offset: Pagination offset.
 
         Returns:
             List of EvolutionEvent records.
         """
-        return await self._evolution_event_repo.find_by_instance(
-            instance_id,
-            limit=limit,
-            offset=offset,
+        if gene_id:
+            events = await self._evolution_event_repo.find_by_gene(
+                gene_id,
+                limit=limit,
+                offset=offset,
+            )
+        elif instance_id:
+            events = await self._evolution_event_repo.find_by_instance(
+                instance_id,
+                limit=limit,
+                offset=offset,
+            )
+        else:
+            raise ValueError("Either instance_id or gene_id is required")
+
+        if event_type is None:
+            return events
+        event_type_value = (
+            event_type
+            if isinstance(event_type, EvolutionEventType)
+            else EvolutionEventType(event_type)
         )
+        return [event for event in events if event.event_type == event_type_value]
 
     # ------------------------------------------------------------------
     # Reviews

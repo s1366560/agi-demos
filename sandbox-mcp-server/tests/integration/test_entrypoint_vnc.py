@@ -10,12 +10,11 @@ Test Structure:
 - Phase 3: Test fallback to x11vnc when TigerVNC unavailable
 - Phase 4: Test VNC port responsiveness
 """
+import os
 import subprocess
 import time
+
 import pytest
-import os
-import signal
-from typing import List
 
 
 class TestEntrypointVNC:
@@ -100,7 +99,7 @@ class TestEntrypointVNC:
         TDD Phase: RED ❌
         """
         # Start container
-        container_id = self._run_container(docker_image, container_name)
+        self._run_container(docker_image, container_name)
 
         try:
             # Wait for VNC to start
@@ -157,7 +156,7 @@ class TestEntrypointVNC:
 
         TDD Phase: RED ❌ (may pass with x11vnc, but we need TigerVNC)
         """
-        container_id = self._run_container(docker_image, container_name)
+        self._run_container(docker_image, container_name)
 
         try:
             # Wait for VNC to start
@@ -212,7 +211,7 @@ class TestEntrypointVNC:
         """
         # Force x11vnc by setting environment variable
         env_vars = {"VNC_SERVER_TYPE": "x11vnc"}
-        container_id = self._run_container(docker_image, container_name, env_vars)
+        self._run_container(docker_image, container_name, env_vars)
 
         try:
             # Wait for VNC to start
@@ -269,7 +268,7 @@ class TestEntrypointVNC:
 
         TDD Phase: RED ❌
         """
-        container_id = self._run_container(docker_image, container_name)
+        self._run_container(docker_image, container_name)
 
         try:
             # Wait for VNC to start
@@ -318,7 +317,7 @@ class TestEntrypointVNC:
 
         TDD Phase: RED ❌
         """
-        container_id = self._run_container(docker_image, container_name)
+        self._run_container(docker_image, container_name)
 
         try:
             # Wait for VNC to start

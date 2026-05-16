@@ -6,7 +6,6 @@ processes, enhancing security by limiting attack surface.
 
 import json
 import logging
-import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path

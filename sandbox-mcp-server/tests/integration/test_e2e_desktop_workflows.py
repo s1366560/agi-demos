@@ -5,16 +5,21 @@ TDD Phase: RED - Write tests first, expect failures, then implement.
 """
 
 import asyncio
-import pytest
+import shutil
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.server.desktop_manager import DesktopManager
+import pytest
+
 from src.tools.desktop_tools import (
-    start_desktop,
-    stop_desktop,
     get_desktop_status,
     restart_desktop,
+    start_desktop,
+    stop_desktop,
+)
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("kasmvncserver") is None,
+    reason="KasmVNC is required for desktop workflow integration tests",
 )
 
 
@@ -171,8 +176,6 @@ class TestConcurrentSessions:
     @pytest.mark.asyncio
     async def test_concurrent_desktop_sessions(self, workspace_dirs):
         """Test running multiple desktop sessions concurrently."""
-        sessions = []
-
         # Start all sessions concurrently
         tasks = [
             start_desktop(

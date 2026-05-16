@@ -8,6 +8,7 @@ Tests:
 """
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,6 +25,9 @@ from src.infrastructure.agent.pool.ha import (
     StateCheckpoint,
     StateRecoveryService,
 )
+from src.infrastructure.agent.pool.instance import AgentInstance
+from src.infrastructure.agent.pool.manager import AgentPoolManager
+from src.infrastructure.agent.pool.types import ProjectTier
 
 
 # =============================================================================
@@ -238,6 +242,59 @@ class TestFailureRecoveryService:
         assert len(callback_events) == 1
         assert callback_events[0].failure_type == FailureType.CONNECTION_LOST
 
+    async def test_recovery_restart_parses_instance_key_for_pool_manager(self):
+        """Restart recovery calls AgentPoolManager with parsed key fields."""
+
+        class FakePoolManager:
+            def __init__(self):
+                self.terminated = []
+
+            async def terminate_instance(self, tenant_id, project_id, agent_mode, graceful=True):
+                self.terminated.append((tenant_id, project_id, agent_mode, graceful))
+                return True
+
+        pool_manager = FakePoolManager()
+        service = FailureRecoveryService(pool_manager=pool_manager)
+
+        await service._recovery_restart("tenant:project:mode")
+
+        assert pool_manager.terminated == [("tenant", "project", "mode", False)]
+
+    async def test_recovery_restart_rejects_malformed_instance_key(self):
+        """Malformed recovery keys fail before calling the pool manager."""
+        pool_manager = MagicMock()
+        pool_manager.terminate_instance = AsyncMock()
+        service = FailureRecoveryService(pool_manager=pool_manager)
+
+        with pytest.raises(ValueError, match="instance_key must have format"):
+            await service._recovery_restart("tenant:project")
+
+        pool_manager.terminate_instance.assert_not_called()
+
+    async def test_recovery_migrate_preserves_agent_mode_for_pool_manager(self):
+        """Migration applies the tier override to the same tenant/project/mode key."""
+
+        class FakePoolManager:
+            def __init__(self):
+                self.tier_updates = []
+                self.terminated = []
+
+            async def set_project_tier(self, tenant_id, project_id, tier, agent_mode="default"):
+                self.tier_updates.append((tenant_id, project_id, tier, agent_mode))
+                return True
+
+            async def terminate_instance(self, tenant_id, project_id, agent_mode, graceful=True):
+                self.terminated.append((tenant_id, project_id, agent_mode, graceful))
+                return True
+
+        pool_manager = FakePoolManager()
+        service = FailureRecoveryService(pool_manager=pool_manager)
+
+        await service._recovery_migrate("tenant:project:custom")
+
+        assert pool_manager.tier_updates == [("tenant", "project", ProjectTier.COLD, "custom")]
+        assert pool_manager.terminated == [("tenant", "project", "custom", False)]
+
 
 class TestFailureEvent:
     """Tests for FailureEvent."""
@@ -366,6 +423,31 @@ class TestAutoScalingService:
         assert event.success is True
         assert pool_manager.calls == [("tenant:project:mode", 4)]
         assert scaling_service._current_counts["tenant:project:mode"] == 4
+
+    async def test_scale_calls_agent_pool_manager_backend(self):
+        """Auto-scaling can apply a one-instance target to the real pool manager."""
+        pool_manager = AgentPoolManager()
+        scaling_service = AutoScalingService(pool_manager=pool_manager)
+        created = MagicMock(spec=AgentInstance)
+        created.id = "scaled-instance"
+
+        with patch.object(pool_manager, "_create_instance", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = created
+
+            event = await scaling_service.scale(
+                instance_key="tenant:project:mode",
+                direction=ScalingDirection.UP,
+                target_count=1,
+            )
+
+        assert event.success is True
+        mock_create.assert_awaited_once_with(
+            tenant_id="tenant",
+            project_id="project",
+            agent_mode="mode",
+        )
+        assert pool_manager._instances["tenant:project:mode"] is created
+        assert scaling_service._current_counts["tenant:project:mode"] == 1
 
     async def test_scale_fails_when_pool_manager_has_no_scaling_backend(self):
         """Do not report success when a configured pool manager cannot scale."""

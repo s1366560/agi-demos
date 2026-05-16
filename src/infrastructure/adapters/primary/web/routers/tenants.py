@@ -109,6 +109,10 @@ class AddMemberRequest(BaseModel):
     role: str | None = "member"
 
 
+class UpdateMemberRoleRequest(BaseModel):
+    role: str
+
+
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     tenant_data: TenantCreate,
@@ -413,6 +417,58 @@ async def add_tenant_member_json(
     await db.commit()
 
     return {"message": "Member added successfully", "user_id": body.user_id, "role": role}
+
+
+@router.patch("/{tenant_id}/members/{user_id}", response_model=dict[str, Any])
+async def update_tenant_member_role(
+    tenant_id: str,
+    user_id: str,
+    body: UpdateMemberRoleRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Update an existing tenant member role."""
+    role = body.role
+    if role not in ["owner", "admin", "member", "viewer", "editor"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Invalid role"))
+
+    result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant not found"))
+
+    if tenant.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only tenant owner can update member roles"),
+        )
+
+    if user_id == tenant.owner_id and role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Cannot change tenant owner role"),
+        )
+
+    membership_result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant).where(
+                and_(UserTenant.user_id == user_id, UserTenant.tenant_id == tenant_id)
+            )
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=_("Tenant member not found")
+        )
+
+    membership.role = role
+    membership.permissions = {"read": True, "write": role in ["owner", "admin", "member", "editor"]}
+    await db.commit()
+
+    return {"message": "Member role updated successfully", "user_id": user_id, "role": role}
 
 
 @router.delete("/{tenant_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

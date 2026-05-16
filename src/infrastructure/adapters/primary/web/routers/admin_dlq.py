@@ -29,7 +29,7 @@ from src.infrastructure.i18n import gettext as _
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/admin/dlq",
+    prefix="/api/v1/admin/dlq",
     tags=["admin", "dlq"],
 )
 
@@ -206,7 +206,9 @@ async def list_messages(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_(f"Invalid status: {filter_status}. Valid values: {[s.value for s in DLQMessageStatus]}"),
+                detail=_(
+                    f"Invalid status: {filter_status}. Valid values: {[s.value for s in DLQMessageStatus]}"
+                ),
             ) from None
 
     messages = await dlq.get_messages(

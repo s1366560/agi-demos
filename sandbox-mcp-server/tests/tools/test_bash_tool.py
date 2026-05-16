@@ -1,7 +1,5 @@
 """Tests for bash tool using TDD methodology."""
 
-import asyncio
-import os
 import tempfile
 from pathlib import Path
 
@@ -64,6 +62,7 @@ class TestBashTool:
 
             # On host system, sudo might not be available - that's ok for this test
             # We're mainly testing it doesn't crash
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_sudo_whoami(self):
@@ -76,6 +75,7 @@ class TestBashTool:
 
             # On host system, sudo might not work - that's expected
             # We're testing the bash tool handles this gracefully
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_apt_update_dry_run(self):
@@ -88,6 +88,7 @@ class TestBashTool:
             )
 
             # On host system, this might fail - that's expected
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_working_directory(self):
@@ -140,6 +141,7 @@ class TestBashTool:
             )
 
             # Node.js might not be available on host
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_java_version(self):
@@ -151,6 +153,7 @@ class TestBashTool:
             )
 
             # Java might not be available on host
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_git_version(self):
@@ -162,7 +165,7 @@ class TestBashTool:
             )
 
             # Git should be available in most environments
-            content = result.get("content", [{}])[0].get("text", "")
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_workspace_fallback(self):

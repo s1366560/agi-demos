@@ -58,6 +58,7 @@ def mock_provider_service():
     service.update_provider = AsyncMock()
     service.delete_provider = AsyncMock(return_value=True)
     service.check_provider_health = AsyncMock()
+    service.test_provider_connection = AsyncMock()
     service.assign_provider_to_tenant = AsyncMock()
     service.unassign_provider_from_tenant = AsyncMock(return_value=True)
     service.resolve_provider_for_tenant = AsyncMock()
@@ -452,6 +453,32 @@ class TestLLMProvidersRouterDelete:
 @pytest.mark.unit
 class TestLLMProvidersRouterHealthCheck:
     """Test cases for provider health check endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_test_provider_connection_success(self, llm_client, mock_provider_service):
+        """Test a provider connection without saving it."""
+        mock_health = ProviderHealth(
+            provider_id=uuid4(),
+            status=ProviderStatus.HEALTHY,
+            response_time_ms=120,
+            last_check=datetime.now(UTC),
+            error_message=None,
+        )
+        mock_provider_service.test_provider_connection.return_value = mock_health
+
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "test-openai",
+                "provider_type": "openai",
+                "api_key": "sk-test-key-12345",
+                "llm_model": "gpt-4o",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_provider_service.test_provider_connection.assert_called_once()
+        assert response.json()["status"] == "healthy"
 
     @pytest.mark.asyncio
     async def test_check_provider_health_success(self, llm_client, mock_provider_service):

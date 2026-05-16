@@ -19,6 +19,7 @@ from src.infrastructure.graph.extraction.prompts import (
     RELATIONSHIP_EXTRACTION_SYSTEM_PROMPT,
     build_relationship_extraction_prompt,
 )
+from src.infrastructure.graph.llm_response import extract_response_content
 from src.infrastructure.graph.schemas import EntityEdge, EntityNode
 
 logger = logging.getLogger(__name__)
@@ -226,7 +227,7 @@ class RelationshipExtractor:
                 Message(role="user", content=user_prompt),
             ]
             response = await self._llm_client.ainvoke(domain_messages)
-            return response.content if hasattr(response, "content") else str(response)
+            return extract_response_content(response)
 
         elif hasattr(self._llm_client, "generate"):
             response = await self._llm_client.generate(
@@ -234,7 +235,20 @@ class RelationshipExtractor:
                 temperature=self._temperature,
                 response_format="json",
             )
-            return response.content if hasattr(response, "content") else str(response)
+            return extract_response_content(response)
+
+        elif hasattr(self._llm_client, "generate_response"):
+            from src.domain.llm_providers.llm_types import Message
+
+            response_messages = [
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=user_prompt),
+            ]
+            response = await self._llm_client.generate_response(
+                messages=response_messages,
+                response_model=None,
+            )
+            return extract_response_content(response)
 
         elif hasattr(self._llm_client, "_generate_response"):
             from src.domain.llm_providers.llm_types import Message
@@ -247,7 +261,7 @@ class RelationshipExtractor:
                 messages=graphiti_messages,
                 response_model=None,
             )
-            return cast(str, response.get("content", "") if isinstance(response, dict) else str(response))
+            return extract_response_content(response)
 
         else:
             raise NotImplementedError(f"Unsupported LLM client type: {type(self._llm_client)}")

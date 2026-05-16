@@ -13,12 +13,11 @@ Test Categories:
 """
 
 import asyncio
-import os
 import subprocess
 import time
-import pytest
 from pathlib import Path
-from typing import Optional
+
+import pytest
 
 from src.server.desktop_manager import DesktopManager
 

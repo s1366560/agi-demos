@@ -372,7 +372,7 @@ class GenomeListResponse(BaseModel):
 class GeneRatingCreate(BaseModel):
     """Request model for rating a gene."""
 
-    gene_id: str = Field(..., description="Gene ID to rate")
+    gene_id: str | None = Field(default=None, description="Gene ID to rate")
     rating: int = Field(..., ge=1, le=5, description="Rating value (1-5)")
     comment: str | None = Field(
         default=None,
@@ -397,7 +397,7 @@ class GeneRatingResponse(BaseModel):
 class GenomeRatingCreate(BaseModel):
     """Request model for rating a genome."""
 
-    genome_id: str = Field(..., description="Genome ID to rate")
+    genome_id: str | None = Field(default=None, description="Genome ID to rate")
     rating: int = Field(..., ge=1, le=5, description="Rating value (1-5)")
     comment: str | None = Field(
         default=None,

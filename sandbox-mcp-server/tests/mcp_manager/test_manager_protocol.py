@@ -8,12 +8,12 @@ Tests for the following MCP protocol methods:
 - logging/setLevel: Set logging level on servers
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import asyncio
+
+import pytest
 
 from src.mcp_manager.manager import MCPServerManager
-from src.mcp_manager.process_tracker import ServerStatus, ManagedServer
+from src.mcp_manager.process_tracker import ManagedServer, ServerStatus
 
 
 @pytest.fixture

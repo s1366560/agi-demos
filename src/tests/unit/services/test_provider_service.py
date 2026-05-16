@@ -262,6 +262,32 @@ class TestProviderService:
         }
 
     @pytest.mark.asyncio
+    async def test_test_provider_connection_checks_form_config_without_persisting(self, service):
+        """Connection tests should use submitted config and avoid writing health rows."""
+        config = ProviderConfigCreate(
+            name="draft-openai",
+            provider_type=ProviderType.OPENAI,
+            api_key="sk-test",
+            llm_model="gpt-4o",
+        )
+
+        with patch.object(
+            service,
+            "_check_provider_endpoint",
+            new=AsyncMock(return_value=("healthy", None)),
+        ) as mock_check:
+            health = await service.test_provider_connection(config)
+
+        assert health.status.value == "healthy"
+        assert health.error_message is None
+        mock_check.assert_awaited_once()
+        checked_provider = mock_check.await_args.args[0]
+        assert checked_provider.name == "draft-openai"
+        assert checked_provider.llm_model == "gpt-4o"
+        assert mock_check.await_args.args[1] == "sk-test"
+        service.repository.create_health_check.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_bedrock_health_check_requires_secret_key_config(self, service):
         """Bedrock health checks should fail fast without the AWS secret key."""
         provider = MagicMock()

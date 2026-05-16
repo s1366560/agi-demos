@@ -60,6 +60,7 @@ class InstanceService:
         tenant_id: str,
         created_by: str,
         *,
+        description: str | None = None,
         cluster_id: str | None = None,
         namespace: str | None = None,
         image_version: str = "latest",
@@ -71,9 +72,21 @@ class InstanceService:
         service_type: ServiceType = ServiceType.cluster_ip,
         ingress_domain: str | None = None,
         env_vars: dict[str, Any] | None = None,
+        quota_cpu: str | None = None,
+        quota_memory: str | None = None,
+        quota_max_pods: int | None = None,
+        storage_class: str | None = None,
+        storage_size: str | None = None,
         advanced_config: dict[str, Any] | None = None,
         llm_providers: dict[str, Any] | None = None,
+        compute_provider: str | None = None,
+        runtime: str = "default",
         workspace_id: str | None = None,
+        hex_position_q: int | None = None,
+        hex_position_r: int | None = None,
+        agent_display_name: str | None = None,
+        agent_label: str | None = None,
+        theme_color: str | None = None,
     ) -> Instance:
         """Create a new instance, add creator as admin, record deploy.
 
@@ -92,6 +105,7 @@ class InstanceService:
             name=name,
             slug=slug,
             tenant_id=tenant_id,
+            description=description,
             created_by=created_by,
             cluster_id=cluster_id,
             namespace=namespace,
@@ -104,9 +118,21 @@ class InstanceService:
             service_type=service_type,
             ingress_domain=ingress_domain,
             env_vars=env_vars or {},
+            quota_cpu=quota_cpu,
+            quota_memory=quota_memory,
+            quota_max_pods=quota_max_pods,
+            storage_class=storage_class,
+            storage_size=storage_size,
             advanced_config=advanced_config or {},
             llm_providers=llm_providers or {},
+            compute_provider=compute_provider,
+            runtime=runtime,
             workspace_id=workspace_id,
+            hex_position_q=hex_position_q,
+            hex_position_r=hex_position_r,
+            agent_display_name=agent_display_name,
+            agent_label=agent_label,
+            theme_color=theme_color,
             status=InstanceStatus.creating,
             created_at=datetime.now(UTC),
         )
@@ -172,11 +198,15 @@ class InstanceService:
         total = await self._instance_repo.count_by_tenant(tenant_id)
         return items, total
 
-    async def update_instance(  # noqa: PLR0913, C901, PLR0912
+    async def update_instance(  # noqa: PLR0913, C901, PLR0912, PLR0915
         self,
         instance_id: str,
         *,
         name: str | None = None,
+        description: str | None = None,
+        slug: str | None = None,
+        cluster_id: str | None = None,
+        namespace: str | None = None,
         image_version: str | None = None,
         replicas: int | None = None,
         cpu_request: str | None = None,
@@ -186,9 +216,18 @@ class InstanceService:
         service_type: ServiceType | None = None,
         ingress_domain: str | None = None,
         env_vars: dict[str, Any] | None = None,
+        quota_cpu: str | None = None,
+        quota_memory: str | None = None,
+        quota_max_pods: int | None = None,
+        storage_class: str | None = None,
+        storage_size: str | None = None,
         advanced_config: dict[str, Any] | None = None,
         llm_providers: dict[str, Any] | None = None,
+        compute_provider: str | None = None,
+        runtime: str | None = None,
         workspace_id: str | None = None,
+        hex_position_q: int | None = None,
+        hex_position_r: int | None = None,
         agent_display_name: str | None = None,
         agent_label: str | None = None,
         theme_color: str | None = None,
@@ -211,6 +250,14 @@ class InstanceService:
 
         if name is not None:
             instance.name = name
+        if description is not None:
+            instance.description = description
+        if slug is not None:
+            instance.slug = slug
+        if cluster_id is not None:
+            instance.cluster_id = cluster_id
+        if namespace is not None:
+            instance.namespace = namespace
         if image_version is not None:
             instance.image_version = image_version
         if replicas is not None:
@@ -229,12 +276,30 @@ class InstanceService:
             instance.ingress_domain = ingress_domain
         if env_vars is not None:
             instance.env_vars = env_vars
+        if quota_cpu is not None:
+            instance.quota_cpu = quota_cpu
+        if quota_memory is not None:
+            instance.quota_memory = quota_memory
+        if quota_max_pods is not None:
+            instance.quota_max_pods = quota_max_pods
+        if storage_class is not None:
+            instance.storage_class = storage_class
+        if storage_size is not None:
+            instance.storage_size = storage_size
         if advanced_config is not None:
             instance.advanced_config = advanced_config
         if llm_providers is not None:
             instance.llm_providers = llm_providers
+        if compute_provider is not None:
+            instance.compute_provider = compute_provider
+        if runtime is not None:
+            instance.runtime = runtime
         if workspace_id is not None:
             instance.workspace_id = workspace_id
+        if hex_position_q is not None:
+            instance.hex_position_q = hex_position_q
+        if hex_position_r is not None:
+            instance.hex_position_r = hex_position_r
         if agent_display_name is not None:
             instance.agent_display_name = agent_display_name
         if agent_label is not None:

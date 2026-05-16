@@ -134,6 +134,7 @@ async def create_instance(
             slug=data.slug,
             tenant_id=tenant_id,
             created_by=current_user.id,
+            description=data.description,
             cluster_id=data.cluster_id,
             namespace=data.namespace,
             image_version=data.image_version,
@@ -145,9 +146,21 @@ async def create_instance(
             service_type=ServiceType(data.service_type),
             ingress_domain=data.ingress_domain,
             env_vars=data.env_vars,
+            quota_cpu=data.quota_cpu,
+            quota_memory=data.quota_memory,
+            quota_max_pods=data.quota_max_pods,
+            storage_class=data.storage_class,
+            storage_size=data.storage_size,
             advanced_config=data.advanced_config,
             llm_providers=data.llm_providers,
+            compute_provider=data.compute_provider,
+            runtime=data.runtime,
             workspace_id=data.workspace_id,
+            hex_position_q=data.hex_position_q,
+            hex_position_r=data.hex_position_r,
+            agent_display_name=data.agent_display_name,
+            agent_label=data.agent_label,
+            theme_color=data.theme_color,
         )
         await db.commit()
         return InstanceResponse.model_validate(result, from_attributes=True)
@@ -238,6 +251,10 @@ async def update_instance(
         result = await service.update_instance(
             instance_id,
             name=data.name,
+            description=data.description,
+            slug=data.slug,
+            cluster_id=data.cluster_id,
+            namespace=data.namespace,
             image_version=data.image_version,
             replicas=data.replicas,
             cpu_request=data.cpu_request,
@@ -247,9 +264,18 @@ async def update_instance(
             service_type=svc_type,
             ingress_domain=data.ingress_domain,
             env_vars=data.env_vars,
+            quota_cpu=data.quota_cpu,
+            quota_memory=data.quota_memory,
+            quota_max_pods=data.quota_max_pods,
+            storage_class=data.storage_class,
+            storage_size=data.storage_size,
             advanced_config=data.advanced_config,
             llm_providers=data.llm_providers,
+            compute_provider=data.compute_provider,
+            runtime=data.runtime,
             workspace_id=data.workspace_id,
+            hex_position_q=data.hex_position_q,
+            hex_position_r=data.hex_position_r,
             agent_display_name=data.agent_display_name,
             agent_label=data.agent_label,
             theme_color=data.theme_color,
@@ -560,7 +586,9 @@ async def add_member(
         )
         await db.commit()
 
-        user_row = await db.execute(refresh_select_statement(select(UserModel).where(UserModel.id == data.user_id)))
+        user_row = await db.execute(
+            refresh_select_statement(select(UserModel).where(UserModel.id == data.user_id))
+        )
         user = user_row.scalar_one_or_none()
         return InstanceMemberResponse(
             id=result.id,
@@ -655,7 +683,9 @@ async def update_member_role(
         )
         await db.commit()
 
-        user_row = await db.execute(refresh_select_statement(select(UserModel).where(UserModel.id == result.user_id)))
+        user_row = await db.execute(
+            refresh_select_statement(select(UserModel).where(UserModel.id == result.user_id))
+        )
         user = user_row.scalar_one_or_none()
         return InstanceMemberResponse(
             id=result.id,
@@ -739,7 +769,9 @@ async def list_members(
         user_ids = [m.user_id for m in members]
         user_map: dict[str, UserModel] = {}
         if user_ids:
-            user_result = await db.execute(refresh_select_statement(select(UserModel).where(UserModel.id.in_(user_ids))))
+            user_result = await db.execute(
+                refresh_select_statement(select(UserModel).where(UserModel.id.in_(user_ids)))
+            )
             for u in user_result.scalars().all():
                 user_map[u.id] = u
 

@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -46,6 +47,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Authentication"])
 
 
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str | None = None
+    redirect_uri: str | None = None
+
+
+def _user_profile(user: DBUser) -> dict[str, Any]:
+    return dict(user.profile or {})
+
+
 async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
     """
     Ensure user has a default project.
@@ -54,7 +65,9 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
     This is called after successful login to ensure first-time users have a project.
     """
     # Check if user already has any projects
-    result = await db.execute(refresh_select_statement(select(UserProject).where(UserProject.user_id == user.id).limit(1)))
+    result = await db.execute(
+        refresh_select_statement(select(UserProject).where(UserProject.user_id == user.id).limit(1))
+    )
     existing_project = result.scalar_one_or_none()
 
     if existing_project:
@@ -62,7 +75,9 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
         return
 
     # Get user's first tenant (should exist from initialization)
-    result = await db.execute(refresh_select_statement(select(UserTenant).where(UserTenant.user_id == user.id).limit(1)))
+    result = await db.execute(
+        refresh_select_statement(select(UserTenant).where(UserTenant.user_id == user.id).limit(1))
+    )
     user_tenant = result.scalar_one_or_none()
 
     if not user_tenant:
@@ -70,7 +85,9 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
         return
 
     # Get tenant details
-    tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == user_tenant.tenant_id)))
+    tenant_result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == user_tenant.tenant_id))
+    )
     tenant = tenant_result.scalar_one_or_none()
 
     if not tenant:
@@ -119,9 +136,11 @@ async def login_for_access_token(
 
     # Query user
     result = await db.execute(
-        refresh_select_statement(select(DBUser)
-        .where(DBUser.email == form_data.username)
-        .options(selectinload(DBUser.roles).selectinload(UserRole.role)))
+        refresh_select_statement(
+            select(DBUser)
+            .where(DBUser.email == form_data.username)
+            .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+        )
     )
     user = result.scalar_one_or_none()
 
@@ -171,6 +190,17 @@ async def login_for_access_token(
         "token_type": "bearer",
         "must_change_password": bool(user.must_change_password),
     }
+
+
+@router.post("/auth/oauth/{provider}/callback", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def oauth_callback(provider: str, _request: OAuthCallbackRequest) -> None:
+    """Return an explicit unsupported response until OAuth providers are configured."""
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=_("OAuth login is not configured for provider: {provider}").format(
+            provider=provider
+        ),
+    )
 
 
 @router.post("/auth/force-change-password", response_model=ForceChangePasswordResponse)
@@ -231,7 +261,9 @@ async def list_api_keys(
     current_user: DBUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> list[Any]:
     """List all API keys for the current user."""
-    result = await db.execute(refresh_select_statement(select(DBAPIKey).where(DBAPIKey.user_id == current_user.id)))
+    result = await db.execute(
+        refresh_select_statement(select(DBAPIKey).where(DBAPIKey.user_id == current_user.id))
+    )
     keys = result.scalars().all()
 
     return [
@@ -255,7 +287,9 @@ async def revoke_api_key(
 ) -> None:
     """Revoke (delete) an API key."""
     result = await db.execute(
-        refresh_select_statement(select(DBAPIKey).where(DBAPIKey.id == key_id, DBAPIKey.user_id == current_user.id))
+        refresh_select_statement(
+            select(DBAPIKey).where(DBAPIKey.id == key_id, DBAPIKey.user_id == current_user.id)
+        )
     )
     key = result.scalar_one_or_none()
 
@@ -276,9 +310,11 @@ async def read_users_me(
 
     # Eager load roles to avoid lazy loading in async mode
     result = await db.execute(
-        refresh_select_statement(select(DBUser)
-        .options(selectinload(DBUser.roles).selectinload(UserRole.role))
-        .where(DBUser.id == current_user.id))
+        refresh_select_statement(
+            select(DBUser)
+            .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+            .where(DBUser.id == current_user.id)
+        )
     )
     user_with_roles = result.scalar_one_or_none()
 
@@ -291,7 +327,7 @@ async def read_users_me(
         roles=role_names,
         is_active=current_user.is_active,
         created_at=current_user.created_at,
-        profile={},
+        profile=_user_profile(current_user),
         preferred_language=current_user.preferred_language,
     )
 
@@ -310,13 +346,8 @@ async def update_user_me(
         current_user.preferred_language = user_update.preferred_language
 
     if user_update.profile is not None:
-        # Merge existing profile with new profile data
-        # Note: Profile is not currently supported in DBUser, so we skip it for now
-        # current_profile = current_user.profile or {}
-        # new_profile_data = user_update.profile.dict(exclude_unset=True)
-        # current_profile.update(new_profile_data)
-        # current_user.profile = current_profile
-        pass
+        profile_update = user_update.profile.model_dump(exclude_unset=True)
+        current_user.profile = {**_user_profile(current_user), **profile_update}
 
     db.add(current_user)
     await db.commit()
@@ -324,9 +355,11 @@ async def update_user_me(
 
     # Reload roles for response
     result = await db.execute(
-        refresh_select_statement(select(DBUser)
-        .options(selectinload(DBUser.roles).selectinload(UserRole.role))
-        .where(DBUser.id == current_user.id))
+        refresh_select_statement(
+            select(DBUser)
+            .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+            .where(DBUser.id == current_user.id)
+        )
     )
     user_with_roles = result.scalar_one_or_none()
     role_names = [r.role.name for r in user_with_roles.roles] if user_with_roles else []
@@ -338,7 +371,7 @@ async def update_user_me(
         roles=role_names,
         is_active=current_user.is_active,
         created_at=current_user.created_at,
-        profile={},
+        profile=_user_profile(current_user),
         preferred_language=current_user.preferred_language,
     )
 
@@ -410,12 +443,8 @@ async def device_code_request(request: dict[str, Any] | None = None) -> dict[str
         "approved_user_id": None,
         "access_token": None,
     }
-    await redis_client.setex(
-        _device_key(device_code), _DEVICE_CODE_TTL, _json.dumps(payload)
-    )
-    await redis_client.setex(
-        _user_code_key(user_code), _DEVICE_CODE_TTL, device_code
-    )
+    await redis_client.setex(_device_key(device_code), _DEVICE_CODE_TTL, _json.dumps(payload))
+    await redis_client.setex(_user_code_key(user_code), _DEVICE_CODE_TTL, device_code)
 
     # The verification URI is the frontend route that reads user_code from
     # the URL, authenticates the user, and calls /auth/device/approve.
@@ -451,7 +480,9 @@ async def device_code_approve(
     device_code_raw = await redis_client.get(_user_code_key(user_code))
     if device_code_raw is None:
         raise HTTPException(status_code=404, detail=_("user_code expired or unknown"))
-    device_code = device_code_raw.decode() if isinstance(device_code_raw, bytes) else device_code_raw
+    device_code = (
+        device_code_raw.decode() if isinstance(device_code_raw, bytes) else device_code_raw
+    )
 
     raw = await redis_client.get(_device_key(device_code))
     if raw is None:

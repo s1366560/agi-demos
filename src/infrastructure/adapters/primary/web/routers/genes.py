@@ -30,6 +30,8 @@ from src.application.schemas.gene_schemas import (
     GenomeUpdate,
 )
 from src.configuration.di_container import DIContainer
+from src.domain.model.gene.enums import EvolutionEventType
+from src.domain.model.gene.instance_gene import EvolutionEvent
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
@@ -97,6 +99,11 @@ class EvolutionEventResponse(BaseModel):
     gene_name: str = ""
     gene_slug: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)
+    from_version: str | None = None
+    to_version: str | None = None
+    trigger: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: str = "completed"
     created_at: str
 
 
@@ -104,9 +111,53 @@ class EvolutionEventListResponse(BaseModel):
     """List of evolution events."""
 
     items: list[EvolutionEventResponse]
+    events: list[EvolutionEventResponse]
     total: int
     page: int
     page_size: int
+
+
+class EvolutionEventCreateRequest(BaseModel):
+    """Request model for manually recording an evolution event."""
+
+    instance_id: str
+    gene_id: str | None = None
+    genome_id: str | None = None
+    event_type: EvolutionEventType
+    from_version: str | None = None
+    to_version: str | None = None
+    trigger: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: str = "completed"
+    gene_name: str = ""
+    gene_slug: str | None = None
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _evolution_event_response(event: EvolutionEvent) -> EvolutionEventResponse:
+    details = event.details or {}
+    payload = details.get("payload")
+    if not isinstance(payload, dict):
+        payload = details
+    return EvolutionEventResponse(
+        id=event.id,
+        instance_id=event.instance_id,
+        gene_id=event.gene_id,
+        genome_id=event.genome_id,
+        event_type=event.event_type.value,
+        gene_name=event.gene_name,
+        gene_slug=event.gene_slug,
+        details=details,
+        from_version=_optional_str(details.get("from_version")),
+        to_version=_optional_str(details.get("to_version")),
+        trigger=_optional_str(details.get("trigger")),
+        payload=payload,
+        status=_optional_str(details.get("status")) or "completed",
+        created_at=event.created_at.isoformat(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -183,25 +234,6 @@ async def list_genes(
         page=page,
         page_size=page_size,
     )
-
-
-@router.get("/{gene_id}", response_model=GeneResponse)
-async def get_gene(
-    request: Request,
-    gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
-) -> GeneResponse:
-    """Get a gene by ID."""
-    container = get_container_with_db(request, db)
-    service = container.gene_service()
-    gene = await service.get_gene(gene_id)
-    if not gene:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Gene {gene_id} not found"),
-        )
-    return GeneResponse.model_validate(gene, from_attributes=True)
 
 
 @router.put("/{gene_id}", response_model=GeneResponse)
@@ -653,6 +685,29 @@ async def list_gene_ratings(
     return [GeneRatingResponse.model_validate(r, from_attributes=True) for r in ratings]
 
 
+@router.get(
+    "/genomes/{genome_id}/ratings",
+    response_model=list[GenomeRatingResponse],
+)
+async def list_genome_ratings(
+    request: Request,
+    genome_id: str,
+    limit: int = Query(50, ge=1, le=200, description="Max results"),
+    offset: int = Query(0, ge=0, description="Offset"),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[GenomeRatingResponse]:
+    """List ratings for a genome."""
+    container = get_container_with_db(request, db)
+    service = container.gene_service()
+    ratings = await service.list_genome_ratings(
+        genome_id=genome_id,
+        limit=limit,
+        offset=offset,
+    )
+    return [GenomeRatingResponse.model_validate(r, from_attributes=True) for r in ratings]
+
+
 @router.post(
     "/genomes/{genome_id}/ratings",
     response_model=GenomeRatingResponse,
@@ -695,7 +750,9 @@ async def rate_genome(
 )
 async def list_evolution_events(
     request: Request,
-    instance_id: str = Query(..., description="Agent instance ID to query"),
+    instance_id: str | None = Query(None, description="Agent instance ID to query"),
+    gene_id: str | None = Query(None, description="Gene ID to query"),
+    event_type: EvolutionEventType | None = Query(None, description="Filter by event type"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -705,31 +762,95 @@ async def list_evolution_events(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     offset = (page - 1) * page_size
-    events = await service.list_evolution_events(
-        instance_id=instance_id,
-        limit=page_size,
-        offset=offset,
-    )
-    items = [
-        EvolutionEventResponse(
-            id=ev.id,
-            instance_id=ev.instance_id,
-            gene_id=ev.gene_id,
-            genome_id=ev.genome_id,
-            event_type=ev.event_type.value,
-            gene_name=ev.gene_name,
-            gene_slug=ev.gene_slug,
-            details=ev.details,
-            created_at=ev.created_at.isoformat(),
+    try:
+        events = await service.list_evolution_events(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            event_type=event_type,
+            limit=page_size,
+            offset=offset,
         )
-        for ev in events
-    ]
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    items = [_evolution_event_response(ev) for ev in events]
     return EvolutionEventListResponse(
         items=items,
+        events=items,
         total=len(items),
         page=page,
         page_size=page_size,
     )
+
+
+@router.post(
+    "/evolution",
+    response_model=EvolutionEventResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_evolution_event(
+    request: Request,
+    data: EvolutionEventCreateRequest,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> EvolutionEventResponse:
+    """Create an evolution event record."""
+    container = get_container_with_db(request, db)
+    service = container.gene_service()
+    event = await service.create_evolution_event(
+        instance_id=data.instance_id,
+        gene_id=data.gene_id,
+        genome_id=data.genome_id,
+        event_type=data.event_type,
+        gene_name=data.gene_name,
+        gene_slug=data.gene_slug,
+        details={
+            "from_version": data.from_version,
+            "to_version": data.to_version,
+            "trigger": data.trigger,
+            "payload": data.payload,
+            "status": data.status,
+        },
+    )
+    await db.commit()
+    return _evolution_event_response(event)
+
+
+@router.get("/evolution/{event_id}", response_model=EvolutionEventResponse)
+async def get_evolution_event(
+    request: Request,
+    event_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> EvolutionEventResponse:
+    """Get a specific evolution event."""
+    container = get_container_with_db(request, db)
+    service = container.gene_service()
+    event = await service.get_evolution_event(event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_(f"Evolution event {event_id} not found"),
+        )
+    return _evolution_event_response(event)
+
+
+@router.get("/{gene_id}", response_model=GeneResponse)
+async def get_gene(
+    request: Request,
+    gene_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> GeneResponse:
+    """Get a gene by ID."""
+    container = get_container_with_db(request, db)
+    service = container.gene_service()
+    gene = await service.get_gene(gene_id)
+    if not gene:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_(f"Gene {gene_id} not found"),
+        )
+    return GeneResponse.model_validate(gene, from_attributes=True)
 
 
 @router.get(

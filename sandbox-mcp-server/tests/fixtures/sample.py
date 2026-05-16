@@ -3,6 +3,8 @@
 This file contains various Python constructs for parsing.
 """
 
+# ruff: noqa: F401,F841,I001
+
 import os
 import sys
 from typing import List, Optional

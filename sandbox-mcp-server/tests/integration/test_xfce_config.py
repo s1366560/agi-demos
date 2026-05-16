@@ -16,12 +16,10 @@ Following strict TDD methodology:
 - REFACTOR: Optimize configurations
 """
 
-import os
-import subprocess
-import pytest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, Any
+
+import pytest
 
 
 class TestXFCEPanelConfig:
@@ -495,7 +493,7 @@ class TestWhiskerMenuConfig:
 
         # Should have valid key=value pairs
         lines = content.split("\n")
-        valid_lines = [l for l in lines if l.strip() and not l.strip().startswith("#")]
+        valid_lines = [line for line in lines if line.strip() and not line.strip().startswith("#")]
 
         assert len(valid_lines) > 0, "No configuration entries found"
 

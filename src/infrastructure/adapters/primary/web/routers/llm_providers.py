@@ -475,6 +475,33 @@ async def delete_provider(
 # Health Check Endpoints
 
 
+@router.post("/test-connection", response_model=ProviderHealth)
+async def test_provider_connection(
+    config: ProviderConfigCreate,
+    current_user: User = Depends(require_admin),
+    service: ProviderService = Depends(get_provider_service_with_session),
+) -> ProviderHealth:
+    """
+    Test an LLM provider configuration without saving it.
+
+    Requires admin access.
+    """
+    try:
+        health = await service.test_provider_connection(config)
+        logger.info(
+            "Provider connection test completed for %s by user %s: %s",
+            config.provider_type,
+            current_user.id,
+            health.status,
+        )
+        return health
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+
 @router.post("/{provider_id}/health-check", response_model=ProviderHealth)
 async def check_provider_health(
     provider_id: UUID,

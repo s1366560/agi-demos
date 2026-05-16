@@ -62,9 +62,8 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
-    preferred_language: Mapped[str | None] = mapped_column(
-        String(16), nullable=True, default=None
-    )
+    preferred_language: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    profile: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
@@ -332,7 +331,9 @@ class WorkspaceModel(Base):
         back_populates="workspace", cascade="all, delete-orphan"
     )
     messages: Mapped[list["WorkspaceMessageModel"]] = relationship(
-        foreign_keys="[WorkspaceMessageModel.workspace_id]", cascade="all, delete-orphan"
+        foreign_keys="[WorkspaceMessageModel.workspace_id]",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
     )
 
     __table_args__ = (
@@ -2448,7 +2449,9 @@ class WorkspaceMessageModel(Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    workspace: Mapped["WorkspaceModel"] = relationship(foreign_keys=[workspace_id])
+    workspace: Mapped["WorkspaceModel"] = relationship(
+        foreign_keys=[workspace_id], back_populates="messages"
+    )
 
     __table_args__ = (
         Index("ix_workspace_messages_workspace_created", "workspace_id", "created_at"),
@@ -2565,6 +2568,7 @@ class InstanceModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tenant_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -3668,9 +3672,7 @@ class ReflectionVerdictRecord(Base):
         nullable=True,
     )
     rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    proposed_payload: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    proposed_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -57,7 +57,9 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
     async def find_by_email(self, email: str) -> User | None:
         """Find a user by email address."""
         query = select(DBUser).where(DBUser.email == email)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_user = result.scalar_one_or_none()
         return self._to_domain(db_user)
 
@@ -94,7 +96,7 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
             is_active=db_model.is_active,
             must_change_password=db_model.must_change_password,
             preferred_language=db_model.preferred_language,
-            profile={},  # Default empty dict since DB doesn't have this column
+            profile=dict(db_model.profile or {}),
             created_at=db_model.created_at,
         )
 
@@ -119,6 +121,7 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
             is_active=domain_entity.is_active,
             must_change_password=domain_entity.must_change_password,
             preferred_language=domain_entity.preferred_language,
+            profile=dict(domain_entity.profile or {}),
             created_at=domain_entity.created_at,
         )
 
@@ -141,3 +144,4 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
         db_model.is_active = domain_entity.is_active
         db_model.must_change_password = domain_entity.must_change_password
         db_model.preferred_language = domain_entity.preferred_language
+        db_model.profile = dict(domain_entity.profile or {})

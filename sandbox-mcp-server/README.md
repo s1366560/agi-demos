@@ -366,11 +366,15 @@ pytest tests/ -v
 pytest tests/test_desktop_manager.py -v
 pytest tests/integration/test_vnc_performance.py -v
 
+# Include RED-phase Docker/TigerVNC desktop tests
+RUN_SANDBOX_RED_TESTS=1 pytest tests/integration/ -v
+
 # Run with coverage
 pytest --cov=src/server --cov=src/tools --cov-report=html
 ```
 
-**Test Coverage**: 94% (111/138 tests passing)
+RED-phase Docker/TigerVNC desktop tests are skipped by default in local runs because they
+require the desktop container stack.
 
 ## Documentation
 

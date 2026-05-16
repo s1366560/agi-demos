@@ -8,14 +8,40 @@ from src.infrastructure.graph.extraction.relationship_extractor import Relations
 class MockLLMClient:
     """Mock LLM client for testing."""
 
-    async def generate_response(self, prompt: str):
+    async def generate_response(self, **_kwargs):
         return '{"relationships": []}'
+
+
+class GenerateOnlyLLMClient:
+    """Mock the default project LLM client response shape."""
+
+    async def generate(self, **_kwargs):
+        return {
+            "content": (
+                '{"relationships": ['
+                '{"from_entity": "Ada", "to_entity": "Lab", "relationship_type": "FOUNDED"}'
+                "]}"
+            )
+        }
 
 
 @pytest.fixture
 def extractor():
     """Create RelationshipExtractor with mocked dependencies."""
     return RelationshipExtractor(llm_client=MockLLMClient())
+
+
+@pytest.mark.unit
+class TestRelationshipExtractorLLMResponse:
+    """Tests for LLM response normalization."""
+
+    async def test_call_llm_extracts_content_from_generate_dict(self):
+        extractor = RelationshipExtractor(llm_client=GenerateOnlyLLMClient())
+
+        response = await extractor._call_llm("Extract relationships", "Ada founded a lab.")
+
+        assert '"relationships"' in response
+        assert '"relationship_type": "FOUNDED"' in response
 
 
 @pytest.mark.unit

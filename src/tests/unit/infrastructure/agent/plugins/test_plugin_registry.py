@@ -2,6 +2,7 @@
 
 from importlib import import_module
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -369,8 +370,17 @@ async def test_notify_hook_default_priority_is_100() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_apply_hook_executes_custom_script_runtime_override() -> None:
+async def test_apply_hook_executes_custom_script_runtime_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Custom script overrides should execute real code for matching lifecycle hooks."""
+    audit_service = MagicMock()
+    audit_service.log_event = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.custom_hook_executor.get_audit_service",
+        lambda: audit_service,
+    )
+
     registry = AgentPluginRegistry()
 
     result = await registry.apply_hook(
@@ -400,8 +410,17 @@ async def test_apply_hook_executes_custom_script_runtime_override() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_apply_hook_enforces_side_effect_family_no_payload_mutation() -> None:
+async def test_apply_hook_enforces_side_effect_family_no_payload_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Side-effect hooks should not mutate the dispatcher payload."""
+    audit_service = MagicMock()
+    audit_service.log_event = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.custom_hook_executor.get_audit_service",
+        lambda: audit_service,
+    )
+
     registry = AgentPluginRegistry()
 
     result = await registry.apply_hook(

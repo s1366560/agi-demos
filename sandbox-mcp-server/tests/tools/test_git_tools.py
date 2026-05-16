@@ -6,15 +6,15 @@ TDD Cycle:
 3. REFACTOR - Improve while keeping tests passing
 """
 
-import asyncio
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from src.tools.git_tools import (
+    generate_commit,
     git_diff,
     git_log,
-    generate_commit,
 )
 
 

@@ -55,6 +55,7 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
             name=db_model.name,
             slug=db_model.slug,
             tenant_id=db_model.tenant_id,
+            description=db_model.description,
             cluster_id=db_model.cluster_id,
             namespace=db_model.namespace,
             image_version=db_model.image_version,
@@ -100,6 +101,7 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
             name=domain_entity.name,
             slug=domain_entity.slug,
             tenant_id=domain_entity.tenant_id,
+            description=domain_entity.description,
             cluster_id=domain_entity.cluster_id,
             namespace=domain_entity.namespace,
             image_version=domain_entity.image_version,
@@ -142,6 +144,7 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
     def _update_fields(self, db_model: InstanceModel, domain_entity: Instance) -> None:
         db_model.name = domain_entity.name
         db_model.slug = domain_entity.slug
+        db_model.description = domain_entity.description
         db_model.cluster_id = domain_entity.cluster_id
         db_model.namespace = domain_entity.namespace
         db_model.image_version = domain_entity.image_version

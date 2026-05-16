@@ -17,6 +17,7 @@ Recovery strategies:
 
 import asyncio
 import contextlib
+import inspect
 import logging
 import time
 from collections.abc import Callable
@@ -415,8 +416,19 @@ class FailureRecoveryService:
     async def _recovery_restart(self, instance_key: str) -> None:
         """Simple restart recovery."""
         if self._pool_manager:
+            tenant_id, project_id, agent_mode = self._parse_instance_key(instance_key)
             # Terminate and recreate
-            await self._pool_manager.terminate_instance(instance_key, graceful=False)
+            terminate_instance = self._pool_manager.terminate_instance
+            params = inspect.signature(terminate_instance).parameters
+            if "tenant_id" in params:
+                await terminate_instance(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    agent_mode=agent_mode,
+                    graceful=False,
+                )
+            else:
+                await terminate_instance(instance_key, graceful=False)
             # Instance will be recreated on next request
             logger.info(f"Instance terminated for restart: {instance_key}")
 
@@ -434,22 +446,38 @@ class FailureRecoveryService:
     async def _recovery_migrate(self, instance_key: str) -> None:
         """Migrate to different backend."""
         if self._pool_manager:
-            # Get current tier
-            parts = instance_key.split(":")
-            if len(parts) >= 2:
-                tenant_id, project_id = parts[0], parts[1]
-                # Downgrade tier (e.g., HOT -> WARM, WARM -> COLD)
-                from ..types import ProjectTier
+            tenant_id, project_id, agent_mode = self._parse_instance_key(instance_key)
+            # Downgrade tier (e.g., HOT -> WARM, WARM -> COLD)
+            from ..types import ProjectTier
 
-                await self._pool_manager.set_project_tier(
+            set_project_tier = self._pool_manager.set_project_tier
+            params = inspect.signature(set_project_tier).parameters
+            if "agent_mode" in params:
+                await set_project_tier(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    tier=ProjectTier.COLD,
+                    agent_mode=agent_mode,
+                )
+            else:
+                await set_project_tier(
                     tenant_id=tenant_id,
                     project_id=project_id,
                     tier=ProjectTier.COLD,
                 )
-                logger.info(f"Migrated to COLD tier: {instance_key}")
+            logger.info(f"Migrated to COLD tier: {instance_key}")
 
         # Then restart
         await self._recovery_restart(instance_key)
+
+    @staticmethod
+    def _parse_instance_key(instance_key: str) -> tuple[str, str, str]:
+        """Parse tenant, project, and agent mode from a pool instance key."""
+        parts = instance_key.split(":", 2)
+        if len(parts) != 3 or not all(parts):
+            raise ValueError("instance_key must have format 'tenant_id:project_id:agent_mode'")
+        tenant_id, project_id, agent_mode = parts
+        return tenant_id, project_id, agent_mode
 
     async def _escalate(
         self,

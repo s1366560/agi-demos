@@ -6,8 +6,8 @@ Provides tools for managing web terminal sessions.
 import logging
 from typing import Optional
 
-from src.server.websocket_server import MCPTool
 from src.server.web_terminal import WebTerminalManager
+from src.server.websocket_server import MCPTool
 
 logger = logging.getLogger(__name__)
 

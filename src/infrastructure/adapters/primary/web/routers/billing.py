@@ -19,7 +19,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.i18n import gettext as _
 
-router = APIRouter(prefix="/tenants", tags=["billing"])
+router = APIRouter(prefix="/api/v1/tenants", tags=["billing"])
 
 
 @router.get("/{tenant_id}/billing")
@@ -34,9 +34,11 @@ async def get_billing_info(
     from src.infrastructure.adapters.secondary.persistence.models import UserTenant
 
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
+            )
+        )
     )
     user_tenant = user_tenant_result.scalar_one_or_none()
 
@@ -44,34 +46,44 @@ async def get_billing_info(
         raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Optional tenant info; fall back to defaults if not present
-    tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    tenant_result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = tenant_result.scalar_one_or_none()
     # Get invoices
     invoices_result = await db.execute(
-        refresh_select_statement(select(Invoice)
-        .where(Invoice.tenant_id == tenant_id)
-        .order_by(Invoice.created_at.desc())
-        .limit(12))
+        refresh_select_statement(
+            select(Invoice)
+            .where(Invoice.tenant_id == tenant_id)
+            .order_by(Invoice.created_at.desc())
+            .limit(12)
+        )
     )
     invoices = invoices_result.scalars().all()
 
     # Calculate usage statistics
-    projects_result = await db.execute(refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id)))
+    projects_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id))
+    )
     projects = projects_result.scalars().all()
 
     project_ids = [p.id for p in projects]
 
     # Count memories
     memories_result = await db.execute(
-        refresh_select_statement(select(func.count(Memory.id)).where(Memory.project_id.in_(project_ids)))
+        refresh_select_statement(
+            select(func.count(Memory.id)).where(Memory.project_id.in_(project_ids))
+        )
     )
     memory_count = memories_result.scalar() or 0
 
     # Count users with access
     users_result = await db.execute(
-        refresh_select_statement(select(func.count(func.distinct(UserProject.user_id))).where(
-            UserProject.project_id.in_(project_ids)
-        ))
+        refresh_select_statement(
+            select(func.count(func.distinct(UserProject.user_id))).where(
+                UserProject.project_id.in_(project_ids)
+            )
+        )
     )
     user_count = users_result.scalar() or 0
 
@@ -125,9 +137,11 @@ async def list_invoices(
     from src.infrastructure.adapters.secondary.persistence.models import UserTenant
 
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
+            )
+        )
     )
     user_tenant = user_tenant_result.scalar_one_or_none()
 
@@ -137,7 +151,11 @@ async def list_invoices(
     # Optional existence; invoices can be listed by tenant_id regardless
     # Get invoices
     result = await db.execute(
-        refresh_select_statement(select(Invoice).where(Invoice.tenant_id == tenant_id).order_by(Invoice.created_at.desc()))
+        refresh_select_statement(
+            select(Invoice)
+            .where(Invoice.tenant_id == tenant_id)
+            .order_by(Invoice.created_at.desc())
+        )
     )
     invoices = result.scalars().all()
 
@@ -172,9 +190,11 @@ async def upgrade_plan(
     from src.infrastructure.adapters.secondary.persistence.models import UserTenant
 
     user_tenant_result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(
-            UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
-        ))
+        refresh_select_statement(
+            select(UserTenant).where(
+                UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
+            )
+        )
     )
     user_tenant = user_tenant_result.scalar_one_or_none()
 
@@ -182,7 +202,9 @@ async def upgrade_plan(
         raise HTTPException(status_code=403, detail=_("Only owner can upgrade plan"))
 
     # Existence after permission; allow auto-create only if system has tenants
-    tenant_result = await db.execute(refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id)))
+    tenant_result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
     tenant = tenant_result.scalar_one_or_none()
     if not tenant:
         # Check whether any tenant exists; if none, treat as not found

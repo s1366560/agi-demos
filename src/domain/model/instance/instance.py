@@ -16,6 +16,7 @@ class Instance(Entity):
     name: str
     slug: str
     tenant_id: str
+    description: str | None = None
     cluster_id: str | None = None
     namespace: str | None = None
     image_version: str = "latest"

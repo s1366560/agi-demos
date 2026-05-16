@@ -32,6 +32,7 @@ from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
 )
 from src.infrastructure.adapters.primary.web.routers import (
+    admin_dlq,
     ai_tools,
     artifacts,
     attachments_upload,
@@ -710,8 +711,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(workspace_chat.router)
 
     # Agent Capability System (L2 Skill + L3 SubAgent)
-    app.include_router(skills.router)
     app.include_router(skills_curated.router)
+    app.include_router(skills.router)
     app.include_router(tenant_skill_configs.router)
     app.include_router(subagents.router)
 
@@ -777,6 +778,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Observability (workspace-scoped event logs, DLQ, circuit state, queues)
     app.include_router(observability.router)
+    app.include_router(admin_dlq.router)
 
     app.include_router(invitations.router)
     app.include_router(invitations.public_router)

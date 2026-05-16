@@ -10,6 +10,7 @@ from src.infrastructure.graph.search.hybrid_search import (
     DEFAULT_KEYWORD_WEIGHT,
     DEFAULT_RRF_K,
     DEFAULT_VECTOR_WEIGHT,
+    MAX_FULLTEXT_QUERY_TERMS,
     GraphSearchConfig,
     HybridSearch,
     _dict_to_item,
@@ -512,6 +513,49 @@ class TestQueryExpansion:
         # The search_query param should not contain stop words like "how", "does"
         search_query = call_kwargs.kwargs.get("search_query", "")
         assert "authentication" in search_query
+
+    @pytest.mark.unit
+    def test_fulltext_query_terms_are_capped_and_deduplicated(self, hybrid_search):
+        """Long FTS queries stay below Neo4j/Lucene clause limits."""
+        query = " ".join([f"term{i}" for i in range(MAX_FULLTEXT_QUERY_TERMS + 100)] + ["term0"])
+
+        search_query = hybrid_search._escape_fulltext_query(query)
+        terms = search_query.split()
+
+        assert len(terms) == MAX_FULLTEXT_QUERY_TERMS
+        assert len(set(terms)) == MAX_FULLTEXT_QUERY_TERMS
+        assert terms[0] == "term0"
+        assert terms[-1] == f"term{MAX_FULLTEXT_QUERY_TERMS - 1}"
+
+    @pytest.mark.unit
+    async def test_keyword_entity_search_caps_long_fulltext_query(
+        self, hybrid_search, mock_neo4j_client
+    ):
+        """Entity keyword search passes a bounded query to Neo4j."""
+        mock_result = MagicMock()
+        mock_result.records = []
+        mock_neo4j_client.execute_query.return_value = mock_result
+        query = " ".join(f"term{i}" for i in range(MAX_FULLTEXT_QUERY_TERMS + 900))
+
+        await hybrid_search._keyword_search_entities(query, "project-1", 10)
+
+        search_query = mock_neo4j_client.execute_query.call_args.kwargs["search_query"]
+        assert len(search_query.split()) == MAX_FULLTEXT_QUERY_TERMS
+
+    @pytest.mark.unit
+    async def test_keyword_episode_search_caps_long_fulltext_query(
+        self, hybrid_search, mock_neo4j_client
+    ):
+        """Episode keyword search passes a bounded query to Neo4j."""
+        mock_result = MagicMock()
+        mock_result.records = []
+        mock_neo4j_client.execute_query.return_value = mock_result
+        query = " ".join(f"term{i}" for i in range(MAX_FULLTEXT_QUERY_TERMS + 900))
+
+        await hybrid_search._keyword_search_episodes(query, "project-1", 10)
+
+        search_query = mock_neo4j_client.execute_query.call_args.kwargs["search_query"]
+        assert len(search_query.split()) == MAX_FULLTEXT_QUERY_TERMS
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,10 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 
-router = APIRouter(prefix="/events", tags=["events"], dependencies=[require_feature("events")])
+router = APIRouter(
+    prefix="/api/v1/events", tags=["events"], dependencies=[require_feature("events")]
+)
+
 
 class EventLogResponse(BaseModel):
     id: str
@@ -24,11 +27,13 @@ class EventLogResponse(BaseModel):
     metadata: dict[str, Any]
     created_at: datetime
 
+
 class EventLogListResponse(BaseModel):
     items: list[EventLogResponse]
     total: int
     page: int
     page_size: int
+
 
 async def get_event_service(
     db: Any = Depends(get_db),  # noqa: ANN401
@@ -36,7 +41,9 @@ async def get_event_service(
     from src.infrastructure.adapters.secondary.persistence.sql_event_log_repository import (
         SqlEventLogRepository,
     )
+
     return EventLogService(SqlEventLogRepository(db))
+
 
 @router.get("", response_model=EventLogListResponse)
 async def list_events(
@@ -66,12 +73,14 @@ async def list_events(
                 source=i.source,
                 metadata=i.metadata,
                 created_at=i.created_at,
-            ) for i in items
+            )
+            for i in items
         ],
         total=total,
         page=page,
         page_size=page_size,
     )
+
 
 @router.get("/types", response_model=list[str])
 async def list_event_types(

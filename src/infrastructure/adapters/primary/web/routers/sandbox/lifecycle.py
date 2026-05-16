@@ -107,7 +107,9 @@ async def check_sandbox_health(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Invalid health check level: {level}. Valid values: basic, mcp, services, full"),
+            detail=_(
+                f"Invalid health check level: {level}. Valid values: basic, mcp, services, full"
+            ),
         ) from None
 
     # Create health service
@@ -224,6 +226,55 @@ async def create_sandbox(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.get("/list", response_model=ListSandboxesResponse)
+async def list_sandboxes(
+    status: str | None = None,
+    current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    db: AsyncSession = Depends(get_db),
+) -> ListSandboxesResponse:
+    """List sandboxes the caller is allowed to see (member projects only).
+
+    Superusers see all sandboxes; other users only see sandboxes whose
+    project_id matches one of their UserProject memberships.
+    """
+    status_filter = None
+    if status:
+        try:
+            status_filter = SandboxStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=_(f"Invalid status: {status}")) from None
+
+    instances = await adapter.list_sandboxes(status=status_filter)
+
+    if not current_user.is_superuser:
+        allowed_project_ids = await list_user_project_ids(user=current_user, db=db)
+        instances = [
+            inst
+            for inst in instances
+            if (
+                getattr(inst, "project_id", None)
+                or extract_project_id(getattr(inst, "project_path", "") or "")
+            )
+            in allowed_project_ids
+        ]
+
+    sandboxes = [
+        SandboxResponse(
+            id=inst.id,
+            status=inst.status.value,
+            project_path=inst.project_path,
+            endpoint=inst.endpoint,
+            websocket_url=getattr(inst, "websocket_url", None),
+            created_at=inst.created_at.isoformat(),
+            tools=[],
+        )
+        for inst in instances
+    ]
+
+    return ListSandboxesResponse(sandboxes=sandboxes, total=len(sandboxes))
+
+
 @router.get("/{sandbox_id}", response_model=SandboxResponse)
 async def get_sandbox(
     sandbox_id: str,
@@ -287,55 +338,6 @@ async def terminate_sandbox(
         raise HTTPException(status_code=404, detail=_(f"Sandbox not found: {sandbox_id}"))
 
     return {"status": "terminated", "sandbox_id": sandbox_id}
-
-
-@router.get("/list", response_model=ListSandboxesResponse)
-async def list_sandboxes(
-    status: str | None = None,
-    current_user: User = Depends(get_current_user),
-    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-    db: AsyncSession = Depends(get_db),
-) -> ListSandboxesResponse:
-    """List sandboxes the caller is allowed to see (member projects only).
-
-    Superusers see all sandboxes; other users only see sandboxes whose
-    project_id matches one of their UserProject memberships.
-    """
-    status_filter = None
-    if status:
-        try:
-            status_filter = SandboxStatus(status)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=_(f"Invalid status: {status}")) from None
-
-    instances = await adapter.list_sandboxes(status=status_filter)
-
-    if not current_user.is_superuser:
-        allowed_project_ids = await list_user_project_ids(user=current_user, db=db)
-        instances = [
-            inst
-            for inst in instances
-            if (
-                getattr(inst, "project_id", None)
-                or extract_project_id(getattr(inst, "project_path", "") or "")
-            )
-            in allowed_project_ids
-        ]
-
-    sandboxes = [
-        SandboxResponse(
-            id=inst.id,
-            status=inst.status.value,
-            project_path=inst.project_path,
-            endpoint=inst.endpoint,
-            websocket_url=getattr(inst, "websocket_url", None),
-            created_at=inst.created_at.isoformat(),
-            tools=[],
-        )
-        for inst in instances
-    ]
-
-    return ListSandboxesResponse(sandboxes=sandboxes, total=len(sandboxes))
 
 
 @router.post("/cleanup")

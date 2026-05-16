@@ -19,6 +19,7 @@ from src.infrastructure.graph.extraction.prompts import (
     COMMUNITY_SUMMARY_SYSTEM_PROMPT,
     build_community_summary_prompt,
 )
+from src.infrastructure.graph.llm_response import extract_response_content
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.graph.schemas import CommunityNode, EntityNode
 
@@ -393,15 +394,7 @@ class CommunityUpdater:
     @staticmethod
     def _response_content(response: object) -> str:
         """Extract text content from supported LLM response shapes."""
-        if isinstance(response, str):
-            return response
-        if isinstance(response, dict):
-            content = response.get("content", "")
-        else:
-            content = getattr(response, "content", None)
-        if content is None:
-            return "" if response is None else str(response)
-        return content if isinstance(content, str) else str(content)
+        return extract_response_content(response)
 
     async def _get_existing_communities(
         self,

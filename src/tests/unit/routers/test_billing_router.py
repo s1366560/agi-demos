@@ -12,6 +12,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
 )
 
+TENANTS_API_URL = "/api/v1/tenants"
+
 
 class TestGetBillingInfo:
     """Tests for GET /tenants/{tenant_id}/billing"""
@@ -59,7 +61,7 @@ class TestGetBillingInfo:
         test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -91,7 +93,7 @@ class TestGetBillingInfo:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -109,7 +111,7 @@ class TestGetBillingInfo:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 403
         assert "Access denied" in response.json()["detail"]
@@ -125,7 +127,7 @@ class TestGetBillingInfo:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 403
         assert "Access denied" in response.json()["detail"]
@@ -133,7 +135,7 @@ class TestGetBillingInfo:
     @pytest.mark.asyncio
     async def test_get_billing_no_tenant_access(self, test_db, client, test_tenant):
         """Test billing access when user has no tenant relationship."""
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 403
         assert "Access denied" in response.json()["detail"]
@@ -147,7 +149,7 @@ class TestGetBillingInfo:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get("/tenants/nonexistent_tenant/billing")
+        response = client.get(f"{TENANTS_API_URL}/nonexistent_tenant/billing")
 
         assert response.status_code == 404
         assert "Tenant not found" in response.json()["detail"]
@@ -186,7 +188,7 @@ class TestGetBillingInfo:
 
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -219,7 +221,7 @@ class TestGetBillingInfo:
             test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -254,7 +256,7 @@ class TestListInvoices:
             test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
 
         assert response.status_code == 200
         data = response.json()
@@ -281,7 +283,7 @@ class TestListInvoices:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
 
         assert response.status_code == 200
         data = response.json()
@@ -298,7 +300,7 @@ class TestListInvoices:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
 
         assert response.status_code == 403
         assert "Access denied" in response.json()["detail"]
@@ -314,7 +316,7 @@ class TestListInvoices:
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
 
         assert response.status_code == 200
         data = response.json()
@@ -345,7 +347,7 @@ class TestListInvoices:
             test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"/tenants/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
 
         assert response.status_code == 200
         data = response.json()
@@ -369,7 +371,7 @@ class TestUpgradePlan:
         await test_db.commit()
 
         plan_data = {"plan": "pro"}
-        response = client.post(f"/tenants/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -389,7 +391,7 @@ class TestUpgradePlan:
         await test_db.commit()
 
         plan_data = {"plan": "free"}
-        response = client.post(f"/tenants/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -408,7 +410,7 @@ class TestUpgradePlan:
         await test_db.commit()
 
         plan_data = {"plan": "enterprise"}
-        response = client.post(f"/tenants/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -427,7 +429,7 @@ class TestUpgradePlan:
         await test_db.commit()
 
         plan_data = {"plan": "pro"}
-        response = client.post(f"/tenants/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
 
         assert response.status_code == 403
         assert "Only owner can upgrade plan" in response.json()["detail"]
@@ -444,7 +446,7 @@ class TestUpgradePlan:
         await test_db.commit()
 
         plan_data = {"plan": "pro"}
-        response = client.post(f"/tenants/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
 
         assert response.status_code == 403
         assert "Only owner can upgrade plan" in response.json()["detail"]
@@ -459,7 +461,7 @@ class TestUpgradePlan:
         await test_db.commit()
 
         plan_data = {"plan": "pro"}
-        response = client.post("/tenants/nonexistent_tenant/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/nonexistent_tenant/upgrade", json=plan_data)
 
         assert response.status_code == 404
         assert "Tenant not found" in response.json()["detail"]
@@ -468,7 +470,7 @@ class TestUpgradePlan:
     async def test_upgrade_no_access(self, test_db, client, test_tenant):
         """Test upgrade when user has no tenant relationship."""
         plan_data = {"plan": "pro"}
-        response = client.post(f"/tenants/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
 
         assert response.status_code == 403
         assert "Only owner can upgrade plan" in response.json()["detail"]

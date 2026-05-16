@@ -211,6 +211,8 @@ class TestResourceManager:
         assert allocation is not None
         assert allocation.project_id == "project-1"
         assert allocation.tenant_id == "tenant-1"
+        assert resource_manager.get_allocation("tenant-1", "project-1") is allocation
+        assert instance_config.instance_key not in resource_manager.list_allocations()
 
     @pytest.mark.asyncio
     async def test_allocate_and_get_usage(self, resource_manager, instance_config):
@@ -228,14 +230,14 @@ class TestResourceManager:
         """Test resource release."""
         allocation = await resource_manager.allocate(config=instance_config)
 
-        # The allocation key is tenant_id:project_id:agent_mode
-        await resource_manager.release(
+        released = await resource_manager.release(
             tenant_id="tenant-1",
             project_id="project-1",
         )
-        # For now, test that allocation was created
+        assert released is True
         assert allocation is not None
         assert allocation.project_id == "project-1"
+        assert resource_manager.get_allocation("tenant-1", "project-1") is None
 
     @pytest.mark.asyncio
     async def test_acquire_and_release_instance(self, resource_manager, instance_config):
@@ -243,15 +245,65 @@ class TestResourceManager:
         allocation = await resource_manager.allocate(config=instance_config)
         assert allocation is not None
 
-        # Acquire instance - note: allocation key may differ
-        await resource_manager.acquire_instance(
+        acquired = await resource_manager.acquire_instance(
             tenant_id="tenant-1",
             project_id="project-1",
             memory_mb=256,
             cpu_cores=0.5,
         )
-        # Test that basic allocation works
-        assert allocation.can_allocate_instance() is True
+        assert acquired is True
+
+        usage = await resource_manager.get_usage("tenant-1", "project-1")
+        global_usage = await resource_manager.get_global_usage()
+        assert usage is not None
+        assert usage.active_instances == 1
+        assert usage.memory_used_mb == 256
+        assert usage.cpu_used_cores == 0.5
+        assert global_usage.active_instances == 1
+        assert global_usage.memory_used_mb == 256
+        assert global_usage.cpu_used_cores == 0.5
+
+        released = await resource_manager.release_instance(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            memory_mb=256,
+            cpu_cores=0.5,
+        )
+        assert released is True
+
+        usage = await resource_manager.get_usage("tenant-1", "project-1")
+        global_usage = await resource_manager.get_global_usage()
+        assert usage is not None
+        assert usage.active_instances == 0
+        assert usage.memory_used_mb == 0
+        assert usage.cpu_used_cores == 0
+        assert global_usage.active_instances == 0
+        assert global_usage.memory_used_mb == 0
+        assert global_usage.cpu_used_cores == 0
+
+    @pytest.mark.asyncio
+    async def test_acquire_instance_enforces_global_instance_limit(self, instance_config):
+        """Existing project allocations still respect the global instance cap."""
+        resource_manager = ResourceManager(config=PoolConfig(max_total_instances=1))
+        await resource_manager.allocate(config=instance_config)
+
+        first = await resource_manager.acquire_instance(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            memory_mb=128,
+            cpu_cores=0.25,
+        )
+        second = await resource_manager.acquire_instance(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            memory_mb=128,
+            cpu_cores=0.25,
+        )
+
+        global_usage = await resource_manager.get_global_usage()
+        assert first is True
+        assert second is False
+        assert global_usage.active_instances == 1
 
 
 # ============================================================================
@@ -439,6 +491,25 @@ class TestAgentPoolManager:
             mock_create.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_create_instance_fails_when_resource_acquire_fails(self, pool_manager):
+        """Do not create an instance if resource accounting rejects the acquisition."""
+        pool_manager._resource_manager.allocate = AsyncMock()
+        pool_manager._resource_manager.acquire_instance = AsyncMock(return_value=False)
+        pool_manager._resource_manager.release = AsyncMock(return_value=True)
+
+        with pytest.raises(RuntimeError, match="Failed to acquire instance resources"):
+            await pool_manager._create_instance(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                agent_mode="default",
+            )
+
+        pool_manager._resource_manager.release.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+        )
+
+    @pytest.mark.asyncio
     async def test_terminate_instance(self, pool_manager):
         """Test instance termination."""
         # Create a mock instance with the required attributes
@@ -468,6 +539,51 @@ class TestAgentPoolManager:
             agent_mode="default",
         )
         assert result is True
+
+    @pytest.mark.asyncio
+    async def test_scale_instances_creates_single_instance(self, pool_manager):
+        """Auto-scaling can warm an empty project key to one active instance."""
+        instance_key = "tenant-1:project-1:default"
+        created = MagicMock(spec=AgentInstance)
+        created.id = "scaled-instance"
+
+        with patch.object(pool_manager, "_create_instance", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = created
+
+            await pool_manager.scale_instances(instance_key, 1)
+
+        mock_create.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+        assert pool_manager._instances[instance_key] is created
+        assert pool_manager._project_instances[instance_key] == {"scaled-instance"}
+
+    @pytest.mark.asyncio
+    async def test_scale_instances_drains_existing_instance(self, pool_manager):
+        """Auto-scaling can drain an existing project key to zero instances."""
+        instance_key = "tenant-1:project-1:default"
+        mock_instance = MagicMock(spec=AgentInstance)
+        mock_instance.is_active = True
+        pool_manager._instances[instance_key] = mock_instance
+
+        with patch.object(pool_manager, "_remove_instance", new_callable=AsyncMock) as mock_remove:
+            await pool_manager.scale_instances(instance_key, 0)
+
+        mock_remove.assert_awaited_once_with(mock_instance)
+
+    @pytest.mark.asyncio
+    async def test_scale_instances_rejects_multi_replica_target(self, pool_manager):
+        """Do not report fake multi-replica support for the single-instance manager."""
+        with pytest.raises(RuntimeError, match="one active instance"):
+            await pool_manager.scale_instances("tenant-1:project-1:default", 2)
+
+    @pytest.mark.asyncio
+    async def test_scale_instances_rejects_malformed_instance_key(self, pool_manager):
+        """Malformed auto-scaling keys fail before mutating pool state."""
+        with pytest.raises(ValueError, match="instance_key must have format"):
+            await pool_manager.scale_instances("tenant-1:project-1", 1)
 
     def test_get_pool_stats(self, pool_manager):
         """Test getting pool statistics."""

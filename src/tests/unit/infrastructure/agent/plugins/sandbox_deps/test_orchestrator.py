@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -217,15 +218,15 @@ class TestEnsureDependenciesFreshInstall:
         # State should be saved after success
         assert store.save.call_count >= 1
 
-    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.wait_for")
-    async def test_host_context_runs_pip_install(self, mock_wait_for: AsyncMock) -> None:
+    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.to_thread")
+    async def test_host_context_runs_pip_install(self, mock_to_thread: AsyncMock) -> None:
         """HOST context runs pip install via subprocess."""
         deps = _make_deps()
 
         mock_process = MagicMock()
         mock_process.returncode = 0
         mock_process.stderr = ""
-        mock_wait_for.return_value = mock_process
+        mock_to_thread.return_value = mock_process
 
         store = AsyncMock()
         store.load = AsyncMock(return_value=None)
@@ -247,19 +248,19 @@ class TestEnsureDependenciesFreshInstall:
         )
 
         assert result.success is True
-        mock_wait_for.assert_called_once()
+        mock_to_thread.assert_called_once()
         # Sandbox installer should NOT be called for HOST
         installer.install.assert_not_called()
 
-    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.wait_for")
-    async def test_hybrid_context_installs_both(self, mock_wait_for: AsyncMock) -> None:
+    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.to_thread")
+    async def test_hybrid_context_installs_both(self, mock_to_thread: AsyncMock) -> None:
         """HYBRID context installs in sandbox first, then host."""
         deps = _make_deps()
 
         mock_process = MagicMock()
         mock_process.returncode = 0
         mock_process.stderr = ""
-        mock_wait_for.return_value = mock_process
+        mock_to_thread.return_value = mock_process
 
         store = AsyncMock()
         store.load = AsyncMock(return_value=None)
@@ -290,7 +291,7 @@ class TestEnsureDependenciesFreshInstall:
         assert result.success is True
         # Both sandbox installer and host pip should be called
         installer.install.assert_called_once()
-        mock_wait_for.assert_called_once()
+        mock_to_thread.assert_called_once()
 
     async def test_hybrid_sandbox_failure_skips_host(self) -> None:
         """HYBRID: if sandbox install fails, host is NOT attempted."""
@@ -640,8 +641,12 @@ class TestInstallHostDeps:
         assert result.success is True
         assert result.skipped_packages == ()
 
-    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.wait_for")
-    async def test_pip_timeout_returns_failure(self, mock_wait_for: AsyncMock) -> None:
+    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.to_thread")
+    async def test_pip_timeout_returns_failure(
+        self,
+        mock_to_thread: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """TimeoutError from pip install returns failure."""
         deps = _make_deps()
         request = InstallRequest(
@@ -651,7 +656,14 @@ class TestInstallHostDeps:
             dependencies=deps,
         )
 
-        mock_wait_for.side_effect = TimeoutError()
+        async def _slow_to_thread(*_args, **_kwargs):
+            await asyncio.sleep(1)
+
+        mock_to_thread.side_effect = _slow_to_thread
+        monkeypatch.setattr(
+            "src.infrastructure.agent.plugins.sandbox_deps.orchestrator._HOST_PIP_TIMEOUT_SECONDS",
+            0.01,
+        )
 
         orch = _build_orchestrator()
 
@@ -660,8 +672,8 @@ class TestInstallHostDeps:
         assert result.success is False
         assert any("timed out" in e for e in result.errors)
 
-    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.wait_for")
-    async def test_pip_nonzero_returncode_fails(self, mock_wait_for: AsyncMock) -> None:
+    @patch("src.infrastructure.agent.plugins.sandbox_deps.orchestrator.asyncio.to_thread")
+    async def test_pip_nonzero_returncode_fails(self, mock_to_thread: AsyncMock) -> None:
         """pip returning non-zero exit code results in failure."""
         deps = _make_deps()
         request = InstallRequest(
@@ -674,7 +686,7 @@ class TestInstallHostDeps:
         mock_process = MagicMock()
         mock_process.returncode = 1
         mock_process.stderr = "No matching distribution"
-        mock_wait_for.return_value = mock_process
+        mock_to_thread.return_value = mock_process
 
         orch = _build_orchestrator()
 

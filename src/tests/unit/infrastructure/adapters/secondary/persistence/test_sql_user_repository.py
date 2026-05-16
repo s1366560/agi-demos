@@ -51,6 +51,7 @@ class TestSqlUserRepositoryCreate:
         assert retrieved.name == "Test User"
         assert retrieved.password_hash == "hashed_password_123"
         assert retrieved.is_active is True
+        assert retrieved.profile == {"bio": "Test bio"}
 
     @pytest.mark.asyncio
     async def test_save_with_none_user_raises_error(self, v2_user_repo: SqlUserRepository):
@@ -95,6 +96,7 @@ class TestSqlUserRepositoryUpdate:
         assert retrieved.name == "Updated Name"
         assert retrieved.password_hash == "new_hash"
         assert retrieved.is_active is True
+        assert retrieved.profile == {"bio": "New bio"}
 
     @pytest.mark.asyncio
     async def test_update_preserves_created_at(self, v2_user_repo: SqlUserRepository):
@@ -325,6 +327,7 @@ class TestSqlUserRepositoryToDomain:
         assert retrieved.name == "Domain Test"
         assert retrieved.password_hash == "hash"
         assert retrieved.is_active is True
+        assert retrieved.profile == {"bio": "test bio"}
         assert retrieved.created_at is not None
 
     @pytest.mark.asyncio
@@ -356,6 +359,7 @@ class TestSqlUserRepositoryToDb:
         assert db_model.full_name == "To DB Test"
         assert db_model.hashed_password == "hash"
         assert db_model.is_active is True
+        assert db_model.profile == {}
 
 
 class TestSqlUserRepositoryTransaction:

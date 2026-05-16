@@ -100,6 +100,111 @@ class TestInstanceServiceListPagination:
 
 
 @pytest.mark.unit
+class TestInstanceServiceCreateUpdateFields:
+    """Tests for instance fields exposed by the API schema."""
+
+    async def test_create_instance_persists_extended_fields(self) -> None:
+        """create_instance carries UI-exposed deployment fields into the domain entity."""
+        repo = AsyncMock()
+        deploy_repo = AsyncMock()
+        member_repo = AsyncMock()
+
+        service = _make_service(
+            instance_repo=repo,
+            deploy_record_repo=deploy_repo,
+            instance_member_repo=member_repo,
+        )
+
+        result = await service.create_instance(
+            name="Agent Runtime",
+            slug="agent-runtime",
+            tenant_id="tenant-1",
+            created_by="user-1",
+            description="Runs production agents",
+            cluster_id="cluster-1",
+            namespace="agents",
+            quota_cpu="2",
+            quota_memory="4Gi",
+            quota_max_pods=5,
+            storage_class="fast",
+            storage_size="20Gi",
+            compute_provider="kubernetes",
+            runtime="docker",
+            workspace_id="workspace-1",
+            hex_position_q=2,
+            hex_position_r=-1,
+            agent_display_name="Runtime Agent",
+            agent_label="prod",
+            theme_color="#0070f3",
+        )
+
+        assert result.description == "Runs production agents"
+        assert result.cluster_id == "cluster-1"
+        assert result.namespace == "agents"
+        assert result.quota_cpu == "2"
+        assert result.quota_memory == "4Gi"
+        assert result.quota_max_pods == 5
+        assert result.storage_class == "fast"
+        assert result.storage_size == "20Gi"
+        assert result.compute_provider == "kubernetes"
+        assert result.runtime == "docker"
+        assert result.workspace_id == "workspace-1"
+        assert result.hex_position_q == 2
+        assert result.hex_position_r == -1
+        assert result.agent_display_name == "Runtime Agent"
+        assert result.agent_label == "prod"
+        assert result.theme_color == "#0070f3"
+        repo.save.assert_awaited_once_with(result)
+
+    async def test_update_instance_persists_extended_fields(self) -> None:
+        """update_instance applies mutable fields from the API update schema."""
+        instance = _make_instance()
+        repo = AsyncMock()
+        repo.find_by_id.return_value = instance
+
+        service = _make_service(instance_repo=repo)
+        result = await service.update_instance(
+            instance_id="inst-1",
+            description="Updated runtime description",
+            slug="renamed-runtime",
+            cluster_id="cluster-2",
+            namespace="runtime",
+            quota_cpu="4",
+            quota_memory="8Gi",
+            quota_max_pods=10,
+            storage_class="standard",
+            storage_size="50Gi",
+            compute_provider="local",
+            runtime="kubernetes",
+            workspace_id="workspace-2",
+            hex_position_q=4,
+            hex_position_r=3,
+            agent_display_name="Updated Runtime Agent",
+            agent_label="staging",
+            theme_color="#171717",
+        )
+
+        assert result.description == "Updated runtime description"
+        assert result.slug == "renamed-runtime"
+        assert result.cluster_id == "cluster-2"
+        assert result.namespace == "runtime"
+        assert result.quota_cpu == "4"
+        assert result.quota_memory == "8Gi"
+        assert result.quota_max_pods == 10
+        assert result.storage_class == "standard"
+        assert result.storage_size == "50Gi"
+        assert result.compute_provider == "local"
+        assert result.runtime == "kubernetes"
+        assert result.workspace_id == "workspace-2"
+        assert result.hex_position_q == 4
+        assert result.hex_position_r == 3
+        assert result.agent_display_name == "Updated Runtime Agent"
+        assert result.agent_label == "staging"
+        assert result.theme_color == "#171717"
+        repo.save.assert_awaited_once_with(result)
+
+
+@pytest.mark.unit
 class TestInstanceServiceUpdateConfig:
     """Tests for the new update_config service method."""
 

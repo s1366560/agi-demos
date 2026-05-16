@@ -16,6 +16,7 @@ class InstanceCreate(BaseModel):
         min_length=1,
         max_length=255,
     )
+    description: str | None = Field(default=None, description="Instance description")
     tenant_id: str = Field(..., description="Tenant ID")
     cluster_id: str | None = Field(default=None, description="Cluster ID to deploy to")
     namespace: str | None = Field(default=None, description="Kubernetes namespace", max_length=255)
@@ -96,6 +97,7 @@ class InstanceUpdate(BaseModel):
         min_length=1,
         max_length=255,
     )
+    description: str | None = Field(default=None, description="Instance description")
     slug: str | None = Field(
         default=None,
         description="URL-friendly instance identifier",
@@ -158,6 +160,7 @@ class InstanceResponse(BaseModel):
     id: str = Field(..., description="Instance unique identifier")
     name: str = Field(..., description="Instance name")
     slug: str = Field(..., description="URL-friendly instance identifier")
+    description: str | None = Field(default=None, description="Instance description")
     tenant_id: str = Field(..., description="Tenant ID")
     cluster_id: str | None = Field(default=None, description="Cluster ID")
     namespace: str | None = Field(default=None, description="Kubernetes namespace")

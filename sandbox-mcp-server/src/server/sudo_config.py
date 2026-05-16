@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Set
 
 logger = logging.getLogger(__name__)
 

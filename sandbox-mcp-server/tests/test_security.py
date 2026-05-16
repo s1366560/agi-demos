@@ -5,14 +5,14 @@ TDD approach: Write tests first, expect failures, then implement.
 
 import asyncio
 import time
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.server.security import (
-    TokenAuthenticator,
-    SessionTimeoutManager,
     SecurityConfig,
     SecurityMiddleware,
+    SessionTimeoutManager,
+    TokenAuthenticator,
 )
 
 

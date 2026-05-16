@@ -20,8 +20,15 @@ class MockEmbeddingService:
 class MockLLMClient:
     """Mock LLM client for testing."""
 
-    async def generate_response(self, prompt: str):
+    async def generate_response(self, **_kwargs):
         return '{"entities": []}'
+
+
+class GenerateOnlyLLMClient:
+    """Mock the default project LLM client response shape."""
+
+    async def generate(self, **_kwargs):
+        return {"content": '{"entities": [{"name": "Ada", "entity_type": "Person"}]}'}
 
 
 @pytest.fixture
@@ -36,6 +43,16 @@ def extractor():
 @pytest.mark.unit
 class TestEntityExtractorJsonParsing:
     """Tests for JSON extraction from LLM responses."""
+
+    async def test_call_llm_extracts_content_from_generate_dict(self):
+        extractor = EntityExtractor(
+            llm_client=GenerateOnlyLLMClient(),
+            embedding_service=MockEmbeddingService(),
+        )
+
+        response = await extractor._call_llm("Extract entities", "Ada founded a lab.")
+
+        assert response == '{"entities": [{"name": "Ada", "entity_type": "Person"}]}'
 
     def test_extract_json_simple_object(self, extractor):
         """Test extracting simple JSON object with entities."""

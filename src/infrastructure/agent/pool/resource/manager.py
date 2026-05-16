@@ -56,10 +56,8 @@ class ResourceAllocationError(Exception):
     """资源分配错误."""
 
 
-
 class QuotaExceededError(ResourceAllocationError):
     """配额超限错误."""
-
 
 
 class ResourceManager:
@@ -94,6 +92,11 @@ class ResourceManager:
             f"max_instances={config.max_total_instances}"
         )
 
+    @staticmethod
+    def _allocation_key(tenant_id: str, project_id: str) -> str:
+        """Build the project-level resource allocation key."""
+        return f"{tenant_id}:{project_id}"
+
     async def allocate(
         self,
         config: AgentInstanceConfig,
@@ -110,7 +113,7 @@ class ResourceManager:
             QuotaExceededError: 配额超限
         """
         async with self._lock:
-            allocation_key = config.instance_key
+            allocation_key = self._allocation_key(config.tenant_id, config.project_id)
 
             # 检查是否已有分配
             if allocation_key in self._allocations:
@@ -184,7 +187,7 @@ class ResourceManager:
             是否成功释放
         """
         async with self._lock:
-            allocation_key = f"{tenant_id}:{project_id}"
+            allocation_key = self._allocation_key(tenant_id, project_id)
 
             if allocation_key not in self._allocations:
                 return False
@@ -230,7 +233,7 @@ class ResourceManager:
             是否成功获取
         """
         async with self._lock:
-            allocation_key = f"{tenant_id}:{project_id}"
+            allocation_key = self._allocation_key(tenant_id, project_id)
             allocation = self._allocations.get(allocation_key)
 
             if not allocation:
@@ -239,6 +242,29 @@ class ResourceManager:
 
             if not allocation.can_allocate_instance():
                 logger.warning(f"[ResourceManager] Instance limit exceeded: project={project_id}")
+                return False
+
+            if self._total_instances >= self.config.max_total_instances:
+                logger.warning(
+                    f"[ResourceManager] Global instance limit exceeded: "
+                    f"{self._total_instances}/{self.config.max_total_instances}"
+                )
+                return False
+
+            if self._total_memory_used_mb + memory_mb > self.config.max_total_memory_mb:
+                logger.warning(
+                    f"[ResourceManager] Global memory limit exceeded: "
+                    f"{self._total_memory_used_mb + memory_mb}/"
+                    f"{self.config.max_total_memory_mb}MB"
+                )
+                return False
+
+            if self._total_cpu_used_cores + cpu_cores > self.config.max_total_cpu_cores:
+                logger.warning(
+                    f"[ResourceManager] Global CPU limit exceeded: "
+                    f"{self._total_cpu_used_cores + cpu_cores}/"
+                    f"{self.config.max_total_cpu_cores} cores"
+                )
                 return False
 
             # 更新分配
@@ -279,7 +305,7 @@ class ResourceManager:
             是否成功释放
         """
         async with self._lock:
-            allocation_key = f"{tenant_id}:{project_id}"
+            allocation_key = self._allocation_key(tenant_id, project_id)
             allocation = self._allocations.get(allocation_key)
 
             if not allocation:
@@ -319,7 +345,7 @@ class ResourceManager:
             是否成功获取
         """
         async with self._lock:
-            allocation_key = f"{tenant_id}:{project_id}"
+            allocation_key = self._allocation_key(tenant_id, project_id)
             allocation = self._allocations.get(allocation_key)
 
             if not allocation:
@@ -349,7 +375,7 @@ class ResourceManager:
             是否成功释放
         """
         async with self._lock:
-            allocation_key = f"{tenant_id}:{project_id}"
+            allocation_key = self._allocation_key(tenant_id, project_id)
             allocation = self._allocations.get(allocation_key)
 
             if not allocation:
@@ -373,7 +399,7 @@ class ResourceManager:
         Returns:
             资源使用情况，不存在则返回None
         """
-        allocation_key = f"{tenant_id}:{project_id}"
+        allocation_key = self._allocation_key(tenant_id, project_id)
         allocation = self._allocations.get(allocation_key)
 
         if not allocation:
@@ -426,7 +452,7 @@ class ResourceManager:
         Returns:
             资源分配记录，不存在则返回None
         """
-        allocation_key = f"{tenant_id}:{project_id}"
+        allocation_key = self._allocation_key(tenant_id, project_id)
         return self._allocations.get(allocation_key)
 
     def list_allocations(self) -> dict[str, ProjectResourceAllocation]:
@@ -454,7 +480,7 @@ class ResourceManager:
             是否成功更新
         """
         async with self._lock:
-            allocation_key = f"{tenant_id}:{project_id}"
+            allocation_key = self._allocation_key(tenant_id, project_id)
             allocation = self._allocations.get(allocation_key)
 
             if not allocation:

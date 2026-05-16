@@ -207,12 +207,15 @@ class AgentPoolManager:
 
         # 分配资源
         await self._resource_manager.allocate(config)
-        await self._resource_manager.acquire_instance(
+        acquired_resources = await self._resource_manager.acquire_instance(
             tenant_id=tenant_id,
             project_id=project_id,
             memory_mb=config.quota.memory_request_mb,
             cpu_cores=config.quota.cpu_request_cores,
         )
+        if not acquired_resources:
+            await self._resource_manager.release(tenant_id=tenant_id, project_id=project_id)
+            raise RuntimeError(f"Failed to acquire instance resources: project={project_id}")
 
         # 创建实例
         instance = AgentInstance(config=config)
@@ -333,6 +336,7 @@ class AgentPoolManager:
             return ProjectTier.WARM
         else:
             return ProjectTier.COLD
+
     @staticmethod
     def _compute_project_score(metrics: ProjectMetrics) -> int:
         """Compute composite score from project metrics."""
@@ -411,6 +415,59 @@ class AgentPoolManager:
 
             await self._remove_instance(instance)
             return True
+
+    async def scale_instances(self, instance_key: str, target_count: int) -> None:
+        """Scale the active instance group for an auto-scaling key.
+
+        The current pool manager stores one active ``AgentInstance`` per
+        ``tenant_id:project_id:agent_mode`` key. Auto-scaling therefore supports
+        the practical zero/one transitions used to warm or drain a project key,
+        and rejects multi-replica targets instead of reporting a fake success.
+        """
+        if target_count < 0:
+            raise ValueError("target_count must be >= 0")
+
+        tenant_id, project_id, agent_mode = self._parse_instance_key(instance_key)
+
+        async with self._instances_lock:
+            instance = self._instances.get(instance_key)
+            if instance is not None and not instance.is_active:
+                await self._remove_instance(instance)
+                instance = None
+
+            current_count = 1 if instance is not None else 0
+            if target_count == current_count:
+                return
+
+            if target_count == 0:
+                if instance is not None:
+                    await self._remove_instance(instance)
+                return
+
+            if target_count == 1:
+                created = await self._create_instance(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    agent_mode=agent_mode,
+                )
+                if instance_key not in self._instances:
+                    self._instances[instance_key] = created
+                    self._project_instances.setdefault(instance_key, set()).add(created.id)
+                return
+
+            raise RuntimeError(
+                "AgentPoolManager currently supports one active instance per "
+                f"instance key; cannot scale {instance_key} to {target_count}"
+            )
+
+    @staticmethod
+    def _parse_instance_key(instance_key: str) -> tuple[str, str, str]:
+        """Parse a pool instance key into tenant, project, and mode parts."""
+        parts = instance_key.split(":", 2)
+        if len(parts) != 3 or not all(parts):
+            raise ValueError("instance_key must have format 'tenant_id:project_id:agent_mode'")
+        tenant_id, project_id, agent_mode = parts
+        return tenant_id, project_id, agent_mode
 
     async def pause_instance(
         self,
@@ -549,9 +606,7 @@ class AgentPoolManager:
                 # Migrate to a new instance with downgraded tier config
                 old_config = instance.config
                 downgraded_tier = (
-                    ProjectTier.WARM
-                    if old_config.tier == ProjectTier.HOT
-                    else ProjectTier.COLD
+                    ProjectTier.WARM if old_config.tier == ProjectTier.HOT else ProjectTier.COLD
                 )
                 new_config = old_config.with_tier(downgraded_tier)
                 async with self._instances_lock:

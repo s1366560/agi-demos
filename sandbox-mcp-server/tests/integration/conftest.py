@@ -1,9 +1,20 @@
 """
 Pytest configuration and fixtures for integration tests.
 """
-import pytest
+import os
 import subprocess
-import time
+
+import pytest
+
+RED_PHASE_TEST_FILES = {
+    "test_e2e_desktop_workflows.py",
+    "test_entrypoint_vnc.py",
+    "test_entrypoint_vnc_simple.py",
+    "test_tigervnc.py",
+    "test_vnc_performance.py",
+    "test_xfce_config.py",
+    "test_xfce_dockerfile.py",
+}
 
 
 def pytest_configure(config):
@@ -15,10 +26,17 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     """Add markers to tests automatically"""
+    run_red_tests = os.getenv("RUN_SANDBOX_RED_TESTS") == "1"
+    red_skip = pytest.mark.skip(
+        reason="sandbox RED-phase desktop tests require RUN_SANDBOX_RED_TESTS=1"
+    )
+
     for item in items:
         # Mark all tests in integration/ as integration tests
         if "integration" in str(item.fspath):
             item.add_marker(pytest.mark.integration)
+        if not run_red_tests and item.fspath.basename in RED_PHASE_TEST_FILES:
+            item.add_marker(red_skip)
 
 
 @pytest.fixture(scope="session")

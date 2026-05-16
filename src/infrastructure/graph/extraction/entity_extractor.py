@@ -20,6 +20,7 @@ from src.infrastructure.graph.extraction.prompts import (
     ENTITY_EXTRACTION_SYSTEM_PROMPT,
     build_entity_extraction_prompt,
 )
+from src.infrastructure.graph.llm_response import extract_response_content
 from src.infrastructure.graph.schemas import EntityNode
 
 logger = logging.getLogger(__name__)
@@ -270,8 +271,7 @@ class EntityExtractor:
                 Message(role="user", content=user_prompt),
             ]
             response = await self._llm_client.ainvoke(domain_messages)
-            # Returns ChatResponse which has .content attribute
-            return response.content if hasattr(response, "content") else str(response)
+            return extract_response_content(response)
 
         elif hasattr(self._llm_client, "generate"):
             # Custom LLM client style
@@ -280,7 +280,20 @@ class EntityExtractor:
                 temperature=self._temperature,
                 response_format="json",
             )
-            return response.content if hasattr(response, "content") else str(response)
+            return extract_response_content(response)
+
+        elif hasattr(self._llm_client, "generate_response"):
+            from src.domain.llm_providers.llm_types import Message
+
+            response_messages = [
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=user_prompt),
+            ]
+            response = await self._llm_client.generate_response(
+                messages=response_messages,
+                response_model=None,
+            )
+            return extract_response_content(response)
 
         elif hasattr(self._llm_client, "_generate_response"):
             # Graphiti-style LLM client
@@ -294,7 +307,7 @@ class EntityExtractor:
                 messages=graphiti_messages,
                 response_model=None,  # We'll parse JSON ourselves
             )
-            return cast(str, response.get("content", "") if isinstance(response, dict) else str(response))
+            return extract_response_content(response)
 
         else:
             client_type = type(self._llm_client)
@@ -303,14 +316,15 @@ class EntityExtractor:
                 "Unsupported LLM client type encountered in EntityExtractor._call_llm: %s. "
                 "Available public attributes: %s. "
                 "Expected an LLM client exposing one of the following interfaces: 'chat', "
-                "'ainvoke', 'generate', or '_generate_response'.",
+                "'ainvoke', 'generate', 'generate_response', or '_generate_response'.",
                 client_type,
                 client_attrs,
             )
             raise NotImplementedError(
                 f"Unsupported LLM client type: {client_type}. "
                 f"Available public attributes: {client_attrs}. "
-                "Expected an LLM client exposing one of: 'chat', 'ainvoke', 'generate', or '_generate_response'."
+                "Expected an LLM client exposing one of: "
+                "'chat', 'ainvoke', 'generate', 'generate_response', or '_generate_response'."
             )
 
     def _parse_entities_response(

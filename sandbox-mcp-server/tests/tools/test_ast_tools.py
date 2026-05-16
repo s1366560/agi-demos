@@ -6,6 +6,8 @@ TDD Cycle:
 3. REFACTOR - Improve while keeping tests passing
 """
 
+from pathlib import Path
+
 import pytest
 
 from src.tools.ast_tools import (
@@ -15,6 +17,10 @@ from src.tools.ast_tools import (
     ast_parse,
 )
 
+FIXTURE_WORKSPACE = str(Path(__file__).resolve().parents[1])
+SAMPLE_FILE = "fixtures/sample.py"
+MISSING_FILE = "fixtures/nonexistent.py"
+
 
 class TestASTParse:
     """Test suite for ast_parse tool."""
@@ -23,8 +29,8 @@ class TestASTParse:
     async def test_parse_valid_python_file(self):
         """Test parsing a valid Python file."""
         result = await ast_parse(
-            file_path="tests/fixtures/sample.py",
-            _workspace_dir=".",
+            file_path=SAMPLE_FILE,
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -32,7 +38,7 @@ class TestASTParse:
         assert "metadata" in result
 
         metadata = result["metadata"]
-        assert metadata["file_path"] == "tests/fixtures/sample.py"
+        assert metadata["file_path"] == SAMPLE_FILE
         assert metadata["total_symbols"] > 0
 
         symbols = metadata["symbols"]
@@ -44,8 +50,8 @@ class TestASTParse:
     async def test_parse_nonexistent_file(self):
         """Test parsing a file that doesn't exist."""
         result = await ast_parse(
-            file_path="tests/fixtures/nonexistent.py",
-            _workspace_dir=".",
+            file_path=MISSING_FILE,
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert result.get("isError") is True
@@ -55,9 +61,9 @@ class TestASTParse:
     async def test_parse_includes_docstrings(self):
         """Test that docstrings are included by default."""
         result = await ast_parse(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             include_docstrings=True,
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         symbols = result["metadata"]["symbols"]
@@ -76,9 +82,9 @@ class TestASTParse:
     async def test_parse_without_docstrings(self):
         """Test parsing without docstrings."""
         result = await ast_parse(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             include_docstrings=False,
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -123,9 +129,9 @@ class TestASTFindSymbols:
     async def test_find_classes(self):
         """Test finding classes."""
         result = await ast_find_symbols(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             symbol_type="class",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -141,9 +147,9 @@ class TestASTFindSymbols:
     async def test_find_functions(self):
         """Test finding functions."""
         result = await ast_find_symbols(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             symbol_type="function",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -159,9 +165,9 @@ class TestASTFindSymbols:
     async def test_find_imports(self):
         """Test finding imports."""
         result = await ast_find_symbols(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             symbol_type="import",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -172,10 +178,10 @@ class TestASTFindSymbols:
     async def test_find_with_pattern_filter(self):
         """Test finding symbols with regex pattern."""
         result = await ast_find_symbols(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             symbol_type="class",
             pattern="Service",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -191,9 +197,9 @@ class TestASTFindSymbols:
     async def test_find_invalid_symbol_type(self):
         """Test with invalid symbol type."""
         result = await ast_find_symbols(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             symbol_type="invalid_type",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert result.get("isError") is True
@@ -207,9 +213,9 @@ class TestASTExtractFunction:
     async def test_extract_function(self):
         """Test extracting a function."""
         result = await ast_extract_function(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             function_name="calculate_score",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -225,10 +231,10 @@ class TestASTExtractFunction:
     async def test_extract_method(self):
         """Test extracting a class method."""
         result = await ast_extract_function(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             function_name="get_user",
             class_name="UserService",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -241,9 +247,9 @@ class TestASTExtractFunction:
     async def test_extract_nonexistent_function(self):
         """Test extracting a function that doesn't exist."""
         result = await ast_extract_function(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             function_name="nonexistent_function",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -254,9 +260,9 @@ class TestASTExtractFunction:
     async def test_extract_function_from_nonexistent_file(self):
         """Test extracting from a file that doesn't exist."""
         result = await ast_extract_function(
-            file_path="tests/fixtures/nonexistent.py",
+            file_path=MISSING_FILE,
             function_name="calculate_score",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert result.get("isError") is True
@@ -269,9 +275,9 @@ class TestASTGetImports:
     async def test_get_imports_flat(self):
         """Test getting imports as a flat list."""
         result = await ast_get_imports(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             group_by_module=False,
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -283,9 +289,9 @@ class TestASTGetImports:
     async def test_get_imports_grouped(self):
         """Test getting imports grouped by module."""
         result = await ast_get_imports(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             group_by_module=True,
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert not result.get("isError")
@@ -301,8 +307,8 @@ class TestASTGetImports:
     async def test_get_imports_from_nonexistent_file(self):
         """Test getting imports from a file that doesn't exist."""
         result = await ast_get_imports(
-            file_path="tests/fixtures/nonexistent.py",
-            _workspace_dir=".",
+            file_path=MISSING_FILE,
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
 
         assert result.get("isError") is True
@@ -316,27 +322,27 @@ class TestASTToolsIntegration:
         """Test a complete workflow: parse -> find -> extract."""
         # Step 1: Parse the file
         parse_result = await ast_parse(
-            file_path="tests/fixtures/sample.py",
-            _workspace_dir=".",
+            file_path=SAMPLE_FILE,
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
         assert not parse_result.get("isError")
 
         # Step 2: Find UserService class
         find_result = await ast_find_symbols(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             symbol_type="class",
             pattern="UserService",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
         assert not find_result.get("isError")
         assert find_result["metadata"]["count"] >= 1
 
         # Step 3: Extract a method from UserService
         extract_result = await ast_extract_function(
-            file_path="tests/fixtures/sample.py",
+            file_path=SAMPLE_FILE,
             function_name="get_user",
             class_name="UserService",
-            _workspace_dir=".",
+            _workspace_dir=FIXTURE_WORKSPACE,
         )
         assert not extract_result.get("isError")
         assert extract_result["metadata"]["found"] is True

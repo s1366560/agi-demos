@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from server.web_terminal_status import (
     TerminalStatus,
-    WebTerminalStatus,
     WebTerminalManager,  # Backward compatibility alias
+    WebTerminalStatus,
 )
 
 

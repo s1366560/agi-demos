@@ -6,8 +6,6 @@ Service startup is managed by entrypoint.sh.
 
 import asyncio
 import logging
-import os
-import signal
 from dataclasses import dataclass
 from typing import Optional
 
