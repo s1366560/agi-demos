@@ -29,6 +29,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     User,
     UserProject,
+    UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -191,6 +192,49 @@ async def _has_memory_share_edit_permission(
     return any(
         (share.permissions or {}).get("edit") is True for share in share_result.scalars().all()
     )
+
+
+async def _has_project_admin_access(
+    memory: Memory,
+    current_user: User,
+    db: AsyncSession,
+) -> bool:
+    """Return whether the user can administer a memory through its project or tenant."""
+    if current_user.is_superuser:
+        return True
+
+    project_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        return False
+
+    if project.owner_id == current_user.id:
+        return True
+
+    user_project_result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.id).where(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == memory.project_id,
+                UserProject.role.in_(["owner", "admin"]),
+            )
+        )
+    )
+    if user_project_result.scalar_one_or_none():
+        return True
+
+    tenant_role_result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant.id).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == project.tenant_id,
+                UserTenant.role.in_(["owner", "admin"]),
+            )
+        )
+    )
+    return tenant_role_result.scalar_one_or_none() is not None
 
 
 async def _resolve_extraction_content(
@@ -615,18 +659,7 @@ async def delete_memory(
 
     # 2. Check permissions
     if memory.author_id != current_user.id:
-        # Check if user is project owner/admin
-        user_project_result = await db.execute(
-            refresh_select_statement(
-                select(UserProject).where(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == memory.project_id,
-                    UserProject.role.in_(["owner", "admin"]),
-                )
-            )
-        )
-        if not user_project_result.scalar_one_or_none():
-            # Check if user is tenant owner? (Optional, skipping for now)
+        if not await _has_project_admin_access(cast(Memory, memory), current_user, db):
             raise HTTPException(status_code=403, detail=_("Permission denied"))
 
     # 3. Delete from Graphiti/Neo4j using GraphitiAdapter
@@ -677,9 +710,8 @@ async def delete_memory(
             status_code=207,
             content={
                 "status": "partial_success",
-                "message": (
-                    "Memory deleted from database, but one or more cleanup steps failed. "
-                    "Some graph or searchable chunk data may remain stale."
+                "message": _(
+                    "Memory deleted from database, but one or more cleanup steps failed. Some graph or searchable chunk data may remain stale."
                 ),
             },
         )

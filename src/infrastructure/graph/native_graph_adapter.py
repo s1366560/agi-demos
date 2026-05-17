@@ -471,8 +471,16 @@ class NativeGraphAdapter(GraphServicePort):
                     memory_id=episode.metadata.get("memory_id"),
                 )
             else:
-                logger.warning(
-                    "QueuePort not configured. Episode will not be processed asynchronously."
+                logger.info(
+                    "QueuePort not configured. Processing episode %s synchronously.",
+                    episode.id,
+                )
+                _ = await self.process_episode(
+                    episode_uuid=episode.id,
+                    content=episode.content,
+                    project_id=episode.project_id,
+                    tenant_id=episode.tenant_id,
+                    user_id=episode.user_id,
                 )
 
             return episode

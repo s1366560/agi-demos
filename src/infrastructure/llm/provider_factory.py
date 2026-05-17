@@ -111,9 +111,7 @@ class AIServiceFactory:
         from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
         from src.infrastructure.llm.model_catalog import get_model_catalog_service
 
-        litellm_client = create_litellm_client(
-            provider_config, catalog=get_model_catalog_service()
-        )
+        litellm_client = create_litellm_client(provider_config, catalog=get_model_catalog_service())
         return UnifiedLLMClient(litellm_client=litellm_client, temperature=temperature)
 
     def create_pooled_llm_client(
@@ -181,8 +179,7 @@ class AIServiceFactory:
             return EmbeddingService(embedder=embedder)  # type: ignore[arg-type]
         except Exception as e:
             logger.warning(
-                "Failed to create embedding service, "
-                "falling back to NullEmbeddingService: %s",
+                "Failed to create embedding service, falling back to NullEmbeddingService: %s",
                 e,
             )
             return NullEmbeddingService()  # type: ignore[return-value]
@@ -204,7 +201,6 @@ class AIServiceFactory:
 
         return LiteLLMReranker(config=provider_config)
 
-
     # ------------------------------------------------------------------
     # Category-Based Model Routing
     # ------------------------------------------------------------------
@@ -215,11 +211,17 @@ class AIServiceFactory:
         task_description: str,
         cache: bool | None = None,
     ) -> LiteLLMClient:
-        """Create a ``LiteLLMClient`` with category-based model selection.
+        """Create a ``LiteLLMClient`` with structured category model selection.
 
-        Detects the task category from the description and overrides the
-        model in ``provider_config`` with the category-optimal model when
-        available.
+        ``CategoryRouter.detect_category`` is a synchronous safe fallback:
+        it does not perform semantic keyword matching on ``task_description``.
+        It returns a conservative category unless the caller supplies a
+        structured signal through the router API. Subjective intent
+        classification belongs to the agent-backed auto broker.
+
+        The selected category is then routed against the provider's available
+        models, and the model in ``provider_config`` is overridden when a
+        category-preferred model is available.
 
         Args:
             provider_config: Base provider config (used for API keys, etc.).
@@ -250,8 +252,7 @@ class AIServiceFactory:
             # Override the model in provider config with the top pick
             preferred = routed.preferred_models[0]
             logger.info(
-                "Category router selected model=%s for category=%s "
-                "(original=%s)",
+                "Category router selected model=%s for category=%s (original=%s)",
                 preferred,
                 routed.category.value,
                 provider_config.llm_model,
@@ -260,6 +261,7 @@ class AIServiceFactory:
         return create_litellm_client(
             provider_config, cache=cache, catalog=get_model_catalog_service()
         )
+
 
 # Module-level convenience ------------------------------------------------
 

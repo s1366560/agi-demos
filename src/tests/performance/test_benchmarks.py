@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -15,14 +16,19 @@ class TestPerformanceBenchmarks:
     """Performance benchmarks for API endpoints."""
 
     @pytest.mark.asyncio
-    async def test_episode_creation_performance(self, client):
+    async def test_episode_creation_performance(
+        self, client, mock_graphiti_client, test_project_db
+    ):
         """Benchmark episode creation endpoint."""
         iterations = 100
+        mock_graphiti_client.add_episode = AsyncMock(
+            side_effect=lambda episode: Mock(id=episode.id)
+        )
         sample_data = {
             "name": "Benchmark Episode",
             "content": "This is a benchmark test episode content.",
-            "project_id": "bench_proj",
-            "tenant_id": "bench_tenant",
+            "project_id": test_project_db.id,
+            "tenant_id": test_project_db.tenant_id,
         }
 
         start_time = time.time()
@@ -44,7 +50,7 @@ class TestPerformanceBenchmarks:
         assert avg_time < 100, f"Average response time too high: {avg_time:.2f}ms"
 
     @pytest.mark.asyncio
-    async def test_search_performance(self, client):
+    async def test_search_performance(self, client, test_project_db):
         """Benchmark search endpoint."""
         iterations = 50
 
@@ -53,7 +59,7 @@ class TestPerformanceBenchmarks:
         for _ in range(iterations):
             response = client.post(
                 "/api/v1/search-enhanced/advanced",
-                json={"query": "test search", "limit": 20},
+                json={"query": "test search", "limit": 20, "project_id": test_project_db.id},
             )
             assert response.status_code == 200
 
@@ -69,14 +75,17 @@ class TestPerformanceBenchmarks:
         assert avg_time < 200, f"Search response time too high: {avg_time:.2f}ms"
 
     @pytest.mark.asyncio
-    async def test_list_episodes_performance(self, client):
+    async def test_list_episodes_performance(self, client, test_project_db):
         """Benchmark list episodes endpoint."""
         iterations = 100
 
         start_time = time.time()
 
         for _ in range(iterations):
-            response = client.get("/api/v1/episodes/?limit=50")
+            response = client.get(
+                f"/api/v1/episodes/?limit=50&tenant_id={test_project_db.tenant_id}"
+                f"&project_id={test_project_db.id}"
+            )
             assert response.status_code == 200
 
         end_time = time.time()
@@ -118,15 +127,15 @@ class TestPerformanceBenchmarks:
         assert successful == 50, f"Some requests failed: {successful}/50"
 
     @pytest.mark.asyncio
-    async def test_memory_crud_performance(self, client):
+    async def test_memory_crud_performance(self, client, test_project_db):
         """Benchmark memory CRUD operations."""
         # Create
         create_data = {
-            "project_id": "bench_proj",
+            "project_id": test_project_db.id,
             "title": "Bench Memory",
             "content": "Benchmark memory content",
-            "author_id": "bench_user",
-            "tenant_id": "bench_tenant",
+            "author_id": test_project_db.owner_id,
+            "tenant_id": test_project_db.tenant_id,
         }
 
         start_time = time.time()
@@ -232,9 +241,11 @@ class TestScalabilityBenchmarks:
     """Test scalability characteristics of the new architecture."""
 
     @pytest.mark.asyncio
-    async def test_memory_leak_check(self, client):
+    async def test_memory_leak_check(self, client, mock_graphiti_client):
         """Check for memory leaks with repeated requests."""
         import gc
+
+        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
 
         # Force garbage collection
         gc.collect()
@@ -271,7 +282,7 @@ class TestScalabilityBenchmarks:
 
         # Make many concurrent database requests
         async def db_request():
-            response = client.get("/api/v1/projects")
+            response = client.get("/api/v1/projects/")
             return response
 
         start_time = time.time()

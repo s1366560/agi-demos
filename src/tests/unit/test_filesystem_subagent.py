@@ -919,25 +919,25 @@ class TestRealAgentFiles:
     """Test loading the actual .memstack/agents/ files in the repo."""
 
     async def test_load_real_agents_if_present(self):
-        """Load real agent files from the repo root if they exist."""
+        """Load repo agent files when present and otherwise return an empty result."""
         repo_root = Path.cwd()
         agents_dir = repo_root / ".memstack" / "agents"
-
-        if not agents_dir.exists():
-            pytest.skip("No .memstack/agents/ directory in repo root")
 
         loader = FileSystemSubAgentLoader(
             base_path=repo_root,
             tenant_id="test-tenant",
             project_id="test-project",
+            scanner=FileSystemSubAgentScanner(include_global=False),
         )
         result = await loader.load_all()
 
-        # Should load some agents (we know there are 13)
-        assert result.count > 0
         assert len(result.errors) == 0
+        if not agents_dir.exists():
+            assert result.count == 0
+            return
 
         # Verify all have required fields
+        assert result.count > 0
         for loaded in result.subagents:
             sa = loaded.subagent
             assert sa.name

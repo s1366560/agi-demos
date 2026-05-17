@@ -51,6 +51,7 @@ PreferredLanguage = Literal["en-US", "zh-CN"]
 class ProjectObjectiveToTaskRequest(BaseModel):
     preferred_language: PreferredLanguage | None = None
 
+
 router = APIRouter(
     prefix=(
         "/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives"
@@ -372,7 +373,10 @@ async def project_objective_to_task(
             offset=0,
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
+        detail = _("Access denied")
+        if str(exc) == "User must be a workspace member":
+            detail = _("User must be a workspace member")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

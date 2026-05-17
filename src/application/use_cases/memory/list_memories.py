@@ -30,8 +30,14 @@ class ListMemoriesUseCase:
         Returns:
             List of Memory objects
         """
-        # For now, basic implementation without search
-        # Search functionality can be added later by extending the repository
+        if query.search and query.search.strip():
+            return await self._memory_repo.search_by_project(
+                project_id=query.project_id,
+                search=query.search.strip(),
+                limit=query.limit,
+                offset=query.offset,
+            )
+
         return await self._memory_repo.list_by_project(
             project_id=query.project_id, limit=query.limit, offset=query.offset
         )

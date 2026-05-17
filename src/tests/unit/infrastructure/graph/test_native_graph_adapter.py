@@ -123,6 +123,46 @@ class TestNativeGraphAdapterAddEpisode:
         mock_neo4j_client.execute_query.assert_called()
         mock_queue_port.add_episode.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_add_episode_processes_synchronously_without_queue(
+        self,
+        mock_neo4j_client,
+        mock_llm_client,
+        mock_embedding_service,
+    ):
+        """Test add_episode still extracts graph data when no queue adapter is configured."""
+        mock_neo4j_client.execute_query.return_value = MagicMock(records=[])
+        adapter = NativeGraphAdapter(
+            neo4j_client=mock_neo4j_client,
+            llm_client=mock_llm_client,
+            embedding_service=mock_embedding_service,
+            queue_port=None,
+            enable_reflexion=False,
+        )
+
+        episode = Episode(
+            id=str(uuid4()),
+            content="Test episode content",
+            source_type=SourceType.TEXT,
+            valid_at=datetime.now(UTC),
+            tenant_id="tenant-1",
+            project_id="project-1",
+            user_id="user-1",
+            metadata={"memory_id": "mem-1"},
+        )
+
+        with patch.object(adapter, "process_episode", AsyncMock()) as process_episode:
+            result = await adapter.add_episode(episode)
+
+        assert result is episode
+        process_episode.assert_awaited_once_with(
+            episode_uuid=episode.id,
+            content=episode.content,
+            project_id=episode.project_id,
+            tenant_id=episode.tenant_id,
+            user_id=episode.user_id,
+        )
+
 
 @pytest.mark.unit
 class TestNativeGraphAdapterSearch:

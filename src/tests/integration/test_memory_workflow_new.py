@@ -97,10 +97,6 @@ class TestMemoryWorkflowNew:
         # Verify workflow engine was NOT called
         assert not mock_workflow_engine.start_workflow.called
 
-    @pytest.mark.skip(
-        reason="Requires real PostgreSQL + Temporal infrastructure. "
-        "The endpoint uses async_session_factory() which connects to production DB."
-    )
     async def test_reprocess_memory_endpoint(
         self,
         async_client: AsyncClient,
@@ -120,8 +116,25 @@ class TestMemoryWorkflowNew:
         # Reset mock calls
         mock_workflow_engine.start_workflow.reset_mock()
 
-        # Act
-        response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
+        # Mock async_session_factory to avoid hitting real PostgreSQL.
+        # reprocess_memory opens a separate session for TaskLog.
+        mock_task_session = MagicMock()
+        mock_task_session.add = MagicMock()
+
+        @asynccontextmanager
+        async def _fake_factory():
+            mock_begin = MagicMock()
+            mock_begin.__aenter__ = AsyncMock(return_value=None)
+            mock_begin.__aexit__ = AsyncMock(return_value=False)
+            mock_task_session.begin = MagicMock(return_value=mock_begin)
+            yield mock_task_session
+
+        with patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            _fake_factory,
+        ):
+            # Act
+            response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
 
         # Assert
         assert response.status_code == 200

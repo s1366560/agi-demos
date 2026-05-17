@@ -170,7 +170,9 @@ class TestTopologyRouter:
         assert mock_topology_service.create_edge.await_args.kwargs["direction"] == "forward"
         assert mock_topology_service.create_edge.await_args.kwargs["auto_created"] is True
 
-    def test_create_edge_rejects_client_controlled_geometry(self, topology_client: TestClient) -> None:
+    def test_create_edge_rejects_client_controlled_geometry(
+        self, topology_client: TestClient
+    ) -> None:
         response = topology_client.post(
             "/api/v1/workspaces/ws-1/topology/edges",
             json={
@@ -221,6 +223,23 @@ class TestTopologyRouter:
         assert response.json()["detail"] == "Access denied"
         assert "permission" not in response.text.lower()
 
+    def test_create_node_workspace_membership_failure_is_actionable(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.create_node.side_effect = PermissionError(
+            "User must be a workspace member"
+        )
+
+        response = topology_client.post(
+            "/api/v1/workspaces/ws-1/topology/nodes",
+            json={"node_type": "note", "title": "My Node"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "User must be a workspace member"
+
     def test_update_edge_workspace_validation_failure(
         self,
         topology_client: TestClient,
@@ -238,6 +257,23 @@ class TestTopologyRouter:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json()["detail"] == "Invalid topology request"
         assert "same workspace" not in response.text.lower()
+
+    def test_create_edge_workspace_endpoint_validation_is_actionable(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.create_edge.side_effect = ValueError(
+            "Edge endpoints must exist in same workspace"
+        )
+
+        response = topology_client.post(
+            "/api/v1/workspaces/ws-1/topology/edges",
+            json={"source_node_id": "node-1", "target_node_id": "node-2"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Edge endpoints must exist in same workspace"
 
     def test_create_node_value_error_is_sanitized(
         self,

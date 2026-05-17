@@ -3,8 +3,9 @@ V2 SQLAlchemy implementation of MemoryRepository using BaseRepository.
 """
 
 import logging
+from typing import override
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.memory import Memory
@@ -29,7 +30,9 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
     async def save(self, memory: Memory) -> Memory:
         """Save a memory (create or update)."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(select(DBMemory).where(DBMemory.id == memory.id)))
+            refresh_select_statement(
+                self._refresh_statement(select(DBMemory).where(DBMemory.id == memory.id))
+            )
         )
         db_memory = result.scalar_one_or_none()
 
@@ -65,6 +68,29 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
     ) -> list[Memory]:
         """List all memories for a project."""
         return await self.list_all(limit=limit, offset=offset, project_id=project_id)
+
+    @override
+    async def search_by_project(
+        self, project_id: str, search: str, limit: int = 50, offset: int = 0
+    ) -> list[Memory]:
+        """Search memories in a project by title or content."""
+        pattern = f"%{search}%"
+        result = await self._session.execute(
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMemory)
+                    .where(DBMemory.project_id == project_id)
+                    .where(or_(DBMemory.title.ilike(pattern), DBMemory.content.ilike(pattern)))
+                    .offset(offset)
+                    .limit(limit)
+                )
+            )
+        )
+        return [
+            domain_memory
+            for db_memory in result.scalars().all()
+            if (domain_memory := self._to_domain(db_memory)) is not None
+        ]
 
     async def delete(self, memory_id: str) -> bool:
         """Delete a memory."""

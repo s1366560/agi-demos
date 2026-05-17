@@ -63,3 +63,24 @@ async def test_repository_list_by_project(db_session):
     assert "Mem 1" in titles
     assert "Mem 2" in titles
     assert "Mem 3" not in titles
+
+
+@pytest.mark.asyncio
+async def test_repository_search_by_project(db_session):
+    # Arrange
+    repo = SqlAlchemyMemoryRepository(db_session)
+    memory1 = Memory(project_id="proj_A", title="Alpha Note", content="Plain text", author_id="u1")
+    memory2 = Memory(project_id="proj_A", title="Beta", content="Alpha content", author_id="u1")
+    memory3 = Memory(
+        project_id="proj_B", title="Alpha Note", content="Other project", author_id="u1"
+    )
+
+    await repo.save(memory1)
+    await repo.save(memory2)
+    await repo.save(memory3)
+
+    # Act
+    results = await repo.search_by_project("proj_A", "alpha")
+
+    # Assert
+    assert {memory.id for memory in results} == {memory1.id, memory2.id}

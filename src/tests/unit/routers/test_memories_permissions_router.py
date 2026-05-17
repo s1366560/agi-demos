@@ -11,12 +11,14 @@ from src.infrastructure.adapters.primary.web.routers.memories import (
     MemoryCreate,
     _check_memory_edit_permission,
     create_memory,
+    delete_memory,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryShare,
     Project,
     User,
+    UserTenant,
 )
 
 
@@ -128,3 +130,74 @@ class TestMemoryCreateRouter:
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert exc_info.value.detail == "Failed to create memory"
+
+
+@pytest.mark.unit
+class TestMemoryDeletePermission:
+    @pytest.mark.asyncio
+    async def test_allows_tenant_admin_without_project_membership(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+        another_user: User,
+    ) -> None:
+        memory = _make_memory("memory-delete-tenant-admin", test_project_db, test_user)
+        tenant_membership = UserTenant(
+            id="tenant-admin-delete-memory",
+            user_id=another_user.id,
+            tenant_id=test_project_db.tenant_id,
+            role="admin",
+            permissions={"read": True, "write": True, "admin": True},
+        )
+        test_db.add_all([memory, tenant_membership])
+        await test_db.commit()
+
+        graph_service = Mock()
+        graph_service.delete_episode_by_memory_id = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.memories._delete_memory_chunks_for_request",
+            AsyncMock(return_value=0),
+        )
+
+        response = await delete_memory(
+            memory.id,
+            current_user=another_user,
+            db=test_db,
+            graph_service=graph_service,
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        graph_service.delete_episode_by_memory_id.assert_awaited_once_with(memory.id)
+
+    @pytest.mark.asyncio
+    async def test_allows_superuser_without_project_or_tenant_membership(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+        another_user: User,
+    ) -> None:
+        memory = _make_memory("memory-delete-superuser", test_project_db, test_user)
+        another_user.is_superuser = True
+        test_db.add_all([memory, another_user])
+        await test_db.commit()
+
+        graph_service = Mock()
+        graph_service.delete_episode_by_memory_id = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.memories._delete_memory_chunks_for_request",
+            AsyncMock(return_value=0),
+        )
+
+        response = await delete_memory(
+            memory.id,
+            current_user=another_user,
+            db=test_db,
+            graph_service=graph_service,
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        graph_service.delete_episode_by_memory_id.assert_awaited_once_with(memory.id)

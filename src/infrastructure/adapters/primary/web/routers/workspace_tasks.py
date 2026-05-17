@@ -324,20 +324,39 @@ def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
     )
 
 
+def _workspace_task_permission_detail(exc: PermissionError) -> str:
+    message = str(exc)
+    if message.startswith("Only workspace plan leader authority may "):
+        return _("Only workspace plan leader authority may perform this action")
+    if message == "Root goal must leave todo before a child task enters in_progress":
+        return _("Root goal must leave todo before a child task enters in_progress")
+    if message == "Autonomy execution task transitions require leader or assigned worker authority":
+        return _("Autonomy execution task transitions require leader or assigned worker authority")
+    return _("Access denied")
+
+
+def _workspace_task_value_error_detail(exc: ValueError) -> tuple[int, str]:
+    message = str(exc)
+    if "not found" in message.lower():
+        return status.HTTP_404_NOT_FOUND, _("Workspace task not found")
+    if message == "Workspace agent binding does not belong to workspace":
+        return status.HTTP_400_BAD_REQUEST, _(
+            "Workspace agent binding does not belong to workspace"
+        )
+    if message == "Cannot transition task status from todo to done":
+        return status.HTTP_400_BAD_REQUEST, _("Cannot transition task status from todo to done")
+    return status.HTTP_400_BAD_REQUEST, _("Invalid workspace task request")
+
+
 def _to_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PermissionError):
-        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
-    if isinstance(exc, ValueError):
-        message = str(exc)
-        if "not found" in message.lower():
-            return HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=_("Workspace task not found"),
-            )
         return HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Invalid workspace task request"),
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_workspace_task_permission_detail(exc),
         )
+    if isinstance(exc, ValueError):
+        status_code, detail = _workspace_task_value_error_detail(exc)
+        return HTTPException(status_code=status_code, detail=detail)
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_("Internal server error")
     )

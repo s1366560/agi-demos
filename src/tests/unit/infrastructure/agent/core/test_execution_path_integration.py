@@ -52,16 +52,12 @@ def test_decide_execution_path_respects_forced_subagent() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.xfail(
-    reason="Selection pipeline semantic ranker does not enforce budget cap without real embeddings",
-    strict=False,
-)
 def test_get_current_tools_applies_selection_pipeline_budget() -> None:
     """Selection pipeline should reduce tool count under configured max budget."""
-    tools = {f"tool_{idx}": _MockTool(f"tool_{idx}") for idx in range(20)}
+    tools = {f"mcp__srv__tool_{idx}": _MockTool(f"mcp__srv__tool_{idx}") for idx in range(20)}
     tools["read"] = _MockTool("read")
     tools["write"] = _MockTool("write")
-    agent = ReActAgent(model="test-model", tools=tools, tool_selection_max_tools=5)
+    agent = ReActAgent(model="test-model", tools=tools, tool_selection_max_tools=8)
 
     selection_context = agent._build_tool_selection_context(
         tenant_id="tenant-1",
@@ -71,9 +67,13 @@ def test_get_current_tools_applies_selection_pipeline_budget() -> None:
         effective_mode="build",
     )
     selected_tools, selected_defs = agent._get_current_tools(selection_context=selection_context)
+    selected_mcp_tools = [name for name in selected_tools if name.startswith("mcp__")]
 
     assert len(selected_tools) <= agent._tool_selection_max_tools
     assert len(selected_defs) <= agent._tool_selection_max_tools
+    assert len(selected_mcp_tools) <= agent._tool_selection_max_tools - 2
+    assert "read" in selected_tools
+    assert "write" in selected_tools
     assert any(step.stage == "semantic_ranker_stage" for step in agent._last_tool_selection_trace)
 
 

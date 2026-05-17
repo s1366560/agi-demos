@@ -9,53 +9,58 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.application.services.memory_service import MemoryService
-from src.infrastructure.adapters.secondary.persistence.models import Memory
+from src.domain.model.enums import ProcessingStatus
+from src.domain.model.memory.memory import Memory
 
 
 @pytest.mark.asyncio
 class TestMemoryService:
     """Test MemoryService business logic."""
 
-    @pytest.mark.skip(
-        reason="Legacy interface diverges from current MemoryService; covered by use case tests"
-    )
-    async def test_create_memory_success(
-        self, mock_memory_repo, mock_graphiti_client, mock_queue_service
-    ):
+    async def test_create_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory creation."""
         # Arrange
-        service = MemoryService(mock_memory_repo, mock_graphiti_client, mock_queue_service)
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
 
-        mock_memory_repo.create.return_value = Memory(
-            id="memory-1",
-            title="Test Memory",
-            content="Test content",
-            project_id="project-1",
-            author_id="user-1",
-            created_at=datetime.now(UTC),
-        )
-
-        # Act - call with individual parameters, not a dict
         result = await service.create_memory(
             title="Test Memory",
             content="Test content",
             project_id="project-1",
             user_id="user-1",
             tenant_id="tenant-1",
+            tags=["research"],
+            is_public=True,
+            metadata={"source": "test"},
         )
 
-        # Assert
         assert result.title == "Test Memory"
         assert result.content == "Test content"
-        mock_memory_repo.create.assert_called_once()
+        assert result.project_id == "project-1"
+        assert result.author_id == "user-1"
+        assert result.tags == ["research"]
+        assert result.is_public is True
+        assert result.processing_status == ProcessingStatus.PENDING.value
+        assert result.metadata == {
+            "source": "test",
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+            "user_id": "user-1",
+        }
+        mock_memory_repo.save.assert_awaited_once_with(result)
 
-    @pytest.mark.skip(
-        reason="Legacy interface diverges from current MemoryService; covered by use case tests"
-    )
-    async def test_update_memory_success(self, mock_memory_repo, mock_queue_service):
+        mock_graphiti_client.add_episode.assert_awaited_once()
+        episode = mock_graphiti_client.add_episode.call_args.args[0]
+        assert episode.name == "Test Memory"
+        assert episode.content == "Test content"
+        assert episode.metadata["memory_id"] == result.id
+        assert episode.tenant_id == "tenant-1"
+        assert episode.project_id == "project-1"
+        assert episode.user_id == "user-1"
+
+    async def test_update_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory update."""
         # Arrange
-        service = MemoryService(mock_memory_repo, Mock(), mock_queue_service)
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
         memory_id = "memory-1"
 
         existing_memory = Memory(
@@ -65,57 +70,64 @@ class TestMemoryService:
             version=1,
             project_id="project-1",
             author_id="user-1",
+            metadata={"tenant_id": "tenant-1", "source": "original"},
             created_at=datetime.now(UTC),
         )
 
         mock_memory_repo.find_by_id.return_value = existing_memory
-        mock_memory_repo.update.return_value = Memory(
-            id=memory_id,
+
+        result = await service.update_memory(
+            memory_id=memory_id,
             title="New Title",
             content="New Content",
-            version=2,  # Version incremented
-            project_id="project-1",
-            author_id="user-1",
-            created_at=datetime.now(UTC),
+            tags=["updated"],
+            is_public=True,
+            metadata={"source": "edited"},
         )
 
-        # Act - use kwargs for individual parameters
-        result = await service.update_memory(
-            memory_id=memory_id, title="New Title", content="New Content"
-        )
-
-        # Assert
         assert result.title == "New Title"
-        mock_memory_repo.update.assert_called_once()
+        assert result.content == "New Content"
+        assert result.tags == ["updated"]
+        assert result.is_public is True
+        assert result.metadata["source"] == "edited"
+        assert result.updated_at is not None
+        assert result.processing_status == ProcessingStatus.PENDING.value
+        mock_memory_repo.save.assert_awaited_once_with(existing_memory)
 
-    @pytest.mark.skip(
-        reason="Legacy interface diverges from current MemoryService; covered by use case tests"
-    )
-    async def test_update_memory_version_conflict(self, mock_memory_repo, mock_queue_service):
-        """Test update with version mismatch raises error."""
+        mock_graphiti_client.add_episode.assert_awaited_once()
+        episode = mock_graphiti_client.add_episode.call_args.args[0]
+        assert episode.content == "New Content"
+        assert episode.metadata["memory_id"] == memory_id
+        assert episode.metadata["tenant_id"] == "tenant-1"
+        assert episode.metadata["reprocess"] is True
+
+    async def test_update_memory_content_unchanged_does_not_reprocess(
+        self, mock_memory_repo, mock_graphiti_client
+    ):
+        """Test metadata-only updates skip graph reprocessing."""
         # Arrange
-        service = MemoryService(mock_memory_repo, Mock(), mock_queue_service)
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
         memory_id = "memory-1"
 
         existing_memory = Memory(
             id=memory_id,
             title="Title",
             content="Content",
-            version=2,  # Current version is 2
             project_id="project-1",
             author_id="user-1",
+            processing_status=ProcessingStatus.COMPLETED.value,
+            metadata={"tenant_id": "tenant-1"},
             created_at=datetime.now(UTC),
         )
 
         mock_memory_repo.find_by_id.return_value = existing_memory
 
-        # Act & Assert
-        with pytest.raises(ValueError, match="Version mismatch"):
-            await service.update_memory(
-                memory_id,
-                {"title": "New Title"},
-                version=1,  # Trying to update with version 1
-            )
+        result = await service.update_memory(memory_id=memory_id, metadata={"category": "note"})
+
+        assert result.metadata["category"] == "note"
+        assert result.processing_status == ProcessingStatus.COMPLETED.value
+        mock_memory_repo.save.assert_awaited_once_with(existing_memory)
+        mock_graphiti_client.add_episode.assert_not_awaited()
 
     async def test_delete_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory deletion with proper graph cleanup."""
@@ -304,17 +316,35 @@ class TestMemoryService:
         # Assert - calls save() not update()
         mock_memory_repo.save.assert_called_once()
 
+    async def test_share_memory_skips_duplicate_collaborators(self, mock_memory_repo):
+        """Test sharing memory does not duplicate existing collaborators."""
+        service = MemoryService(mock_memory_repo, Mock())
+        memory_id = "memory-1"
 
-@pytest.mark.asyncio
-class TestMemoryServicePermissions:
-    """Test permission checks in MemoryService."""
+        existing_memory = Memory(
+            id=memory_id,
+            title="Memory",
+            content="Content",
+            version=1,
+            project_id="project-1",
+            author_id="user-1",
+            collaborators=["user-2"],
+            created_at=datetime.now(UTC),
+        )
+        mock_memory_repo.find_by_id.return_value = existing_memory
 
-    async def test_user_with_edit_share_can_update(self, mock_memory_repo):
-        """Test that user with edit share can update memory."""
-        # This would require mock share repository setup
-        # For now, we'll test the basic logic
+        result = await service.share_memory(memory_id=memory_id, collaborators=["user-2", "user-3"])
 
-    async def test_user_without_permission_cannot_update(self):
-        """Test that user without permission cannot update memory."""
-        # This would require full mock setup of shares and permissions
-        # For now, we'll test the basic logic
+        assert result.collaborators == ["user-2", "user-3"]
+        assert result.updated_at is not None
+        mock_memory_repo.save.assert_called_once_with(existing_memory)
+
+    async def test_share_memory_not_found(self, mock_memory_repo):
+        """Test sharing a missing memory raises a clear error."""
+        service = MemoryService(mock_memory_repo, Mock())
+        mock_memory_repo.find_by_id.return_value = None
+
+        with pytest.raises(ValueError, match="Memory memory-1 not found"):
+            await service.share_memory(memory_id="memory-1", collaborators=["user-2"])
+
+        mock_memory_repo.save.assert_not_called()

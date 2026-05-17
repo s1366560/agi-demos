@@ -20,6 +20,28 @@ async def v2_memory_repo(v2_db_session: AsyncSession) -> SqlMemoryRepository:
     return SqlMemoryRepository(v2_db_session)
 
 
+def _memory(memory_id: str, project_id: str, title: str, content: str) -> Memory:
+    return Memory(
+        id=memory_id,
+        project_id=project_id,
+        title=title,
+        content=content,
+        author_id="user-1",
+        content_type="text",
+        tags=[],
+        entities=[],
+        relationships=[],
+        version=1,
+        collaborators=[],
+        is_public=False,
+        status="enabled",
+        processing_status="pending",
+        metadata={},
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+
 class TestSqlMemoryRepositoryCreate:
     """Tests for creating memories."""
 
@@ -238,6 +260,28 @@ class TestSqlMemoryRepositoryFind:
 
         page3 = await v2_memory_repo.list_by_project("proj-page", limit=2, offset=4)
         assert len(page3) == 1
+
+    @pytest.mark.asyncio
+    async def test_search_by_project_filters_title_content_and_project(
+        self, v2_memory_repo: SqlMemoryRepository
+    ):
+        """Test searching memories for one project."""
+        await v2_memory_repo.save(
+            _memory("mem-search-1", "proj-search", "Retention Plan", "Quarterly summary")
+        )
+        await v2_memory_repo.save(
+            _memory("mem-search-2", "proj-search", "Release Notes", "Customer retention")
+        )
+        await v2_memory_repo.save(
+            _memory("mem-search-3", "proj-search", "Unrelated", "Roadmap details")
+        )
+        await v2_memory_repo.save(
+            _memory("mem-search-4", "other-project", "Retention Plan", "Hidden")
+        )
+
+        memories = await v2_memory_repo.search_by_project("proj-search", "retention")
+
+        assert {memory.id for memory in memories} == {"mem-search-1", "mem-search-2"}
 
 
 class TestSqlMemoryRepositoryDelete:

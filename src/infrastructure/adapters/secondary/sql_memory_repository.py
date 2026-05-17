@@ -1,4 +1,6 @@
-from sqlalchemy import delete, select
+from typing import override
+
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.memory import Memory
@@ -60,7 +62,9 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
         return memory
 
     async def find_by_id(self, memory_id: str) -> Memory | None:
-        result = await self._session.execute(refresh_select_statement(select(MemoryModel).where(MemoryModel.id == memory_id)))
+        result = await self._session.execute(
+            refresh_select_statement(select(MemoryModel).where(MemoryModel.id == memory_id))
+        )
         model = result.scalar_one_or_none()
         return self._to_domain(model) if model else None
 
@@ -68,15 +72,36 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
         self, project_id: str, limit: int = 50, offset: int = 0
     ) -> list[Memory]:
         result = await self._session.execute(
-            refresh_select_statement(select(MemoryModel)
-            .where(MemoryModel.project_id == project_id)
-            .limit(limit)
-            .offset(offset))
+            refresh_select_statement(
+                select(MemoryModel)
+                .where(MemoryModel.project_id == project_id)
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        models = result.scalars().all()
+        return [self._to_domain(m) for m in models]
+
+    @override
+    async def search_by_project(
+        self, project_id: str, search: str, limit: int = 50, offset: int = 0
+    ) -> list[Memory]:
+        pattern = f"%{search}%"
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(MemoryModel)
+                .where(MemoryModel.project_id == project_id)
+                .where(or_(MemoryModel.title.ilike(pattern), MemoryModel.content.ilike(pattern)))
+                .limit(limit)
+                .offset(offset)
+            )
         )
         models = result.scalars().all()
         return [self._to_domain(m) for m in models]
 
     async def delete(self, memory_id: str) -> bool:
-        await self._session.execute(refresh_select_statement(delete(MemoryModel).where(MemoryModel.id == memory_id)))
+        await self._session.execute(
+            refresh_select_statement(delete(MemoryModel).where(MemoryModel.id == memory_id))
+        )
         await self._session.commit()
         return True

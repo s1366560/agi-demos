@@ -6,6 +6,8 @@ These tests ensure that:
 3. Switching providers doesn't cause dimension mismatch errors
 """
 
+import os
+
 import pytest
 
 from src.domain.llm_providers.llm_types import EmbedderClient, EmbedderConfig
@@ -229,15 +231,15 @@ class TestProviderDimensionCompatibility:
 
 @pytest.mark.integration
 @pytest.mark.slow
-@pytest.mark.skipif(True, reason="Requires valid external API credentials; cannot run in CI")
+@pytest.mark.skipif(
+    not (os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("GEMINI_API_KEY")),
+    reason="Requires valid external API credentials; set DASHSCOPE_API_KEY or GEMINI_API_KEY",
+)
 class TestValidatedEmbedderWithRealProviders:
 
     @pytest.mark.asyncio
     async def test_qwen_embedder_with_validated_wrapper(self):
         """Test Qwen embedder wrapped with ValidatedEmbedder via LiteLLM."""
-        # Skip if no API key
-        import os
-
         from src.domain.llm_providers.models import ProviderType
         from src.infrastructure.llm.litellm.litellm_embedder import (
             LiteLLMEmbedder,
@@ -266,8 +268,6 @@ class TestValidatedEmbedderWithRealProviders:
     @pytest.mark.asyncio
     async def test_gemini_embedder_with_validated_wrapper(self):
         """Test Gemini embedder wrapped with ValidatedEmbedder via LiteLLM."""
-        import os
-
         from src.domain.llm_providers.models import ProviderType
         from src.infrastructure.llm.litellm.litellm_embedder import (
             LiteLLMEmbedder,

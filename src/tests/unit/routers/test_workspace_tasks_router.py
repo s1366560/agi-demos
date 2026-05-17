@@ -55,6 +55,36 @@ def test_to_http_error_sanitizes_permission_errors() -> None:
     assert error.detail == "Access denied"
 
 
+def test_to_http_error_exposes_safe_workspace_leader_permission_errors() -> None:
+    error = _to_http_error(PermissionError("Only workspace plan leader authority may block task"))
+
+    assert error.status_code == 403
+    assert error.detail == "Only workspace plan leader authority may perform this action"
+
+
+def test_to_http_error_exposes_safe_root_goal_permission_errors() -> None:
+    error = _to_http_error(
+        PermissionError("Root goal must leave todo before a child task enters in_progress")
+    )
+
+    assert error.status_code == 403
+    assert error.detail == "Root goal must leave todo before a child task enters in_progress"
+
+
+def test_to_http_error_exposes_safe_worker_authority_permission_errors() -> None:
+    error = _to_http_error(
+        PermissionError(
+            "Autonomy execution task transitions require leader or assigned worker authority"
+        )
+    )
+
+    assert error.status_code == 403
+    assert (
+        error.detail
+        == "Autonomy execution task transitions require leader or assigned worker authority"
+    )
+
+
 def test_to_http_error_sanitizes_not_found_value_errors() -> None:
     error = _to_http_error(ValueError("task task-secret not found"))
 
@@ -67,3 +97,17 @@ def test_to_http_error_sanitizes_bad_request_value_errors() -> None:
 
     assert error.status_code == 400
     assert error.detail == "Invalid workspace task request"
+
+
+def test_to_http_error_exposes_safe_workspace_binding_value_errors() -> None:
+    error = _to_http_error(ValueError("Workspace agent binding does not belong to workspace"))
+
+    assert error.status_code == 400
+    assert error.detail == "Workspace agent binding does not belong to workspace"
+
+
+def test_to_http_error_exposes_safe_transition_value_errors() -> None:
+    error = _to_http_error(ValueError("Cannot transition task status from todo to done"))
+
+    assert error.status_code == 400
+    assert error.detail == "Cannot transition task status from todo to done"

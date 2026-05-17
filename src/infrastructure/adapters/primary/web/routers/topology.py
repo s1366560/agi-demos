@@ -29,17 +29,23 @@ router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/topology", tags=["t
 logger = logging.getLogger(__name__)
 
 
-def _topology_access_denied_error() -> HTTPException:
+def _topology_access_denied_error(exc: PermissionError | None = None) -> HTTPException:
+    detail = _("Access denied")
+    if exc is not None and str(exc) == "User must be a workspace member":
+        detail = _("User must be a workspace member")
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail=_("Access denied"),
+        detail=detail,
     )
 
 
-def _invalid_topology_request_error() -> HTTPException:
+def _invalid_topology_request_error(exc: ValueError | None = None) -> HTTPException:
+    detail = _("Invalid topology request")
+    if exc is not None and str(exc) == "Edge endpoints must exist in same workspace":
+        detail = _("Edge endpoints must exist in same workspace")
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=_("Invalid topology request"),
+        detail=detail,
     )
 
 
@@ -263,10 +269,10 @@ async def create_node(
         return TopologyNodeResponse.model_validate(node)
     except PermissionError as e:
         await db.rollback()
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         await db.rollback()
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.get("/nodes", response_model=list[TopologyNodeResponse])
@@ -286,7 +292,7 @@ async def list_nodes(
         )
         return [TopologyNodeResponse.model_validate(node) for node in nodes]
     except PermissionError as e:
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         raise _topology_not_found_error() from e
 
@@ -306,11 +312,11 @@ async def get_node(
         )
         return TopologyNodeResponse.model_validate(node)
     except PermissionError as e:
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         if _is_not_found_error(e):
             raise _topology_node_not_found_error() from e
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.patch("/nodes/{node_id}", response_model=TopologyNodeResponse)
@@ -360,12 +366,12 @@ async def update_node(
         return TopologyNodeResponse.model_validate(node)
     except PermissionError as e:
         await db.rollback()
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         await db.rollback()
         if _is_not_found_error(e):
             raise _topology_node_not_found_error() from e
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -396,12 +402,12 @@ async def delete_node(
         )
     except PermissionError as e:
         await db.rollback()
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         await db.rollback()
         if _is_not_found_error(e):
             raise _topology_node_not_found_error() from e
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.post("/edges", response_model=TopologyEdgeResponse, status_code=status.HTTP_201_CREATED)
@@ -439,10 +445,10 @@ async def create_edge(
         return TopologyEdgeResponse.model_validate(edge)
     except PermissionError as e:
         await db.rollback()
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         await db.rollback()
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.get("/edges", response_model=list[TopologyEdgeResponse])
@@ -462,7 +468,7 @@ async def list_edges(
         )
         return [TopologyEdgeResponse.model_validate(edge) for edge in edges]
     except PermissionError as e:
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         raise _topology_not_found_error() from e
 
@@ -482,11 +488,11 @@ async def get_edge(
         )
         return TopologyEdgeResponse.model_validate(edge)
     except PermissionError as e:
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         if _is_not_found_error(e):
             raise _topology_edge_not_found_error() from e
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.patch("/edges/{edge_id}", response_model=TopologyEdgeResponse)
@@ -526,12 +532,12 @@ async def update_edge(
         return TopologyEdgeResponse.model_validate(edge)
     except PermissionError as e:
         await db.rollback()
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         await db.rollback()
         if _is_not_found_error(e):
             raise _topology_edge_not_found_error() from e
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e
 
 
 @router.delete("/edges/{edge_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -562,9 +568,9 @@ async def delete_edge(
         )
     except PermissionError as e:
         await db.rollback()
-        raise _topology_access_denied_error() from e
+        raise _topology_access_denied_error(e) from e
     except ValueError as e:
         await db.rollback()
         if _is_not_found_error(e):
             raise _topology_edge_not_found_error() from e
-        raise _invalid_topology_request_error() from e
+        raise _invalid_topology_request_error(e) from e

@@ -18,6 +18,23 @@ class MemoryRepository(ABC):
     ) -> list[Memory]:
         pass
 
+    async def search_by_project(
+        self, project_id: str, search: str, limit: int = 50, offset: int = 0
+    ) -> list[Memory]:
+        """Search memories within a project.
+
+        Concrete repositories should override this when they can push search
+        into storage. The fallback keeps older in-memory or test repositories
+        compatible while preserving the public use-case behavior.
+        """
+        needle = search.casefold()
+        memories = await self.list_by_project(project_id=project_id, limit=limit, offset=offset)
+        return [
+            memory
+            for memory in memories
+            if needle in memory.title.casefold() or needle in memory.content.casefold()
+        ]
+
     @abstractmethod
     async def delete(self, memory_id: str) -> bool:
         pass

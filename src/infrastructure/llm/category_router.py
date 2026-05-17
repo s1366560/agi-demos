@@ -12,9 +12,12 @@ Usage::
     router = CategoryRouter(
         provider_configs={"dashscope": ["qwen-max", "qwen-plus", "qwen-turbo"]},
     )
+    # Natural-language intent classification is handled by an agent broker.
+    # This sync fallback returns CONVERSATION for non-empty text unless a
+    # structured tools_requested signal is supplied.
     category = router.detect_category("Write a Python function to sort a list")
     config = router.route(category)
-    # category is a safe default unless a structured broker verdict is supplied.
+    # category is a safe fallback unless a structured broker verdict is supplied.
 """
 
 from __future__ import annotations
