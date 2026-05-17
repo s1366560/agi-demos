@@ -548,6 +548,10 @@ module = [
     "jsonschema.*",
     "grpc",
     "grpc.*",
+    "fitz",
+    "memstack_agent.plugins.feishu.plugin",
+    "prometheus_client",
+    "prometheus_client.*",
 ]
 ignore_missing_imports = true
 
