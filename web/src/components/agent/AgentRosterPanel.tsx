@@ -80,7 +80,7 @@ const RunStatusLabel = memo<{ status: GraphRunStatus }>(({ status }) => {
   };
 
   return (
-    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${colorMap[status]}`}>
+    <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${colorMap[status]}`}>
       {status}
     </span>
   );
@@ -234,7 +234,7 @@ const AgentRosterDrawer = memo(() => {
           <span>{activeRun ? activeRun.graphName : t('agent.graph.title', 'Agent Graph')}</span>
           {activeRun && <RunStatusLabel status={activeRun.status} />}
           {runningCount > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+            <span className="text-xs px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
               {runningCount}
             </span>
           )}
