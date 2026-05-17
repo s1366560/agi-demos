@@ -1,13 +1,17 @@
 """Unit tests for instance channel route authorization."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.routers import instance_channels
 from src.infrastructure.adapters.primary.web.routers.instance_channels import (
+    UpdateChannelRequest,
     _require_instance_access,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -102,3 +106,83 @@ class TestInstanceChannelAuthorization:
             await _require_instance_access("missing-instance", test_user, test_db)
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+class _ChannelServiceStub:
+    def __init__(self, message: str = "channel channel-secret not found") -> None:
+        self.update_channel = AsyncMock(side_effect=ValueError(message))
+        self.delete_channel = AsyncMock(side_effect=ValueError(message))
+        self.test_connection = AsyncMock(side_effect=ValueError(message))
+
+
+@pytest.mark.unit
+class TestInstanceChannelErrorResponses:
+    @pytest.mark.asyncio
+    async def test_update_channel_sanitizes_missing_channel_id(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        service = _ChannelServiceStub()
+        monkeypatch.setattr(instance_channels, "_require_instance_access", AsyncMock())
+        monkeypatch.setattr(instance_channels, "_build_service", lambda _db: service)
+        db = SimpleNamespace(commit=AsyncMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await instance_channels.update_channel(
+                instance_id="instance-1",
+                channel_id="channel-secret",
+                body=UpdateChannelRequest(name="New"),
+                current_user=SimpleNamespace(id="user-1"),
+                db=db,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert exc_info.value.detail == "Instance channel not found"
+        assert "channel-secret" not in exc_info.value.detail
+        db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_delete_channel_sanitizes_missing_channel_id(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        service = _ChannelServiceStub()
+        monkeypatch.setattr(instance_channels, "_require_instance_access", AsyncMock())
+        monkeypatch.setattr(instance_channels, "_build_service", lambda _db: service)
+        db = SimpleNamespace(commit=AsyncMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await instance_channels.delete_channel(
+                instance_id="instance-1",
+                channel_id="channel-secret",
+                current_user=SimpleNamespace(id="user-1"),
+                db=db,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert exc_info.value.detail == "Instance channel not found"
+        assert "channel-secret" not in exc_info.value.detail
+        db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_test_channel_connection_sanitizes_missing_channel_id(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        service = _ChannelServiceStub()
+        monkeypatch.setattr(instance_channels, "_require_instance_access", AsyncMock())
+        monkeypatch.setattr(instance_channels, "_build_service", lambda _db: service)
+        db = SimpleNamespace(commit=AsyncMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await instance_channels.test_channel_connection(
+                instance_id="instance-1",
+                channel_id="channel-secret",
+                current_user=SimpleNamespace(id="user-1"),
+                db=db,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert exc_info.value.detail == "Instance channel not found"
+        assert "channel-secret" not in exc_info.value.detail
+        db.commit.assert_not_awaited()

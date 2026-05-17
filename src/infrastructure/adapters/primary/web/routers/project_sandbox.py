@@ -79,6 +79,12 @@ _PREVIEW_SCHEME_ENV = "WORKSPACE_HTTP_PREVIEW_SCHEME"
 _PREVIEW_SESSION_TTL_ENV = "WORKSPACE_HTTP_PREVIEW_SESSION_TTL_SECONDS"
 _SANDBOX_PROXY_TOKEN_COOKIE_NAME = "sandbox_proxy_token"
 _SANDBOX_PROXY_AUTH_COOKIE_MAX_AGE_SECONDS = 3600
+_SANDBOX_NOT_FOUND_DETAIL = _("Sandbox not found")
+_SANDBOX_NOT_FOUND_WITH_CREATE_HINT_DETAIL = _("Sandbox not found. Use POST to create one.")
+_SANDBOX_NETWORK_UNAVAILABLE_DETAIL = _("Unable to resolve sandbox network address")
+_DESKTOP_SERVICE_NOT_RUNNING_DETAIL = _("Desktop service is not running")
+_TERMINAL_SERVICE_NOT_RUNNING_DETAIL = _("Terminal service is not running")
+_MCP_SERVICE_NOT_RUNNING_DETAIL = _("MCP service is not running")
 
 
 # ============================================================================
@@ -740,7 +746,7 @@ async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: 
 
     raise HTTPException(
         status_code=503,
-        detail=_(f"Unable to resolve sandbox network address for {sandbox_id}"),
+        detail=_SANDBOX_NETWORK_UNAVAILABLE_DETAIL,
     )
 
 
@@ -916,6 +922,17 @@ def _format_error_message(detail: Any) -> str:
         return json.dumps(detail, ensure_ascii=False)
     except TypeError:
         return str(detail)
+
+
+def _http_service_not_found_message() -> str:
+    return _("HTTP service not found")
+
+
+def _http_service_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("HTTP service not found"),
+    )
 
 
 async def _publish_http_service_error_event(
@@ -1291,7 +1308,7 @@ async def get_project_sandbox(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=_(f"No sandbox found for project {project_id}. Use POST to create one."),
+            detail=_SANDBOX_NOT_FOUND_WITH_CREATE_HINT_DETAIL,
         )
 
     return ProjectSandboxResponse.from_info(info)
@@ -1343,7 +1360,7 @@ async def ensure_project_sandbox(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=_(f"Invalid profile: {request.profile}. Use: lite, standard, full"),
+                detail=_("Invalid sandbox profile"),
             ) from None
 
     try:
@@ -1415,7 +1432,7 @@ async def check_project_sandbox_health(
         if not info:
             raise HTTPException(
                 status_code=404,
-                detail=_(f"No sandbox found for project {project_id}"),
+                detail=_SANDBOX_NOT_FOUND_DETAIL,
             )
 
         return HealthCheckResponse(
@@ -1453,7 +1470,7 @@ async def get_project_sandbox_stats(
         if not info:
             raise HTTPException(
                 status_code=404,
-                detail=_(f"No sandbox found for project {project_id}"),
+                detail=_SANDBOX_NOT_FOUND_DETAIL,
             )
 
         # Get stats from the adapter (pass project_id as fallback for container lookup)
@@ -1607,7 +1624,7 @@ async def terminate_project_sandbox(
         if not success:
             raise HTTPException(
                 status_code=404,
-                detail=_(f"No sandbox found for project {project_id}"),
+                detail=_SANDBOX_NOT_FOUND_DETAIL,
             )
 
         # Publish event via Redis Stream (for SSE subscribers)
@@ -1698,7 +1715,7 @@ async def list_project_sandboxes(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=_(f"Invalid status: {status}"),
+                detail=_("Invalid sandbox status"),
             ) from None
 
     sandboxes = await service.list_project_sandboxes(
@@ -1798,7 +1815,7 @@ async def stop_project_desktop(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=_(f"No sandbox found for project {project_id}"),
+            detail=_SANDBOX_NOT_FOUND_DETAIL,
         )
 
     try:
@@ -1855,7 +1872,7 @@ async def stop_project_terminal(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=_(f"No sandbox found for project {project_id}"),
+            detail=_SANDBOX_NOT_FOUND_DETAIL,
         )
 
     try:
@@ -2080,10 +2097,7 @@ async def create_project_http_service_preview_session(
 
     service_info = await _get_http_service(project_id, service_id, redis_client)
     if not service_info:
-        raise HTTPException(
-            status_code=404,
-            detail=_(f"HTTP service {service_id} not found for project {project_id}"),
-        )
+        raise _http_service_not_found_error()
 
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
         return HttpServicePreviewSessionResponse(
@@ -2119,10 +2133,7 @@ async def stop_project_http_service(
 
     removed = await _pop_http_service(project_id, service_id, redis_client)
     if not removed:
-        raise HTTPException(
-            status_code=404,
-            detail=_(f"HTTP service {service_id} not found for project {project_id}"),
-        )
+        raise _http_service_not_found_error()
 
     removed.status = "stopped"
     removed.updated_at = datetime.now(UTC).isoformat()
@@ -2497,10 +2508,7 @@ async def proxy_project_http_service(
 
     service_info = await _get_http_service(project_id, service_id, redis_client)
     if not service_info:
-        raise HTTPException(
-            status_code=404,
-            detail=_(f"HTTP service {service_id} not found for project {project_id}"),
-        )
+        raise _http_service_not_found_error()
 
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
         raise HTTPException(
@@ -2629,7 +2637,7 @@ async def proxy_project_http_service_websocket(
     if not service_info:
         await websocket.close(
             code=1008,
-            reason=f"HTTP service {service_id} not found for project {project_id}",
+            reason=_http_service_not_found_message(),
         )
         return
 
@@ -2679,7 +2687,7 @@ async def proxy_project_http_service_websocket(
             error_message=str(e) or type(e).__name__,
         )
         with contextlib.suppress(Exception):
-            await websocket.send_text(f'{{"error": "{e!s}"}}')
+            await websocket.send_json({"error": "HTTP service WebSocket proxy failed"})
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason="HTTP service WS proxy failure")
             websocket_closed = True
@@ -2715,10 +2723,7 @@ async def proxy_project_http_service_preview_host(
 
     service_info = await _get_http_service_by_preview_label(project_id, service_label, redis_client)
     if not service_info:
-        raise HTTPException(
-            status_code=404,
-            detail=_(f"HTTP service {service_label} not found for project {project_id}"),
-        )
+        raise _http_service_not_found_error()
     if service_info.source_type != HttpServiceSourceType.SANDBOX_INTERNAL:
         raise HTTPException(
             status_code=400,
@@ -2850,7 +2855,7 @@ async def proxy_project_http_service_preview_host_websocket(
     if not service_info:
         await websocket.close(
             code=1008,
-            reason=f"HTTP service {service_label} not found for project {project_id}",
+            reason=_http_service_not_found_message(),
         )
         return
 
@@ -2930,13 +2935,13 @@ async def proxy_project_desktop(
     if not info:
         raise HTTPException(
             status_code=404,
-            detail=_(f"No sandbox found for project {project_id}"),
+            detail=_SANDBOX_NOT_FOUND_DETAIL,
         )
 
     if not info.desktop_url:
         raise HTTPException(
             status_code=503,
-            detail=_(f"Desktop service is not running for project {project_id}"),
+            detail=_DESKTOP_SERVICE_NOT_RUNNING_DETAIL,
         )
 
     # Build target URL from the desktop service URL
@@ -3019,13 +3024,13 @@ async def proxy_project_desktop_websocket(
     info = await service.get_project_sandbox(project_id)
 
     if not info:
-        await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
+        await websocket.close(code=1008, reason=_SANDBOX_NOT_FOUND_DETAIL)
         return
 
     if not info.desktop_url:
         await websocket.close(
             code=1008,
-            reason=f"Desktop service is not running for project {project_id}",
+            reason=_DESKTOP_SERVICE_NOT_RUNNING_DETAIL,
         )
         return
 
@@ -3054,7 +3059,7 @@ async def proxy_project_desktop_websocket(
     except Exception as e:
         logger.error(f"Desktop WebSocket proxy error for project {project_id}: {e}")
         with contextlib.suppress(Exception):
-            await websocket.send_text(f'{{"error": "{e!s}"}}')
+            await websocket.send_json({"error": "Desktop WebSocket proxy failed"})
     finally:
         if upstream_ws:
             with contextlib.suppress(Exception):
@@ -3084,12 +3089,12 @@ async def proxy_project_terminal_websocket(
     info = await service.get_project_sandbox(project_id)
 
     if not info:
-        await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
+        await websocket.close(code=1008, reason=_SANDBOX_NOT_FOUND_DETAIL)
         return
 
     if not info.terminal_url:
         await websocket.close(
-            code=1008, reason=f"Terminal service is not running for project {project_id}"
+            code=1008, reason=_TERMINAL_SERVICE_NOT_RUNNING_DETAIL
         )
         return
 
@@ -3113,7 +3118,10 @@ async def proxy_project_terminal_websocket(
             try:
                 session = await proxy.create_session(container_id=info.sandbox_id)
             except ValueError as e:
-                await websocket.send_json({"type": "error", "message": str(e)})
+                logger.warning("Failed to create terminal session for project %s: %s", project_id, e)
+                await websocket.send_json(
+                    {"type": "error", "message": "Failed to create terminal session"}
+                )
                 await websocket.close()
                 return
 
@@ -3137,7 +3145,7 @@ async def proxy_project_terminal_websocket(
     except Exception as e:
         logger.error(f"Terminal WebSocket proxy error: {e}")
         with contextlib.suppress(Exception):
-            await websocket.send_json({"type": "error", "message": str(e)})
+            await websocket.send_json({"type": "error", "message": "Terminal WebSocket proxy failed"})
 
     finally:
         # Cleanup
@@ -3168,13 +3176,13 @@ async def proxy_project_mcp_websocket(
     info = await service.get_project_sandbox(project_id)
 
     if not info:
-        await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
+        await websocket.close(code=1008, reason=_SANDBOX_NOT_FOUND_DETAIL)
         return
 
     if not info.websocket_url:
         await websocket.close(
             code=1008,
-            reason=f"MCP service is not running for project {project_id}",
+            reason=_MCP_SERVICE_NOT_RUNNING_DETAIL,
         )
         return
 
@@ -3198,7 +3206,7 @@ async def proxy_project_mcp_websocket(
     except Exception as e:
         logger.error(f"MCP WebSocket proxy error for project {project_id}: {e}")
         with contextlib.suppress(Exception):
-            await websocket.send_text(f'{{"error": "{e!s}"}}')
+            await websocket.send_json({"error": "MCP WebSocket proxy failed"})
     finally:
         # Ensure both connections are closed
         if upstream_ws:

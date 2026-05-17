@@ -4,7 +4,10 @@ from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskStatus,
 )
-from src.infrastructure.adapters.primary.web.routers.workspace_tasks import _to_response
+from src.infrastructure.adapters.primary.web.routers.workspace_tasks import (
+    _to_http_error,
+    _to_response,
+)
 
 
 def test_to_response_projects_current_attempt_fields() -> None:
@@ -43,3 +46,24 @@ def test_to_response_projects_current_attempt_fields() -> None:
     assert response.last_worker_report_summary == "Worker delivered the checklist"
     assert response.last_worker_report_artifacts == ["artifact:1"]
     assert response.last_worker_report_verifications == ["verification:1"]
+
+
+def test_to_http_error_sanitizes_permission_errors() -> None:
+    error = _to_http_error(PermissionError("workspace secret permission denied"))
+
+    assert error.status_code == 403
+    assert error.detail == "Access denied"
+
+
+def test_to_http_error_sanitizes_not_found_value_errors() -> None:
+    error = _to_http_error(ValueError("task task-secret not found"))
+
+    assert error.status_code == 404
+    assert error.detail == "Workspace task not found"
+
+
+def test_to_http_error_sanitizes_bad_request_value_errors() -> None:
+    error = _to_http_error(ValueError("secret task transition invalid"))
+
+    assert error.status_code == 400
+    assert error.detail == "Invalid workspace task request"

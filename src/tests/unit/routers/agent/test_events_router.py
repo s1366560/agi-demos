@@ -279,3 +279,39 @@ class TestAgentEventsRouter:
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to get workflow status"
         assert "internal" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_get_workflow_status_actor_not_found_is_sanitized(
+        self,
+        test_db,
+        test_user,
+    ) -> None:
+        async def accessible_conversation(*_args, **_kwargs):
+            return SimpleNamespace(
+                tenant_id="tenant-1",
+                project_id="project-1",
+            )
+
+        async def missing_actor(*_args, **_kwargs):
+            return None
+
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
+            accessible_conversation,
+        )
+        self.monkeypatch.setattr(
+            "src.infrastructure.agent.actor.actor_manager.get_actor_if_exists",
+            missing_actor,
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_workflow_status(
+                "conversation-secret",
+                request=MagicMock(),
+                current_user=test_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Actor not found"
+        assert "conversation-secret" not in str(exc_info.value.detail)

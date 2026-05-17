@@ -57,6 +57,21 @@ class CloneTemplateRequest(BaseModel):
     )
 
 
+def _template_value_error_to_http(error: ValueError) -> HTTPException:
+    """Map service/domain validation errors to stable API responses."""
+    message = str(error).lower()
+    if "not found" in message:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Template not found"),
+        )
+
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid template request"),
+    )
+
+
 # ------------------------------------------------------------------
 # Template CRUD
 # ------------------------------------------------------------------
@@ -97,10 +112,7 @@ async def create_template(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 @router.get(
@@ -140,10 +152,7 @@ async def list_templates(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 @router.get(
@@ -203,10 +212,7 @@ async def update_template(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 @router.delete(
@@ -233,10 +239,7 @@ async def delete_template(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 # ------------------------------------------------------------------
@@ -268,10 +271,7 @@ async def publish_template(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 @router.post(
@@ -298,10 +298,7 @@ async def unpublish_template(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 # ------------------------------------------------------------------
@@ -363,10 +360,7 @@ async def clone_template(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 # ------------------------------------------------------------------
@@ -413,10 +407,7 @@ async def add_template_item(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 @router.delete(
@@ -448,10 +439,7 @@ async def remove_template_item(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _template_value_error_to_http(e) from e
 
 
 @router.get(

@@ -325,7 +325,7 @@ async def create_subagent(
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_(f"SubAgent with name '{data.name}' already exists"),
+                detail=_("SubAgent already exists"),
             )
 
         # Create subagent
@@ -530,7 +530,7 @@ async def import_filesystem_subagent(
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Filesystem SubAgent '{name}' not found"),
+            detail=_("Filesystem SubAgent not found"),
         )
 
     container = get_container_with_db(request, db)
@@ -541,7 +541,7 @@ async def import_filesystem_subagent(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"SubAgent '{name}' already exists in database"),
+            detail=_("SubAgent already exists"),
         )
 
     # Create a DB copy from the filesystem SubAgent
@@ -625,7 +625,7 @@ async def create_template(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"Template '{data.name}' v{data.version} already exists"),
+            detail=_("Template already exists"),
         )
 
     template_data = data.model_dump()
@@ -773,7 +773,7 @@ async def install_template(
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"SubAgent '{template['name']}' already exists"),
+            detail=_("SubAgent already exists"),
         )
 
     subagent = SubAgent.create(
@@ -914,7 +914,7 @@ async def update_subagent(
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_(f"SubAgent with name '{data.name}' already exists"),
+                detail=_("SubAgent already exists"),
             )
 
     # Update fields

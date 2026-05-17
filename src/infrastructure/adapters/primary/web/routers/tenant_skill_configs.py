@@ -100,6 +100,13 @@ def config_to_response(config: TenantSkillConfig) -> TenantSkillConfigResponse:
     )
 
 
+def _invalid_skill_config_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid tenant skill config request"),
+    )
+
+
 # === API Endpoints ===
 
 
@@ -145,7 +152,7 @@ async def get_tenant_skill_config(
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"No configuration found for system skill: {system_skill_name}"),
+            detail=_("Skill configuration not found"),
         )
 
     return config_to_response(config)
@@ -193,10 +200,7 @@ async def disable_system_skill(
         return config_to_response(config)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_skill_config_request_error() from e
 
 
 @router.post(
@@ -223,7 +227,7 @@ async def override_system_skill(
         if not override_skill:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=_(f"Override skill not found: {data.override_skill_id}"),
+                detail=_("Override skill not found"),
             )
         if override_skill.tenant_id != tenant_id:
             raise HTTPException(
@@ -261,10 +265,7 @@ async def override_system_skill(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_skill_config_request_error() from e
 
 
 @router.post("/enable", status_code=status.HTTP_204_NO_CONTENT)
@@ -287,7 +288,7 @@ async def enable_system_skill(
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"No configuration found for system skill: {data.system_skill_name}"),
+            detail=_("Skill configuration not found"),
         )
 
     await repo.delete_by_tenant_and_skill(tenant_id, data.system_skill_name)
@@ -316,7 +317,7 @@ async def delete_tenant_skill_config(
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"No configuration found for system skill: {system_skill_name}"),
+            detail=_("Skill configuration not found"),
         )
 
     await repo.delete(existing.id)

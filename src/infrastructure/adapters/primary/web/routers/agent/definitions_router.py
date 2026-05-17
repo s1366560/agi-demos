@@ -182,11 +182,13 @@ async def create_definition(
 
     except ValueError as e:
         status_code = 409 if "already exists" in str(e) else 400
-        raise HTTPException(status_code=status_code, detail=str(e)) from e
+        if status_code == 409:
+            raise HTTPException(status_code=status_code, detail=_("Definition already exists")) from e
+        raise HTTPException(status_code=status_code, detail=_("Invalid definition request")) from e
     except IntegrityError as e:
         raise HTTPException(
             status_code=409,
-            detail=_(f"Agent with name '{body.name}' already exists"),
+            detail=_("Definition already exists"),
         ) from e
     except HTTPException:
         raise
@@ -329,7 +331,7 @@ async def update_definition(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=_("Invalid definition request")) from e
     except Exception as e:
         logger.error(
             "Error updating definition: %s",
@@ -414,7 +416,7 @@ async def set_definition_enabled(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=_("Invalid definition request")) from e
     except Exception as e:
         logger.error(
             "Error updating definition: %s",

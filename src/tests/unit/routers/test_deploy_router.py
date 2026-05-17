@@ -1,6 +1,7 @@
 """Unit tests for deploy route tenant authorization."""
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -8,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.deploy_schemas import DeployCreate
+from src.infrastructure.adapters.primary.web.routers import deploy as deploy_router
 from src.infrastructure.adapters.primary.web.routers.deploy import (
     _require_deploy_tenant_access,
     _require_instance_tenant_access,
@@ -189,3 +191,126 @@ class TestDeployRouterAuthorization:
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+
+
+class _FailingDeployService:
+    async def create_deploy(self, **_kwargs: object) -> object:
+        raise ValueError("Instance instance-secret not found")
+
+    async def get_latest_deploy(self, **_kwargs: object) -> object | None:
+        return None
+
+    async def get_deploy(self, **_kwargs: object) -> object | None:
+        return None
+
+    async def mark_deploy_success(self, **_kwargs: object) -> object:
+        raise ValueError("Deploy record deploy-secret not found")
+
+    async def mark_deploy_failed(self, **_kwargs: object) -> object:
+        raise ValueError("Instance instance-secret not found")
+
+    async def cancel_deploy(self, **_kwargs: object) -> object:
+        raise ValueError("Deploy deploy-secret is already terminal")
+
+
+class _FailingContainer:
+    def __init__(self) -> None:
+        self.service = _FailingDeployService()
+        self.redis_client = SimpleNamespace()
+
+    def deploy_service(self) -> _FailingDeployService:
+        return self.service
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("call_name", "call_args", "expected_status", "expected_detail"),
+    [
+        (
+            "create_deploy",
+            {
+                "data": DeployCreate(instance_id="instance-secret", action="create"),
+            },
+            status.HTTP_400_BAD_REQUEST,
+            "Deploy operation failed",
+        ),
+        (
+            "get_latest_deploy",
+            {
+                "instance_id": "instance-secret",
+            },
+            status.HTTP_404_NOT_FOUND,
+            "Deploy not found",
+        ),
+        (
+            "get_deploy",
+            {
+                "deploy_id": "deploy-secret",
+            },
+            status.HTTP_404_NOT_FOUND,
+            "Deploy not found",
+        ),
+        (
+            "mark_deploy_success",
+            {
+                "deploy_id": "deploy-secret",
+                "data": deploy_router.DeploySuccessRequest(message="ok"),
+            },
+            status.HTTP_400_BAD_REQUEST,
+            "Deploy operation failed",
+        ),
+        (
+            "mark_deploy_failed",
+            {
+                "deploy_id": "deploy-secret",
+                "data": deploy_router.DeployFailedRequest(message="failed"),
+            },
+            status.HTTP_400_BAD_REQUEST,
+            "Deploy operation failed",
+        ),
+        (
+            "cancel_deploy",
+            {
+                "deploy_id": "deploy-secret",
+            },
+            status.HTTP_400_BAD_REQUEST,
+            "Deploy operation failed",
+        ),
+        (
+            "stream_deploy_progress",
+            {
+                "deploy_id": "deploy-secret",
+            },
+            status.HTTP_404_NOT_FOUND,
+            "Deploy not found",
+        ),
+    ],
+)
+async def test_deploy_routes_sanitize_missing_resource_errors(
+    call_name: str,
+    call_args: dict[str, object],
+    expected_status: int,
+    expected_detail: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def allow_instance_access(*_args: object, **_kwargs: object) -> str:
+        return "tenant-1"
+
+    async def allow_deploy_access(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(deploy_router, "_require_instance_tenant_access", allow_instance_access)
+    monkeypatch.setattr(deploy_router, "_require_deploy_tenant_access", allow_deploy_access)
+    monkeypatch.setattr(deploy_router, "get_container_with_db", lambda *_args: _FailingContainer())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await getattr(deploy_router, call_name)(
+            request=SimpleNamespace(),
+            current_user=SimpleNamespace(id="user-1", is_superuser=False),
+            db=SimpleNamespace(commit=AsyncMock()),
+            **call_args,
+        )
+
+    assert exc_info.value.status_code == expected_status
+    assert exc_info.value.detail == expected_detail
+    assert "secret" not in exc_info.value.detail

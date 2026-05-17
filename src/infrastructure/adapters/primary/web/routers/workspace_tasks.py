@@ -326,12 +326,18 @@ def _to_response(task: WorkspaceTask) -> WorkspaceTaskResponse:
 
 def _to_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PermissionError):
-        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
     if isinstance(exc, ValueError):
         message = str(exc)
         if "not found" in message.lower():
-            return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+            return HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_("Workspace task not found"),
+            )
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid workspace task request"),
+        )
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=_("Internal server error")
     )

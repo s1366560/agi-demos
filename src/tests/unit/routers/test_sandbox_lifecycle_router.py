@@ -2,12 +2,14 @@
 
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
 
 from src.infrastructure.adapters.primary.web.routers.sandbox import lifecycle as lifecycle_router
 from src.infrastructure.adapters.primary.web.routers.sandbox.schemas import CreateSandboxRequest
+from src.infrastructure.adapters.primary.web.routers.sandbox.utils import assert_caller_owns_sandbox
 
 
 async def _allow_project_access(**_kwargs: Any) -> None:
@@ -46,3 +48,64 @@ async def test_create_sandbox_sanitizes_internal_errors(
     assert exc_info.value.detail == "Failed to create sandbox"
     assert "internal" not in exc_info.value.detail
     assert "tenant-secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_sandboxes_invalid_status_is_sanitized() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await lifecycle_router.list_sandboxes(
+            status="secret-status",
+            current_user=SimpleNamespace(id="user-1", is_superuser=True),
+            adapter=SimpleNamespace(),
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert exc_info.value.detail == "Invalid sandbox status"
+    assert "secret-status" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_terminate_sandbox_missing_after_authorization_is_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def allow_sandbox_access(**_kwargs: Any) -> tuple[SimpleNamespace, str]:
+        return SimpleNamespace(id="sandbox-secret"), "project-1"
+
+    class Adapter:
+        async def terminate_sandbox(self, _sandbox_id: str) -> bool:
+            return False
+
+    monkeypatch.setattr(lifecycle_router, "assert_caller_owns_sandbox", allow_sandbox_access)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await lifecycle_router.terminate_sandbox(
+            sandbox_id="sandbox-secret",
+            current_user=SimpleNamespace(id="user-1", is_superuser=True),
+            adapter=Adapter(),
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.detail == "Sandbox not found"
+    assert "sandbox-secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_assert_caller_owns_sandbox_missing_sandbox_is_sanitized() -> None:
+    adapter = SimpleNamespace(get_sandbox=AsyncMock(return_value=None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await assert_caller_owns_sandbox(
+            sandbox_id="sandbox-secret",
+            user=SimpleNamespace(id="user-1", is_superuser=True),
+            db=SimpleNamespace(),
+            adapter=adapter,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.detail == "Sandbox not found"
+    assert "sandbox-secret" not in exc_info.value.detail

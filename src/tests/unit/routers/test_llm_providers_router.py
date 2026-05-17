@@ -210,7 +210,9 @@ class TestLLMProvidersRouterCreate:
     async def test_create_provider_validation_error(self, llm_client, mock_provider_service):
         """Test validation error when creating provider with bad data."""
         # When the service raises ValueError, we get 400
-        mock_provider_service.create_provider.side_effect = ValueError("Duplicate provider name")
+        mock_provider_service.create_provider.side_effect = ValueError(
+            "Duplicate provider name: secret-provider"
+        )
 
         response = llm_client.post(
             "/api/v1/llm-providers/",
@@ -224,6 +226,8 @@ class TestLLMProvidersRouterCreate:
 
         # Should get 400 due to ValueError in service
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Invalid provider request"
+        assert "secret-provider" not in response.text
 
 
 @pytest.mark.unit
@@ -484,6 +488,31 @@ class TestLLMProvidersRouterHealthCheck:
         assert response.json()["status"] == "healthy"
 
     @pytest.mark.asyncio
+    async def test_test_provider_connection_validation_error(
+        self,
+        llm_client,
+        mock_provider_service,
+    ):
+        """Test connection errors are not exposed verbatim."""
+        mock_provider_service.test_provider_connection.side_effect = ValueError(
+            "Provider base_url contains internal-hostname"
+        )
+
+        response = llm_client.post(
+            "/api/v1/llm-providers/test-connection",
+            json={
+                "name": "test-openai",
+                "provider_type": "openai",
+                "api_key": "sk-test-key-12345",
+                "llm_model": "gpt-4o",
+            },
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Provider connection test failed"
+        assert "internal-hostname" not in response.text
+
+    @pytest.mark.asyncio
     async def test_check_provider_health_success(self, llm_client, mock_provider_service):
         """Test triggering a health check."""
         provider_id = str(uuid4())
@@ -508,13 +537,17 @@ class TestLLMProvidersRouterHealthCheck:
     @pytest.mark.asyncio
     async def test_check_provider_health_not_found(self, llm_client, mock_provider_service):
         """Test health check for non-existent provider."""
-        provider_id = str(uuid4())
+        provider_id = uuid4()
 
-        mock_provider_service.check_provider_health.side_effect = ValueError("Provider not found")
+        mock_provider_service.check_provider_health.side_effect = ValueError(
+            f"Provider not found: {provider_id}"
+        )
 
         response = llm_client.post(f"/api/v1/llm-providers/{provider_id}/health-check")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Provider not found"
+        assert str(provider_id) not in response.text
 
 
 @pytest.mark.unit
@@ -585,7 +618,7 @@ class TestLLMProvidersRouterTenantAssignment:
         tenant_id = "tenant-123"
 
         mock_provider_service.assign_provider_to_tenant.side_effect = ValueError(
-            "Provider not found"
+            f"Provider not found: {provider_id}"
         )
 
         response = llm_client.post(
@@ -593,6 +626,9 @@ class TestLLMProvidersRouterTenantAssignment:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Provider assignment failed"
+        assert provider_id not in response.text
+        assert tenant_id not in response.text
 
     @pytest.mark.asyncio
     async def test_unassign_provider_from_tenant_success(self, llm_client, mock_provider_service):
@@ -654,12 +690,14 @@ class TestLLMProvidersRouterTenantAssignment:
         tenant_id = "tenant-123"
 
         mock_provider_service.resolve_provider_for_tenant.side_effect = NoActiveProviderError(
-            "No active provider found"
+            f"No active provider found for tenant {tenant_id}"
         )
 
         response = llm_client.get(f"/api/v1/llm-providers/tenants/{tenant_id}/provider")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "No active provider configured"
+        assert tenant_id not in response.text
 
     @pytest.mark.asyncio
     async def test_get_tenant_provider_for_other_tenant_forbidden(

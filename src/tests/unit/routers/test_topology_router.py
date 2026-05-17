@@ -218,7 +218,8 @@ class TestTopologyRouter:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "permission" in response.json()["detail"].lower()
+        assert response.json()["detail"] == "Access denied"
+        assert "permission" not in response.text.lower()
 
     def test_update_edge_workspace_validation_failure(
         self,
@@ -235,4 +236,91 @@ class TestTopologyRouter:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "same workspace" in response.json()["detail"].lower()
+        assert response.json()["detail"] == "Invalid topology request"
+        assert "same workspace" not in response.text.lower()
+
+    def test_create_node_value_error_is_sanitized(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.create_node.side_effect = ValueError(
+            "Reserved center coordinate in workspace ws-secret"
+        )
+
+        response = topology_client.post(
+            "/api/v1/workspaces/ws-1/topology/nodes",
+            json={"node_type": "note", "title": "My Node"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Invalid topology request"
+        assert "ws-secret" not in response.text
+
+    def test_list_nodes_value_error_is_sanitized(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.list_nodes.side_effect = ValueError("workspace ws-secret not found")
+
+        response = topology_client.get("/api/v1/workspaces/ws-1/topology/nodes")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Topology not found"
+        assert "ws-secret" not in response.text
+
+    def test_get_node_missing_id_is_sanitized(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.get_node.side_effect = ValueError("node node-secret not found")
+
+        response = topology_client.get("/api/v1/workspaces/ws-1/topology/nodes/node-secret")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Topology node not found"
+        assert "node-secret" not in response.text
+
+    def test_update_node_non_not_found_value_error_is_sanitized(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.update_node.side_effect = ValueError("node secret payload invalid")
+
+        response = topology_client.patch(
+            "/api/v1/workspaces/ws-1/topology/nodes/node-1",
+            json={"title": "Updated"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Invalid topology request"
+        assert "secret" not in response.text
+
+    def test_get_edge_missing_id_is_sanitized(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.get_edge.side_effect = ValueError("edge edge-secret not found")
+
+        response = topology_client.get("/api/v1/workspaces/ws-1/topology/edges/edge-secret")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Topology edge not found"
+        assert "edge-secret" not in response.text
+
+    def test_delete_edge_missing_id_is_sanitized(
+        self,
+        topology_client: TestClient,
+        mock_topology_service: AsyncMock,
+    ) -> None:
+        mock_topology_service.delete_edge.side_effect = ValueError("edge edge-secret not found")
+
+        response = topology_client.delete("/api/v1/workspaces/ws-1/topology/edges/edge-secret")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Topology edge not found"
+        assert "edge-secret" not in response.text

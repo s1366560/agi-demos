@@ -139,5 +139,5 @@ async def short_term_recall(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Short-term recall failed: {e}")
-        raise HTTPException(status_code=500, detail=_(f"Short-term recall failed: {e!s}")) from e
+        logger.exception("Short-term recall failed")
+        raise HTTPException(status_code=500, detail=_("Short-term recall failed")) from e

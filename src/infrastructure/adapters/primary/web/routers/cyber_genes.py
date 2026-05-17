@@ -48,7 +48,7 @@ def _validate_config_json(config_json: str | None) -> None:
     except json.JSONDecodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=_(f"config_json is not valid JSON: {exc.msg}"),
+            detail=_("config_json is not valid JSON"),
         ) from exc
     if not isinstance(parsed, dict):
         raise HTTPException(

@@ -491,6 +491,38 @@ class TestUpdateTenantAgentConfig:
 
         assert exc_info.value.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_update_value_errors_are_sanitized(self) -> None:
+        repo = MagicMock()
+        repo.get_by_tenant = AsyncMock(return_value=None)
+        repo.save = AsyncMock(side_effect=ValueError("secret config validation"))
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.require_tenant_access",
+                AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.SqlTenantAgentConfigRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.config.invalidate_agent_session"
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await update_tenant_agent_config(
+                UpdateTenantAgentConfigRequest(llm_model="openai/gpt-5.4"),
+                request=MagicMock(),
+                tenant_id="tenant-1",
+                current_user=_make_user(),
+                db=MagicMock(),
+            )
+
+        assert exc_info.value.status_code == 422
+        assert exc_info.value.detail == "Invalid tenant agent config"
+        assert "secret" not in exc_info.value.detail
+
 
 @pytest.mark.unit
 class TestGetTenantAgentConfig:

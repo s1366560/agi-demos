@@ -106,7 +106,7 @@ async def call_mcp_tool(
     if not server:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"MCP server not found: {request_data.server_id}"),
+            detail=_("MCP server not found"),
         )
 
     if server.tenant_id != tenant_id:
@@ -118,7 +118,7 @@ async def call_mcp_tool(
     if not server.enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_(f"MCP server '{server.name}' is disabled"),
+            detail=_("MCP server is disabled"),
         )
 
     try:
@@ -131,7 +131,7 @@ async def call_mcp_tool(
         if not server.config:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_(f"MCP server '{server.name}' has no transport configuration"),
+                detail=_("MCP server has no transport configuration"),
             )
 
         async with MCPClient(

@@ -206,9 +206,7 @@ async def list_messages(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_(
-                    f"Invalid status: {filter_status}. Valid values: {[s.value for s in DLQMessageStatus]}"
-                ),
+                detail=_("Invalid DLQ status"),
             ) from None
 
     messages = await dlq.get_messages(
@@ -250,7 +248,7 @@ async def get_message(
     if message is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"DLQ message not found: {message_id}"),
+            detail=_("DLQ message not found"),
         )
 
     return DLQMessageResponse.from_domain(message)
@@ -276,7 +274,7 @@ async def retry_message(
     except DLQMessageNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"DLQ message not found: {message_id}"),
+            detail=_("DLQ message not found"),
         ) from None
 
 
@@ -324,7 +322,7 @@ async def discard_message(
     except DLQMessageNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"DLQ message not found: {message_id}"),
+            detail=_("DLQ message not found"),
         ) from None
 
 

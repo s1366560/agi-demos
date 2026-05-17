@@ -84,6 +84,30 @@ class TestBlackboardRouter:
         assert exc.detail == "Internal server error"
         assert "internal" not in exc.detail
 
+    def test_map_error_sanitizes_permission_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import blackboard
+
+        exc = blackboard._map_error(PermissionError("blackboard secret denied"))
+
+        assert exc.status_code == status.HTTP_403_FORBIDDEN
+        assert exc.detail == "Access denied"
+
+    def test_map_error_sanitizes_not_found_value_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import blackboard
+
+        exc = blackboard._map_error(ValueError("blackboard item item-secret not found"))
+
+        assert exc.status_code == status.HTTP_404_NOT_FOUND
+        assert exc.detail == "Blackboard item not found"
+
+    def test_map_error_sanitizes_bad_request_value_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import blackboard
+
+        exc = blackboard._map_error(ValueError("secret blackboard payload invalid"))
+
+        assert exc.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc.detail == "Invalid blackboard request"
+
     @pytest.mark.asyncio
     async def test_create_and_list_posts(self, test_db, client, test_user, monkeypatch):
         publish_mock = AsyncMock()

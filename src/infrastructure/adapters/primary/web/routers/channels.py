@@ -481,8 +481,8 @@ def _apply_secret_sentinel(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
-                    "message": "Secret sentinel is only valid for existing configs",
-                    "errors": [{"path": path, "message": "No existing secret value found"}],
+                    "message": _("Invalid channel secret placeholder"),
+                    "errors": [{"path": "$", "message": _("Existing secret value not found")}],
                 },
             )
         _set_path_value(normalized, path, existing_value)
@@ -558,12 +558,12 @@ def _validate_plugin_settings_schema(
     formatted_errors = []
     for error in errors:
         path = ".".join(str(segment) for segment in error.path) or "$"
-        formatted_errors.append({"path": path, "message": error.message})
+        formatted_errors.append({"path": path, "message": _("Invalid channel setting")})
 
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={
-            "message": f"Invalid channel settings for channel_type={channel_type}",
+            "message": _("Invalid channel settings"),
             "errors": formatted_errors,
         },
     )
@@ -683,14 +683,7 @@ async def _ensure_channel_plugin_enabled_for_project(
     if plugin_record and not bool(plugin_record.get("enabled", True)):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(
-                "Plugin '{plugin_name}' is disabled for tenant '{tenant_id}'. "
-                "Enable it before configuring channel_type '{channel_type}'."
-            ).format(
-                plugin_name=plugin_name,
-                tenant_id=tenant_id,
-                channel_type=channel_type,
-            ),
+            detail=_("Plugin is disabled for this tenant"),
         )
 
 
@@ -817,9 +810,7 @@ async def get_tenant_channel_plugin_schema(
     if metadata is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Channel type not found in plugin catalog: {channel_type}").format(
-                channel_type=channel_type
-            ),
+            detail=_("Channel type not found in plugin catalog"),
         )
 
     plugin_record = plugin_by_name.get(metadata.plugin_name, {})
@@ -856,7 +847,7 @@ async def install_tenant_plugin(
     control_plane = _build_plugin_control_plane()
     result = await control_plane.install_plugin(data.requirement)
     if not result.success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Plugin install failed"))
     return PluginActionResponse(
         success=True,
         message=result.message,
@@ -929,7 +920,10 @@ async def uninstall_tenant_plugin(
     control_plane = _build_plugin_control_plane()
     result = await control_plane.uninstall_plugin(plugin_name)
     if not result.success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Plugin uninstall failed"),
+        )
     return PluginActionResponse(
         success=True,
         message=result.message,
@@ -999,9 +993,7 @@ async def get_project_channel_plugin_schema(
     if metadata is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Channel type not found in plugin catalog: {channel_type}").format(
-                channel_type=channel_type
-            ),
+            detail=_("Channel type not found in plugin catalog"),
         )
 
     plugin_record = plugin_by_name.get(metadata.plugin_name, {})
@@ -1038,7 +1030,7 @@ async def install_project_plugin(
     control_plane = _build_plugin_control_plane()
     result = await control_plane.install_plugin(data.requirement)
     if not result.success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_("Plugin install failed"))
     return PluginActionResponse(
         success=True,
         message=result.message,
@@ -1113,7 +1105,10 @@ async def uninstall_project_plugin(
     control_plane = _build_plugin_control_plane()
     result = await control_plane.uninstall_plugin(plugin_name)
     if not result.success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Plugin uninstall failed"),
+        )
     return PluginActionResponse(
         success=True,
         message=result.message,

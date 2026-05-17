@@ -75,6 +75,30 @@ class TestWorkspaceChatRouter:
         assert exc.detail == "Internal server error"
         assert "internal" not in exc.detail
 
+    def test_map_error_sanitizes_permission_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import workspace_chat
+
+        exc = workspace_chat._map_error(PermissionError("workspace chat secret denied"))
+
+        assert exc.status_code == status.HTTP_403_FORBIDDEN
+        assert exc.detail == "Access denied"
+
+    def test_map_error_sanitizes_not_found_value_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import workspace_chat
+
+        exc = workspace_chat._map_error(ValueError("message msg-secret not found"))
+
+        assert exc.status_code == status.HTTP_404_NOT_FOUND
+        assert exc.detail == "Workspace message not found"
+
+    def test_map_error_sanitizes_bad_request_value_errors(self):
+        from src.infrastructure.adapters.primary.web.routers import workspace_chat
+
+        exc = workspace_chat._map_error(ValueError("secret message payload invalid"))
+
+        assert exc.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc.detail == "Invalid workspace chat request"
+
     @pytest.mark.asyncio
     async def test_send_message_publishes_hosted_sensing_contract(
         self, test_db, client, test_user, monkeypatch

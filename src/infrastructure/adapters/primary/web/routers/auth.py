@@ -197,9 +197,7 @@ async def oauth_callback(provider: str, _request: OAuthCallbackRequest) -> None:
     """Return an explicit unsupported response until OAuth providers are configured."""
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=_("OAuth login is not configured for provider: {provider}").format(
-            provider=provider
-        ),
+        detail=_("OAuth login is not configured"),
     )
 
 
@@ -489,7 +487,7 @@ async def device_code_approve(
         raise HTTPException(status_code=410, detail=_("device code expired"))
     session = _json.loads(raw)
     if session.get("status") != "pending":
-        raise HTTPException(status_code=409, detail=_(f"already {session.get('status')}"))
+        raise HTTPException(status_code=409, detail=_("Device code has already been handled"))
 
     # Determine permissions like /auth/token does.
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
@@ -537,7 +535,7 @@ async def device_code_token(payload: dict[str, Any]) -> dict[str, Any]:
             detail={"error": "authorization_pending", "interval": _DEVICE_CODE_INTERVAL},
         )
     if status_val != "approved":
-        raise HTTPException(status_code=410, detail=status_val)
+        raise HTTPException(status_code=410, detail=_("device code was not approved"))
 
     access_token = session.get("access_token")
     if not access_token:

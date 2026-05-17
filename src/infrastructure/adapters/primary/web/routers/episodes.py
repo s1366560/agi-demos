@@ -314,10 +314,10 @@ async def create_episode(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to create episode: {e}")
+        logger.exception("Failed to create episode")
         raise HTTPException(
             status_code=500,
-            detail=_("Failed to create episode: {error}").format(error=str(e)),
+            detail=_("Failed to create episode"),
         ) from e
 
 
@@ -567,7 +567,8 @@ async def health_check(
         await graphiti_client.driver.execute_query("RETURN 1 as test")
         return {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
     except Exception as e:
+        logger.exception("Episode service health check failed")
         raise HTTPException(
             status_code=503,
-            detail=_("Service unhealthy: {error}").format(error=str(e)),
+            detail=_("Service unhealthy"),
         ) from e

@@ -191,6 +191,8 @@ class TestWorkspacesRouter:
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()["detail"] == "Workspace not found"
+        assert "ws-404" not in response.text
 
     def test_get_workspace_sanitizes_internal_errors(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
@@ -220,6 +222,8 @@ class TestWorkspacesRouter:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Access denied"
+        assert "permission" not in response.text.lower()
         assert workspaces_client.mock_db.rollback.await_count == 1  # type: ignore[attr-defined]
 
     def test_add_member_maps_bad_request(
@@ -233,6 +237,8 @@ class TestWorkspacesRouter:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Invalid workspace request"
+        assert "already" not in response.text.lower()
 
     def test_list_agents_success(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock

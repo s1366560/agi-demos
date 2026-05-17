@@ -27,6 +27,27 @@ class EnabledServerRepository:
         )
 
 
+class MissingServerRepository:
+    async def get_by_id(self, _server_id: str) -> None:
+        return None
+
+
+class DisabledServerRepository:
+    async def get_by_id(self, _server_id: str) -> MCPServer:
+        server = await EnabledServerRepository().get_by_id(_server_id)
+        server.enabled = False
+        server.name = "secret-server"
+        return server
+
+
+class UnconfiguredServerRepository:
+    async def get_by_id(self, _server_id: str) -> MCPServer:
+        server = await EnabledServerRepository().get_by_id(_server_id)
+        server.config = None
+        server.name = "secret-server"
+        return server
+
+
 class FailingMCPClient:
     def __init__(self, **_kwargs: object) -> None:
         pass
@@ -70,3 +91,39 @@ async def test_call_mcp_tool_sanitizes_client_errors(
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Failed to call MCP tool"
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("repo", "expected_status", "expected_detail"),
+    [
+        (MissingServerRepository(), 404, "MCP server not found"),
+        (DisabledServerRepository(), 400, "MCP server is disabled"),
+        (UnconfiguredServerRepository(), 400, "MCP server has no transport configuration"),
+    ],
+)
+async def test_call_mcp_tool_sanitizes_server_lookup_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    repo: object,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
+
+    monkeypatch.setattr(repo_module, "SqlMCPServerRepository", lambda _db: repo)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await tools_router.call_mcp_tool(
+            request_data=MCPToolCallRequest(
+                server_id="server-secret",
+                tool_name="tool-1",
+                arguments={},
+            ),
+            db=SimpleNamespace(),
+            tenant_id="tenant-1",
+        )
+
+    assert exc_info.value.status_code == expected_status
+    assert exc_info.value.detail == expected_detail
+    assert "secret" not in exc_info.value.detail

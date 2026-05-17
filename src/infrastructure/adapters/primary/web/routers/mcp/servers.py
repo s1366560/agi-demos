@@ -50,6 +50,27 @@ MCP_LOGGING_LEVELS = {
 }
 
 
+def _mcp_server_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("MCP server not found"),
+    )
+
+
+def _mcp_access_denied_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_("Access denied"),
+    )
+
+
+def _mcp_server_action_failed_error(status_code: int = status.HTTP_400_BAD_REQUEST) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail=_("MCP server operation failed"),
+    )
+
+
 async def _get_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
     """Get unified MCP runtime service from DI container (H2 fix)."""
     container = request.app.state.container.with_db(db)
@@ -91,16 +112,13 @@ async def create_mcp_server(
 
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
+        raise _mcp_access_denied_error() from e
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to create MCP server: {e}")
+        logger.exception("Failed to create MCP server")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Failed to create MCP server: {error}").format(error=str(e)),
+            detail=_("Failed to create MCP server"),
         ) from e
 
 
@@ -146,16 +164,10 @@ async def get_mcp_server(
     server = await repository.get_by_id(server_id)
 
     if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
-        )
+        raise _mcp_server_not_found_error()
 
     if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied"),
-        )
+        raise _mcp_access_denied_error()
 
     return MCPServerResponse.model_validate(server)
 
@@ -195,22 +207,16 @@ async def update_mcp_server(
 
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _mcp_server_not_found_error() from e
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
+        raise _mcp_access_denied_error() from e
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to update MCP server: {e}")
+        logger.exception("Failed to update MCP server")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Failed to update MCP server: {error}").format(error=str(e)),
+            detail=_("Failed to update MCP server"),
         ) from e
 
 
@@ -230,16 +236,10 @@ async def delete_mcp_server(
 
     server = await repository.get_by_id(server_id)
     if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
-        )
+        raise _mcp_server_not_found_error()
 
     if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied"),
-        )
+        raise _mcp_access_denied_error()
 
     try:
         runtime = await _get_runtime_service(request, db)
@@ -256,22 +256,16 @@ async def delete_mcp_server(
 
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _mcp_server_not_found_error() from e
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
+        raise _mcp_access_denied_error() from e
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to delete MCP server: {e}")
+        logger.exception("Failed to delete MCP server")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Failed to delete MCP server: {error}").format(error=str(e)),
+            detail=_("Failed to delete MCP server"),
         ) from e
 
 
@@ -302,26 +296,18 @@ async def sync_mcp_server_tools(
     except ValueError as e:
         await db.rollback()
         message = str(e)
-        raise HTTPException(
-            status_code=(
-                status.HTTP_404_NOT_FOUND
-                if "not found" in message.lower()
-                else status.HTTP_400_BAD_REQUEST
-            ),
-            detail=message,
-        ) from e
+        if "not found" in message.lower():
+            raise _mcp_server_not_found_error() from e
+        raise _mcp_server_action_failed_error() from e
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
+        raise _mcp_access_denied_error() from e
     except Exception as e:
         await db.rollback()
-        logger.error(f"Failed to sync MCP server tools: {e}")
+        logger.exception("Failed to sync MCP server tools")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Failed to sync MCP server tools: {error}").format(error=str(e)),
+            detail=_("Failed to sync MCP server tools"),
         ) from e
 
 
@@ -361,27 +347,19 @@ async def test_mcp_server_connection(
     except ValueError as e:
         await db.rollback()
         message = str(e)
-        raise HTTPException(
-            status_code=(
-                status.HTTP_404_NOT_FOUND
-                if "not found" in message.lower()
-                else status.HTTP_400_BAD_REQUEST
-            ),
-            detail=message,
-        ) from e
+        if "not found" in message.lower():
+            raise _mcp_server_not_found_error() from e
+        raise _mcp_server_action_failed_error() from e
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
-    except Exception as e:
+        raise _mcp_access_denied_error() from e
+    except Exception:
         await db.rollback()
-        logger.error(f"Failed to test MCP server connection: {e}")
+        logger.exception("Failed to test MCP server connection")
         return MCPServerTestResult(
             success=False,
-            message=f"Connection failed: {e!s}",
-            errors=[str(e)],
+            message=_("Connection failed"),
+            errors=[_("Connection failed")],
         )
 
 
@@ -414,10 +392,7 @@ async def reconcile_mcp_project(
         )
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
+        raise _mcp_access_denied_error() from e
     except Exception as e:
         await db.rollback()
         logger.exception("Failed to reconcile MCP project %s", project_id)
@@ -496,15 +471,9 @@ async def get_mcp_server_health(
     repository = SqlMCPServerRepository(db)
     server = await repository.get_by_id(server_id)
     if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
-        )
+        raise _mcp_server_not_found_error()
     if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied"),
-        )
+        raise _mcp_access_denied_error()
 
     return _compute_server_health(server)
 
@@ -526,9 +495,9 @@ async def list_mcp_server_prompts(
         runtime = await _get_runtime_service(request, db)
         prompts = await runtime.list_server_prompts(server_id, tenant_id)
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
+        raise _mcp_access_denied_error() from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise _mcp_server_not_found_error() from exc
     return {"prompts": prompts}
 
 
@@ -546,16 +515,16 @@ async def set_mcp_server_log_level(
     if level not in MCP_LOGGING_LEVELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Invalid MCP logging level: {level}").format(level=level),
+            detail=_("Invalid MCP logging level"),
         )
 
     try:
         runtime = await _get_runtime_service(request, db)
         success = await runtime.set_server_log_level(server_id, tenant_id, level)
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
+        raise _mcp_access_denied_error() from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise _mcp_server_not_found_error() from exc
 
     await db.commit()
     if not success:
@@ -598,15 +567,9 @@ async def _get_mcp_server_for_tenant(
     repository = SqlMCPServerRepository(db)
     server = await repository.get_by_id(server_id)
     if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("MCP server not found: {server_id}").format(server_id=server_id),
-        )
+        raise _mcp_server_not_found_error()
     if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied"),
-        )
+        raise _mcp_access_denied_error()
     return server
 
 

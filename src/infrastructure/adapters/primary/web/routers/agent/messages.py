@@ -828,7 +828,7 @@ async def get_conversation_execution(
         }
 
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from e
     except Exception as exc:
         logger.exception("Error getting conversation execution history")
         raise HTTPException(
@@ -1117,7 +1117,7 @@ async def get_execution_stats(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from e
     except Exception as exc:
         logger.exception("Error getting execution statistics")
         raise HTTPException(

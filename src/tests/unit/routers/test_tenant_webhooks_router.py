@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, Request, status
@@ -23,6 +25,9 @@ class FakeWebhookService:
         if self.webhook and self.webhook.id == webhook_id:
             return self.webhook
         return None
+
+    async def update_webhook(self, **_kwargs: object) -> Webhook:
+        raise ValueError("Webhook webhook-secret not found")
 
 
 @dataclass
@@ -133,3 +138,37 @@ class TestTenantWebhookAuthorization:
             )
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.unit
+async def test_update_webhook_sanitizes_not_found_value_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def allow_admin(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    service = FakeWebhookService(None)
+    monkeypatch.setattr(tenant_webhooks, "_require_webhook_tenant_admin", allow_admin)
+    monkeypatch.setattr(
+        tenant_webhooks,
+        "get_container_with_db",
+        lambda _request, _db: FakeContainer(service),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await tenant_webhooks.update_webhook(
+            webhook_id="webhook-secret",
+            body=tenant_webhooks.WebhookUpdateRequest(
+                name="Deploy",
+                url="https://example.com/hook",
+                events=["memory.created"],
+                is_active=True,
+            ),
+            request=SimpleNamespace(),
+            current_user=SimpleNamespace(id="user-1"),
+            db=SimpleNamespace(commit=AsyncMock()),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.detail == "Webhook not found"
+    assert "secret" not in exc_info.value.detail

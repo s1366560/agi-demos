@@ -372,9 +372,12 @@ async def project_objective_to_task(
             offset=0,
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Workspace task not found"),
+        ) from exc
 
     existing_task = await task_repo.find_root_by_objective_id(workspace_id, objective_id)
     if existing_task is not None:
@@ -403,7 +406,7 @@ async def project_objective_to_task(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            detail=_("Failed to project objective to task"),
         ) from exc
     try:
         await event_publisher.publish_pending_events(command_service.consume_pending_events())

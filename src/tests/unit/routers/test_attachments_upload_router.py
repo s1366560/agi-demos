@@ -13,11 +13,14 @@ from src.domain.ports.services.storage_service_port import PartUploadResult
 from src.infrastructure.adapters.primary.web.routers.attachments_upload import (
     CompleteUploadPart,
     CompleteUploadRequest,
+    InitiateUploadRequest,
     _get_authorized_attachment,
     _verify_project_access,
     complete_multipart_upload,
+    initiate_multipart_upload,
     list_attachments,
     upload_part,
+    upload_simple,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
 
@@ -89,6 +92,17 @@ class FakeAttachmentService:
         attachment = self._attachments[attachment_id]
         attachment.mark_uploaded()
         return attachment
+
+
+class FailingAttachmentService(FakeAttachmentService):
+    def __init__(self) -> None:
+        super().__init__([])
+
+    async def initiate_multipart_upload(self, **_kwargs: object) -> Attachment:
+        raise ValueError("internal multipart validation secret")
+
+    async def upload_simple(self, **_kwargs: object) -> Attachment:
+        raise ValueError("internal simple upload secret")
 
 
 @pytest.mark.unit
@@ -338,3 +352,52 @@ class TestAttachmentRouteAuthorization:
         assert response.status == AttachmentStatus.UPLOADED.value
         assert len(service.complete_calls) == 1
         assert [part.part_number for part in service.complete_calls[0][1]] == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_initiate_upload_sanitizes_service_value_errors(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        with pytest.raises(HTTPException) as exc_info:
+            await initiate_multipart_upload(
+                request=InitiateUploadRequest(
+                    conversation_id="conversation-1",
+                    project_id=test_project_db.id,
+                    filename="example.txt",
+                    mime_type="text/plain",
+                    size_bytes=12,
+                ),
+                current_user=test_user,
+                tenant_id=test_project_db.tenant_id,
+                db=test_db,
+                attachment_service=FailingAttachmentService(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.detail == "Invalid upload request"
+        assert "internal" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_simple_upload_sanitizes_service_value_errors(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        with pytest.raises(HTTPException) as exc_info:
+            await upload_simple(
+                conversation_id="conversation-1",
+                project_id=test_project_db.id,
+                purpose="both",
+                file=UploadFile(BytesIO(b"file-data"), filename="example.txt"),
+                current_user=test_user,
+                tenant_id=test_project_db.tenant_id,
+                db=test_db,
+                attachment_service=FailingAttachmentService(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.detail == "Invalid upload request"
+        assert "internal" not in exc_info.value.detail

@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.infrastructure.adapters.primary.web.routers.agent import tools as tools_router
+from src.infrastructure.adapters.primary.web.routers.agent.schemas import ToolPolicyDebugRequest
 
 
 @pytest.mark.unit
@@ -93,3 +94,20 @@ async def test_get_tool_composition_sanitizes_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "Failed to get tool composition"
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_debug_tool_policy_sanitizes_invalid_sandbox_scope() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await tools_router.debug_tool_policy(
+            body=ToolPolicyDebugRequest(
+                tool_names=["bash"],
+                sandbox_scope="secret-scope",
+            ),
+            current_user=SimpleNamespace(id="user-1"),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Invalid sandbox scope"
+    assert "secret-scope" not in exc_info.value.detail

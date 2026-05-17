@@ -61,6 +61,20 @@ class DeployFailedRequest(BaseModel):
     message: str = Field(..., description="Failure message")
 
 
+def _deploy_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Deploy not found"),
+    )
+
+
+def _deploy_action_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Deploy operation failed"),
+    )
+
+
 async def _ensure_tenant_access(db: AsyncSession, current_user: DBUser, tenant_id: str) -> None:
     if current_user.is_superuser:
         return
@@ -158,10 +172,7 @@ async def create_deploy(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _deploy_action_error() from e
     except Exception as e:
         logger.exception("Error creating deploy")
         raise HTTPException(status_code=500, detail=_("Internal server error")) from e
@@ -217,10 +228,7 @@ async def get_latest_deploy(
         service = container.deploy_service()
         result = await service.get_latest_deploy(instance_id=instance_id)
         if result is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=_(f"No deploys found for instance {instance_id}"),
-            )
+            raise _deploy_not_found_error()
         return DeployResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
@@ -243,10 +251,7 @@ async def get_deploy(
         service = container.deploy_service()
         result = await service.get_deploy(deploy_id=deploy_id)
         if result is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=_(f"Deploy {deploy_id} not found"),
-            )
+            raise _deploy_not_found_error()
         return DeployResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
@@ -280,10 +285,7 @@ async def mark_deploy_success(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _deploy_action_error() from e
     except Exception as e:
         logger.exception("Error marking deploy success")
         raise HTTPException(status_code=500, detail=_("Internal server error")) from e
@@ -314,10 +316,7 @@ async def mark_deploy_failed(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _deploy_action_error() from e
     except Exception as e:
         logger.exception("Error marking deploy failed")
         raise HTTPException(status_code=500, detail=_("Internal server error")) from e
@@ -344,10 +343,7 @@ async def cancel_deploy(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _deploy_action_error() from e
     except Exception as e:
         logger.exception("Error cancelling deploy")
         raise HTTPException(status_code=500, detail=_("Internal server error")) from e
@@ -366,10 +362,7 @@ async def stream_deploy_progress(
 
     record = await service.get_deploy(deploy_id=deploy_id)
     if record is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Deploy {deploy_id} not found"),
-        )
+        raise _deploy_not_found_error()
     await _require_deploy_tenant_access(db, current_user, deploy_id)
 
     rc: Any = container.redis_client

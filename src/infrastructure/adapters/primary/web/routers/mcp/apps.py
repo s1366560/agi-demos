@@ -121,6 +121,14 @@ def _validate_tenant(app: MCPApp, tenant_id: str) -> None:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
 
 
+def _mcp_app_not_found_error() -> HTTPException:
+    return HTTPException(status_code=404, detail=_("MCP App not found"))
+
+
+def _mcp_app_forbidden_error() -> HTTPException:
+    return HTTPException(status_code=403, detail=_("Access denied"))
+
+
 # === Endpoints ===
 
 
@@ -376,10 +384,10 @@ async def delete_mcp_app(
         return {"message": "MCP App deleted", "id": app_id}
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise _mcp_app_not_found_error() from e
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=403, detail=str(e)) from e
+        raise _mcp_app_forbidden_error() from e
     except Exception as e:
         await db.rollback()
         logger.exception("Delete app failed: app=%s", app_id)
@@ -421,10 +429,10 @@ async def refresh_mcp_app_resource(
         )
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise _mcp_app_not_found_error() from e
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=403, detail=str(e)) from e
+        raise _mcp_app_forbidden_error() from e
     except Exception as e:
         await db.rollback()
         logger.exception("Resource refresh failed: app=%s", app_id)
@@ -521,17 +529,15 @@ async def _retry_resource_after_reinstall(
                 transport_config=transport_config,
             )
             return await read_fn()
-        raise HTTPException(status_code=404, detail=_(f"Resource not found: {body.uri}"))
+        raise HTTPException(status_code=404, detail=_("Resource not found"))
     except HTTPException:
         raise
     except TimeoutError:
         logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
-        raise HTTPException(status_code=404, detail=_(f"Resource not found: {body.uri}")) from None
+        raise HTTPException(status_code=404, detail=_("Resource not found")) from None
     except Exception as reinstall_err:
         logger.warning("resources/read reinstall failed for '%s': %s", server_name, reinstall_err)
-        raise HTTPException(
-            status_code=404, detail=_(f"Resource not found: {body.uri}")
-        ) from reinstall_err
+        raise HTTPException(status_code=404, detail=_("Resource not found")) from reinstall_err
 
 
 def _extract_html_from_result(result: Any, uri: str) -> str:
@@ -543,7 +549,7 @@ def _extract_html_from_result(result: Any, uri: str) -> str:
                 error_text = item.get("text", "")
                 break
         logger.warning("resources/read proxy error: %s", error_text)
-        raise HTTPException(status_code=404, detail=_(f"Resource not found: {uri}"))
+        raise HTTPException(status_code=404, detail=_("Resource not found"))
 
     html_content = None
     for item in result.content:
@@ -555,7 +561,7 @@ def _extract_html_from_result(result: Any, uri: str) -> str:
                 html_content = item.get("text", "")
 
     if not html_content:
-        raise HTTPException(status_code=404, detail=_(f"No content found for resource: {uri}"))
+        raise HTTPException(status_code=404, detail=_("Resource content not found"))
     return cast(str, html_content)
 
 
@@ -600,7 +606,7 @@ async def proxy_resource_read(
         if not server_name:
             raise HTTPException(
                 status_code=400,
-                detail=_(f"Cannot determine server name from URI: {body.uri}. Provide server_name parameter."),
+                detail=_("Cannot determine server name from URI"),
             )
 
         container = get_container_with_db(request, db)

@@ -75,7 +75,7 @@ async def _enforce_conversation_invariants(
         try:
             conversation.assert_autonomous_invariants(conversation.conversation_mode)
         except ConversationDomainError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise HTTPException(status_code=422, detail=_("Invalid conversation state")) from exc
 
     if conversation.workspace_id and conversation.participant_agents:
         validator = WorkspaceRosterValidator(
@@ -84,7 +84,7 @@ async def _enforce_conversation_invariants(
         try:
             await validator.assert_valid(conversation)
         except ParticipantNotPresentError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise HTTPException(status_code=422, detail=_("Invalid workspace roster")) from exc
 
 
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
@@ -130,7 +130,7 @@ async def create_conversation(
             exc_info=True,
             extra={"error_id": AGENT_CONVERSATION_CREATE_FAILED},
         )
-        raise HTTPException(status_code=400, detail=_(f"Invalid request: {e!s}")) from e
+        raise HTTPException(status_code=400, detail=_("Invalid request")) from e
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
@@ -489,10 +489,7 @@ async def update_conversation_mode(
                 except ValueError as exc:
                     raise HTTPException(
                         status_code=422,
-                        detail=(
-                            _(f"Invalid conversation_mode '{raw_mode}'. Must be one of: "
-                            f"{[m.value for m in ConversationMode]}")
-                        ),
+                        detail=_("Invalid conversation mode"),
                     ) from exc
 
         # Track G2 — workspace linkage fields. Both are explicitly-optional:
@@ -518,7 +515,7 @@ async def update_conversation_mode(
     except ValueError as e:
         await db.rollback()
         logger.warning(f"Invalid conversation mode update for {conversation_id}: {e}")
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise HTTPException(status_code=422, detail=_("Invalid conversation mode update")) from e
     except Exception as exc:
         await db.rollback()
         logger.exception("Error updating conversation mode")

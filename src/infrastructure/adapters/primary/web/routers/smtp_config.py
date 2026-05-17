@@ -133,10 +133,11 @@ async def test_smtp_config(
     try:
         await service.test_smtp(tenant_id, body.recipient_email)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=_("SMTP config not found")) from exc
     except Exception as exc:
+        logger.exception("SMTP test failed for tenant %s", tenant_id)
         raise HTTPException(
             status_code=400,
-            detail=_(f"SMTP test failed: {exc}"),
+            detail=_("SMTP test failed"),
         ) from exc
     return {"message": "Test email sent successfully"}

@@ -136,7 +136,7 @@ async def create_provider(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=_("Invalid provider request"),
         ) from e
 
 
@@ -534,7 +534,7 @@ async def test_provider_connection(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=_("Provider connection test failed"),
         ) from e
 
 
@@ -556,7 +556,7 @@ async def check_provider_health(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+            detail=_("Provider not found"),
         ) from e
 
 
@@ -635,7 +635,7 @@ async def assign_provider_to_tenant(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=_("Provider assignment failed"),
         ) from e
 
 
@@ -662,7 +662,7 @@ async def get_tenant_provider(
     except NoActiveProviderError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+            detail=_("No active provider configured"),
         ) from e
 
 

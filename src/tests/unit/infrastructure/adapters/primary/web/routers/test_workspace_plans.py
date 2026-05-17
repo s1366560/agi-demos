@@ -230,6 +230,27 @@ def test_map_error_sanitizes_internal_errors() -> None:
     assert "secret-host" not in str(exc.detail)
 
 
+def test_map_error_sanitizes_permission_errors() -> None:
+    exc = workspace_plans._map_error(PermissionError("workspace plan secret denied"))
+
+    assert exc.status_code == 403
+    assert exc.detail == "Access denied"
+
+
+def test_map_error_sanitizes_not_found_value_errors() -> None:
+    exc = workspace_plans._map_error(ValueError("workspace plan plan-secret not found"))
+
+    assert exc.status_code == 404
+    assert exc.detail == "Workspace plan not found"
+
+
+def test_map_error_sanitizes_bad_request_value_errors() -> None:
+    exc = workspace_plans._map_error(ValueError("secret workspace plan state invalid"))
+
+    assert exc.status_code == 400
+    assert exc.detail == "Invalid workspace plan request"
+
+
 def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> None:
     plan = _make_plan("workspace-plan-api")
     task = plan.nodes[PlanNodeId("task-api")]

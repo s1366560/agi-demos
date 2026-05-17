@@ -130,7 +130,7 @@ async def create_terminal_session(
     # Verify sandbox exists
     sandbox = await adapter.get_sandbox(sandbox_id)
     if not sandbox:
-        raise HTTPException(status_code=404, detail=_(f"Sandbox not found: {sandbox_id}"))
+        raise HTTPException(status_code=404, detail=_("Sandbox not found"))
 
     # Get container ID (sandbox_id is the container name)
     container_id = sandbox_id
@@ -145,7 +145,7 @@ async def create_terminal_session(
             rows=request.rows,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Terminal session not found")) from e
     except Exception as e:
         logger.error(f"Failed to create terminal session: {e}")
         raise HTTPException(status_code=500, detail=_("Failed to create terminal session")) from e
@@ -299,7 +299,7 @@ async def terminal_websocket(
     except Exception as e:
         logger.error(f"Terminal WebSocket error: {e}")
         with contextlib.suppress(Exception):
-            await websocket.send_json({"type": "error", "message": str(e)})
+            await websocket.send_json({"type": "error", "message": "Terminal WebSocket failed"})
     finally:
         if output_task is not None:
             output_task.cancel()
@@ -323,7 +323,8 @@ async def _resolve_terminal_session(
     try:
         return cast(TerminalSession | None, await proxy.create_session(container_id=sandbox_id))
     except ValueError as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
+        logger.warning("Failed to create terminal session for sandbox %s: %s", sandbox_id, e)
+        await websocket.send_json({"type": "error", "message": "Failed to create terminal session"})
         await websocket.close()
         return None
 

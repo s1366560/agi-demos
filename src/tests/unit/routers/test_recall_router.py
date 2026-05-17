@@ -89,3 +89,28 @@ class TestRecallRouter:
         assert "e.tenant_id = $tenant_id" in query
         assert kwargs["project_id"] == test_project_db.id
         assert kwargs["tenant_id"] == test_project_db.tenant_id
+
+    @pytest.mark.asyncio
+    async def test_short_term_recall_sanitizes_internal_errors(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        graphiti_client = Mock()
+        graphiti_client.driver = Mock()
+        graphiti_client.driver.execute_query = AsyncMock(
+            side_effect=RuntimeError("internal neo4j secret")
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await short_term_recall(
+                ShortTermRecallQuery(window_minutes=60, limit=10, project_id=test_project_db.id),
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Short-term recall failed"
+        assert "internal" not in exc_info.value.detail

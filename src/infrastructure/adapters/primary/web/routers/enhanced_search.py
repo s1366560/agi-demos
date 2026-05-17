@@ -74,14 +74,16 @@ async def _search_graph_service_for_scope(
     return results
 
 
-def _parse_optional_datetime(value: str | None, error_detail: str) -> datetime | None:
+def _parse_optional_datetime(value: str | None, field: str) -> datetime | None:
     if not value:
         return None
 
     try:
         return datetime.fromisoformat(value)
     except ValueError:
-        raise HTTPException(status_code=400, detail=error_detail) from None
+        if field == "since":
+            raise HTTPException(status_code=400, detail=_("Invalid 'since' datetime format")) from None
+        raise HTTPException(status_code=400, detail=_("Invalid 'until' datetime format")) from None
 
 
 async def _graph_project_filter(
@@ -447,8 +449,8 @@ async def search_temporal(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        parsed_since = _parse_optional_datetime(since, _("Invalid 'since' datetime format"))
-        parsed_until = _parse_optional_datetime(until, _("Invalid 'until' datetime format"))
+        parsed_since = _parse_optional_datetime(since, "since")
+        parsed_until = _parse_optional_datetime(until, "until")
 
         # Build temporal filter
         conditions, scope_params, scope_empty = await _graph_project_filter(
@@ -536,7 +538,7 @@ async def search_with_facets(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        parsed_since = _parse_optional_datetime(since, _("Invalid 'since' datetime format"))
+        parsed_since = _parse_optional_datetime(since, "since")
 
         # Build filters
         conditions, scope_params, scope_empty = await _graph_project_filter(

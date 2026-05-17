@@ -266,7 +266,7 @@ async def _assert_workspace_roster_projection(
     try:
         await validator.assert_valid(conversation)
     except ParticipantNotPresentError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=_("Invalid workspace roster")) from exc
 
 
 # === Endpoints ===
@@ -330,15 +330,15 @@ async def add_participant(
             role=data.role,
         )
     except ParticipantAlreadyPresentError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+        raise HTTPException(status_code=409, detail=_("Participant already present")) from e
     except ParticipantLimitError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+        raise HTTPException(status_code=409, detail=_("Participant limit exceeded")) from e
     except SenderNotInRosterError as e:
-        raise HTTPException(status_code=403, detail=str(e)) from e
+        raise HTTPException(status_code=403, detail=_("Access denied")) from e
     except CoordinatorRequiredError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise HTTPException(status_code=422, detail=_("Coordinator is required")) from e
     except ParticipantNotPresentError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
     await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
@@ -370,9 +370,9 @@ async def remove_participant(
     try:
         conversation.remove_participant(agent_id, actor_id=current_user.id, reason=reason)
     except ParticipantNotPresentError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Participant not found")) from e
     except CoordinatorRequiredError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise HTTPException(status_code=422, detail=_("Coordinator is required")) from e
 
     await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
@@ -407,7 +407,7 @@ async def set_coordinator(
     try:
         conversation.set_coordinator(data.agent_id)
     except ParticipantNotPresentError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
     await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)
@@ -437,7 +437,7 @@ async def set_focused_agent(
     try:
         conversation.set_focused_agent(data.agent_id)
     except ParticipantNotPresentError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+        raise HTTPException(status_code=404, detail=_("Participant not found")) from e
 
     await _assert_workspace_roster_projection(conversation, request, db)
     await conv_repo.save(conversation)

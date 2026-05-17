@@ -188,7 +188,7 @@ def _parse_purpose(purpose: str) -> AttachmentPurpose:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Invalid purpose: {purpose}. Must be one of: llm_context, sandbox_input, both"),
+            detail=_("Invalid attachment purpose"),
         ) from None
 
 
@@ -302,7 +302,7 @@ async def initiate_multipart_upload(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=_("Invalid upload request")) from e
     except HTTPException:
         raise
     except Exception as e:
@@ -475,7 +475,7 @@ async def upload_simple(
         return _attachment_to_response(attachment)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=_("Invalid upload request")) from e
     except HTTPException:
         raise
     except Exception as exc:
@@ -498,7 +498,7 @@ async def list_attachments(
     try:
         status_enum = AttachmentStatus(status) if status else None
     except ValueError:
-        raise HTTPException(status_code=400, detail=_(f"Invalid status: {status}")) from None
+        raise HTTPException(status_code=400, detail=_("Invalid attachment status")) from None
 
     attachments = await attachment_service.get_by_conversation(
         conversation_id=conversation_id,

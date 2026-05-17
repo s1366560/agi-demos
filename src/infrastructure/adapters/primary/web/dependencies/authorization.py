@@ -86,7 +86,7 @@ def require_permission(permission: str) -> Callable[..., Any]:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=_(f"Permission '{permission}' required"),
+                    detail=_("Permission required"),
                 )
 
             # Permission granted, proceed with the endpoint
@@ -155,7 +155,7 @@ def require_any_permission(*permissions: str) -> Callable[..., Any]:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=_(f"One of permissions {permissions} required"),
+                    detail=_("Required permission missing"),
                 )
 
             return cast(None, await func(*args, **kwargs))
@@ -222,7 +222,7 @@ def require_all_permissions(*permissions: str) -> Callable[..., Any]:
                 )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=_(f"Permissions required: {missing_permissions}"),
+                    detail=_("Required permissions missing"),
                 )
 
             return cast(None, await func(*args, **kwargs))
@@ -281,7 +281,7 @@ def require_role(role: str) -> Callable[..., Any]:
                     f"User {current_user.id} denied access to {func.__name__}: missing role {role}"
                 )
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail=_(f"Role '{role}' required")
+                    status_code=status.HTTP_403_FORBIDDEN, detail=_("Role required")
                 )
 
             return cast(None, await func(*args, **kwargs))

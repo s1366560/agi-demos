@@ -152,7 +152,7 @@ async def list_artifacts(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=_(f"Invalid category: {category}. Valid categories: {[c.value for c in ArtifactCategory]}"),
+                detail=_("Invalid artifact category"),
             ) from None
 
     # Get artifacts
@@ -265,7 +265,7 @@ async def download_artifact(
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Artifact not ready for download (status: {artifact.status.value})"),
+            detail=_("Artifact is not ready for download"),
         )
 
     # Refresh URL to ensure it's valid
@@ -299,7 +299,7 @@ async def refresh_artifact_url(
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Cannot refresh URL for artifact with status: {artifact.status.value}"),
+            detail=_("Artifact URL cannot be refreshed in its current status"),
         )
 
     url = await service.refresh_artifact_url(artifact_id)
@@ -333,7 +333,7 @@ async def update_artifact_content(
     if artifact.status != ArtifactStatus.READY:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Cannot update artifact with status: {artifact.status.value}"),
+            detail=_("Artifact cannot be updated in its current status"),
         )
 
     updated = await service.update_artifact_content(artifact_id, request.content)

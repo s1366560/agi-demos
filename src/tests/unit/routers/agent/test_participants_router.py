@@ -9,11 +9,25 @@ from fastapi import HTTPException
 
 from src.domain.model.agent.conversation.conversation import Conversation
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
+from src.domain.model.agent.conversation.errors import (
+    CoordinatorRequiredError,
+    ParticipantAlreadyPresentError,
+    ParticipantLimitError,
+    ParticipantNotPresentError,
+    SenderNotInRosterError,
+)
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.infrastructure.adapters.primary.web.routers.agent.participants import (
+    CoordinatorSetRequest,
+    FocusedAgentSetRequest,
+    ParticipantAddRequest,
+    ParticipantRemoveRequest,
     _assert_workspace_roster_projection,
     _roster_response,
+    add_participant,
     list_mention_candidates,
+    remove_participant,
+    set_coordinator,
     set_focused_agent,
 )
 
@@ -177,4 +191,127 @@ async def test_workspace_roster_projection_raises_http_422_for_unbound_participa
 
     assert isinstance(exc_info.value, HTTPException)
     assert exc_info.value.status_code == 422
-    assert "ghost" in str(exc_info.value.detail)
+    assert exc_info.value.detail == "Invalid workspace roster"
+    assert "ghost" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("domain_error", "expected_status", "expected_detail"),
+    [
+        (ParticipantAlreadyPresentError("secret already present"), 409, "Participant already present"),
+        (ParticipantLimitError("secret limit"), 409, "Participant limit exceeded"),
+        (SenderNotInRosterError("secret sender"), 403, "Access denied"),
+        (CoordinatorRequiredError("secret coordinator"), 422, "Coordinator is required"),
+        (ParticipantNotPresentError("secret participant"), 404, "Participant not found"),
+    ],
+)
+async def test_add_participant_domain_errors_are_sanitized(
+    domain_error: Exception,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    conversation = _conversation()
+    conversation.add_participant = MagicMock(side_effect=domain_error)
+    project = SimpleNamespace(owner_id="user-1", agent_conversation_mode="multi_agent_shared")
+    db = MagicMock()
+    db.commit = AsyncMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await add_participant(
+            conversation_id="conv-1",
+            data=ParticipantAddRequest(agent_id="secret-agent"),
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == expected_status
+    assert exc_info.value.detail == expected_detail
+    assert "secret" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("domain_error", "expected_status", "expected_detail"),
+    [
+        (ParticipantNotPresentError("secret participant"), 404, "Participant not found"),
+        (CoordinatorRequiredError("secret coordinator"), 422, "Coordinator is required"),
+    ],
+)
+async def test_remove_participant_domain_errors_are_sanitized(
+    domain_error: Exception,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    conversation = _conversation()
+    conversation.remove_participant = MagicMock(side_effect=domain_error)
+    project = SimpleNamespace(owner_id="user-1", agent_conversation_mode="multi_agent_shared")
+    db = MagicMock()
+    db.commit = AsyncMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await remove_participant(
+            conversation_id="conv-1",
+            agent_id="secret-agent",
+            data=ParticipantRemoveRequest(reason="secret reason"),
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == expected_status
+    assert exc_info.value.detail == expected_detail
+    assert "secret" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("route", "data"),
+    [
+        (set_coordinator, CoordinatorSetRequest(agent_id="secret-agent")),
+        (set_focused_agent, FocusedAgentSetRequest(agent_id="secret-agent")),
+    ],
+)
+async def test_participant_selection_not_found_errors_are_sanitized(
+    route,
+    data: CoordinatorSetRequest | FocusedAgentSetRequest,
+) -> None:
+    conversation = _conversation()
+    project = SimpleNamespace(owner_id="user-1", agent_conversation_mode="multi_agent_shared")
+    db = MagicMock()
+    db.commit = AsyncMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await route(
+            conversation_id="conv-1",
+            data=data,
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Participant not found"
+    assert "secret-agent" not in str(exc_info.value.detail)

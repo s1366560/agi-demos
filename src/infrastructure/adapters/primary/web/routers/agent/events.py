@@ -111,7 +111,7 @@ async def _get_accessible_conversation(
     conversation_repo = SqlConversationRepository(db)
     conversation = await conversation_repo.find_by_id(conversation_id)
     if not conversation:
-        raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
     await _verify_tenant_access(conversation.tenant_id, user, db)
     return conversation
@@ -368,7 +368,7 @@ async def get_workflow_status(
         if not actor:
             raise HTTPException(
                 status_code=404,
-                detail=_(f"No actor found for conversation {conversation_id}"),
+                detail=_("Actor not found"),
             )
 
         status = await await_ray(actor.status.remote())

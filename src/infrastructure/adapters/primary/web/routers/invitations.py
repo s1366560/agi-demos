@@ -27,6 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.sql_invitation_repository import (
     SqlInvitationRepository,
 )
+from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,34 @@ public_router = APIRouter(
 
 def _build_service(db: AsyncSession) -> InvitationService:
     return InvitationService(invitation_repo=SqlInvitationRepository(db))
+
+
+def _invitation_conflict_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=_("Invitation already exists"),
+    )
+
+
+def _invitation_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Invitation not found"),
+    )
+
+
+def _invitation_forbidden_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_("Not authorized to manage this invitation"),
+    )
+
+
+def _invalid_invitation_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid or expired invitation"),
+    )
 
 
 async def _require_invitation_admin(
@@ -77,7 +106,7 @@ async def create_invitation(
             invited_by=current_user.id,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+        raise _invitation_conflict_error() from e
     await db.commit()
     return InvitationResponse(
         id=invitation.id,
@@ -134,9 +163,9 @@ async def cancel_invitation(
     try:
         await service.cancel(invitation_id, tenant_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        raise _invitation_not_found_error() from e
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _invitation_forbidden_error() from e
     await db.commit()
 
 
@@ -170,7 +199,7 @@ async def accept_invitation(
     try:
         invitation = await service.accept_invitation(token, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise _invalid_invitation_error() from e
 
     existing = await db.execute(
         refresh_select_statement(select(UserTenant).where(

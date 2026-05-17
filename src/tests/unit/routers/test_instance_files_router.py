@@ -136,3 +136,76 @@ async def test_list_files_allows_owned_instance(
 
     assert result == {"tree": []}
     file_service.list_tree.assert_awaited_once_with("instance-1")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_preview_file_sanitizes_missing_file_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_container(monkeypatch, SimpleNamespace(tenant_id="tenant-1"))
+    file_service = FileServiceStub()
+    file_service.read_content.side_effect = FileNotFoundError("secret/path.txt missing")
+    monkeypatch.setattr(instance_files, "_get_file_service", lambda: file_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await instance_files.preview_file(
+            instance_id="instance-1",
+            file_path="secret/path.txt",
+            request=SimpleNamespace(),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "File not found"
+    assert "secret/path.txt" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_file_sanitizes_conflict_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_container(monkeypatch, SimpleNamespace(tenant_id="tenant-1"))
+    file_service = FileServiceStub()
+    file_service.create.side_effect = FileExistsError("secret/path.txt already exists")
+    monkeypatch.setattr(instance_files, "_get_file_service", lambda: file_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await instance_files.create_file(
+            instance_id="instance-1",
+            body=instance_files.CreateFileRequest(path="secret/path.txt", type="file"),
+            request=SimpleNamespace(),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "File already exists"
+    assert "secret/path.txt" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_upload_file_sanitizes_validation_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_container(monkeypatch, SimpleNamespace(tenant_id="tenant-1"))
+    file_service = FileServiceStub()
+    file_service.upload.side_effect = ValueError("secret directory is invalid")
+    monkeypatch.setattr(instance_files, "_get_file_service", lambda: file_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await instance_files.upload_file(
+            instance_id="instance-1",
+            request=SimpleNamespace(),
+            file=SimpleNamespace(read=AsyncMock(return_value=b"content"), filename="file.txt"),
+            directory="secret",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid file request"
+    assert "secret" not in exc_info.value.detail

@@ -23,9 +23,49 @@ from src.infrastructure.adapters.primary.web.routers.workspace_events import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/topology", tags=["topology"])
 logger = logging.getLogger(__name__)
+
+
+def _topology_access_denied_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_("Access denied"),
+    )
+
+
+def _invalid_topology_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid topology request"),
+    )
+
+
+def _topology_node_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Topology node not found"),
+    )
+
+
+def _topology_edge_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Topology edge not found"),
+    )
+
+
+def _topology_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Topology not found"),
+    )
+
+
+def _is_not_found_error(error: ValueError) -> bool:
+    return "not found" in str(error).lower()
 
 
 def get_topology_service(request: Request, db: AsyncSession = Depends(get_db)) -> TopologyService:
@@ -223,10 +263,10 @@ async def create_node(
         return TopologyNodeResponse.model_validate(node)
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.get("/nodes", response_model=list[TopologyNodeResponse])
@@ -246,9 +286,9 @@ async def list_nodes(
         )
         return [TopologyNodeResponse.model_validate(node) for node in nodes]
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        raise _topology_not_found_error() from e
 
 
 @router.get("/nodes/{node_id}", response_model=TopologyNodeResponse)
@@ -266,11 +306,11 @@ async def get_node(
         )
         return TopologyNodeResponse.model_validate(node)
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        if _is_not_found_error(e):
+            raise _topology_node_not_found_error() from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.patch("/nodes/{node_id}", response_model=TopologyNodeResponse)
@@ -320,12 +360,12 @@ async def update_node(
         return TopologyNodeResponse.model_validate(node)
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
         await db.rollback()
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        if _is_not_found_error(e):
+            raise _topology_node_not_found_error() from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -356,12 +396,12 @@ async def delete_node(
         )
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
         await db.rollback()
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        if _is_not_found_error(e):
+            raise _topology_node_not_found_error() from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.post("/edges", response_model=TopologyEdgeResponse, status_code=status.HTTP_201_CREATED)
@@ -399,10 +439,10 @@ async def create_edge(
         return TopologyEdgeResponse.model_validate(edge)
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.get("/edges", response_model=list[TopologyEdgeResponse])
@@ -422,9 +462,9 @@ async def list_edges(
         )
         return [TopologyEdgeResponse.model_validate(edge) for edge in edges]
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        raise _topology_not_found_error() from e
 
 
 @router.get("/edges/{edge_id}", response_model=TopologyEdgeResponse)
@@ -442,11 +482,11 @@ async def get_edge(
         )
         return TopologyEdgeResponse.model_validate(edge)
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        if _is_not_found_error(e):
+            raise _topology_edge_not_found_error() from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.patch("/edges/{edge_id}", response_model=TopologyEdgeResponse)
@@ -486,12 +526,12 @@ async def update_edge(
         return TopologyEdgeResponse.model_validate(edge)
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
         await db.rollback()
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        if _is_not_found_error(e):
+            raise _topology_edge_not_found_error() from e
+        raise _invalid_topology_request_error() from e
 
 
 @router.delete("/edges/{edge_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -522,9 +562,9 @@ async def delete_edge(
         )
     except PermissionError as e:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+        raise _topology_access_denied_error() from e
     except ValueError as e:
         await db.rollback()
-        if "not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        if _is_not_found_error(e):
+            raise _topology_edge_not_found_error() from e
+        raise _invalid_topology_request_error() from e

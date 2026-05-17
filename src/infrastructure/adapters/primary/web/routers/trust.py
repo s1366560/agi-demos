@@ -182,12 +182,12 @@ async def resolve_approval_request(
     service = _build_service(db)
     try:
         record = await service.resolve_approval(
-        record_id,
-        reviewer_id=current_user.id,
-        decision=body.decision,
-    )
+            record_id,
+            reviewer_id=current_user.id,
+            decision=body.decision,
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=_("Approval request not found")) from exc
     await db.commit()
     return _record_response(record)
 

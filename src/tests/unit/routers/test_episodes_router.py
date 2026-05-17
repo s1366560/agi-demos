@@ -155,14 +155,17 @@ class TestEpisodesRouter:
     async def test_create_episode_failure(self, client, mock_graphiti_client, sample_episode_data):
         """Test episode creation failure handling."""
         # Mock failure
-        mock_graphiti_client.add_episode = AsyncMock(side_effect=Exception("Database error"))
+        mock_graphiti_client.add_episode = AsyncMock(
+            side_effect=Exception("Database error secret-dsn")
+        )
 
         # Make request
         response = client.post("/api/v1/episodes/", json=_without_scope(sample_episode_data))
 
         # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to create episode" in response.json()["detail"]
+        assert response.json()["detail"] == "Failed to create episode"
+        assert "secret-dsn" not in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_get_episode_success(self, client, mock_graphiti_client):
@@ -466,7 +469,7 @@ class TestEpisodesRouter:
         # Mock failure
         mock_graphiti_client.driver = Mock()
         mock_graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=Exception("Connection error")
+            side_effect=Exception("Connection error secret-neo4j")
         )
 
         # Make request
@@ -474,6 +477,8 @@ class TestEpisodesRouter:
 
         # Assert
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.json()["detail"] == "Service unhealthy"
+        assert "secret-neo4j" not in response.json()["detail"]
 
 
 @pytest.mark.unit

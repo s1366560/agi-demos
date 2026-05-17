@@ -139,6 +139,62 @@ def _optional_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _invalid_gene_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid gene request"),
+    )
+
+
+def _gene_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Gene not found"),
+    )
+
+
+def _genome_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Genome not found"),
+    )
+
+
+def _instance_gene_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Instance gene not found"),
+    )
+
+
+def _invalid_evolution_event_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid evolution event request"),
+    )
+
+
+def _evolution_event_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Evolution event not found"),
+    )
+
+
+def _gene_review_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Gene review not found"),
+    )
+
+
+def _gene_review_forbidden_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_("Access denied"),
+    )
+
+
 def _evolution_event_response(event: EvolutionEvent) -> EvolutionEventResponse:
     details = event.details or {}
     payload = details.get("payload")
@@ -203,10 +259,7 @@ async def create_gene(
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_gene_request_error() from e
 
 
 @router.get("/", response_model=GeneListResponse)
@@ -256,10 +309,7 @@ async def update_gene(
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _gene_not_found_error() from e
 
 
 @router.delete(
@@ -280,10 +330,7 @@ async def delete_gene(
         await service.delete_gene(gene_id)
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _gene_not_found_error() from e
 
 
 @router.post("/{gene_id}/publish", response_model=GeneResponse)
@@ -301,10 +348,7 @@ async def publish_gene(
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _gene_not_found_error() from e
 
 
 @router.post("/{gene_id}/unpublish", response_model=GeneResponse)
@@ -322,10 +366,7 @@ async def unpublish_gene(
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _gene_not_found_error() from e
 
 
 # ---------------------------------------------------------------------------
@@ -364,10 +405,7 @@ async def create_genome(
         await db.commit()
         return GenomeResponse.model_validate(genome, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_gene_request_error() from e
 
 
 @router.get("/genomes", response_model=GenomeListResponse)
@@ -410,10 +448,7 @@ async def get_genome(
     service = container.gene_service()
     genome = await service.get_genome(genome_id)
     if not genome:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Genome {genome_id} not found"),
-        )
+        raise _genome_not_found_error()
     return GenomeResponse.model_validate(genome, from_attributes=True)
 
 
@@ -437,10 +472,7 @@ async def update_genome(
         await db.commit()
         return GenomeResponse.model_validate(genome, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _genome_not_found_error() from e
 
 
 @router.delete(
@@ -461,10 +493,7 @@ async def delete_genome(
         await service.delete_genome(genome_id)
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _genome_not_found_error() from e
 
 
 @router.post(
@@ -485,10 +514,7 @@ async def publish_genome(
         await db.commit()
         return GenomeResponse.model_validate(genome, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _genome_not_found_error() from e
 
 
 # ---------------------------------------------------------------------------
@@ -533,10 +559,7 @@ async def install_gene(
             created_at=instance_gene.created_at.isoformat(),
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_gene_request_error() from e
 
 
 @router.delete(
@@ -558,10 +581,7 @@ async def uninstall_gene(
         await service.uninstall_gene(instance_gene_id)
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_gene_not_found_error() from e
 
 
 @router.get(
@@ -612,10 +632,7 @@ async def get_instance_gene(
     service = container.gene_service()
     ig = await service.get_instance_gene(instance_gene_id)
     if not ig:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"InstanceGene {instance_gene_id} not found"),
-        )
+        raise _instance_gene_not_found_error()
     return InstanceGeneResponse(
         id=ig.id,
         instance_id=ig.instance_id,
@@ -661,10 +678,7 @@ async def rate_gene(
         await db.commit()
         return GeneRatingResponse.model_validate(rating, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _gene_not_found_error() from e
 
 
 @router.get(
@@ -739,10 +753,7 @@ async def rate_genome(
         await db.commit()
         return GenomeRatingResponse.model_validate(rating, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _genome_not_found_error() from e
 
 
 # ---------------------------------------------------------------------------
@@ -777,7 +788,7 @@ async def list_evolution_events(
             offset=offset,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise _invalid_evolution_event_request_error() from e
     items = [_evolution_event_response(ev) for ev in events]
     return EvolutionEventListResponse(
         items=items,
@@ -833,10 +844,7 @@ async def get_evolution_event(
     service = container.gene_service()
     event = await service.get_evolution_event(event_id)
     if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Evolution event {event_id} not found"),
-        )
+        raise _evolution_event_not_found_error()
     return _evolution_event_response(event)
 
 
@@ -852,10 +860,7 @@ async def get_gene(
     service = container.gene_service()
     gene = await service.get_gene(gene_id)
     if not gene:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Gene {gene_id} not found"),
-        )
+        raise _gene_not_found_error()
     return GeneResponse.model_validate(gene, from_attributes=True)
 
 
@@ -914,10 +919,7 @@ async def create_gene_review(
         await db.commit()
         return GeneReviewResponse.model_validate(review, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_gene_request_error() from e
 
 
 @router.delete(
@@ -943,12 +945,6 @@ async def delete_gene_review(
         )
         await db.commit()
     except PermissionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        ) from e
+        raise _gene_review_forbidden_error() from e
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _gene_review_not_found_error() from e

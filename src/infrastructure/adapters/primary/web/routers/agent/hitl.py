@@ -147,7 +147,7 @@ async def _load_authorized_pending_hitl_request(
         logger.warning(f"HITL request not found in database: {request_id}")
         raise HTTPException(
             status_code=404,
-            detail=_(f"HITL request {request_id} not found"),
+            detail=_("HITL request not found"),
         )
 
     logger.info(
@@ -189,16 +189,13 @@ async def _load_authorized_pending_hitl_request(
     if await _mark_hitl_timeout_if_expired(db=db, repo=repo, hitl_request=hitl_request):
         raise HTTPException(
             status_code=400,
-            detail=_(f"HITL request {request_id} has expired (status: timeout)"),
+            detail=_("HITL request has expired"),
         )
 
     if hitl_request.status != HITLRequestStatus.PENDING:
         raise HTTPException(
             status_code=400,
-            detail=(
-                _(f"HITL request {request_id} is no longer pending "
-                f"(status: {hitl_request.status.value})")
-            ),
+            detail=_("HITL request is no longer pending"),
         )
 
     return hitl_request
@@ -237,7 +234,7 @@ def _validate_and_summarize_hitl_response(
         response_data=request.response_data,
     )
 
-    is_valid, validation_error = validate_hitl_response(
+    is_valid, _validation_error = validate_hitl_response(
         hitl_type=HITLType(stored_hitl_type),
         request_data=build_hitl_request_data_from_record(hitl_request),
         response_data=request.response_data,
@@ -253,7 +250,7 @@ def _validate_and_summarize_hitl_response(
     if not is_valid:
         raise HTTPException(
             status_code=400,
-            detail=validation_error or "Invalid HITL response",
+            detail=_("Invalid HITL response"),
         )
 
     response_str, response_metadata = summarize_hitl_response(
@@ -286,7 +283,7 @@ async def get_pending_hitl_requests(
         conversation = await conv_repo.find_by_id(conversation_id)
 
         if not conversation:
-            raise HTTPException(status_code=404, detail=_(f"Conversation {conversation_id} not found"))
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
         # Verify user has access (same tenant)
         if conversation.tenant_id != tenant_id:
@@ -448,7 +445,7 @@ async def respond_to_hitl(
         if request.hitl_type not in valid_types:
             raise HTTPException(
                 status_code=400,
-                detail=_(f"Invalid hitl_type '{request.hitl_type}'. Must be one of: {valid_types}"),
+                detail=_("Invalid HITL type"),
             )
 
         repo = SqlHITLRequestRepository(db)
@@ -476,7 +473,7 @@ async def respond_to_hitl(
         if updated_request is None:
             raise HTTPException(
                 status_code=409,
-                detail=_(f"HITL request {request.request_id} could not be updated"),
+                detail=_("HITL request could not be updated"),
             )
         await db.commit()
 
@@ -550,7 +547,7 @@ async def cancel_hitl_request(
         if cancelled_request is None:
             raise HTTPException(
                 status_code=409,
-                detail=_(f"HITL request {request.request_id} could not be cancelled"),
+                detail=_("HITL request could not be cancelled"),
             )
         await db.commit()
 

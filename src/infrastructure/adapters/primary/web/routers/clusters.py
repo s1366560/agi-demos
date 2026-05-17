@@ -71,6 +71,13 @@ def _usage_percent(used: object, total: object) -> float | None:
     return round(min(max((used_value / total_value) * 100, 0), 100), 2)
 
 
+def _cluster_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Cluster not found"),
+    )
+
+
 def _cluster_health_response(cluster: Cluster) -> ClusterHealthResponse:
     provider_config = cluster.provider_config or {}
     health = _health_config(provider_config)
@@ -191,10 +198,7 @@ async def get_cluster(
         service = container.cluster_service()
         result = await service.get_cluster(cluster_id, tenant_id=tenant_id)
         if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=_(f"Cluster {cluster_id} not found"),
-            )
+            raise _cluster_not_found_error()
         return ClusterResponse.model_validate(result, from_attributes=True)
     except HTTPException:
         raise
@@ -227,10 +231,7 @@ async def update_cluster(
         await db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _cluster_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -256,10 +257,7 @@ async def delete_cluster(
         await service.delete_cluster(cluster_id, tenant_id=tenant_id)
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _cluster_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -283,10 +281,7 @@ async def get_cluster_health(
         service = container.cluster_service()
         result = await service.get_cluster(cluster_id, tenant_id=tenant_id)
         if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=_(f"Cluster {cluster_id} not found"),
-            )
+            raise _cluster_not_found_error()
         return _cluster_health_response(result)
     except HTTPException:
         raise
@@ -325,10 +320,7 @@ async def update_health_status(
         await db.commit()
         return ClusterResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _cluster_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:

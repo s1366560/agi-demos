@@ -294,10 +294,9 @@ async def debug_tool_policy(
     try:
         scope = SandboxScope(body.sandbox_scope)
     except ValueError as exc:
-        valid = [s.value for s in SandboxScope]
         raise HTTPException(
             status_code=422,
-            detail=_(f"Invalid sandbox_scope '{body.sandbox_scope}'. Valid: {valid}"),
+            detail=_("Invalid sandbox scope"),
         ) from exc
 
     sandbox_allowed = frozenset(body.sandbox_allowed_tools) if body.sandbox_allowed_tools else None

@@ -61,6 +61,13 @@ def _serialize(entity: InstanceChannelConfig) -> dict[str, Any]:
     return raw
 
 
+def _channel_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Instance channel not found"),
+    )
+
+
 async def _require_instance_access(
     instance_id: str,
     current_user: User,
@@ -142,10 +149,7 @@ async def update_channel(
             config=body.config,
         )
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise _channel_not_found_error() from exc
     await db.commit()
     return _serialize(entity)
 
@@ -166,10 +170,7 @@ async def delete_channel(
     try:
         await svc.delete_channel(channel_id, expected_instance_id=instance_id)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise _channel_not_found_error() from exc
     await db.commit()
 
 
@@ -186,9 +187,6 @@ async def test_channel_connection(
     try:
         result = await svc.test_connection(channel_id, expected_instance_id=instance_id)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise _channel_not_found_error() from exc
     await db.commit()
     return result

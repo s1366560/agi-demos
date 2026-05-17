@@ -276,7 +276,7 @@ async def assert_caller_owns_sandbox(
     if instance is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Sandbox not found: {sandbox_id}"),
+            detail=_("Sandbox not found"),
         )
 
     project_id_attr = getattr(instance, "project_id", None)

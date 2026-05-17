@@ -107,9 +107,7 @@ async def check_sandbox_health(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=_(
-                f"Invalid health check level: {level}. Valid values: basic, mcp, services, full"
-            ),
+            detail=_("Invalid health check level"),
         ) from None
 
     # Create health service
@@ -245,7 +243,7 @@ async def list_sandboxes(
         try:
             status_filter = SandboxStatus(status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=_(f"Invalid status: {status}")) from None
+            raise HTTPException(status_code=400, detail=_("Invalid sandbox status")) from None
 
     instances = await adapter.list_sandboxes(status=status_filter)
 
@@ -337,7 +335,7 @@ async def terminate_sandbox(
     success = await adapter.terminate_sandbox(sandbox_id)
 
     if not success:
-        raise HTTPException(status_code=404, detail=_(f"Sandbox not found: {sandbox_id}"))
+        raise HTTPException(status_code=404, detail=_("Sandbox not found"))
 
     return {"status": "terminated", "sandbox_id": sandbox_id}
 

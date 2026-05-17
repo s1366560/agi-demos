@@ -205,6 +205,43 @@ class TestAgentMessagesRouter:
         assert "internal" not in exc_info.value.detail
 
     @pytest.mark.asyncio
+    async def test_conversation_execution_not_found_errors_are_sanitized(
+        self,
+        test_db,
+        test_user,
+    ):
+        container = SimpleNamespace(
+            agent_service=lambda _llm: SimpleNamespace(
+                get_execution_history=AsyncMock(side_effect=ValueError("secret conversation id"))
+            )
+        )
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
+            lambda _request, _db: container,
+        )
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
+            AsyncMock(return_value=object()),
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_conversation_execution(
+                "conversation-secret",
+                request=MagicMock(),
+                project_id="project-1",
+                limit=50,
+                status_filter=None,
+                tool_filter=None,
+                current_user=test_user,
+                tenant_id="tenant-secret",
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Conversation not found"
+        assert "secret" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
     async def test_tool_executions_sanitizes_internal_errors(self, test_db, test_user):
         conversation_repo = SimpleNamespace(
             find_by_id=AsyncMock(side_effect=RuntimeError("internal tool repo secret"))
@@ -286,6 +323,36 @@ class TestAgentMessagesRouter:
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to get execution statistics"
         assert "internal" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_execution_stats_not_found_errors_are_sanitized(self, test_db, test_user):
+        container = SimpleNamespace(
+            agent_service=lambda _llm: SimpleNamespace(
+                get_execution_history=AsyncMock(side_effect=ValueError("secret conversation id"))
+            )
+        )
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
+            lambda _request, _db: container,
+        )
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
+            AsyncMock(return_value=object()),
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_execution_stats(
+                "conversation-secret",
+                request=MagicMock(),
+                project_id="project-1",
+                current_user=test_user,
+                tenant_id="tenant-secret",
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Conversation not found"
+        assert "secret" not in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_message_replies_sanitizes_internal_errors(

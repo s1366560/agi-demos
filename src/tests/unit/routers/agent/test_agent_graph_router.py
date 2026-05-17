@@ -14,8 +14,12 @@ from src.domain.model.agent.graph.graph_run import GraphRun
 from src.domain.model.auth.user import User as AuthUser
 from src.infrastructure.adapters.primary.web.routers.agent.agent_graph_router import (
     CancelRunRequest,
+    CreateGraphRequest,
+    StartRunRequest,
     cancel_graph_run,
+    create_graph,
     list_graph_runs,
+    start_graph_run,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 
@@ -94,3 +98,90 @@ class TestAgentGraphRouter:
 
         assert exc_info.value.status_code == 404
         orchestrator.cancel_run.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_start_graph_run_value_errors_are_sanitized(
+        self,
+        test_db: AsyncSession,
+        test_user: DBUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        orchestrator = SimpleNamespace(
+            start_run=AsyncMock(side_effect=ValueError("secret graph run validation"))
+        )
+        container = SimpleNamespace(graph_orchestrator=lambda: orchestrator)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await start_graph_run(
+                self._request_with_container(container, monkeypatch),
+                graph_id="graph-secret",
+                body=StartRunRequest(conversation_id="conversation-1"),
+                project_id="project-1",
+                current_user=cast(AuthUser, test_user),
+                user_tenant_id="tenant-current",
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid graph run request"
+        assert "secret" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_create_graph_invalid_pattern_is_sanitized(
+        self,
+        test_db: AsyncSession,
+        test_user: DBUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        with pytest.raises(HTTPException) as exc_info:
+            await create_graph(
+                request=MagicMock(),
+                body=CreateGraphRequest(
+                    name="secret graph",
+                    pattern="secret-pattern",
+                    nodes=[],
+                    edges=[],
+                ),
+                project_id="project-1",
+                current_user=cast(AuthUser, test_user),
+                user_tenant_id="tenant-current",
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid graph pattern"
+        assert "secret-pattern" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_cancel_graph_run_value_errors_are_sanitized(
+        self,
+        test_db: AsyncSession,
+        test_user: DBUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        run = GraphRun(
+            id="run-current-tenant",
+            graph_id="graph-current-tenant",
+            conversation_id="conversation-current-tenant",
+            tenant_id="tenant-current",
+            project_id="project-graph",
+        )
+        orchestrator = SimpleNamespace(
+            get_run_status=AsyncMock(return_value=run),
+            cancel_run=AsyncMock(side_effect=ValueError("secret cancel reason")),
+        )
+        container = SimpleNamespace(graph_orchestrator=lambda: orchestrator)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await cancel_graph_run(
+                self._request_with_container(container, monkeypatch),
+                run.id,
+                body=CancelRunRequest(reason="stop"),
+                current_user=cast(AuthUser, test_user),
+                user_tenant_id="tenant-current",
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid graph run request"
+        assert "secret" not in exc_info.value.detail

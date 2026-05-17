@@ -89,11 +89,11 @@ async def verify_task_stream_api_key(api_key: str) -> None:
             api_key_repository=SqlAPIKeyRepository(session),
         )
         try:
-            _ = await auth_service.verify_api_key(api_key)
+            await auth_service.verify_api_key(api_key)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(exc),
+                detail=_("Invalid API key"),
             ) from exc
         await session.commit()
 
@@ -450,10 +450,10 @@ async def _poll_task_updates(
     task_id: str,
     last_progress: int,
     last_status: str,
+    retry_sleep_seconds: float = 2.0,
+    poll_sleep_seconds: float = 1.0,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Poll database for task updates, yielding SSE events on changes."""
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-
     retry_count = 0
     max_retries = 3
     poll_iteration = 0
@@ -504,20 +504,25 @@ async def _poll_task_updates(
                     return
 
             retry_count = 0
-            await asyncio.sleep(1)
+            await asyncio.sleep(poll_sleep_seconds)
 
-        except Exception as e:
+        except Exception:
             retry_count += 1
-            logger.error(f"Error in SSE stream for task {task_id}: {e}")
+            logger.exception("Error in SSE stream for task %s", task_id)
 
             if retry_count >= max_retries:
                 yield {
                     "event": "error",
-                    "data": json.dumps({"error": "Stream error", "message": str(e)}),
+                    "data": json.dumps(
+                        {
+                            "error": "Stream error",
+                            "message": _("Task stream failed"),
+                        }
+                    ),
                 }
                 return
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(retry_sleep_seconds)
 
 
 @router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)

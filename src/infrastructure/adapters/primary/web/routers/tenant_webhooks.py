@@ -119,7 +119,10 @@ async def update_webhook(
         await db.commit()
         return cast(WebhookResponse, webhook)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Webhook not found"),
+        ) from e
 
 
 @router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)

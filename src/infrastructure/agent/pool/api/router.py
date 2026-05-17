@@ -293,7 +293,7 @@ async def _get_instance(
     """获取实例详情."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
+        raise HTTPException(status_code=404, detail=_("Instance not found"))
 
     return _build_instance_info(instance_key, instance)
 
@@ -305,7 +305,7 @@ async def _pause_instance(
     """暂停实例."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
+        raise HTTPException(status_code=404, detail=_("Instance not found"))
 
     try:
         await instance.pause()
@@ -315,7 +315,7 @@ async def _pause_instance(
         )
     except Exception as e:
         logger.error(f"Failed to pause instance {instance_key}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to pause instance")) from e
 
 
 async def _resume_instance(
@@ -325,7 +325,7 @@ async def _resume_instance(
     """恢复实例."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
+        raise HTTPException(status_code=404, detail=_("Instance not found"))
 
     try:
         await instance.resume()
@@ -335,7 +335,7 @@ async def _resume_instance(
         )
     except Exception as e:
         logger.error(f"Failed to resume instance {instance_key}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to resume instance")) from e
 
 
 async def _terminate_instance(
@@ -346,7 +346,7 @@ async def _terminate_instance(
     """终止实例."""
     instance = manager._instances.get(instance_key)
     if not instance:
-        raise HTTPException(status_code=404, detail=_(f"Instance not found: {instance_key}"))
+        raise HTTPException(status_code=404, detail=_("Instance not found"))
 
     try:
         # 解析 instance_key
@@ -363,7 +363,7 @@ async def _terminate_instance(
         )
     except Exception as e:
         logger.error(f"Failed to terminate instance {instance_key}: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=_("Failed to terminate instance")) from e
 
 
 async def _set_project_tier(
@@ -379,7 +379,7 @@ async def _set_project_tier(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Invalid tier: {request.tier}. Must be one of: hot, warm, cold"),
+            detail=_("Invalid project tier"),
         ) from None
 
     # 获取当前分级

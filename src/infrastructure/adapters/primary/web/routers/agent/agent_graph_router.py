@@ -335,7 +335,7 @@ async def create_graph(
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=_(f"Invalid pattern: {body.pattern}. Valid: {[p.value for p in GraphPattern]}"),
+            detail=_("Invalid graph pattern"),
         ) from exc
 
     nodes = [
@@ -374,7 +374,7 @@ async def create_graph(
 
     validation_errors = graph.validate_graph()
     if validation_errors:
-        raise HTTPException(status_code=400, detail="; ".join(validation_errors))
+        raise HTTPException(status_code=400, detail=_("Invalid graph definition"))
 
     container = get_container_with_db(request, db)
     repo = container.graph_repository()
@@ -433,7 +433,7 @@ async def update_graph(
 
     validation_errors = graph.validate_graph()
     if validation_errors:
-        raise HTTPException(status_code=400, detail="; ".join(validation_errors))
+        raise HTTPException(status_code=400, detail=_("Invalid graph definition"))
 
     try:
         await repo.save(graph)
@@ -505,7 +505,7 @@ async def start_graph_run(
         await db.commit()
         return _run_to_response(run, include_executions=True)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=_("Invalid graph run request")) from exc
     except HTTPException:
         raise
     except Exception:
@@ -578,7 +578,7 @@ async def cancel_graph_run(
             raise HTTPException(status_code=404, detail=_("Graph run not found"))
         return _run_to_response(run, include_executions=True)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=_("Invalid graph run request")) from exc
     except HTTPException:
         raise
     except Exception:

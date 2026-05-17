@@ -108,7 +108,7 @@ def _validate_runtime_hooks(
     if len(runtime_hooks) > MAX_RUNTIME_HOOK_OVERRIDES:
         raise HTTPException(
             status_code=422,
-            detail=_(f"runtime_hooks cannot exceed {MAX_RUNTIME_HOOK_OVERRIDES} entries"),
+            detail=_("runtime_hooks cannot exceed the maximum number of entries"),
         )
 
     allowed_unknown_keys = allowed_unknown_hook_keys or set()
@@ -138,7 +138,7 @@ def _validate_runtime_hook_override(
     hook_label = f"{hook.plugin_name}:{hook.hook_name}"
     if hook.key in seen_hooks:
         raise HTTPException(
-            status_code=422, detail=_(f"Duplicate runtime hook override: {hook_label}")
+            status_code=422, detail=_("Duplicate runtime hook override")
         )
     seen_hooks.add(hook.key)
 
@@ -150,7 +150,7 @@ def _validate_runtime_hook_override(
     if catalog_entry is None:
         registry = get_plugin_registry()
         if hook.key not in allowed_unknown_keys and hook.hook_name not in registry.list_well_known_hooks():
-            raise HTTPException(status_code=422, detail=_(f"Unknown runtime hook: {hook_label}"))
+            raise HTTPException(status_code=422, detail=_("Unknown runtime hook"))
         return
 
     _validate_runtime_hook_settings_schema(hook, catalog_entry, hook_label)
@@ -163,10 +163,7 @@ def _validate_runtime_hook_priority(hook: RuntimeHookConfig, hook_label: str) ->
 
     raise HTTPException(
         status_code=422,
-        detail=(
-            _(f"Runtime hook priority for {hook_label} must be between "
-            f"-{MAX_RUNTIME_HOOK_PRIORITY} and {MAX_RUNTIME_HOOK_PRIORITY}")
-        ),
+        detail=_("Runtime hook priority must be within the allowed range"),
     )
 
 
@@ -180,31 +177,31 @@ def _validate_runtime_hook_identity(
     if normalized_executor_kind not in {item.value for item in HookExecutorKind}:
         raise HTTPException(
             status_code=422,
-            detail=_(f"Runtime hook {hook_label} has unsupported executor_kind"),
+            detail=_("Runtime hook has unsupported executor_kind"),
         )
     if normalized_executor_kind == HookExecutorKind.BUILTIN.value:
         if not hook.plugin_name.strip():
             raise HTTPException(
                 status_code=422,
-                detail=_(f"Builtin runtime hook {hook_label} requires plugin_name"),
+                detail=_("Builtin runtime hook requires plugin_name"),
             )
         return
 
     if not (hook.source_ref or "").strip():
         raise HTTPException(
             status_code=422,
-            detail=_(f"Custom runtime hook {hook_label} requires source_ref"),
+            detail=_("Custom runtime hook requires source_ref"),
         )
     if not (hook.entrypoint or "").strip():
         raise HTTPException(
             status_code=422,
-            detail=_(f"Custom runtime hook {hook_label} requires entrypoint"),
+            detail=_("Custom runtime hook requires entrypoint"),
         )
     effective_family = (hook.hook_family or (catalog_entry.hook_family if catalog_entry else "")).strip()
     if not effective_family:
         raise HTTPException(
             status_code=422,
-            detail=_(f"Custom runtime hook {hook_label} requires hook_family"),
+            detail=_("Custom runtime hook requires hook_family"),
         )
 
 
@@ -227,17 +224,14 @@ def _validate_runtime_hook_security_boundary(
     ):
         raise HTTPException(
             status_code=422,
-            detail=(
-                _(f"Runtime hook {hook_label} cannot use executor_kind "
-                f"{hook.executor_kind} for hook_family {effective_family}")
-            ),
+            detail=_("Runtime hook cannot use executor_kind for hook_family"),
         )
 
     timeout_override = hook.settings.get(TIMEOUT_SETTING_KEY)
     if timeout_override is not None and not isinstance(timeout_override, (int, float)):
         raise HTTPException(
             status_code=422,
-            detail=_(f"Runtime hook {hook_label} timeout_seconds must be numeric"),
+            detail=_("Runtime hook timeout_seconds must be numeric"),
         )
     if timeout_override is not None:
         timeout_seconds = float(timeout_override)
@@ -248,26 +242,20 @@ def _validate_runtime_hook_security_boundary(
         ):
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    _(f"Runtime hook {hook_label} timeout_seconds must be between "
-                    f"{MIN_CUSTOM_HOOK_TIMEOUT_SECONDS} and {MAX_CUSTOM_HOOK_TIMEOUT_SECONDS}")
-                ),
+                detail=_("Runtime hook timeout_seconds must be between the allowed bounds"),
             )
 
     isolation_mode = hook.settings.get(ISOLATION_MODE_SETTING_KEY, HOST_ISOLATION_MODE)
     if not isinstance(isolation_mode, str):
         raise HTTPException(
             status_code=422,
-            detail=_(f"Runtime hook {hook_label} isolation_mode must be a string"),
+            detail=_("Runtime hook isolation_mode must be a string"),
         )
     normalized_isolation_mode = isolation_mode.strip().lower()
     if normalized_isolation_mode not in ALLOWED_ISOLATION_MODES:
         raise HTTPException(
             status_code=422,
-            detail=(
-                _(f"Runtime hook {hook_label} isolation_mode must be one of: "
-                f"{', '.join(sorted(ALLOWED_ISOLATION_MODES))}")
-            ),
+            detail=_("Runtime hook isolation_mode must be allowed"),
         )
 
 
@@ -276,20 +264,14 @@ def _validate_runtime_hook_settings_size(hook: RuntimeHookConfig, hook_label: st
     if len(hook.settings) > MAX_RUNTIME_HOOK_SETTINGS_KEYS:
         raise HTTPException(
             status_code=422,
-            detail=(
-                _(f"Runtime hook settings for {hook_label} cannot exceed "
-                f"{MAX_RUNTIME_HOOK_SETTINGS_KEYS} keys")
-            ),
+            detail=_("Runtime hook settings cannot exceed the maximum number of keys"),
         )
 
     serialized_settings = json.dumps(hook.settings, separators=(",", ":"))
     if len(serialized_settings.encode("utf-8")) > MAX_RUNTIME_HOOK_SETTINGS_BYTES:
         raise HTTPException(
             status_code=422,
-            detail=(
-                _(f"Runtime hook settings for {hook_label} cannot exceed "
-                f"{MAX_RUNTIME_HOOK_SETTINGS_BYTES} bytes")
-            ),
+            detail=_("Runtime hook settings cannot exceed the maximum size"),
         )
 
 
@@ -304,23 +286,22 @@ def _validate_runtime_hook_settings_schema(
         if hook.settings:
             raise HTTPException(
                 status_code=422,
-                detail=_(f"Runtime hook {hook_label} does not accept custom settings"),
+                detail=_("Runtime hook does not accept custom settings"),
             )
         return
 
     try:
         jsonschema.validate(instance=hook.settings, schema=schema)
     except jsonschema.ValidationError as exc:
-        message = exc.message or "invalid settings"
         raise HTTPException(
             status_code=422,
-            detail=_(f"Invalid settings for runtime hook {hook_label}: {message}"),
+            detail=_("Invalid settings for runtime hook"),
         ) from exc
     except jsonschema.SchemaError as exc:
         logger.error("Invalid hook schema for %s: %s", hook_label, exc)
         raise HTTPException(
             status_code=500,
-            detail=_(f"Runtime hook schema is invalid for {hook_label}"),
+            detail=_("Runtime hook schema is invalid"),
         ) from exc
 
 
@@ -333,7 +314,7 @@ def _normalize_tool_policy_list(
     if len(tools) > MAX_TOOL_POLICY_ITEMS:
         raise HTTPException(
             status_code=422,
-            detail=_(f"{field_name} cannot exceed {MAX_TOOL_POLICY_ITEMS} entries"),
+            detail=_("Tool policy cannot exceed the maximum number of entries"),
         )
 
     normalized: list[str] = []
@@ -341,16 +322,16 @@ def _normalize_tool_policy_list(
     for raw_name in tools:
         tool_name = raw_name.strip()
         if not tool_name:
-            raise HTTPException(status_code=422, detail=_(f"{field_name} cannot contain empty tools"))
+            raise HTTPException(status_code=422, detail=_("Tool policy cannot contain empty tools"))
         if len(tool_name) > MAX_TOOL_NAME_LENGTH:
             raise HTTPException(
                 status_code=422,
-                detail=_(f"{field_name} tool names cannot exceed {MAX_TOOL_NAME_LENGTH} characters"),
+                detail=_("Tool names cannot exceed the maximum length"),
             )
         if tool_name in seen:
             raise HTTPException(
                 status_code=422,
-                detail=_(f"{field_name} contains duplicate tool: {tool_name}"),
+                detail=_("Tool policy contains duplicate tool"),
             )
         seen.add(tool_name)
         normalized.append(tool_name)
@@ -369,7 +350,7 @@ def _validate_tool_policy(
     if overlap:
         raise HTTPException(
             status_code=422,
-            detail=_(f"Tools cannot be both enabled and disabled: {', '.join(overlap)}"),
+            detail=_("Tools cannot be both enabled and disabled"),
         )
     return normalized_enabled, normalized_disabled
 
@@ -576,7 +557,7 @@ async def update_tenant_agent_config(
         raise
     except ValueError as e:
         # Validation error from entity
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise HTTPException(status_code=422, detail=_("Invalid tenant agent config")) from e
     except Exception as e:
         logger.error(f"Error updating tenant agent config: {e}")
         raise HTTPException(status_code=500, detail=INTERNAL_ERROR_DETAIL) from e

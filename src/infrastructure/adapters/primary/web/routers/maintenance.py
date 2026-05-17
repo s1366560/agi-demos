@@ -1529,7 +1529,7 @@ def _resolve_target_dimension(target_model: str) -> int:
 
     raise HTTPException(
         status_code=400,
-        detail=_(f"Unknown model dimension for: {target_model}"),
+        detail=_("Unknown model dimension"),
     )
 
 

@@ -244,6 +244,26 @@ class TestTraceRouterHelpers:
             )
 
         assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Conversation not found"
+
+    @pytest.mark.asyncio
+    async def test_get_accessible_conversation_sanitizes_missing_id(self) -> None:
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.trace_router._get_conversation",
+                AsyncMock(return_value=None),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await _get_accessible_conversation(
+                MagicMock(),
+                SimpleNamespace(id="user-1", roles=[]),
+                "conv-secret",
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Conversation not found"
+        assert "conv-secret" not in str(exc_info.value.detail)
 
 
 # --- Schema Tests ---

@@ -41,6 +41,27 @@ def _get_file_service() -> InstanceFileService:
     return InstanceFileService()
 
 
+def _file_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("File not found"),
+    )
+
+
+def _invalid_file_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid file request"),
+    )
+
+
+def _file_conflict_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=_("File already exists"),
+    )
+
+
 def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """Get DI container with database session for the current request."""
     app_container: DIContainer = request.app.state.container
@@ -100,15 +121,9 @@ async def preview_file(
     try:
         content = await svc.read_content(instance_id, file_path)
     except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise _file_not_found_error() from exc
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        raise _invalid_file_request_error() from exc
     return {"content": content}
 
 
@@ -126,10 +141,7 @@ async def download_file(
     try:
         data, filename, mime = await svc.read_bytes(instance_id, file_path)
     except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise _file_not_found_error() from exc
     return Response(
         content=data,
         media_type=mime,
@@ -152,15 +164,9 @@ async def create_file(
     try:
         node = await svc.create(instance_id, body.path, body.type)
     except FileExistsError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
+        raise _file_conflict_error() from exc
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        raise _invalid_file_request_error() from exc
     return asdict(node)
 
 
@@ -180,10 +186,7 @@ async def upload_file(
     try:
         node = await svc.upload(instance_id, directory, filename, content)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        raise _invalid_file_request_error() from exc
     return asdict(node)
 
 
@@ -204,7 +207,4 @@ async def delete_file(
     try:
         await svc.delete(instance_id, file_path)
     except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise _file_not_found_error() from exc

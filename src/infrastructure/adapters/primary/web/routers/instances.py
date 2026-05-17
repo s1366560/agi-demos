@@ -93,6 +93,34 @@ class _InstanceReader(Protocol):
     async def get_instance(self, instance_id: str) -> Instance | None: ...
 
 
+def _instance_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Instance not found"),
+    )
+
+
+def _instance_action_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Instance operation failed"),
+    )
+
+
+def _invalid_instance_member_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid instance member request"),
+    )
+
+
+def _instance_member_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Instance member not found"),
+    )
+
+
 async def _get_owned_instance_or_404(
     service: _InstanceReader,
     instance_id: str,
@@ -101,10 +129,7 @@ async def _get_owned_instance_or_404(
     """Load an instance and enforce tenant ownership without revealing existence."""
     instance = await service.get_instance(instance_id)
     if instance is None or getattr(instance, "tenant_id", None) != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Instance {instance_id} not found"),
-        )
+        raise _instance_not_found_error()
     return instance
 
 
@@ -283,10 +308,7 @@ async def update_instance(
         await db.commit()
         return InstanceResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_action_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -316,10 +338,7 @@ async def delete_instance(
         await service.delete_instance(instance_id)
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_action_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -361,10 +380,7 @@ async def scale_instance(
         instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
         return InstanceResponse.model_validate(instance, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_action_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -399,10 +415,7 @@ async def restart_instance(
         instance = await _get_owned_instance_or_404(service, instance_id, tenant_id)
         return InstanceResponse.model_validate(instance, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_action_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -509,10 +522,7 @@ async def save_pending_config(
         await db.commit()
         return InstanceResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_action_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -546,10 +556,7 @@ async def apply_pending_config(
         await db.commit()
         return DeployResponse.model_validate(result, from_attributes=True)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_action_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -604,10 +611,7 @@ async def add_member(
             created_at=result.created_at,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_instance_member_request_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -701,10 +705,7 @@ async def update_member_role(
             created_at=result.created_at,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_member_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -738,10 +739,7 @@ async def remove_member(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_member_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:
@@ -792,10 +790,7 @@ async def list_members(
             for m in members
         ]
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
+        raise _instance_member_not_found_error() from e
     except HTTPException:
         raise
     except Exception as e:

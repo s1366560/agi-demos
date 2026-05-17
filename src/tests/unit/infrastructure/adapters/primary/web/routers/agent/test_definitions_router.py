@@ -7,13 +7,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from src.domain.model.agent.agent_definition import Agent, AgentModel
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.infrastructure.adapters.primary.web.routers.agent.definitions_router import (
     CreateDefinitionBody,
+    SetEnabledBody,
     UpdateDefinitionBody,
     create_definition,
+    set_definition_enabled,
     update_definition,
 )
 
@@ -224,7 +227,45 @@ class TestDefinitionsRouterA2AConfig:
             )
 
         assert exc_info.value.status_code == 409
-        assert "already exists" in str(exc_info.value.detail)
+        assert exc_info.value.detail == "Definition already exists"
+        assert "agent-1" not in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_create_definition_integrity_errors_are_sanitized(self):
+        registry = _make_registry()
+        container = _make_container(registry)
+        container.agent_orchestrator().create_agent = AsyncMock(
+            side_effect=IntegrityError("secret statement", "secret params", Exception("secret"))
+        )
+        db = _make_db()
+        body = CreateDefinitionBody(
+            name="secret-agent",
+            display_name="Worker Agent",
+            system_prompt="Work carefully.",
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=container,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await create_definition(
+                body,
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail == "Definition already exists"
+        assert "secret-agent" not in str(exc_info.value.detail)
 
     @pytest.mark.asyncio
     async def test_update_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(self):
@@ -332,7 +373,7 @@ class TestDefinitionsRouterA2AConfig:
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
             ),
-            pytest.raises(HTTPException, match="name uses a reserved agent identifier"),
+            pytest.raises(HTTPException) as exc_info,
         ):
             await update_definition(
                 "agent-1",
@@ -342,6 +383,9 @@ class TestDefinitionsRouterA2AConfig:
                 tenant_id="tenant-1",
                 db=db,
             )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid definition request"
 
     @pytest.mark.asyncio
     async def test_update_definition_coerces_model_and_workspace_defaults(self):
@@ -373,3 +417,35 @@ class TestDefinitionsRouterA2AConfig:
         assert updated_agent.model == AgentModel.INHERIT
         assert isinstance(updated_agent.workspace_config, WorkspaceConfig)
         assert response["model"] == AgentModel.INHERIT.value
+
+    @pytest.mark.asyncio
+    async def test_set_definition_enabled_value_errors_are_sanitized(self):
+        registry = _make_registry()
+        db = _make_db()
+        existing = _make_agent()
+        registry.get_by_id = AsyncMock(return_value=existing)
+        registry.set_enabled = AsyncMock(side_effect=ValueError("secret definition state"))
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=_make_container(registry),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await set_definition_enabled(
+                "agent-1",
+                SetEnabledBody(enabled=True),
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid definition request"
+        assert "secret" not in exc_info.value.detail

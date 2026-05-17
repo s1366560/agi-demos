@@ -315,7 +315,7 @@ async def edit_pending_submission(
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"Cannot edit submission in {submission.status} state"),
+            detail=_("Cannot edit submission in its current state"),
         )
 
     if data.proposed_semver is not None:
@@ -374,7 +374,7 @@ async def withdraw_pending_submission(
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"Cannot withdraw submission in {submission.status} state"),
+            detail=_("Cannot withdraw submission in its current state"),
         )
     submission.status = "withdrawn"
     submission.reviewed_at = datetime.now(UTC)
@@ -421,7 +421,7 @@ async def admin_approve_submission(
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"Submission already {submission.status}"),
+            detail=_("Submission has already been reviewed"),
         )
 
     # P2-4 Track D: semver bump + history. If bump provided, derive next
@@ -464,10 +464,7 @@ async def admin_approve_submission(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                _(f"A curated skill with this content already exists "
-                f"(id={existing.id}, semver={existing.semver}, status={existing.status})")
-            ),
+            detail=_("A curated skill with this content already exists"),
         )
 
     now = datetime.now(UTC)
@@ -528,7 +525,7 @@ async def admin_reject_submission(
     if submission.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_(f"Submission already {submission.status}"),
+            detail=_("Submission has already been reviewed"),
         )
     submission.status = "rejected"
     submission.reviewer_id = current_user.id

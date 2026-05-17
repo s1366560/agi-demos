@@ -130,6 +130,20 @@ def skill_to_response(skill: Skill) -> SkillResponse:
     )
 
 
+def _invalid_skill_request_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_("Invalid skill request"),
+    )
+
+
+def _skill_version_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Skill version not found"),
+    )
+
+
 # === API Endpoints ===
 
 
@@ -153,7 +167,7 @@ async def create_skill(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_(f"Invalid scope: {data.scope}. Must be 'tenant' or 'project'"),
+                detail=_("Invalid skill scope"),
             ) from None
 
         if scope == SkillScope.SYSTEM:
@@ -193,10 +207,7 @@ async def create_skill(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
+        raise _invalid_skill_request_error() from e
 
 
 @router.get("/", response_model=SkillListResponse)
@@ -401,7 +412,7 @@ async def update_skill_status(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_(f"Invalid status: {status_value}. Must be one of: active, disabled, deprecated"),
+            detail=_("Invalid skill status"),
         ) from None
 
     from datetime import datetime
@@ -687,10 +698,7 @@ async def get_skill_version(
     version = await version_repo.get_by_version(skill_id, version_number)
 
     if not version:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Version {version_number} not found for skill {skill_id}"),
-        )
+        raise _skill_version_not_found_error()
 
     return SkillVersionDetailResponse(
         id=version.id,
@@ -735,7 +743,7 @@ async def rollback_skill(
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_(f"Skill not found: {skill_id}"),
+            detail=_("Skill not found"),
         )
 
     tenant_id = tenant["tenant_id"]
@@ -759,7 +767,7 @@ async def rollback_skill(
     if "error" in result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result["error"],
+            detail=_("Skill rollback failed"),
         )
 
     await db.commit()

@@ -57,6 +57,52 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(app)
 
 
+class _FakeWebSocket:
+    def __init__(
+        self,
+        *,
+        headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
+        query_items: list[tuple[str, str]] | None = None,
+    ) -> None:
+        self.accepted = False
+        self.sent_json: list[object] = []
+        self.sent_text: list[str] = []
+        self.closed = False
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
+        self.headers = headers or {}
+        self.cookies = cookies or {}
+        items = query_items or []
+        query_map = dict(items)
+        self.query_params = SimpleNamespace(
+            multi_items=lambda: items,
+            get=lambda key, default=None: query_map.get(key, default),
+        )
+
+    async def accept(self, *args, **kwargs) -> None:
+        self.accepted = True
+
+    async def send_json(self, data: object) -> None:
+        self.sent_json.append(data)
+
+    async def send_text(self, data: str) -> None:
+        self.sent_text.append(data)
+
+    async def close(self, *args, **kwargs) -> None:
+        self.close_code = kwargs.get("code", args[0] if args else None)
+        self.close_reason = kwargs.get("reason")
+        self.closed = True
+
+
+class _SandboxService:
+    def __init__(self, **sandbox_info: object) -> None:
+        self._sandbox_info = SimpleNamespace(sandbox_id="sandbox-1", **sandbox_info)
+
+    async def get_project_sandbox(self, _project_id: str) -> SimpleNamespace:
+        return self._sandbox_info
+
+
 @pytest.mark.unit
 def test_register_list_stop_external_http_service(sandbox_http_client: TestClient) -> None:
     """Register/list/stop flow should work for external_url services."""
@@ -104,6 +150,370 @@ def test_ensure_project_sandbox_sanitizes_internal_errors(
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.json()["detail"] == "Failed to create sandbox"
     assert "secret-host" not in response.text
+
+
+@pytest.mark.unit
+def test_get_project_sandbox_missing_sandbox_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(return_value=None)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Sandbox not found. Use POST to create one."
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+def test_ensure_project_sandbox_invalid_profile_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox",
+        json={"profile": "secret-profile"},
+    )
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["detail"] == "Invalid sandbox profile"
+    assert "secret-profile" not in response.text
+
+
+@pytest.mark.unit
+def test_project_sandbox_health_missing_sandbox_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.health_check = AsyncMock(return_value=False)
+    lifecycle_service.get_project_sandbox = AsyncMock(return_value=None)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/health")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Sandbox not found"
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+def test_project_sandbox_stats_missing_sandbox_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(return_value=None)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/stats")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Sandbox not found"
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+def test_terminate_project_sandbox_missing_sandbox_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.terminate_project_sandbox = AsyncMock(return_value=False)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Sandbox not found"
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+def test_list_project_sandboxes_invalid_status_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    response = sandbox_http_client.get("/api/v1/projects/sandboxes?status=secret-status")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.json()["detail"] == "Invalid sandbox status"
+    assert "secret-status" not in response.text
+
+
+@pytest.mark.unit
+def test_stop_project_desktop_missing_sandbox_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(return_value=None)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox/desktop")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Sandbox not found"
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+def test_stop_project_terminal_missing_sandbox_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(return_value=None)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox/terminal")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Sandbox not found"
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+async def test_desktop_websocket_proxy_sanitizes_internal_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(desktop_url="http://desktop.local")
+
+    async def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("desktop secret token")
+
+    monkeypatch.setattr(router_mod, "_connect_desktop_upstream", fail_connect)
+
+    await router_mod.proxy_project_desktop_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.sent_json == [{"error": "Desktop WebSocket proxy failed"}]
+    assert "secret" not in str(websocket.sent_json)
+    assert websocket.closed is True
+
+
+@pytest.mark.unit
+async def test_desktop_websocket_missing_sandbox_reason_is_sanitized() -> None:
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(get_project_sandbox=AsyncMock(return_value=None))
+
+    await router_mod.proxy_project_desktop_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Sandbox not found"
+    assert "proj-1" not in str(websocket.close_reason)
+
+
+@pytest.mark.unit
+async def test_desktop_websocket_missing_desktop_reason_is_sanitized() -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(desktop_url=None)
+
+    await router_mod.proxy_project_desktop_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Desktop service is not running"
+    assert "proj-1" not in str(websocket.close_reason)
+
+
+@pytest.mark.unit
+async def test_http_service_websocket_proxy_sanitizes_internal_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    event_publisher = AsyncMock()
+
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type="sandbox_internal",
+            service_url="http://sandbox-service.local",
+            project_id="proj-1",
+            sandbox_id="sandbox-1",
+            internal_port=5173,
+            status="running",
+            preview_url="/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/",
+            updated_at="2026-01-01T00:00:00Z",
+        )
+    )
+
+    async def allow_access(*_args, **_kwargs) -> None:
+        return None
+
+    async def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("http service secret token")
+
+    monkeypatch.setattr(router_mod, "verify_project_access", allow_access)
+    monkeypatch.setattr(router_mod, "_connect_http_service_upstream", fail_connect)
+
+    await router_mod.proxy_project_http_service_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        service_id="svc-int",
+        path="ws",
+        current_user=SimpleNamespace(id="user-1"),
+        event_publisher=event_publisher,
+        redis_client=None,
+        db=SimpleNamespace(),
+    )
+
+    assert websocket.sent_json == [{"error": "HTTP service WebSocket proxy failed"}]
+    assert "secret" not in str(websocket.sent_json)
+    assert websocket.closed is True
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_proxy_sanitizes_internal_session_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(terminal_url="http://terminal.local")
+
+    class FailingTerminalProxy:
+        async def create_session(self, *_args, **_kwargs):
+            raise ValueError("terminal docker socket secret")
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.sandbox.terminal_proxy.get_terminal_proxy",
+        lambda: FailingTerminalProxy(),
+    )
+
+    await router_mod.proxy_project_terminal_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        session_id=None,
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.sent_json == [
+        {"type": "error", "message": "Failed to create terminal session"}
+    ]
+    assert "secret" not in str(websocket.sent_json)
+    assert websocket.closed is True
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_missing_sandbox_reason_is_sanitized() -> None:
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(get_project_sandbox=AsyncMock(return_value=None))
+
+    await router_mod.proxy_project_terminal_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        session_id=None,
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Sandbox not found"
+    assert "proj-1" not in str(websocket.close_reason)
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_missing_terminal_reason_is_sanitized() -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(terminal_url=None)
+
+    await router_mod.proxy_project_terminal_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        session_id=None,
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Terminal service is not running"
+    assert "proj-1" not in str(websocket.close_reason)
+
+
+@pytest.mark.unit
+async def test_mcp_websocket_proxy_sanitizes_internal_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(websocket_url="ws://mcp.local")
+
+    async def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("mcp secret token")
+
+    monkeypatch.setattr(router_mod, "_connect_mcp_upstream", fail_connect)
+
+    await router_mod.proxy_project_mcp_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.sent_json == [{"error": "MCP WebSocket proxy failed"}]
+    assert "secret" not in str(websocket.sent_json)
+    assert websocket.closed is True
+
+
+@pytest.mark.unit
+async def test_mcp_websocket_missing_sandbox_reason_is_sanitized() -> None:
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(get_project_sandbox=AsyncMock(return_value=None))
+
+    await router_mod.proxy_project_mcp_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Sandbox not found"
+    assert "proj-1" not in str(websocket.close_reason)
+
+
+@pytest.mark.unit
+async def test_mcp_websocket_missing_mcp_reason_is_sanitized() -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(websocket_url=None)
+
+    await router_mod.proxy_project_mcp_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "MCP service is not running"
+    assert "proj-1" not in str(websocket.close_reason)
 
 
 @pytest.mark.unit
@@ -213,6 +623,9 @@ def test_stop_http_service_not_found(sandbox_http_client: TestClient) -> None:
     """Deleting a missing service returns 404."""
     response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox/http-services/missing")
     assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "HTTP service not found"
+    assert "missing" not in response.text
+    assert "proj-1" not in response.text
 
 
 @pytest.mark.unit
@@ -241,6 +654,9 @@ def test_http_proxy_returns_404_when_service_missing(sandbox_http_client: TestCl
     """HTTP reverse proxy endpoint returns 404 for unknown service."""
     response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/http-services/nope/proxy/")
     assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "HTTP service not found"
+    assert "nope" not in response.text
+    assert "proj-1" not in response.text
 
 
 @pytest.mark.unit
@@ -389,6 +805,21 @@ def test_create_preview_session_returns_host_based_launch_url(
 
 
 @pytest.mark.unit
+def test_create_preview_session_missing_service_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    """Preview-session 404 should not echo service or project identifiers."""
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox/http-services/missing/preview-session"
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "HTTP service not found"
+    assert "missing" not in response.text
+    assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
 def test_host_preview_proxy_redirects_session_token_to_clean_url(
     sandbox_http_client: TestClient,
 ) -> None:
@@ -419,6 +850,22 @@ def test_host_preview_proxy_redirects_session_token_to_clean_url(
     assert response.status_code == status.HTTP_302_FOUND
     assert response.headers["location"] == "http://svc-int.proj-1.preview.localhost:8000/"
     assert router_mod._PREVIEW_SESSION_COOKIE_NAME in response.headers["set-cookie"]
+
+
+@pytest.mark.unit
+def test_host_preview_proxy_missing_service_is_sanitized(
+    sandbox_http_client: TestClient,
+) -> None:
+    """Host preview 404 should not echo preview host labels."""
+    response = sandbox_http_client.get(
+        "/",
+        headers={"host": "missing.proj-1.preview.localhost:8000"},
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "HTTP service not found"
+    assert "missing" not in response.text
+    assert "proj-1" not in response.text
 
 
 @pytest.mark.unit
@@ -537,3 +984,48 @@ def test_host_preview_proxy_sanitizes_upstream_connection_errors(
     assert "127.0.0.1" not in response.text
     assert "connection refused" not in response.text
     event_publisher.publish_http_service_error.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_http_service_websocket_missing_service_reason_is_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Path-based WebSocket preview should not echo missing IDs in close reasons."""
+    websocket = _FakeWebSocket()
+
+    async def allow_access(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(router_mod, "verify_project_access", allow_access)
+
+    await router_mod.proxy_project_http_service_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        service_id="missing",
+        path="ws",
+        current_user=SimpleNamespace(id="user-1"),
+        event_publisher=None,
+        redis_client=None,
+        db=SimpleNamespace(),
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "HTTP service not found"
+
+
+@pytest.mark.unit
+async def test_host_preview_websocket_missing_service_reason_is_sanitized() -> None:
+    """Host-based WebSocket preview should not echo missing IDs in close reasons."""
+    websocket = _FakeWebSocket(headers={"host": "missing.proj-1.preview.localhost:8000"})
+
+    await router_mod.proxy_project_http_service_preview_host_websocket(
+        websocket=websocket,
+        path="ws",
+        event_publisher=None,
+        redis_client=None,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "HTTP service not found"

@@ -7,10 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from src.domain.model.agent.conversation.errors import (
+    ConversationDomainError,
+    ParticipantNotPresentError,
+)
 from src.infrastructure.adapters.primary.web.routers.agent import (
     conversations as conversations_router,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
+    CreateConversationRequest,
     UpdateConversationConfigRequest,
     UpdateConversationModeRequest,
     UpdateConversationTitleRequest,
@@ -209,3 +214,130 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_conversation_validation_errors_are_sanitized() -> None:
+    class FailingCreateUseCase:
+        async def execute(self, **_kwargs: Any) -> Any:
+            raise ValueError("internal project validation secret")
+
+    container = SimpleNamespace(
+        create_conversation_use_case=lambda _llm: FailingCreateUseCase(),
+    )
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.create_conversation(
+            data=CreateConversationRequest(project_id="project-1"),
+            request=_request_with_container(container),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid request"
+    assert "internal" not in exc_info.value.detail
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_conversation_invariant_errors_are_sanitized() -> None:
+    conversation = SimpleNamespace(
+        conversation_mode="autonomous",
+        workspace_id=None,
+        participant_agents=[],
+        assert_autonomous_invariants=MagicMock(
+            side_effect=ConversationDomainError("secret autonomous invariant")
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router._enforce_conversation_invariants(
+            conversation,
+            container=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Invalid conversation state"
+    assert "secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_workspace_roster_invariant_errors_are_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingValidator:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        async def assert_valid(self, _conversation: object) -> None:
+            raise ParticipantNotPresentError("secret workspace roster mismatch")
+
+    monkeypatch.setattr(
+        "src.application.services.agent.workspace_roster_validator.WorkspaceRosterValidator",
+        FailingValidator,
+    )
+    conversation = SimpleNamespace(
+        conversation_mode=None,
+        workspace_id="workspace-1",
+        participant_agents=["secret-agent"],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router._enforce_conversation_invariants(
+            conversation,
+            container=SimpleNamespace(workspace_agent_repository=lambda: object()),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Invalid workspace roster"
+    assert "secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_conversation_mode_value_errors_are_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = SimpleNamespace(
+        conversation_mode=None,
+        workspace_id=None,
+        linked_workspace_task_id=None,
+        participant_agents=[],
+        updated_at=None,
+        assert_autonomous_invariants=MagicMock(),
+    )
+    agent_service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        _conversation_repo=SimpleNamespace(
+            save=AsyncMock(side_effect=ValueError("secret persistence validation"))
+        ),
+    )
+    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        lambda _request, _db: container,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.update_conversation_mode(
+            conversation_id="conversation-1",
+            data=UpdateConversationModeRequest(conversation_mode="single_agent"),
+            request=MagicMock(),
+            project_id="project-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Invalid conversation mode update"
+    assert "secret" not in exc_info.value.detail
+    db.rollback.assert_awaited_once()
