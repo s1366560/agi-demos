@@ -166,7 +166,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             className="
               group w-full flex items-center gap-4 p-4 rounded-xl
               bg-white dark:bg-slate-800/50
-              border-l-4 border-l-primary border border-slate-200/50 dark:border-slate-700/30
+              border border-primary/30 dark:border-primary/25
               hover:shadow-lg hover:shadow-primary/10
               transition-shadow duration-200 ease-out
               text-left

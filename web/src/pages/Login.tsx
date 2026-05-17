@@ -55,34 +55,28 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-[#121520] relative">
+    <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950 relative">
       <div className="absolute top-4 right-4 z-50">
         <LanguageSwitcher />
       </div>
       {/* Left Side - Hero Section */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-900">
-        {/* Background Gradients */}
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/20 to-purple-600/20 z-10"></div>
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
-
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-950">
         {/* Content */}
-        <div className="relative z-20 flex flex-col justify-between w-full p-12 text-white">
+        <div className="relative flex w-full flex-col justify-between border-r border-slate-800 p-12 text-white">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-500/20 rounded-lg backdrop-blur-sm border border-blue-400/20">
+            <div className="rounded-md border border-slate-700 bg-slate-900 p-2">
               <Brain className="h-8 w-8 text-blue-400" />
             </div>
-            <span className="text-2xl font-bold tracking-tight">Mem Stack</span>
+            <span className="text-2xl font-bold tracking-tight">MemStack</span>
           </div>
 
           <div className="space-y-8">
-            <h1 className="text-5xl font-extrabold leading-tight">{t('login.hero.title')}</h1>
+            <h1 className="text-4xl font-bold leading-tight">{t('login.hero.title')}</h1>
             <p className="text-lg text-slate-300 max-w-md">{t('login.hero.subtitle')}</p>
 
             <div className="grid grid-cols-2 gap-6 pt-8">
               <div className="flex items-start space-x-3">
-                <div className="p-2 bg-blue-500/10 rounded-lg">
+                <div className="rounded-md border border-blue-400/20 bg-blue-400/10 p-2">
                   <Database className="h-5 w-5 text-blue-400" />
                 </div>
                 <div>
@@ -95,8 +89,8 @@ export const Login: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="p-2 bg-purple-500/10 rounded-lg">
-                  <Share2 className="h-5 w-5 text-purple-400" />
+                <div className="rounded-md border border-emerald-400/20 bg-emerald-400/10 p-2">
+                  <Share2 className="h-5 w-5 text-emerald-400" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-white">
@@ -166,7 +160,7 @@ export const Login: React.FC = () => {
                   onChange={(e) => {
                     setEmail(e.target.value);
                   }}
-                  className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
+                  className="block w-full px-4 py-3 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                   placeholder={t('login.form.email_placeholder')}
                   required
                   disabled={isLoading || authLoading}
@@ -198,7 +192,7 @@ export const Login: React.FC = () => {
                   onChange={(e) => {
                     setPassword(e.target.value);
                   }}
-                  className="block w-full px-4 py-3 pr-10 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
+                  className="block w-full px-4 py-3 pr-10 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] bg-gray-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900"
                   placeholder={t('login.form.password_placeholder')}
                   required
                   disabled={isLoading || authLoading}
@@ -227,7 +221,7 @@ export const Login: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:-translate-y-0.5"
+              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading || authLoading}
               data-testid="login-submit-button"
             >
@@ -262,7 +256,7 @@ export const Login: React.FC = () => {
           </div>
 
           {/* Demo Credentials Hint */}
-          <div className="mt-10 p-5 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30">
+          <div className="mt-10 p-5 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/30">
             <div className="flex items-center space-x-2 mb-3">
               <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">

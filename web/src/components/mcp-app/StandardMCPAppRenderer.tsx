@@ -937,6 +937,8 @@ export const StandardMCPAppRenderer = forwardRef<
       uiMetadata?.prefersBorder === false
         ? {}
         : { border: '1px solid var(--color-border-primary, #e2e8f0)', borderRadius: '6px' };
+    const portalSurfaceBackground =
+      computedTheme === 'dark' ? 'var(--color-surface-dark)' : 'var(--color-surface-light)';
 
     // Core content rendered by AppRenderer (shared across all display modes)
     const appContent = (
@@ -952,7 +954,7 @@ export const StandardMCPAppRenderer = forwardRef<
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center" style={{ height }}>
-                <Spin tip="Loading MCP App...">
+                <Spin tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App...')}>
                   <div style={{ minHeight: 100 }} />
                 </Spin>
               </div>
@@ -998,7 +1000,7 @@ export const StandardMCPAppRenderer = forwardRef<
                 position: 'fixed',
                 inset: 0,
                 zIndex: 9999,
-                background: 'var(--color-bg-container, #fff)',
+                background: portalSurfaceBackground,
                 display: 'flex',
                 flexDirection: 'column',
               }}
@@ -1019,7 +1021,7 @@ export const StandardMCPAppRenderer = forwardRef<
                     setDisplayMode('inline');
                   }}
                 >
-                  Exit Fullscreen
+                  {translate('components.mcpApp.renderer.exitFullscreen', 'Exit fullscreen')}
                 </Button>
               </div>
               <div style={{ flex: 1, overflow: 'auto' }}>{appContent}</div>
@@ -1045,7 +1047,7 @@ export const StandardMCPAppRenderer = forwardRef<
                 width: 400,
                 height: 300,
                 zIndex: 9998,
-                background: 'var(--color-bg-container, #fff)',
+                background: portalSurfaceBackground,
                 border: '1px solid var(--color-border-primary, #e2e8f0)',
                 borderRadius: 8,
                 boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
@@ -1076,7 +1078,7 @@ export const StandardMCPAppRenderer = forwardRef<
                       setDisplayMode('fullscreen');
                     }}
                   >
-                    Fullscreen
+                    {translate('components.mcpApp.renderer.fullscreen', 'Fullscreen')}
                   </Button>
                   <Button
                     size="small"
@@ -1084,7 +1086,7 @@ export const StandardMCPAppRenderer = forwardRef<
                       setDisplayMode('inline');
                     }}
                   >
-                    Close
+                    {translate('components.mcpApp.renderer.close', 'Close')}
                   </Button>
                 </div>
               </div>

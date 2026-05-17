@@ -63,12 +63,12 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
-const STATUS_BG: Record<string, string> = {
-  pending: 'border-l-slate-400',
-  running: 'border-l-blue-500',
-  completed: 'border-l-green-500',
-  failed: 'border-l-red-500',
-  cancelled: 'border-l-amber-500',
+const STATUS_SURFACE: Record<string, string> = {
+  pending: 'bg-slate-50 dark:bg-slate-800',
+  running: 'bg-blue-50/70 dark:bg-blue-950/20',
+  completed: 'bg-emerald-50/60 dark:bg-emerald-950/20',
+  failed: 'bg-red-50/60 dark:bg-red-950/20',
+  cancelled: 'bg-amber-50/60 dark:bg-amber-950/20',
 };
 
 interface ChainNodeProps {
@@ -78,7 +78,7 @@ interface ChainNodeProps {
 }
 
 const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
-  const borderColor = STATUS_BG[run.status] ?? 'border-l-slate-300';
+  const statusSurface = STATUS_SURFACE[run.status] ?? 'bg-white dark:bg-slate-800';
 
   const handleClick = useCallback(() => {
     onSelect?.(run);
@@ -96,8 +96,8 @@ const ChainNode: FC<ChainNodeProps> = memo(({ run, isLast, onSelect }) => {
       <button
         type="button"
         onClick={handleClick}
-        className={`flex-1 ml-3 mb-3 p-4 rounded-lg border-l-4 ${borderColor}
-          bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+        className={`flex-1 ml-3 mb-3 p-4 rounded-lg ${statusSurface}
+          border border-slate-200 dark:border-slate-700
           hover:shadow-md transition-shadow text-left`}
       >
         <div className="flex items-center gap-2 mb-1">

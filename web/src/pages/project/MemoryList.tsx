@@ -14,6 +14,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useContext, useRef, memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -36,6 +37,7 @@ import { formatDateOnly } from '@/utils/date';
 import { memoryAPI } from '../../services/api';
 
 import type { Memory } from '../../types/memory';
+import type { TFunction } from 'i18next';
 
 // ============================================================================
 // Types
@@ -100,6 +102,77 @@ const TEXTS = {
   deleteMemory: 'Delete memory',
   reprocess: 'Reprocess',
 };
+
+type MemoryListTexts = typeof TEXTS;
+
+function textFallback(t: TFunction, key: string, fallback: string): string {
+  const translated = t(key, fallback);
+  return translated === key ? fallback : translated;
+}
+
+function useMemoryListTexts(): MemoryListTexts {
+  const { t } = useTranslation();
+
+  return useMemo(
+    () => ({
+      title: textFallback(t, 'project.memories.title', TEXTS.title),
+      subtitle: textFallback(t, 'project.memories.subtitle', TEXTS.subtitle),
+      addMemory: textFallback(t, 'project.memories.addMemory', TEXTS.addMemory),
+      searchPlaceholder: textFallback(
+        t,
+        'project.memories.searchPlaceholder',
+        TEXTS.searchPlaceholder
+      ),
+      filterLabel: textFallback(t, 'project.memories.filter.label', TEXTS.filterLabel),
+      allTypes: textFallback(t, 'project.memories.filter.all_types', TEXTS.allTypes),
+      contentTypeLabel: textFallback(
+        t,
+        'project.memories.contentTypeLabel',
+        TEXTS.contentTypeLabel
+      ),
+      contentTypes: {
+        text: textFallback(t, 'project.memories.contentTypes.text', TEXTS.contentTypes.text),
+        document: textFallback(
+          t,
+          'project.memories.contentTypes.document',
+          TEXTS.contentTypes.document
+        ),
+        image: textFallback(t, 'project.memories.contentTypes.image', TEXTS.contentTypes.image),
+        video: textFallback(t, 'project.memories.contentTypes.video', TEXTS.contentTypes.video),
+      },
+      noMemories: textFallback(t, 'project.memories.noMemories', TEXTS.noMemories),
+      loading: textFallback(t, 'common.loading', TEXTS.loading),
+      projectNotFound: textFallback(t, 'project.overview.not_found', TEXTS.projectNotFound),
+      retry: textFallback(t, 'common.retry', TEXTS.retry),
+      tableName: textFallback(t, 'project.memories.columns.name', TEXTS.tableName),
+      tableType: textFallback(t, 'project.memories.columns.type', TEXTS.tableType),
+      tableStatus: textFallback(t, 'project.memories.columns.status', TEXTS.tableStatus),
+      tableProcessing: textFallback(
+        t,
+        'project.memories.columns.processing',
+        TEXTS.tableProcessing
+      ),
+      tableCreated: textFallback(t, 'project.memories.columns.created', TEXTS.tableCreated),
+      statusEnabled: textFallback(t, 'common.status.enabled', TEXTS.statusEnabled),
+      statusDisabled: textFallback(t, 'common.status.disabled', TEXTS.statusDisabled),
+      statusCompleted: textFallback(t, 'project.memories.status.completed', TEXTS.statusCompleted),
+      statusProcessing: textFallback(
+        t,
+        'project.memories.status.processing',
+        TEXTS.statusProcessing
+      ),
+      statusFailed: textFallback(t, 'project.memories.status.failed', TEXTS.statusFailed),
+      statusPending: textFallback(t, 'project.memories.status.pending', TEXTS.statusPending),
+      deleteTitle: textFallback(t, 'project.memories.delete.title', TEXTS.deleteTitle),
+      deleteMessage: textFallback(t, 'project.memories.delete.message', TEXTS.deleteMessage),
+      deleteConfirm: textFallback(t, 'common.delete', TEXTS.deleteConfirm),
+      deleteCancel: textFallback(t, 'common.cancel', TEXTS.deleteCancel),
+      deleteMemory: textFallback(t, 'project.memories.delete.actionLabel', TEXTS.deleteMemory),
+      reprocess: textFallback(t, 'project.memories.actions.reprocess', TEXTS.reprocess),
+    }),
+    [t]
+  );
+}
 
 const ROW_HEIGHT = 80;
 const TABLE_MIN_WIDTH_CLASS = 'min-w-[920px]';
@@ -222,6 +295,7 @@ interface MemoryListProps {
 
 const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   const { projectId } = useParams<{ projectId: string }>();
+  const texts = useMemoryListTexts();
 
   // State
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -347,7 +421,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   };
 
   if (!projectId) {
-    return <MemoryList.Error error={TEXTS.projectNotFound} />;
+    return <MemoryList.Error error={texts.projectNotFound} />;
   }
 
   return (
@@ -405,21 +479,22 @@ interface HeaderProps {
 
 const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
   const { projectBasePath } = useProjectBasePath();
+  const texts = useMemoryListTexts();
 
   return (
     <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-          {TEXTS.title}
+          {texts.title}
         </h1>
-        <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
+        <p className="text-sm text-slate-500">{texts.subtitle}</p>
       </div>
       <Link
         to={`${projectBasePath}/memories/new`}
         className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
       >
         <Plus size={18} />
-        <span>{TEXTS.addMemory}</span>
+        <span>{texts.addMemory}</span>
       </Link>
     </div>
   );
@@ -447,6 +522,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
   onContentTypeFilterChange: propOnContentTypeFilterChange,
 }) => {
   const context = useMemoryListContextOptional();
+  const texts = useMemoryListTexts();
   const search = propSearch ?? context?.state.search ?? '';
   const onSearchChange = propOnSearchChange ?? context?.actions.setSearch;
   const contentTypeFilter = propContentTypeFilter ?? context?.state.contentTypeFilter ?? 'all';
@@ -466,15 +542,16 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
           value={search}
           onChange={(e) => onSearchChange?.(e.target.value)}
           className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600/20 focus:bg-white dark:focus:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
-          placeholder={TEXTS.searchPlaceholder}
+          aria-label={texts.searchPlaceholder}
+          placeholder={texts.searchPlaceholder}
         />
       </div>
       <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 px-2 md:px-0">
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
-          {TEXTS.filterLabel}
+          {texts.filterLabel}
         </span>
         <label className="sr-only" htmlFor="memory-type-filter">
-          {TEXTS.contentTypeLabel}
+          {texts.contentTypeLabel}
         </label>
         <div className="relative">
           <select
@@ -485,11 +562,11 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
             }}
             className="appearance-none rounded-lg border border-blue-600/20 bg-blue-600/10 py-1.5 pl-3 pr-8 text-sm font-medium text-blue-600 transition-colors hover:border-blue-600/40 focus:outline-none focus:ring-2 focus:ring-blue-600/20 dark:text-blue-400"
           >
-            <option value="all">{TEXTS.allTypes}</option>
-            <option value="text">{TEXTS.contentTypes.text}</option>
-            <option value="document">{TEXTS.contentTypes.document}</option>
-            <option value="image">{TEXTS.contentTypes.image}</option>
-            <option value="video">{TEXTS.contentTypes.video}</option>
+            <option value="all">{texts.allTypes}</option>
+            <option value="text">{texts.contentTypes.text}</option>
+            <option value="document">{texts.contentTypes.document}</option>
+            <option value="image">{texts.contentTypes.image}</option>
+            <option value="video">{texts.contentTypes.video}</option>
           </select>
           <ChevronDown
             size={16}
@@ -518,6 +595,7 @@ interface VirtualListProps {
 const VirtualListInternal: React.FC<VirtualListProps> = memo(
   ({ parentRef, virtualizer, filteredMemories, totalSize, className = '' }) => {
     const { state: _state, actions: _actions, projectId: _projectId } = useMemoryListContext();
+    const texts = useMemoryListTexts();
 
     return (
       <div data-testid="memory-list-horizontal-scroll" className={`overflow-x-auto ${className}`}>
@@ -525,19 +603,19 @@ const VirtualListInternal: React.FC<VirtualListProps> = memo(
           <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
             <tr>
               <th className="w-[320px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
-                {TEXTS.tableName}
+                {texts.tableName}
               </th>
               <th className="w-[110px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
-                {TEXTS.tableType}
+                {texts.tableType}
               </th>
               <th className="w-[140px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
-                {TEXTS.tableStatus}
+                {texts.tableStatus}
               </th>
               <th className="w-[150px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
-                {TEXTS.tableProcessing}
+                {texts.tableProcessing}
               </th>
               <th className="w-[120px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400 text-right">
-                {TEXTS.tableCreated}
+                {texts.tableCreated}
               </th>
               <th className="w-[100px] px-6 py-3 font-semibold text-slate-500 dark:text-slate-400"></th>
             </tr>
@@ -584,23 +662,24 @@ interface StatusBadgeProps {
   className?: string | undefined;
 }
 
-const getStatusText = (status: string | undefined): string => {
+const getStatusText = (status: string | undefined, texts: MemoryListTexts): string => {
   switch (status) {
     case 'COMPLETED':
-      return TEXTS.statusCompleted;
+      return texts.statusCompleted;
     case 'PROCESSING':
-      return TEXTS.statusProcessing;
+      return texts.statusProcessing;
     case 'FAILED':
-      return TEXTS.statusFailed;
+      return texts.statusFailed;
     case 'PENDING':
-      return TEXTS.statusPending;
+      return texts.statusPending;
     default:
-      return TEXTS.statusPending;
+      return texts.statusPending;
   }
 };
 
 const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
   ({ status, progress, className = '' }) => {
+    const texts = useMemoryListTexts();
     const styles = getProcessingStatusStyles(status);
 
     return (
@@ -609,7 +688,7 @@ const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles.badge}`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${styles.dot}`}></span>
-          {progress !== undefined ? `${String(progress)}%` : getStatusText(status)}
+          {progress !== undefined ? `${String(progress)}%` : getStatusText(status, texts)}
         </span>
         {progress !== undefined && (
           <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
@@ -625,6 +704,11 @@ const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
 );
 
 StatusBadgeInternal.displayName = 'MemoryList.StatusBadge';
+
+const getMemoryStatusText = (status: string | undefined, texts: MemoryListTexts): string => {
+  if (status === 'DISABLED') return texts.statusDisabled;
+  return texts.statusEnabled;
+};
 
 // ============================================================================
 // MemoryRow Sub-Component
@@ -643,6 +727,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
     const state = context?.state;
     const actions = context?.actions;
     const { projectBasePath } = useProjectBasePath();
+    const texts = useMemoryListTexts();
     const onDelete = propOnDelete ?? actions?.confirmDelete;
     const progress = state?.taskProgress[memory.id]?.progress;
 
@@ -690,7 +775,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
             <span
               className={`w-1.5 h-1.5 rounded-full ${memory.status === 'DISABLED' ? 'bg-red-500' : 'bg-green-500'}`}
             ></span>
-            {memory.status}
+            {getMemoryStatusText(memory.status, texts)}
           </span>
         </td>
         <td className="w-[150px] px-6 py-3">
@@ -708,7 +793,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
                   void actions.handleReprocess(memory.id);
                 }}
                 className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                title={TEXTS.reprocess}
+                title={texts.reprocess}
               >
                 <RefreshCw size={16} style={{ fontSize: '20px' }} />
               </button>
@@ -721,7 +806,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
                 }}
                 disabled={state?.deletingId === memory.id}
                 className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                title={TEXTS.deleteMemory}
+                title={texts.deleteMemory}
               >
                 {state?.deletingId === memory.id ? (
                   <Loader2
@@ -747,9 +832,10 @@ MemoryRowInternal.displayName = 'MemoryList.MemoryRow';
 // Empty Sub-Component
 // ============================================================================
 
-const EmptyInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => (
-  <div className={`p-8 text-center text-slate-500 ${className}`}>{TEXTS.noMemories}</div>
-);
+const EmptyInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => {
+  const texts = useMemoryListTexts();
+  return <div className={`p-8 text-center text-slate-500 ${className}`}>{texts.noMemories}</div>;
+};
 
 EmptyInternal.displayName = 'MemoryList.Empty';
 
@@ -757,9 +843,10 @@ EmptyInternal.displayName = 'MemoryList.Empty';
 // Loading Sub-Component
 // ============================================================================
 
-const LoadingInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => (
-  <div className={`p-10 text-center text-slate-500 ${className}`}>{TEXTS.loading}</div>
-);
+const LoadingInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => {
+  const texts = useMemoryListTexts();
+  return <div className={`p-10 text-center text-slate-500 ${className}`}>{texts.loading}</div>;
+};
 
 LoadingInternal.displayName = 'MemoryList.Loading';
 
@@ -773,23 +860,26 @@ interface ErrorProps {
   className?: string | undefined;
 }
 
-const ErrorInternal: React.FC<ErrorProps> = ({ error, onRetry, className = '' }) => (
-  <div className={`p-8 text-center ${className}`}>
-    <div className="flex flex-col items-center gap-4">
-      <AlertCircle size={32} className="text-red-500" />
-      <p className="text-red-600 dark:text-red-400">{error}</p>
-      {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          {TEXTS.retry}
-        </button>
-      )}
+const ErrorInternal: React.FC<ErrorProps> = ({ error, onRetry, className = '' }) => {
+  const texts = useMemoryListTexts();
+  return (
+    <div className={`p-8 text-center ${className}`}>
+      <div className="flex flex-col items-center gap-4">
+        <AlertCircle size={32} className="text-red-500" />
+        <p className="text-red-600 dark:text-red-400">{error}</p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {texts.retry}
+          </button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 ErrorInternal.displayName = 'MemoryList.Error';
 
@@ -808,6 +898,7 @@ interface DeleteModalProps {
 
 const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
   ({ isOpen, onClose, onConfirm, memoryTitle, isDeleting = false, className = '' }) => {
+    const texts = useMemoryListTexts();
     if (!isOpen) return null;
 
     return (
@@ -816,10 +907,10 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
       >
         <div className="bg-white dark:bg-surface-dark rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-            {TEXTS.deleteTitle}
+            {texts.deleteTitle}
           </h3>
           <p className="text-slate-600 dark:text-slate-300 mb-6">
-            {TEXTS.deleteMessage}
+            {texts.deleteMessage}
             <br />
             <span className="font-medium text-slate-900 dark:text-white">"{memoryTitle}"</span>
           </p>
@@ -830,7 +921,7 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
               disabled={isDeleting}
               className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
-              {TEXTS.deleteCancel}
+              {texts.deleteCancel}
             </button>
             <button
               type="button"
@@ -838,7 +929,7 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
               disabled={isDeleting}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
             >
-              {isDeleting ? TEXTS.loading : TEXTS.deleteConfirm}
+              {isDeleting ? texts.loading : texts.deleteConfirm}
             </button>
           </div>
         </div>

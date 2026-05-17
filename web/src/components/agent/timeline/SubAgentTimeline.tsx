@@ -6,7 +6,7 @@
  *
  * Sprint 1 improvements:
  *  1.1 - Name fallback (name || id slice || unnamed)
- *  1.2 - Colored left border per status + elevated shadow
+ *  1.2 - Status-tinted surface + elevated shadow
  *  1.3 - Status pill with humanized labels
  *  1.4 - Increased padding
  *  1.5 - Humanized error messages
@@ -47,7 +47,6 @@ import {
   STATUS_PILL_CLASSES,
   STATUS_LABEL_KEYS,
   STATUS_LABEL_FALLBACKS,
-  STATUS_BORDER_CLASSES,
   ERROR_PATTERNS,
 } from './subagentUtils';
 
@@ -444,9 +443,8 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     [group.subagentName, group.subagentId, t]
   );
 
-  // 1.2 - Card classes: colored left border + background per status
+  // 1.2 - Card classes: status background per status
   const cardClasses = useMemo(() => {
-    const border = STATUS_BORDER_CLASSES[group.status] ?? '';
     const pulse = group.status === 'running' ? 'animate-subagent-pulse' : '';
 
     let bg: string;
@@ -480,7 +478,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         bg = 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700';
     }
 
-    return `rounded-lg border border-l-3 ${border} ${bg} ${pulse} shadow-sm transition-colors duration-300`;
+    return `rounded-lg border ${bg} ${pulse} shadow-sm transition-colors duration-300`;
   }, [group.status]);
 
   // Header label with name fallback applied

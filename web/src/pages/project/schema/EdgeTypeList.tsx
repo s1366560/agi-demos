@@ -695,10 +695,10 @@ const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(
             onClick={() => {
               onSelect(edge.id);
             }}
-            className={`p-4 border-b border-slate-200 dark:border-border-dark cursor-pointer transition-colors border-l-4 ${
+            className={`p-4 border-b border-slate-200 dark:border-border-dark cursor-pointer transition-colors ${
               selectedEdgeId === edge.id
-                ? 'bg-blue-50 dark:bg-primary/10 border-l-blue-600 dark:border-l-primary hover:bg-blue-100 dark:hover:bg-primary/20'
-                : 'border-l-transparent hover:bg-slate-100 dark:hover:bg-white/5'
+                ? 'bg-blue-50 dark:bg-primary/10 hover:bg-blue-100 dark:hover:bg-primary/20'
+                : 'hover:bg-slate-100 dark:hover:bg-white/5'
             }`}
           >
             <div className="flex justify-between items-start mb-1">

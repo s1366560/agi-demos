@@ -158,24 +158,19 @@ export const OAuthCallback: React.FC = () => {
   const providerName = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : '';
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-[#121520]">
+    <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950">
       {/* Left Side - Hero Section (same as Login page) */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-900">
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/20 to-purple-600/20 z-10" />
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
-        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000" />
-
-        <div className="relative z-20 flex flex-col justify-between w-full p-12 text-white">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-950">
+        <div className="relative flex w-full flex-col justify-between border-r border-slate-800 p-12 text-white">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-500/20 rounded-lg backdrop-blur-sm border border-blue-400/20">
+            <div className="rounded-md border border-slate-700 bg-slate-900 p-2">
               <Brain className="h-8 w-8 text-blue-400" />
             </div>
-            <span className="text-2xl font-bold tracking-tight">Mem Stack</span>
+            <span className="text-2xl font-bold tracking-tight">MemStack</span>
           </div>
 
           <div className="space-y-8">
-            <h1 className="text-5xl font-extrabold leading-tight">
+            <h1 className="text-4xl font-bold leading-tight">
               {t('login.hero.title', 'Enterprise AI Memory Cloud')}
             </h1>
             <p className="text-lg text-slate-300 max-w-md">
@@ -252,7 +247,7 @@ export const OAuthCallback: React.FC = () => {
                 )}
                 <button
                   onClick={handleRetry}
-                  className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                  className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                 >
                   {t('login.oauth.tryAgain', 'Try again')}
                 </button>

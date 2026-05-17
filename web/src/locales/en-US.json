@@ -3921,21 +3921,36 @@
       "processing": "Processing Status",
       "search_placeholder": "Search memories...",
       "searchPlaceholder": "Search memories...",
+      "contentTypeLabel": "Memory type",
+      "contentTypes": {
+        "text": "Text",
+        "document": "Document",
+        "image": "Image",
+        "video": "Video"
+      },
       "actions": {
         "reprocess": "Reprocess"
+      },
+      "delete": {
+        "title": "Delete Memory",
+        "message": "Are you sure you want to delete this memory? This action cannot be undone.",
+        "actionLabel": "Delete memory"
       },
       "errors": {
         "reprocessFailed": "Failed to start processing. Please try again."
       },
       "filter": {
+        "label": "Filter",
         "all_types": "All Types",
         "all_status": "All Status",
         "date_range": "Date Range"
       },
       "columns": {
+        "name": "Name",
         "title": "Title",
         "type": "Type",
         "status": "Status",
+        "processing": "Processing",
         "created": "Created",
         "actions": "Actions"
       },
@@ -4953,6 +4968,14 @@
       "clear": "Clear",
       "noActiveRun": "No active graph run",
       "noNodes": "Waiting for nodes to start..."
+    },
+    "tableView": {
+      "defaultTitle": "Data Table",
+      "rowCount": "{{count}} rows",
+      "rowCount_one": "{{count}} row",
+      "rowCount_other": "{{count}} rows",
+      "searchAria": "Search table rows",
+      "exportCsv": "Export CSV"
     },
     "multiAgent": {
       "status": {
@@ -7634,8 +7657,12 @@
     },
     "mcpApp": {
       "renderer": {
+        "loading": "Loading MCP App...",
         "loadFailed": "Failed to load MCP App",
-        "noUiResource": "This MCP tool does not provide a UI resource. Showing tool result below."
+        "noUiResource": "This MCP tool does not provide a UI resource. Showing tool result below.",
+        "exitFullscreen": "Exit fullscreen",
+        "fullscreen": "Fullscreen",
+        "close": "Close"
       },
       "launcher": {
         "title": "MCP Apps",

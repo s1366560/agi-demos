@@ -7,6 +7,8 @@
 
 import React, { useState, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Typography } from 'antd';
 import { Download, FileText, Search } from 'lucide-react';
 
@@ -16,9 +18,16 @@ import type { ColumnsType, TableProps } from 'antd/es/table';
 
 const { Text } = Typography;
 
-type TableRow = Record<string, unknown> & { id?: React.Key | undefined };
+type TableRow = Record<string, unknown> & {
+  id?: React.Key | undefined;
+  key?: React.Key | undefined;
+};
 type TableColumn = ColumnsType<TableRow>[number];
 type DataIndexPath = string | number | readonly (string | number)[];
+interface CellValueLabels {
+  yes: string;
+  no: string;
+}
 
 interface TableViewProps {
   /** Table data */
@@ -42,10 +51,13 @@ interface TableViewProps {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-const formatCellValue = (value: unknown): string => {
+const formatCellValue = (
+  value: unknown,
+  labels: CellValueLabels = { yes: 'Yes', no: 'No' }
+): string => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') return JSON.stringify(value);
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'boolean') return value ? labels.yes : labels.no;
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'bigint') return value.toString();
   if (typeof value === 'symbol') return value.description ?? '';
@@ -87,20 +99,37 @@ const escapeCsvValue = (value: unknown): string => {
   return strValue;
 };
 
+const getFallbackRowKey = (row: TableRow, index: number): React.Key => {
+  const rowIndex = String(index);
+  try {
+    return `row-${rowIndex}-${JSON.stringify(row)}`;
+  } catch {
+    return `row-${rowIndex}`;
+  }
+};
+
 /**
  * Component for displaying data in a table with search and export
  */
 export const TableView: React.FC<TableViewProps> = ({
   data,
   columns: propColumns,
-  title = 'Data Table',
+  title,
   filename = 'table',
   showSearch = true,
   showExport = true,
   size = 'middle',
   pagination = { pageSize: 10 },
 }) => {
+  const { t } = useTranslation();
   const [searchText, setSearchText] = useState('');
+  const cellValueLabels = useMemo<CellValueLabels>(
+    () => ({
+      yes: t('common.yes', { defaultValue: 'Yes' }),
+      no: t('common.no', { defaultValue: 'No' }),
+    }),
+    [t]
+  );
 
   // Auto-detect columns if not provided
   const detectedColumns = useMemo<ColumnsType<TableRow>>(() => {
@@ -119,21 +148,32 @@ export const TableView: React.FC<TableViewProps> = ({
         if (typeof aVal === 'number' && typeof bVal === 'number') {
           return aVal - bVal;
         }
-        return formatCellValue(aVal).localeCompare(formatCellValue(bVal));
+        return formatCellValue(aVal, cellValueLabels).localeCompare(
+          formatCellValue(bVal, cellValueLabels)
+        );
       },
-      render: (value: unknown) => formatCellValue(value) || '-',
+      render: (value: unknown) => formatCellValue(value, cellValueLabels) || '-',
     }));
-  }, [propColumns, data]);
+  }, [propColumns, data, cellValueLabels]);
 
   const filteredData = useMemo(() => {
     if (!searchText) return data;
     const lowerValue = searchText.toLowerCase();
     return data.filter((row) =>
       Object.values(row).some((cellValue) =>
-        formatCellValue(cellValue).toLowerCase().includes(lowerValue)
+        formatCellValue(cellValue, cellValueLabels).toLowerCase().includes(lowerValue)
       )
     );
-  }, [data, searchText]);
+  }, [data, searchText, cellValueLabels]);
+  const rowCountKey =
+    filteredData.length === 1 ? 'agent.tableView.rowCount_one' : 'agent.tableView.rowCount_other';
+  const rowKeys = useMemo(() => {
+    const keys = new WeakMap<TableRow, React.Key>();
+    data.forEach((row, index) => {
+      keys.set(row, row.id ?? row.key ?? getFallbackRowKey(row, index));
+    });
+    return keys;
+  }, [data]);
 
   // Export to CSV
   const handleExportCSV = () => {
@@ -147,7 +187,11 @@ export const TableView: React.FC<TableViewProps> = ({
       .map(({ column, path }) => escapeCsvValue(getColumnHeader(column, path)))
       .join(',');
     const rows = data.map((row) =>
-      exportColumns.map(({ path }) => escapeCsvValue(getNestedValue(row, path))).join(',')
+      exportColumns
+        .map(({ path }) =>
+          escapeCsvValue(formatCellValue(getNestedValue(row, path), cellValueLabels))
+        )
+        .join(',')
     );
 
     const csv = [headers, ...rows].join('\n');
@@ -168,15 +212,23 @@ export const TableView: React.FC<TableViewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FileText size={16} />
-            <Text strong>{title}</Text>
+            <Text strong>
+              {title ?? t('agent.tableView.defaultTitle', { defaultValue: 'Data Table' })}
+            </Text>
             <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 12 }}>
-              ({filteredData.length} rows)
+              ({t(rowCountKey, {
+                count: filteredData.length,
+                defaultValue: filteredData.length === 1 ? '{{count}} row' : '{{count}} rows',
+              })})
             </Text>
           </div>
           <LazySpace>
             {showSearch && (
               <LazyInput
-                placeholder="Search..."
+                aria-label={t('agent.tableView.searchAria', {
+                  defaultValue: 'Search table rows',
+                })}
+                placeholder={t('common.search', { defaultValue: 'Search' })}
                 prefix={<Search size={16} />}
                 value={searchText}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -192,7 +244,7 @@ export const TableView: React.FC<TableViewProps> = ({
                 onClick={handleExportCSV}
                 disabled={data.length === 0}
               >
-                Export CSV
+                {t('agent.tableView.exportCsv', { defaultValue: 'Export CSV' })}
               </LazyButton>
             )}
           </LazySpace>
@@ -203,7 +255,7 @@ export const TableView: React.FC<TableViewProps> = ({
       <LazyTable
         columns={detectedColumns}
         dataSource={filteredData}
-        rowKey={(record: TableRow, index?: number) => record.id ?? index ?? 0}
+        rowKey={(record: TableRow) => rowKeys.get(record) ?? record.id ?? record.key ?? 0}
         size={size}
         pagination={pagination}
         scroll={{ x: 'max-content' }}

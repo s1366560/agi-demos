@@ -107,7 +107,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
         {/* Content */}
         <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-          <div className="border-l-3 border-slate-300 dark:border-slate-600 rounded-r-xl overflow-hidden bg-slate-50/80 dark:bg-slate-800/50">
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-800/50">
             {/* Header - always visible */}
             <button
               ref={buttonRef}

@@ -19,10 +19,10 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 
+import { fetchArtifactResource } from '../../../services/artifactService';
 import { type CanvasContentType, useCanvasStore } from '../../../stores/canvasStore';
 import { useLayoutModeStore } from '../../../stores/layoutMode';
 import { useSandboxStore } from '../../../stores/sandbox';
-import { fetchArtifactResource } from '../../../services/artifactService';
 import { isOfficeMimeType, isOfficeExtension } from '../../../utils/filePreview';
 
 import { TimeBadge } from './shared';
