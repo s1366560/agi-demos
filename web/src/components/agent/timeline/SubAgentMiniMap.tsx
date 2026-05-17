@@ -32,19 +32,19 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
   if (summaries.length === 0) return null;
 
   return (
-    <div className="absolute top-4 right-4 z-10 w-64 rounded-lg border border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95 animate-fade-in transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200">
+    <div className="absolute top-4 right-4 z-10 w-64 rounded-lg border border-slate-200 bg-surface-light shadow-md dark:border-slate-800 dark:bg-slate-900 animate-fade-in transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200">
       <button
         type="button"
-        className="flex w-full cursor-pointer items-center justify-between border-b border-gray-100 p-2 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50"
+        className="flex w-full cursor-pointer items-center justify-between border-b border-slate-200 p-2 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
         onClick={() => {
           setIsExpanded(!isExpanded);
         }}
       >
-        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
           {t('agent.subagent.minimap_title', 'SubAgent Timeline')}
         </span>
         <span
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           aria-hidden="true"
         >
           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -57,7 +57,7 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
             <button
               type="button"
               key={`${String(summary.startIndex)}-${summary.subagentId}`}
-              className="group flex w-full cursor-pointer items-center justify-between rounded p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50"
+              className="group flex w-full cursor-pointer items-center justify-between rounded p-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
               onClick={() => {
                 onScrollTo(summary.startIndex);
               }}
@@ -67,11 +67,11 @@ export const SubAgentMiniMap: FC<SubAgentMiniMapProps> = ({ summaries, onScrollT
                   className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_CLASSES[summary.status] || 'bg-gray-400'}`}
                   title={summary.status}
                 />
-                <span className="truncate font-medium text-gray-700 dark:text-gray-300">
+                <span className="truncate font-medium text-slate-700 dark:text-slate-300">
                   {summary.name}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
                 {summary.executionTimeMs ? (
                   <span>{formatDuration(summary.executionTimeMs)}</span>
                 ) : summary.status === 'running' ? (

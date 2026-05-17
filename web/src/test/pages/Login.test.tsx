@@ -26,7 +26,7 @@ describe('Login', () => {
 
   it('renders login form', () => {
     render(<Login />);
-    expect(screen.getAllByText('Mem Stack').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('MemStack').length).toBeGreaterThan(0);
     expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
   });
 
@@ -133,21 +133,19 @@ describe('Login', () => {
     expect(passwordInput).toHaveValue('userpassword');
   });
 
-  it('supports keyboard activation for demo credentials', () => {
+  it('renders demo credentials as semantic buttons', () => {
     render(<Login />);
     const emailInput = screen.getByLabelText('Email');
     const passwordInput = screen.getByLabelText('Password');
+    const adminDemoButton = screen.getByRole('button', { name: 'Use admin demo credentials' });
+    const userDemoButton = screen.getByRole('button', { name: 'Use user demo credentials' });
 
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Use admin demo credentials' }), {
-      key: 'Enter',
-    });
+    fireEvent.click(adminDemoButton);
 
     expect(emailInput).toHaveValue('admin@memstack.ai');
     expect(passwordInput).toHaveValue('adminpassword');
 
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Use user demo credentials' }), {
-      key: ' ',
-    });
+    fireEvent.click(userDemoButton);
 
     expect(emailInput).toHaveValue('user@memstack.ai');
     expect(passwordInput).toHaveValue('userpassword');

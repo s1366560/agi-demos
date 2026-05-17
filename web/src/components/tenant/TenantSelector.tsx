@@ -59,6 +59,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
             </h3>
           </div>
           <button
+            type="button"
             onClick={onCreateTenant}
             className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-sm"
           >
@@ -76,6 +77,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
               {t('tenant.selector.emptyMessage')}
             </p>
             <button
+              type="button"
               onClick={onCreateTenant}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
@@ -87,28 +89,23 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
             {tenants.map((tenant) => (
               <div
                 key={tenant.id}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleTenantSelect(tenant);
-                  }
-                }}
-                className={`p-3 rounded-lg border cursor-pointer transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
+                className={`rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 ${
                   currentTenant?.id === tenant.id
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
                 }`}
-                onClick={() => {
-                  handleTenantSelect(tenant);
-                }}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
+                <div className="flex items-center justify-between p-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTenantSelect(tenant);
+                    }}
+                    className="flex min-w-0 flex-1 items-center space-x-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  >
                     <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                        <Building2 className="h-5 w-5 text-white" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
+                        <Building2 className="h-5 w-5 text-slate-50 dark:text-slate-900" />
                       </div>
                     </div>
                     <div>
@@ -126,7 +123,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </button>
                   <div className="flex items-center space-x-2">
                     <button
                       type="button"

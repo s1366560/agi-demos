@@ -58,6 +58,15 @@ describe('MemoryDetailModal', () => {
     expect(screen.getByText('User: user1')).toBeInTheDocument();
   });
 
+  it('closes on Escape', () => {
+    const onClose = vi.fn();
+    render(<MemoryDetailModal isOpen={true} onClose={onClose} memory={mockMemory} />);
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('renders entities and relationships', () => {
     render(<MemoryDetailModal isOpen={true} onClose={mockOnClose} memory={mockMemory} />);
 
@@ -97,9 +106,7 @@ describe('MemoryDetailModal', () => {
     fireEvent.click(screen.getByTitle('Share'));
 
     await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(
-        'https://example.test/tenant/t1/project/p1/memory/1'
-      );
+      expect(writeText).toHaveBeenCalledWith('https://example.test/tenant/t1/project/p1/memory/1');
     });
   });
 

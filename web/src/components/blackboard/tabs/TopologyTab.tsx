@@ -26,7 +26,7 @@ export function TopologyTab({
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <div className="rounded-2xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+        <div className="rounded-lg border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.topologyNodesTitle', 'Nodes')}
@@ -65,7 +65,7 @@ export function TopologyTab({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
+        <div className="rounded-lg border border-border-light bg-surface-light p-5 dark:border-border-dark dark:bg-surface-dark-alt">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.topologyEdgesTitle', 'Edges')}

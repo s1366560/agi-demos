@@ -134,12 +134,12 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
         <div
           className={
             forcedSkillName
-              ? 'relative bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400 rounded-2xl rounded-tr-none p-px'
+              ? 'relative rounded-lg rounded-tr-none border border-primary/30 bg-primary/10'
               : ''
           }
         >
           {forcedSkillName && (
-            <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-primary/90 flex items-center justify-center ring-2 ring-white dark:ring-slate-900 z-10">
+            <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary flex items-center justify-center ring-2 ring-white dark:ring-slate-900 z-10">
               <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
               </svg>
@@ -148,8 +148,8 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
           <div
             className={
               forcedSkillName
-                ? 'bg-white dark:bg-slate-900 rounded-2xl rounded-tr-none px-5 py-4.5'
-                : 'bg-primary text-white rounded-2xl rounded-tr-none px-5 py-4.5 shadow-md'
+                ? 'bg-white dark:bg-slate-900 rounded-lg rounded-tr-none px-5 py-4.5'
+                : 'bg-primary text-white rounded-lg rounded-tr-none px-5 py-4.5 shadow-md'
             }
           >
             <p
@@ -270,7 +270,7 @@ export function ReasoningLogCard({
             </span>
           )}
         </summary>
-        <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed space-y-2">
+        <div className="mt-3 space-y-2 border-l border-slate-200 pl-4 text-sm leading-relaxed text-slate-500 dark:border-border-dark dark:text-text-muted">
           {steps.map((step, index) => (
             <p key={index}>{step}</p>
           ))}

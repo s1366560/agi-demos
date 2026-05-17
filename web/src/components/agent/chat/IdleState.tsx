@@ -124,11 +124,12 @@ export function IdleState({
 
           return (
             <button
+              type="button"
               key={tile.id}
               onClick={() => {
                 handleTileClick(tile);
               }}
-              className={`group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 cursor-pointer text-left`}
+              className={`group flex cursor-pointer flex-col items-start rounded-lg border border-slate-200 bg-white p-5 text-left transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 hover:border-primary hover:shadow-md dark:border-border-dark dark:bg-surface-dark`}
             >
               <div className={`mb-4 p-2 rounded-lg ${colors.bg} ${colors.text}`}>
                 {(() => {

@@ -20,6 +20,8 @@
 
 import { memo, type FC, type ReactNode } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { AlertCircle, Inbox, Loader2 } from 'lucide-react';
 
 import type { LucideIcon } from 'lucide-react';
@@ -117,7 +119,7 @@ const EmptyComponent: FC<StateEmptyProps> = ({
     <div className="flex flex-col items-center justify-center text-center py-12 px-4">
       <div
         className="
-          w-14 h-14 rounded-2xl
+          w-14 h-14 rounded-lg
           bg-slate-100 dark:bg-slate-800
           flex items-center justify-center mb-4
         "
@@ -175,26 +177,31 @@ export interface StateErrorProps {
 
 const ErrorComponent: FC<StateErrorProps> = ({
   error,
-  title = 'Something went wrong',
+  title,
   onRetry,
   onDismiss,
   card = true,
   className = '',
 }) => {
+  const { t } = useTranslation();
   const message = typeof error === 'string' ? error : error?.message;
+  const resolvedTitle =
+    title ?? t('components.stateDisplay.errorTitle', { defaultValue: 'Something went wrong' });
 
   const content = (
     <div className="flex flex-col items-center justify-center text-center py-12 px-4">
       <div
         className="
-          w-14 h-14 rounded-2xl
+          w-14 h-14 rounded-lg
           bg-red-100 dark:bg-red-900/30
           flex items-center justify-center mb-4
         "
       >
         <AlertCircle size={28} className="text-red-500 dark:text-red-400" />
       </div>
-      <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">{title}</h3>
+      <h3 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">
+        {resolvedTitle}
+      </h3>
       {message && (
         <p className="text-sm text-slate-400 dark:text-slate-500 max-w-sm mb-4">{message}</p>
       )}
@@ -209,7 +216,7 @@ const ErrorComponent: FC<StateErrorProps> = ({
               rounded-lg hover:bg-primary/90 transition-colors
             "
           >
-            Try Again
+            {t('components.stateDisplay.tryAgain', { defaultValue: 'Try Again' })}
           </button>
         )}
         {onDismiss && (
@@ -223,7 +230,7 @@ const ErrorComponent: FC<StateErrorProps> = ({
               hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors
             "
           >
-            Dismiss
+            {t('components.stateDisplay.dismiss', { defaultValue: 'Dismiss' })}
           </button>
         )}
       </div>

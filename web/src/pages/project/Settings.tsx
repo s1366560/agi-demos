@@ -102,6 +102,7 @@ const Message: React.FC<ProjectSettingsMessageProps> = ({ message, onClose }) =>
           {message.text}
         </div>
         <button
+          type="button"
           onClick={onClose}
           className="text-current opacity-70 hover:opacity-100"
           aria-label={t('common.close')}
@@ -182,6 +183,7 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
 
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={handleSaveClick}
             disabled={isSaving}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -283,6 +285,7 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
 
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={handleSaveClick}
             disabled={isSaving}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -385,6 +388,7 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
 
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={handleSaveClick}
             disabled={isSaving}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"

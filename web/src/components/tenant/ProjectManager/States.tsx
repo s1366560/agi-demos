@@ -102,6 +102,7 @@ export const Empty: FC<ProjectManagerEmptyProps> = ({
         <p className="text-gray-600 dark:text-slate-400 mb-4">{getSubtitle()}</p>
         {shouldShowCreateButton && (
           <button
+            type="button"
             onClick={handleCreateClick}
             className="flex items-center space-x-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors mx-auto"
           >
@@ -151,6 +152,7 @@ export const Error: FC<ProjectManagerErrorProps> = ({
         </div>
         {onDismiss && (
           <button
+            type="button"
             onClick={handleDismiss}
             className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
           >

@@ -47,5 +47,40 @@ export default defineConfig({
     outDir: 'dist',
     // Report chunk sizes
     chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+
+          if (
+            /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(
+              id
+            )
+          ) {
+            return 'vendor-react';
+          }
+          if (/[\\/]node_modules[\\/](antd|@ant-design|rc-[^\\/]+)[\\/]/.test(id)) {
+            return 'vendor-antd';
+          }
+          if (
+            /[\\/]node_modules[\\/](@tanstack|zustand|use-sync-external-store|swr)[\\/]/.test(id)
+          ) {
+            return 'vendor-state';
+          }
+          if (
+            /[\\/]node_modules[\\/](i18next|react-i18next|i18next-browser-languagedetector)[\\/]/.test(
+              id
+            )
+          ) {
+            return 'vendor-i18n';
+          }
+          if (/[\\/]node_modules[\\/](axios|uuid)[\\/]/.test(id)) {
+            return 'vendor-utils';
+          }
+
+          return undefined;
+        },
+      },
+    },
   },
 });

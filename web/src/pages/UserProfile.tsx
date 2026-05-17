@@ -156,7 +156,7 @@ export const UserProfile: React.FC = () => {
         {/* Left Column: Summary Card */}
         <div className="lg:col-span-1">
           <div className="sticky top-24 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-surface-dark">
-            <div className="relative h-32 bg-gradient-to-r from-primary/80 to-blue-600/80"></div>
+            <div className="relative h-32 bg-slate-100 dark:bg-slate-800"></div>
             <div className="relative flex flex-col items-center px-6 pb-8">
               <div className="relative -mt-16 mb-4">
                 <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-white shadow-md dark:border-surface-dark">
@@ -173,7 +173,7 @@ export const UserProfile: React.FC = () => {
                   type="button"
                   aria-label={t('user_profile.avatar.change', 'Change avatar')}
                   title={t('user_profile.avatar.change', 'Change avatar')}
-                  className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark"
+                  className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-colors hover:bg-primary-dark"
                   onClick={focusAvatarUrlInput}
                 >
                   <Camera size={14} />

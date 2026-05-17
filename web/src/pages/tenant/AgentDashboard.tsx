@@ -90,7 +90,7 @@ function RelatedSurfaceCard({ title, description, path, icon: Icon }: RelatedSur
   return (
     <Link
       to={path}
-      className="group flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-4 transition-colors duration-150 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+      className="group flex items-start gap-3 rounded-lg border border-slate-200/80 bg-white px-4 py-4 transition-colors duration-150 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700 dark:hover:bg-slate-900"
     >
       <div className="mt-0.5 rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
         <Icon size={16} />
@@ -419,7 +419,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
                         </button>
                       </div>
                       {chainLoadError ? (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50/80 px-4 py-5 dark:border-rose-900 dark:bg-rose-950/40">
+                        <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-5 dark:border-rose-900 dark:bg-rose-950/40">
                           <h4 className="text-sm font-semibold text-rose-900 dark:text-rose-100">
                             {t(
                               'tenant.agentDashboard.traceChainLoadErrorTitle',

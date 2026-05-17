@@ -129,8 +129,8 @@ function formatToolProviderLabel(
 
 function SummaryStat({ label, value, hint }: SummaryStatProps) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/90 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/70">
-      <dt className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</dt>
+    <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-900">
+      <dt className="text-xs font-semibold uppercase text-slate-400">{label}</dt>
       <dd className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{value}</dd>
       {hint ? (
         <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{hint}</p>
@@ -144,7 +144,7 @@ function Section({ title, description, children }: SectionProps) {
     <section className="px-6 py-6 sm:px-8">
       <div className="grid gap-5 xl:grid-cols-[220px_minmax(0,1fr)]">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700 dark:text-slate-200">
+          <h3 className="text-sm font-semibold uppercase text-slate-700 dark:text-slate-200">
             {title}
           </h3>
           <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
@@ -245,7 +245,7 @@ export function TenantAgentConfigView({
       <div
         role="status"
         aria-live="polite"
-        className={`rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950 ${className || ''}`}
+        className={`rounded-lg border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950 ${className || ''}`}
       >
         <span className="sr-only">{t('tenant.agentConfigView.loading')}</span>
         <div className="animate-pulse space-y-4">
@@ -255,7 +255,7 @@ export function TenantAgentConfigView({
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={String(index)}
-                className="h-24 rounded-2xl border border-slate-200/80 bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
+                className="h-24 rounded-lg border border-slate-200/80 bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
               />
             ))}
           </div>
@@ -267,9 +267,9 @@ export function TenantAgentConfigView({
   if (error) {
     return (
       <div
-        className={`rounded-[28px] border border-rose-200 bg-rose-50/80 p-6 dark:border-rose-900 dark:bg-rose-950/40 ${className || ''}`}
+        className={`rounded-lg border border-rose-200 bg-rose-50 p-6 dark:border-rose-900 dark:bg-rose-950 ${className || ''}`}
       >
-        <h2 className="text-lg font-semibold tracking-[-0.02em] text-rose-900 dark:text-rose-100">
+        <h2 className="text-lg font-semibold text-rose-900 dark:text-rose-100">
           {t('tenant.agentConfigView.errorTitle')}
         </h2>
         <p className="mt-2 text-sm leading-6 text-rose-700 dark:text-rose-300">{error}</p>
@@ -290,9 +290,9 @@ export function TenantAgentConfigView({
   if (!config) {
     return (
       <div
-        className={`rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 p-6 dark:border-slate-700 dark:bg-slate-900/60 ${className || ''}`}
+        className={`rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 dark:border-slate-700 dark:bg-slate-900 ${className || ''}`}
       >
-        <h2 className="text-lg font-semibold tracking-[-0.02em] text-slate-900 dark:text-white">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
           {t('tenant.agentConfigView.emptyTitle')}
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -307,7 +307,7 @@ export function TenantAgentConfigView({
 
   return (
     <div
-      className={`overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_1px_0_rgba(15,23,42,0.03)] dark:border-slate-800 dark:bg-slate-950 ${className || ''}`}
+      className={`overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950 ${className || ''}`}
     >
       <div className="border-b border-slate-200/80 px-6 py-6 dark:border-slate-800 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -324,7 +324,7 @@ export function TenantAgentConfigView({
                   : t('tenant.agentConfigView.badges.multiAgentDisabled')}
               </StatusPill>
             </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-white sm:text-3xl">
+            <h2 className="mt-4 text-2xl font-semibold text-slate-950 dark:text-white sm:text-3xl">
               {t('tenant.agentConfigView.title')}
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-400">
@@ -345,7 +345,7 @@ export function TenantAgentConfigView({
         </div>
 
         {isDefault ? (
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             {t('tenant.agentConfigView.defaultBanner')}
           </div>
         ) : null}
@@ -495,7 +495,7 @@ export function TenantAgentConfigView({
           description={t('tenant.agentConfigView.sections.runtimeHooks.description')}
         >
           {config.runtime_hook_settings_redacted ? (
-            <div className="rounded-2xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <div className="rounded-lg border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
               {t('tenant.agentConfigView.sections.runtimeHooks.settingsHidden')}
             </div>
           ) : null}
@@ -508,7 +508,7 @@ export function TenantAgentConfigView({
               {config.runtime_hooks.map((hook) => (
                 <div
                   key={[hook.plugin_name ?? hook.source_ref ?? 'hook', hook.hook_name].join(':')}
-                  className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/70"
+                  className="rounded-lg border border-slate-200/80 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">

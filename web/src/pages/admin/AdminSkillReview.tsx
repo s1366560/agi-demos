@@ -76,7 +76,7 @@ function ReviewDialog({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!submission) throw new Error('no submission');
+      if (!submission) throw new Error(t('admin.skillReview.noSubmissionSelected'));
       if (mode === 'approve') {
         const body = {
           review_note: note || null,
@@ -87,14 +87,18 @@ function ReviewDialog({
       return curatedSkillAPI.adminReject(submission.id, { review_note: note || null });
     },
     onSuccess: () => {
-      message.success(mode === 'approve' ? 'Submission approved' : 'Submission rejected');
+      message.success(
+        mode === 'approve'
+          ? t('admin.skillReview.approveSuccess')
+          : t('admin.skillReview.rejectSuccess')
+      );
       void qc.invalidateQueries({ queryKey: ['admin', 'skill-submissions'] });
       setNote('');
       setBump('trust');
       onClose();
     },
     onError: (err: Error) => {
-      message.error(err.message || 'Review failed');
+      message.error(err.message || t('admin.skillReview.reviewFailed'));
     },
   });
 
@@ -121,8 +125,10 @@ function ReviewDialog({
       onOk={() => {
         mutation.mutate();
       }}
-      okText={mode === 'approve' ? 'Approve' : 'Reject'}
-      okButtonProps={{ danger: mode === 'reject' }}
+      okText={
+        mode === 'approve' ? t('admin.skillReview.approveOk') : t('admin.skillReview.rejectOk')
+      }
+      okButtonProps={{ danger: mode === 'reject', disabled: !submission }}
       confirmLoading={mutation.isPending}
     >
       <div className="space-y-4">

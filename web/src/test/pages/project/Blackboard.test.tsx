@@ -415,10 +415,10 @@ describe('Blackboard', () => {
       expect(screen.getByText('Surface load failed')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('common.retry')).toBeInTheDocument();
+    expect(screen.getByText('Retry')).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.click(screen.getByText('common.retry'));
+      fireEvent.click(screen.getByText('Retry'));
     });
 
     // loadWorkspaceSurface is called from both initial load and retry

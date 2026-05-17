@@ -234,9 +234,9 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
 
   return (
     <div
-      className={`${sizeClass} rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center shadow-lg ${className}`}
+      className={`${sizeClass} flex items-center justify-center rounded-lg bg-slate-100 shadow-sm dark:bg-slate-800 ${className}`}
     >
-      <span className="filter drop-shadow-md">{config.icon}</span>
+      <span>{config.icon}</span>
     </div>
   );
 };

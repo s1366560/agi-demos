@@ -57,8 +57,11 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   },
 }));
 
-vi.mock('@/components/agent', () => ({
+vi.mock('@/components/agent/patterns/PatternStats', () => ({
   PatternStats: () => <div data-testid="pattern-stats" />,
+}));
+
+vi.mock('@/components/agent/patterns/PatternList', () => ({
   PatternList: ({
     patterns,
     onDeprecate,
@@ -74,6 +77,9 @@ vi.mock('@/components/agent', () => ({
       ))}
     </div>
   ),
+}));
+
+vi.mock('@/components/agent/patterns/PatternInspector', () => ({
   PatternInspector: ({ onDeprecate }: { onDeprecate: () => void; children?: ReactNode }) => (
     <button type="button" onClick={onDeprecate}>
       inspect-delete

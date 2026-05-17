@@ -111,6 +111,77 @@ export function ToolExecutionLive({
   };
 
   const ToolIcon = getToolIcon(toolName);
+  const getRunningContent = () => {
+    const lowerName = toolName.toLowerCase();
+
+    if (
+      lowerName.includes('web_search') ||
+      (lowerName.includes('web') && lowerName.includes('search'))
+    ) {
+      return {
+        title: t('components.toolExecutionLive.running.webTitle', {
+          defaultValue: 'Fetching web context',
+        }),
+        description: t('components.toolExecutionLive.running.webDescription', {
+          defaultValue: 'Collecting and ranking remote sources before returning results.',
+        }),
+      };
+    }
+
+    if (lowerName.includes('scrape') || lowerName.includes('web')) {
+      return {
+        title: t('components.toolExecutionLive.running.scrapeTitle', {
+          defaultValue: 'Reading remote content',
+        }),
+        description: t('components.toolExecutionLive.running.scrapeDescription', {
+          defaultValue: 'Loading page content and extracting structured evidence.',
+        }),
+      };
+    }
+
+    if (lowerName.includes('search') || lowerName.includes('memory')) {
+      return {
+        title: t('components.toolExecutionLive.running.searchTitle', {
+          defaultValue: 'Searching knowledge graph',
+        }),
+        description: t('components.toolExecutionLive.running.searchDescription', {
+          defaultValue: 'Finding relevant entities, memories, and relationships.',
+        }),
+      };
+    }
+
+    if (lowerName.includes('create')) {
+      return {
+        title: t('components.toolExecutionLive.running.createTitle', {
+          defaultValue: 'Creating resource',
+        }),
+        description: t('components.toolExecutionLive.running.createDescription', {
+          defaultValue: 'Validating input and writing the requested resource.',
+        }),
+      };
+    }
+
+    if (lowerName.includes('graph') || lowerName.includes('query')) {
+      return {
+        title: t('components.toolExecutionLive.running.graphTitle', {
+          defaultValue: 'Querying graph data',
+        }),
+        description: t('components.toolExecutionLive.running.graphDescription', {
+          defaultValue: 'Running the graph query and preparing a concise result set.',
+        }),
+      };
+    }
+
+    return {
+      title: t('components.toolExecutionLive.running.defaultTitle', {
+        defaultValue: 'Executing tool',
+      }),
+      description: t('components.toolExecutionLive.running.defaultDescription', {
+        defaultValue: 'Processing the request and waiting for the tool response.',
+      }),
+    };
+  };
+  const runningContent = status === 'running' ? getRunningContent() : null;
 
   return (
     <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md overflow-hidden mb-4">
@@ -167,24 +238,53 @@ export function ToolExecutionLive({
             </div>
           )}
 
-          {/* Live Results (placeholder for running state) */}
-          {status === 'running' && (
-            <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-md p-6 text-center">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                  <Search size={24} className="text-slate-400" />
+          {/* Live progress */}
+          {runningContent && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex items-start gap-3" aria-live="polite">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  {/* eslint-disable-next-line react-hooks/static-components */}
+                  <ToolIcon size={20} />
                 </div>
-                <div className="text-center">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {t('components.toolExecutionLive.scanningTitle', {
-                      defaultValue: 'Scanning knowledge graph...',
-                    })}
+                    {runningContent.title}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {t('components.toolExecutionLive.scanningDescription', {
-                      defaultValue: 'Searching for relevant entities and relationships',
-                    })}
+                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                    {runningContent.description}
                   </p>
+                  <div className="mt-3 grid gap-2 text-xs text-slate-600 dark:text-slate-400 sm:grid-cols-3">
+                    <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2 dark:bg-slate-950">
+                      <CheckCircle size={14} className="text-emerald-500" />
+                      <span>
+                        {t('components.toolExecutionLive.running.inputAccepted', {
+                          defaultValue: 'Input accepted',
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2 dark:bg-slate-950">
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" />
+                      <span>
+                        {t('components.toolExecutionLive.running.modeActive', {
+                          defaultValue: '{{mode}} mode active',
+                          mode: executionMode,
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-md bg-white px-3 py-2 dark:bg-slate-950">
+                      <span className="h-2 w-2 rounded-full bg-primary animate-pulse motion-reduce:animate-none" />
+                      <span>
+                        {resultCount !== undefined
+                          ? t('components.toolExecutionLive.running.partialResults', {
+                              defaultValue: '{{count}} partial results',
+                              count: resultCount,
+                            })
+                          : t('components.toolExecutionLive.running.awaitingResponse', {
+                              defaultValue: 'Awaiting response',
+                            })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

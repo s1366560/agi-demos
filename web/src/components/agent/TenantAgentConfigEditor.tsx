@@ -72,7 +72,7 @@ interface EditableCustomRuntimeHook extends RuntimeHookConfig {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div className="mb-4">
-      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700 dark:text-slate-200">
+      <h3 className="text-sm font-semibold uppercase text-slate-700 dark:text-slate-200">
         {title}
       </h3>
       <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
@@ -90,7 +90,7 @@ function SettingCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
+    <div className="rounded-lg border border-slate-200/80 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-slate-900 dark:text-white">{title}</p>
@@ -412,10 +412,10 @@ export function TenantAgentConfigEditor({
     <Modal
       title={
         <div className="pr-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+          <p className="text-xs font-semibold uppercase text-slate-400">
             {t('tenant.agentConfigEditor.eyebrow')}
           </p>
-          <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-slate-950">
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">
             {t('tenant.agentConfigEditor.title')}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -476,7 +476,7 @@ export function TenantAgentConfigEditor({
       <Spin spinning={loading}>
         <Form form={form} layout="vertical" onValuesChange={onValuesChange} autoComplete="off">
           <div className="space-y-5">
-            <section className="rounded-3xl border border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-900/70">
+            <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
               <SectionHeader
                 title={t('tenant.agentConfigEditor.sections.modelReasoning.title')}
                 description={t('tenant.agentConfigEditor.sections.modelReasoning.description')}
@@ -567,7 +567,7 @@ export function TenantAgentConfigEditor({
               </div>
             </section>
 
-            <section className="rounded-3xl border border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-900/70">
+            <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
               <SectionHeader
                 title={t('tenant.agentConfigEditor.sections.executionGuardrails.title')}
                 description={t('tenant.agentConfigEditor.sections.executionGuardrails.description')}
@@ -622,7 +622,7 @@ export function TenantAgentConfigEditor({
                 </Form.Item>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
+              <div className="rounded-lg border border-slate-200/80 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
                 <p className="text-sm font-medium text-slate-900 dark:text-white">
                   {t('tenant.agentConfigEditor.sections.executionGuardrails.multiAgentRouting')}
                 </p>
@@ -640,7 +640,7 @@ export function TenantAgentConfigEditor({
               </div>
             </section>
 
-            <section className="rounded-3xl border border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-900/70">
+            <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
               <SectionHeader
                 title={t('tenant.agentConfigEditor.sections.toolPolicy.title')}
                 description={t('tenant.agentConfigEditor.sections.toolPolicy.description')}
@@ -670,7 +670,7 @@ export function TenantAgentConfigEditor({
               </div>
             </section>
 
-            <section className="rounded-3xl border border-slate-200/80 bg-slate-50/80 p-5 dark:border-slate-800 dark:bg-slate-900/70">
+            <section className="rounded-lg border border-slate-200/80 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
               <SectionHeader
                 title={t('tenant.agentConfigEditor.runtimeHooks.title')}
                 description={t('tenant.agentConfigEditor.runtimeHooks.description')}
@@ -701,7 +701,7 @@ export function TenantAgentConfigEditor({
                   return (
                     <div
                       key={key}
-                      className="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"
+                      className="rounded-lg border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="min-w-0">
@@ -972,7 +972,7 @@ export function TenantAgentConfigEditor({
                       return (
                         <div
                           key={hook.ui_key}
-                          className="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"
+                          className="rounded-lg border border-slate-200/80 bg-white p-5 dark:border-slate-800 dark:bg-slate-950"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>

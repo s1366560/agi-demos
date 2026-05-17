@@ -671,6 +671,7 @@ export const A2UIModal = memo<A2UIComponentProps>(({ node, surfaceId }) => {
         >
           <div id="controls">
             <button
+              type="button"
               onClick={() => {
                 closeModal();
               }}

@@ -126,14 +126,14 @@ export const ShortcutOverlay = memo(() => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 animate-fade-in"
       onClick={() => {
         setVisible(false);
       }}
       onKeyDown={handleOverlayKeyDown}
     >
       <div
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 overflow-hidden"
+        className="mx-4 w-full max-w-lg overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-700 dark:bg-slate-900"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -171,7 +171,7 @@ export const ShortcutOverlay = memo(() => {
                 {section.items.map((item, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/30"
+                    className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
                     <span className="text-sm text-slate-600 dark:text-slate-300">
                       {item.description}
@@ -180,7 +180,7 @@ export const ShortcutOverlay = memo(() => {
                       {item.keys.map((key) => (
                         <kbd
                           key={key}
-                          className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-xs font-mono text-slate-500 dark:text-slate-400 min-w-7 justify-center"
+                          className="inline-flex min-w-7 items-center justify-center rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
                         >
                           {key}
                         </kbd>

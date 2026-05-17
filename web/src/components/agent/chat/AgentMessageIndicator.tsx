@@ -19,8 +19,11 @@ export interface AgentMessageIndicatorProps {
   messagePreview: string;
 }
 
-const SENT_COLOR = '#3B82F6';
-const RECEIVED_COLOR = '#8B5CF6';
+const directionClasses = {
+  sent: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/40 dark:bg-blue-950/20 dark:text-blue-300',
+  received:
+    'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-800/40 dark:bg-teal-950/20 dark:text-teal-300',
+} as const;
 
 export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
   direction,
@@ -30,14 +33,10 @@ export const AgentMessageIndicator: FC<AgentMessageIndicatorProps> = ({
 }) => {
   const { t } = useTranslation();
   const isSent = direction === 'sent';
-  const color = isSent ? SENT_COLOR : RECEIVED_COLOR;
-  const backgroundColor = `${color}20`;
-  const borderColor = `${color}40`;
 
   return (
     <div
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm"
-      style={{ backgroundColor, borderColor, color }}
+      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${directionClasses[direction]}`}
       data-testid="agent-message-indicator"
     >
       <div className="flex items-center gap-1.5">

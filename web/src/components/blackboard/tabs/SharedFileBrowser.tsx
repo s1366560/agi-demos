@@ -459,7 +459,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
             type="button"
             onClick={() => void handleMkdir()}
             disabled={creating || !isValidDirectoryName(newDirName)}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary/90 disabled:opacity-50"
+            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-slate-50 transition hover:bg-primary/90 disabled:opacity-50"
           >
             {creating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -611,8 +611,8 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
 
       {/* File preview modal */}
       {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="relative mx-4 max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-2xl dark:border-border-dark dark:bg-surface-dark">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
+          <div className="relative mx-4 max-h-[85vh] w-full max-w-4xl overflow-hidden rounded-lg border border-border-light bg-surface-light shadow-lg dark:border-border-dark dark:bg-surface-dark">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border-light px-5 py-3 dark:border-border-dark">
               <div className="flex items-center gap-2">
@@ -675,7 +675,7 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                   <button
                     type="button"
                     onClick={() => void handleDownload(previewFile)}
-                    className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+                    className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-slate-50 hover:bg-primary/90"
                   >
                     {t('blackboard.files.download', 'Download')}
                   </button>

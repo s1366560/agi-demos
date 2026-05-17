@@ -106,19 +106,19 @@ function ForkDialog({
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (!curated) throw new Error('no curated skill');
+      if (!curated) throw new Error(t('skill.curated.noSkillSelected'));
       return curatedSkillAPI.fork(curated.id, {
         include_executor: includeExecutor,
         include_metadata: includeMetadata,
       });
     },
     onSuccess: (result) => {
-      message.success(`Forked. New skill id: ${result.skill_id}`);
+      message.success(t('skill.curated.forkSuccess', { skillId: result.skill_id }));
       void qc.invalidateQueries({ queryKey: ['skills'] });
       onClose();
     },
     onError: (err: Error) => {
-      message.error(err.message || 'Fork failed');
+      message.error(err.message || t('skill.curated.forkFailed'));
     },
   });
 
@@ -132,7 +132,8 @@ function ForkDialog({
       onOk={() => {
         mutation.mutate();
       }}
-      okText="Fork"
+      okText={t('skill.curated.forkOk')}
+      okButtonProps={{ disabled: !curated }}
       confirmLoading={mutation.isPending}
     >
       <div className="space-y-4">

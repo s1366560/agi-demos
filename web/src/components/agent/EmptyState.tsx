@@ -2,11 +2,10 @@
  * EmptyState - Modern welcome screen when no conversation is active
  *
  * Features:
- * - Animated gradient background
- * - Modern card design with hover effects
+ * - Focused welcome state
+ * - Compact suggestion list that sends actual prompts
  * - Quick action suggestions that send actual prompts
  * - Keyboard shortcut hints
- * - Smooth animations
  */
 
 import React from 'react';
@@ -178,7 +177,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               bg-primary/10 dark:bg-primary/20
               flex items-center justify-center
               text-primary
-              group-hover:scale-110 transition-transform duration-300
+              transition-colors duration-200 group-hover:bg-primary/15
             "
             >
               <History size={20} />
@@ -222,8 +221,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         </div>
       )}
 
-      {/* Suggestion Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl w-full relative z-10">
+      {/* Suggestion list */}
+      <div className="max-w-2xl w-full relative z-10 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700/70 dark:bg-slate-800/50">
         {suggestionCards.map((card) => (
           <button
             key={card.title}
@@ -232,39 +231,33 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               handleCardClick(card.prompt);
             }}
             className="
-              group relative p-4 rounded-xl
-              bg-white dark:bg-slate-800/50
-              border border-slate-200 dark:border-slate-700/50
-              hover:border-slate-300 dark:hover:border-slate-600
-              hover:shadow-md
-              transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ease-out
-              text-left
+              group flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left
+              last:border-b-0 hover:bg-slate-50 dark:border-slate-700/60 dark:hover:bg-slate-700/30
+              transition-[color,background-color,border-color,box-shadow,opacity] duration-150
             "
           >
-            <div className="flex items-start justify-between mb-3">
-              <div
-                className="
-                  w-10 h-10 rounded-lg
-                  bg-primary/8 dark:bg-primary/15
-                  flex items-center justify-center
-                  text-primary
-                "
-              >
-                {card.icon}
-              </div>
-              <ArrowRight
-                size={14}
-                className="text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200"
-              />
+            <div
+              className="
+                flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md
+                bg-primary/8 text-primary dark:bg-primary/15
+              "
+            >
+              {card.icon}
             </div>
 
-            <h3 className="font-medium text-slate-900 dark:text-slate-100 mb-1 text-sm">
-              {card.title}
-            </h3>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                {card.title}
+              </h3>
 
-            <p className="text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
-              {card.description}
-            </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+                {card.description}
+              </p>
+            </div>
+            <ArrowRight
+              size={14}
+              className="flex-shrink-0 text-slate-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 dark:text-slate-600"
+            />
           </button>
         ))}
       </div>

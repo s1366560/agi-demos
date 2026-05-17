@@ -90,8 +90,8 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
           setMode('chat');
         }}
         className="absolute top-4 right-4 z-[60] flex items-center gap-2 px-3 py-1.5 rounded-lg
-          bg-black/60 hover:bg-black/80 text-white/80 hover:text-white text-xs font-medium
-          backdrop-blur-sm transition-[color,background-color,border-color,box-shadow,opacity,transform] cursor-pointer"
+          bg-slate-900/85 hover:bg-slate-900 text-slate-200 hover:text-slate-50 text-xs font-medium
+          border border-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] cursor-pointer"
         title={tFallback(t, 'agent.focusDesktop.exitFocusMode', 'Exit focus mode (ESC)')}
       >
         <Minimize2 size={14} />
@@ -106,23 +106,23 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
           className={`
             absolute bottom-6 left-6 z-[60] w-12 h-12 rounded-full
             flex items-center justify-center cursor-pointer
-            bg-blue-600 hover:bg-blue-500 text-white shadow-lg
-            transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 hover:scale-110
+            bg-blue-600 hover:bg-blue-500 text-slate-50 shadow-md
+            transition-[color,background-color,border-color,box-shadow,opacity] duration-200
             ${isStreaming ? 'animate-pulse motion-reduce:animate-none' : ''}
           `}
           aria-label={tFallback(t, 'agent.focusDesktop.openChat', 'Open chat')}
         >
           <MessageSquare size={20} />
           {isStreaming && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full animate-ping" />
+            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-slate-900/80" />
           )}
         </button>
       ) : (
         /* Expanded Chat Panel */
         <div
           className="absolute bottom-6 left-6 z-[60] w-[420px] h-[500px] max-h-[70vh]
-            rounded-2xl overflow-hidden shadow-2xl border border-white/10
-            bg-white dark:bg-slate-900 flex flex-col"
+            rounded-lg overflow-hidden shadow-lg shadow-slate-950/25 border border-slate-200 dark:border-slate-700
+            bg-slate-50 dark:bg-slate-900 flex flex-col"
         >
           {/* Chat Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
@@ -183,7 +183,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
                   flex-shrink-0 p-2 rounded-lg transition-colors cursor-pointer
                   ${
                     inputValue.trim() && !isStreaming
-                      ? 'bg-blue-600 text-white hover:bg-blue-500'
+                      ? 'bg-blue-600 text-slate-50 hover:bg-blue-500'
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                   }
                 `}

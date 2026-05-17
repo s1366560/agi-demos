@@ -193,7 +193,7 @@ export const OAuthCallback: React.FC = () => {
               <div className="p-2 bg-blue-600 rounded-lg">
                 <Brain className="h-8 w-8 text-white" />
               </div>
-              <span className="text-2xl font-bold text-gray-900 dark:text-white">Mem Stack</span>
+              <span className="text-2xl font-bold text-gray-900 dark:text-white">MemStack</span>
             </div>
           </div>
 
@@ -246,6 +246,7 @@ export const OAuthCallback: React.FC = () => {
                   </div>
                 )}
                 <button
+                  type="button"
                   onClick={handleRetry}
                   className="mt-6 inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                 >

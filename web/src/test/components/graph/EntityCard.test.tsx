@@ -235,4 +235,13 @@ describe('EntityCard - Accessibility', () => {
 
     expect(mockOnClick).toHaveBeenCalled();
   });
+
+  it('can be activated via Space key', () => {
+    render(<EntityCard entity={mockEntity} onClick={mockOnClick} />);
+
+    const card = screen.getByRole('button', { name: /Test Entity/i });
+    fireEvent.keyDown(card, { key: ' ', code: 'Space' });
+
+    expect(mockOnClick).toHaveBeenCalled();
+  });
 });

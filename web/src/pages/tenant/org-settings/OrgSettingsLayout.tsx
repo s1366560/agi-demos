@@ -85,7 +85,7 @@ export const OrgSettingsLayout: React.FC = () => {
                       onClick={() => {
                         handleTabChange(tab.key);
                       }}
-                      className={`flex h-full min-w-max items-center gap-2 border-b-2 px-4 py-3 text-left transition-colors lg:w-full lg:gap-3 lg:border-b-0 lg:border-l-2 ${
+                      className={`flex h-full min-w-max items-center gap-2 border-b px-4 py-3 text-left transition-colors lg:w-full lg:gap-3 lg:border-b-0 lg:border-l ${
                         isActive
                           ? 'border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400'
                           : 'border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/50'

@@ -430,7 +430,7 @@ export function KasmVNCViewer({
       {/* VNC canvas container */}
       <div className="flex-1 relative bg-black overflow-hidden">
         {connectionState === 'connecting' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10 pointer-events-none">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/60 z-10 pointer-events-none">
             <Spin indicator={<Loader2 className="animate-spin" size={32} />} />
             <span className="text-white text-sm">{connectingToDesktopLabel}</span>
           </div>

@@ -83,6 +83,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
     return (
       <Tooltip title={tooltipContent} placement="bottom">
         <div
+          className="hover:bg-slate-100 dark:hover:bg-slate-800/60"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -96,12 +97,6 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
           }}
           onClick={() => {
             setDetailExpanded(true);
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
           }}
         >
           <Database size={13} style={{ color: progressColor }} />

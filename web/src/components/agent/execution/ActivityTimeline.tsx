@@ -431,6 +431,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
               {!showAll && enrichedTimeline.length > maxItems && (
                 <div className="text-center mb-2">
                   <button
+                    type="button"
                     onClick={() => {
                       setShowAll(true);
                     }}
@@ -500,7 +501,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                       compact ? 'w-3 h-3' : 'w-4 h-4'
                     } rounded-full bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 dark:border-blue-600 animate-pulse motion-reduce:animate-none flex items-center justify-center`}
                   >
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
                   </div>
                   <div
                     className={`${

@@ -420,12 +420,12 @@ function SimpleThemeToggle() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => {
           setIsOpen(!isOpen);
         }}
         className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label={t('components.layout.header.toggleTheme', 'Toggle theme')}
-        type="button"
       >
         {themeIcons[theme as keyof typeof themeIcons]}
       </button>
@@ -434,6 +434,7 @@ function SimpleThemeToggle() {
         <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-surface-dark rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
           {(['light', 'dark', 'system'] as const).map((themeName) => (
             <button
+              type="button"
               key={themeName}
               onClick={() => {
                 setTheme(themeName);
@@ -444,7 +445,6 @@ function SimpleThemeToggle() {
                   ? 'bg-slate-50 dark:bg-slate-800 text-primary'
                   : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
-              type="button"
             >
               {themeIcons[themeName]}
               {t(`theme.${themeName}`, themeName)}

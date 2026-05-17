@@ -339,6 +339,7 @@ export const McpServerTabV2: React.FC = () => {
           <div className="flex gap-2">
             <Tooltip title={t('mcp.servers.refreshTooltip')}>
               <button
+                type="button"
                 onClick={handleRefresh}
                 disabled={isLoading}
                 className={`inline-flex items-center justify-center px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200`}
@@ -352,6 +353,7 @@ export const McpServerTabV2: React.FC = () => {
             </Tooltip>
             <Tooltip title={t('mcp.servers.reconcileTooltip')}>
               <button
+                type="button"
                 onClick={() => {
                   void handleReconcile();
                 }}
@@ -365,7 +367,7 @@ export const McpServerTabV2: React.FC = () => {
                 <span className="text-xs font-medium">{t('mcp.servers.reconcileButton')}</span>
               </button>
             </Tooltip>
-            <button onClick={handleCreate} className={BUTTON_STYLES.primary}>
+            <button type="button" onClick={handleCreate} className={BUTTON_STYLES.primary}>
               <Plus size={18} />
               <span>{t('mcp.servers.createButton')}</span>
             </button>
@@ -382,6 +384,7 @@ export const McpServerTabV2: React.FC = () => {
               })}
             </span>
             <button
+              type="button"
               onClick={clearFilters}
               className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
             >
@@ -420,7 +423,7 @@ export const McpServerTabV2: React.FC = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 max-w-sm">
             {t('mcp.servers.emptyHint')}
           </p>
-          <button onClick={handleCreate} className={BUTTON_STYLES.primary}>
+          <button type="button" onClick={handleCreate} className={BUTTON_STYLES.primary}>
             <Plus size={18} />
             {t('mcp.servers.emptyCreateButton')}
           </button>
@@ -432,6 +435,7 @@ export const McpServerTabV2: React.FC = () => {
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('mcp.servers.noMatch')}</p>
           <button
+            type="button"
             onClick={clearFilters}
             className="mt-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
           >

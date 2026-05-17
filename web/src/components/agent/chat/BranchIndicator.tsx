@@ -18,7 +18,11 @@ export const BranchIndicator = memo<BranchIndicatorProps>(({ parentTitle, onNavi
       <GitBranch size={12} />
       <span>{t('agent.branch.forkedFrom', 'Forked from')}</span>
       {onNavigateToParent ? (
-        <button onClick={onNavigateToParent} className="font-medium underline hover:no-underline">
+        <button
+          type="button"
+          onClick={onNavigateToParent}
+          className="font-medium underline hover:no-underline"
+        >
           {parentTitle}
         </button>
       ) : (

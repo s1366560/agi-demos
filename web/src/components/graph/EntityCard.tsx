@@ -84,7 +84,7 @@ const EntityCardInternal: React.FC<EntityCardProps> = ({ entity, onClick, isSele
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onClick(entity);
     }

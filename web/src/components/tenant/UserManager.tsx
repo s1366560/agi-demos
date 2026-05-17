@@ -339,6 +339,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
             </p>
             {!searchTerm && filterRole === 'all' && (
               <button
+                type="button"
                 onClick={handleInviteUser}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               >
@@ -354,8 +355,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
                 className="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 dark:border-slate-700 dark:hover:border-slate-600 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 flex-1 items-start gap-4 sm:items-center">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
-                    <span className="text-white font-medium text-sm">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 dark:bg-slate-100">
+                    <span className="text-sm font-medium text-slate-50 dark:text-slate-900">
                       {user.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
@@ -433,8 +434,8 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
 
       {/* Invite User Modal */}
       {isInviteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
+          <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-lg dark:bg-slate-900">
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
               <div className="flex items-center space-x-2">
                 <UserPlus className="h-5 w-5 text-blue-600 dark:text-blue-400" />

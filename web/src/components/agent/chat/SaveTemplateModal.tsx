@@ -30,8 +30,8 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-6 w-96 shadow-2xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
+        <div className="w-96 rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900">
           <h3 className="text-lg font-semibold mb-4">
             {t('agent.templates.saveTitle', 'Save as Template')}
           </h3>
@@ -41,7 +41,7 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
               setTitle(e.target.value);
             }}
             placeholder={t('agent.templates.titlePlaceholder', 'Template name')}
-            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg mb-3 bg-transparent text-sm text-slate-800 dark:text-slate-200"
+            className="mb-3 w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
             autoFocus
           />
           <select
@@ -49,7 +49,7 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
             onChange={(e) => {
               setCategory(e.target.value);
             }}
-            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg mb-4 bg-transparent text-sm text-slate-800 dark:text-slate-200"
+            className="mb-4 w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
           >
             <option value="general">{t('agent.templates.general', 'General')}</option>
             <option value="analysis">{t('agent.templates.analysis', 'Analysis')}</option>
@@ -62,15 +62,17 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
           </pre>
           <div className="flex justify-end gap-2">
             <button
+              type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+              className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {t('common.cancel', 'Cancel')}
             </button>
             <button
+              type="button"
               onClick={handleSave}
               disabled={!title.trim()}
-              className="px-4 py-2 text-sm bg-primary text-white rounded-lg disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm text-slate-50 disabled:opacity-50"
             >
               {t('common.save', 'Save')}
             </button>

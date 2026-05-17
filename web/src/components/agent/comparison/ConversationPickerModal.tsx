@@ -86,8 +86,8 @@ export const ConversationPickerModal = memo(
     if (!visible) return null;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-        <div className="w-full max-w-md mx-4 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200/60 dark:border-slate-700/50 overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
+        <div className="mx-4 w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-700 dark:bg-slate-900">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
             <h3 className="text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -118,7 +118,7 @@ export const ConversationPickerModal = memo(
                   setSearch(e.target.value);
                 }}
                 placeholder={t('comparison.search', 'Search conversations...')}
-                className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                className="w-full rounded-md border border-slate-200 bg-slate-100 py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
               />
             </div>
           </div>

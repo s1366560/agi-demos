@@ -148,7 +148,7 @@ export function NotificationDropdown({
         <div
           role="dialog"
           aria-label={t('notifications.title', 'Notifications')}
-          className="absolute right-0 top-full z-50 mt-2 w-[22rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900"
         >
           <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">

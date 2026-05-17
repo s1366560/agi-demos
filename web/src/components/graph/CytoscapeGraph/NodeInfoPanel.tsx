@@ -42,11 +42,11 @@ export function CytoscapeGraphNodeInfoPanel({ node: propNode, onClose }: NodeInf
 
   return (
     <div
-      className={`absolute top-6 right-6 bottom-6 w-80 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-2xl rounded-xl z-20 flex flex-col overflow-hidden transition-transform duration-300 ${node ? 'translate-x-0' : 'translate-x-[120%]'}`}
+      className={`absolute top-6 right-6 bottom-6 w-80 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-lg rounded-lg z-20 flex flex-col overflow-hidden transition-transform duration-300 ${node ? 'translate-x-0' : 'translate-x-[120%]'}`}
     >
       {node ? (
         <>
-          <div className="p-5 border-b border-slate-200 dark:border-border-dark bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/10 dark:to-transparent">
+          <div className="p-5 border-b border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-slate-900/30">
             <div className="flex justify-between items-start mb-2">
               <div
                 className={`px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border ${

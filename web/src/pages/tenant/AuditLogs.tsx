@@ -196,10 +196,7 @@ const SummaryBarChart: React.FC<SummaryBarChartProps> = ({
                   <span className="font-medium text-slate-900 dark:text-white">{count}</span>
                 </div>
                 <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary-500 via-blue-500 to-violet-500"
-                    style={{ width }}
-                  />
+                  <div className="h-full rounded-full bg-primary-500" style={{ width }} />
                 </div>
               </div>
             );

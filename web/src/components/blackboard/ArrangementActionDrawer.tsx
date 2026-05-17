@@ -85,7 +85,7 @@ export function ArrangementActionDrawer({
             <button
               type="button"
               onClick={onOpenBlackboard}
-              className="inline-flex min-h-10 items-center rounded-2xl border border-primary/20 bg-primary/10 px-4 text-sm font-medium text-primary transition motion-reduce:transition-none hover:bg-primary/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-200"
+              className="inline-flex min-h-10 items-center rounded-lg border border-primary/20 bg-primary/10 px-4 text-sm font-medium text-primary transition-colors motion-reduce:transition-none hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-200"
             >
               {t('blackboard.openBoard', 'Open central blackboard')}
             </button>
@@ -95,7 +95,7 @@ export function ArrangementActionDrawer({
             <>
               <Link
                 to={agentWorkspacePath}
-                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition motion-reduce:transition-none hover:bg-surface-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-elevated"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition-colors motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-elevated"
               >
                 <ExternalLink className="h-4 w-4" />
                 {t('blackboard.arrangement.openWorkspace', 'Open workspace')}
@@ -103,7 +103,7 @@ export function ArrangementActionDrawer({
               <button
                 type="button"
                 onClick={beginMoveMode}
-                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition motion-reduce:transition-none hover:bg-surface-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-elevated"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition-colors motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-elevated"
               >
                 <Move className="h-4 w-4" />
                 {t('blackboard.arrangement.actions.move', 'Move')}
@@ -114,7 +114,7 @@ export function ArrangementActionDrawer({
                   void handleDeleteSelection();
                 }}
                 disabled={pendingAction != null}
-                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-error/25 bg-error/10 px-4 text-sm font-medium text-status-text-error dark:text-status-text-error-dark transition motion-reduce:transition-none hover:bg-error/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-error/25 bg-error/10 px-4 text-sm font-medium text-status-text-error dark:text-status-text-error-dark transition-colors motion-reduce:transition-none hover:bg-error/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
                 {t('blackboard.arrangement.actions.remove', 'Remove')}
@@ -127,7 +127,7 @@ export function ArrangementActionDrawer({
               <button
                 type="button"
                 onClick={beginMoveMode}
-                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition motion-reduce:transition-none hover:bg-surface-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-elevated"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition-colors motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse dark:hover:bg-surface-elevated"
               >
                 <Move className="h-4 w-4" />
                 {t('blackboard.arrangement.actions.move', 'Move')}
@@ -138,7 +138,7 @@ export function ArrangementActionDrawer({
                   void handleDeleteSelection();
                 }}
                 disabled={pendingAction != null}
-                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-error/25 bg-error/10 px-4 text-sm font-medium text-status-text-error dark:text-status-text-error-dark transition motion-reduce:transition-none hover:bg-error/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-error/25 bg-error/10 px-4 text-sm font-medium text-status-text-error dark:text-status-text-error-dark transition-colors motion-reduce:transition-none hover:bg-error/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
                 {t('blackboard.arrangement.actions.remove', 'Remove')}
@@ -157,7 +157,7 @@ export function ArrangementActionDrawer({
                 onClick={() => {
                   setAddAgentOpen(true);
                 }}
-                className="flex min-h-[96px] flex-col justify-between rounded-[20px] border border-border-light bg-surface-light p-4 text-left transition motion-reduce:transition-none hover:bg-surface-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:hover:bg-surface-elevated"
+                className="flex min-h-[96px] flex-col justify-between rounded-lg border border-border-light bg-surface-light p-4 text-left transition-colors motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:hover:bg-surface-elevated"
               >
                 <Bot className="h-5 w-5 text-primary dark:text-primary-300" />
                 <div>
@@ -178,7 +178,7 @@ export function ArrangementActionDrawer({
                 onClick={() => {
                   void handleCreateNode('corridor');
                 }}
-                className="flex min-h-[96px] flex-col justify-between rounded-[20px] border border-border-light bg-surface-light p-4 text-left transition motion-reduce:transition-none hover:bg-surface-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:hover:bg-surface-elevated"
+                className="flex min-h-[96px] flex-col justify-between rounded-lg border border-border-light bg-surface-light p-4 text-left transition-colors motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:hover:bg-surface-elevated"
               >
                 <Route className="h-5 w-5 text-info dark:text-status-text-info-dark" />
                 <div>
@@ -199,7 +199,7 @@ export function ArrangementActionDrawer({
                 onClick={() => {
                   void handleCreateNode('human_seat');
                 }}
-                className="flex min-h-[96px] flex-col justify-between rounded-[20px] border border-border-light bg-surface-light p-4 text-left transition motion-reduce:transition-none hover:bg-surface-muted active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:hover:bg-surface-elevated"
+                className="flex min-h-[96px] flex-col justify-between rounded-lg border border-border-light bg-surface-light p-4 text-left transition-colors motion-reduce:transition-none hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark dark:hover:bg-surface-elevated"
               >
                 <User className="h-5 w-5 text-warning dark:text-status-text-warning-dark" />
                 <div>
@@ -218,7 +218,7 @@ export function ArrangementActionDrawer({
           )}
 
           {(selection?.kind === 'agent' || selection?.kind === 'node') && (
-            <div className="rounded-[20px] border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
+            <div className="rounded-lg border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2 text-sm text-text-primary dark:text-text-secondary">
                   <span className="text-xs uppercase tracking-wider text-text-muted dark:text-text-muted">
@@ -232,7 +232,7 @@ export function ArrangementActionDrawer({
                       setLabelDraft(event.target.value);
                     }}
                     maxLength={64}
-                    className="min-h-11 w-full rounded-2xl border border-border-light bg-surface-muted px-4 text-sm text-text-primary outline-none transition focus:border-primary/60 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="min-h-11 w-full rounded-lg border border-border-light bg-surface-muted px-4 text-sm text-text-primary outline-none transition focus:border-primary/60 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     placeholder={t(
                       'blackboard.arrangement.fields.labelPlaceholder',
                       'Name this workstation'
@@ -253,10 +253,10 @@ export function ArrangementActionDrawer({
                         onClick={() => {
                           setColorDraft(swatch);
                         }}
-                        className={`h-10 w-10 rounded-2xl border transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                        className={`h-10 w-10 rounded-lg border transition motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                           colorDraft === swatch
                             ? 'border-transparent ring-2 ring-white ring-offset-2 ring-offset-surface-dark'
-                            : 'border-white/10 hover:border-white/30 active:scale-[0.95]'
+                            : 'border-white/10 hover:border-white/30'
                         }`}
                         style={{ backgroundColor: swatch }}
                       />
@@ -272,7 +272,7 @@ export function ArrangementActionDrawer({
                     void handleSaveSelection();
                   }}
                   disabled={pendingAction != null}
-                  className="min-h-11 rounded-2xl bg-primary px-5 text-sm font-medium text-white transition motion-reduce:transition-none hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="min-h-11 rounded-lg bg-primary px-5 text-sm font-medium text-slate-50 transition-colors motion-reduce:transition-none hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {pendingAction === 'save-agent' || pendingAction === 'save-node'
                     ? t('common.loading', 'Loading…')
@@ -289,7 +289,7 @@ export function ArrangementActionDrawer({
           )}
 
           {selection == null && (
-            <div className="rounded-[20px] border border-dashed border-border-separator bg-surface-light p-4 text-sm leading-7 text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+            <div className="rounded-lg border border-dashed border-border-separator bg-surface-light p-4 text-sm leading-7 text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
               {t(
                 'blackboard.arrangement.drawerEmpty',
                 'Use the grid to stage a layout. The action drawer adapts to the selected workstation and keeps destructive actions away from the canvas.'

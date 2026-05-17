@@ -8,6 +8,8 @@
 
 import { memo, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { CheckCircle2, Circle, Loader2, XCircle, Ban } from 'lucide-react';
 
 import type { AgentTask, TaskStatus } from '@/types/agent';
@@ -35,6 +37,7 @@ const PRIORITY_DOT: Record<string, string> = {
 };
 
 const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
+  const { t } = useTranslation();
   const config = STATUS_CONFIG[task.status];
   const Icon = config.icon;
   const isCompleted = task.status === 'completed';
@@ -65,7 +68,10 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
       {task.priority !== 'medium' && (
         <div
           className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${PRIORITY_DOT[task.priority] || ''}`}
-          title={`${task.priority} priority`}
+          title={t('agent.taskList.priorityTitle', {
+            defaultValue: '{{priority}} priority',
+            priority: task.priority,
+          })}
         />
       )}
     </div>
@@ -75,6 +81,7 @@ const TaskItem = memo<{ task: AgentTask }>(({ task }) => {
 TaskItem.displayName = 'TaskItem';
 
 export const TaskList = memo<TaskListProps>(({ tasks }) => {
+  const { t } = useTranslation();
   const stats = useMemo(() => {
     const total = tasks.length;
     const completed = tasks.filter((t) => t.status === 'completed').length;
@@ -89,7 +96,10 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
       <div className="flex flex-col items-center justify-center py-12 px-4">
         <Circle size={32} className="text-slate-300 dark:text-slate-600 mb-3" />
         <p className="text-sm text-slate-500 dark:text-slate-400 text-center">
-          No tasks yet. The agent will create tasks when working on complex requests.
+          {t('agent.taskList.empty', {
+            defaultValue:
+              'No tasks yet. The agent will create tasks when working on complex requests.',
+          })}
         </p>
       </div>
     );
@@ -101,7 +111,11 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
       <div className="px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
           <span>
-            {stats.completed}/{stats.total} completed
+            {t('agent.taskList.completedSummary', {
+              defaultValue: '{{completed}}/{{total}} completed',
+              completed: stats.completed,
+              total: stats.total,
+            })}
           </span>
           <span>{stats.pct}%</span>
         </div>
@@ -113,7 +127,10 @@ export const TaskList = memo<TaskListProps>(({ tasks }) => {
         </div>
         {stats.active > 0 && (
           <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
-            {stats.active} task{stats.active > 1 ? 's' : ''} in progress
+            {t('agent.taskList.activeSummary', {
+              defaultValue: '{{count}} task in progress',
+              count: stats.active,
+            })}
           </p>
         )}
       </div>

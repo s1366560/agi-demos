@@ -248,7 +248,7 @@ export const ArtifactCreatedItem = memo(
             })()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-700/50">
+            <div className="rounded-lg border border-emerald-200/50 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-900/20 p-4">
               <div className="flex items-center gap-2 mb-3">
                 {(() => {
                   const Icon = getCategoryIcon(event.category);

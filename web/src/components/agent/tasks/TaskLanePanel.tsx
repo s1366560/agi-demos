@@ -9,6 +9,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   Ban,
   CheckCircle2,
@@ -92,6 +94,14 @@ const PRIORITY_DOT: Record<string, string> = {
   low: 'bg-slate-300 dark:bg-slate-600',
 };
 
+const LANE_LABEL_KEYS: Record<string, string> = {
+  in_progress: 'inProgress',
+  pending: 'backlog',
+  completed: 'done',
+  failed: 'blocked',
+  Other: 'other',
+};
+
 /**
  * Lane → required-evidence mapping. Distilled from routa's lane contracts:
  * a task moving *out of* a lane must carry the evidence the next lane expects.
@@ -138,6 +148,7 @@ function loadCollapsed(conversationId: string | undefined): Record<LaneKey, bool
 }
 
 const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
+  const { t } = useTranslation();
   const cfg = STATUS_ICON[task.status];
   const Icon = cfg.icon;
   const isActive = task.status === 'in_progress';
@@ -163,7 +174,10 @@ const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
       {task.priority !== 'medium' ? (
         <span
           className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${PRIORITY_DOT[task.priority] ?? ''}`}
-          title={`${task.priority} priority`}
+          title={t('agent.taskLanePanel.priorityTitle', {
+            defaultValue: '{{priority}} priority',
+            priority: task.priority,
+          })}
         />
       ) : null}
     </li>
@@ -172,6 +186,7 @@ const LaneTaskRow = memo<{ task: AgentTask }>(({ task }) => {
 LaneTaskRow.displayName = 'LaneTaskRow';
 
 export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }) => {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<Record<LaneKey, boolean>>(() =>
     loadCollapsed(conversationId)
   );
@@ -232,7 +247,10 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
       <div className="flex flex-col items-center justify-center px-4 py-12">
         <Circle size={32} className="mb-3 text-slate-300 dark:text-slate-600" />
         <p className="text-center text-sm text-slate-500 dark:text-slate-400">
-          No tasks yet. The agent will create lanes when working on complex requests.
+          {t('agent.taskLanePanel.empty', {
+            defaultValue:
+              'No tasks yet. The agent will create lanes when working on complex requests.',
+          })}
         </p>
       </div>
     );
@@ -243,7 +261,11 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
       <div className="border-b border-slate-200/60 px-4 py-3 dark:border-slate-700/50">
         <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>
-            {completed}/{total} done
+            {t('agent.taskLanePanel.doneSummary', {
+              defaultValue: '{{completed}}/{{total}} done',
+              completed,
+              total,
+            })}
           </span>
           <span>{pct}%</span>
         </div>
@@ -258,6 +280,8 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {lanes.map((lane) => {
           const isCollapsed = collapsed[lane.key];
+          const laneLabelKey =
+            lane.label === 'Other' ? 'other' : (LANE_LABEL_KEYS[lane.key] ?? lane.key);
           return (
             <section
               key={lane.key + lane.label}
@@ -276,7 +300,9 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                 </span>
                 <span className={`h-1.5 w-1.5 rounded-full ${lane.accent}`} />
                 <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-600 dark:text-slate-300">
-                  {lane.label}
+                  {t(`agent.taskLanePanel.lanes.${laneLabelKey}`, {
+                    defaultValue: lane.label,
+                  })}
                 </span>
                 <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {lane.tasks.length}
@@ -292,12 +318,19 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                         className="flex flex-wrap items-center gap-1 px-3 pb-1.5 text-[10px] text-slate-500 dark:text-slate-400"
                         data-testid="lane-contract-hint"
                       >
-                        <span className="uppercase tracking-[0.1em]">advances with</span>
+                        <span className="uppercase tracking-[0.1em]">
+                          {t('agent.taskLanePanel.advancesWith', {
+                            defaultValue: 'advances with',
+                          })}
+                        </span>
                         {evidence.map((kind) => (
                           <span
                             key={kind}
                             className="inline-flex items-center rounded border border-slate-200 bg-white px-1.5 py-0.5 font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                            title={`Next lane requires: ${formatArtifactLabel(kind)}`}
+                            title={t('agent.taskLanePanel.nextLaneRequires', {
+                              defaultValue: 'Next lane requires: {{artifact}}',
+                              artifact: formatArtifactLabel(kind),
+                            })}
                           >
                             {formatArtifactLabel(kind)}
                           </span>
@@ -307,7 +340,7 @@ export const TaskLanePanel = memo<TaskLanePanelProps>(({ tasks, conversationId }
                   })()}
                   {lane.tasks.length === 0 ? (
                     <p className="px-3 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
-                      Empty.
+                      {t('agent.taskLanePanel.emptyLane', { defaultValue: 'Empty.' })}
                     </p>
                   ) : (
                     <ul className="space-y-1.5 p-2 pt-0">

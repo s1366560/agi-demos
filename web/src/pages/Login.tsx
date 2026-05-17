@@ -44,16 +44,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleDemoKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-    type: 'admin' | 'user'
-  ) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      handleDemoLogin(type);
-    }
-  };
-
   return (
     <div className="min-h-screen flex bg-gray-50 dark:bg-slate-950 relative">
       <div className="absolute top-4 right-4 z-50">
@@ -264,40 +254,32 @@ export const Login: React.FC = () => {
               </h3>
             </div>
             <div className="space-y-2 text-sm">
-              <div
+              <button
+                type="button"
                 onClick={() => {
                   handleDemoLogin('admin');
                 }}
-                onKeyDown={(event) => {
-                  handleDemoKeyDown(event, 'admin');
-                }}
-                className="flex flex-col gap-1 rounded bg-blue-100/50 p-2 text-blue-800 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                role="button"
-                tabIndex={0}
+                className="flex w-full flex-col gap-1 rounded bg-blue-100/50 p-2 text-left text-blue-800 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 aria-label={t('login.demo.adminAria')}
               >
                 <span className="font-medium leading-tight">{t('login.demo.admin')}</span>
                 <span className="break-all font-mono text-xs leading-snug">
                   admin@memstack.ai / adminpassword
                 </span>
-              </div>
-              <div
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   handleDemoLogin('user');
                 }}
-                onKeyDown={(event) => {
-                  handleDemoKeyDown(event, 'user');
-                }}
-                className="flex flex-col gap-1 rounded bg-blue-100/50 p-2 text-blue-800 transition-colors hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
-                role="button"
-                tabIndex={0}
+                className="flex w-full flex-col gap-1 rounded bg-blue-100/50 p-2 text-left text-blue-800 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
                 aria-label={t('login.demo.userAria')}
               >
                 <span className="font-medium leading-tight">{t('login.demo.user')}</span>
                 <span className="break-all font-mono text-xs leading-snug">
                   user@memstack.ai / userpassword
                 </span>
-              </div>
+              </button>
             </div>
           </div>
         </div>

@@ -32,7 +32,7 @@ export function SidebarUser({ user, onLogout }: SidebarUserProps) {
         }`}
       >
         {/* Avatar */}
-        <div className="size-8 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-slate-50 dark:bg-slate-100 dark:text-slate-900">
           {user.name[0]?.toUpperCase() || 'U'}
         </div>
 

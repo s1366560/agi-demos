@@ -321,10 +321,9 @@ export const InputToolbar = memo<InputToolbarProps>(
               aria-label={t('agent.inputBar.send', 'Send message')}
               data-testid="send-button"
               className={`
-                rounded-xl flex items-center gap-1.5 h-8 px-3
-                bg-gradient-to-r from-primary to-primary-600
-                hover:from-primary-600 hover:to-primary-700
-                shadow-md shadow-primary/20
+                rounded-lg flex items-center gap-1.5 h-8 px-3
+                bg-primary hover:bg-primary-600
+                shadow-sm
                 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
                 transition-colors duration-200
               `}

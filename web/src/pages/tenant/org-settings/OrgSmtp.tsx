@@ -173,7 +173,7 @@ export const OrgSmtp: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t('tenant.orgSettings.smtp.title', 'SMTP Configuration')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -185,11 +185,11 @@ export const OrgSmtp: React.FC = () => {
         </div>
         {config && (
           <button
+            type="button"
             onClick={() => {
               void handleDelete();
             }}
             disabled={isSubmitting}
-            type="button"
             className="inline-flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 dark:border-red-900/50 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium"
           >
             <Trash2 size={16} />
@@ -198,8 +198,8 @@ export const OrgSmtp: React.FC = () => {
         )}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-        <h3 className="text-md font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-6">
+        <h3 className="mb-6 flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
           <Mail size={16} className="text-primary" />
           {t('tenant.orgSettings.smtp.serverSettings', 'Server Settings')}
         </h3>
@@ -219,7 +219,7 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setHost(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.hostPlaceholder')}
             />
           </div>
@@ -238,7 +238,7 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setPort(parseInt(e.target.value, 10));
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.portPlaceholder')}
             />
           </div>
@@ -257,7 +257,7 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setUsername(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.usernamePlaceholder')}
             />
           </div>
@@ -277,7 +277,7 @@ export const OrgSmtp: React.FC = () => {
                 onChange={(e) => {
                   setPassword(e.target.value);
                 }}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 pr-10 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+                className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 pr-10 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 placeholder={
                   config
                     ? config.smtp_password_masked
@@ -317,7 +317,7 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setFromEmail(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.fromEmailPlaceholder')}
             />
           </div>
@@ -336,7 +336,7 @@ export const OrgSmtp: React.FC = () => {
               onChange={(e) => {
                 setFromName(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder={t('tenant.orgSettings.smtp.fromNamePlaceholder')}
             />
           </div>
@@ -364,7 +364,7 @@ export const OrgSmtp: React.FC = () => {
               void handleSave();
             }}
             disabled={isSubmitting}
-            className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+            className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 font-medium text-slate-50 transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isSubmitting && (
               <Loader2 size={20} className="animate-spin motion-reduce:animate-none" />
@@ -375,8 +375,8 @@ export const OrgSmtp: React.FC = () => {
       </div>
 
       {config && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-          <h3 className="text-md font-semibold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-6">
+          <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
             <Send size={16} className="text-green-600" />
             {t('tenant.orgSettings.smtp.testTitle', 'Test Configuration')}
           </h3>
@@ -395,7 +395,7 @@ export const OrgSmtp: React.FC = () => {
                 onChange={(e) => {
                   setRecipientEmail(e.target.value);
                 }}
-                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none"
+                className="w-full rounded-lg border border-slate-300 bg-slate-100 px-4 py-2.5 text-slate-900 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 placeholder={t('tenant.orgSettings.smtp.recipientEmail', 'Recipient email address')}
               />
             </div>
@@ -405,7 +405,7 @@ export const OrgSmtp: React.FC = () => {
                 void handleTest();
               }}
               disabled={isTesting || !recipientEmail}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+              className="flex items-center gap-2 whitespace-nowrap rounded-lg bg-slate-100 px-6 py-2.5 font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               {isTesting ? (
                 <RefreshCcw size={20} className="animate-spin motion-reduce:animate-none" />

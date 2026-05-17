@@ -191,7 +191,7 @@ export function CollaborationOverviewTab({
                   <div className="flex flex-1 items-center gap-2">
                     <div className="h-4 flex-1 overflow-hidden rounded-full bg-surface-muted dark:bg-surface-dark-alt">
                       <div
-                        className="h-full rounded-full transition-all"
+                        className="h-full rounded-full transition-[width,background-color,opacity]"
                         style={{
                           width: `${String(pct)}%`,
                           backgroundColor: getAgentColor(link.from),

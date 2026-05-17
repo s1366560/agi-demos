@@ -196,7 +196,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
         data-testid="conversation-mode-panel"
         data-runtime-role-contract="derived"
       >
-        <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#666]">
+        <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
           {t('agent.workspace.mode.label', 'Mode')}
         </div>
         <Segmented<Mode>
@@ -211,13 +211,13 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
         />
 
         <div
-          className="mt-3 rounded-md border border-[rgba(0,0,0,0.08)] bg-[#fafafa] px-3 py-2"
+          className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60"
           data-testid="conversation-mode-summary"
         >
-          <div className="text-[11px] font-medium uppercase tracking-wide text-[#666]">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {t('agent.workspace.mode.summaryLabel', 'Actor model')}
           </div>
-          <div className="mt-2 space-y-1 text-xs text-[#444]">
+          <div className="mt-2 space-y-1 text-xs text-slate-700 dark:text-slate-300">
             <div>{`${t('agent.workspace.mode.participantsLabel', 'Participants')}: ${String(participantCount)}`}</div>
             {coordinatorLabel ? (
               <div>{`${t('agent.workspace.mode.coordinatorLabel', 'Coordinator')}: ${coordinatorLabel}`}</div>
@@ -225,7 +225,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
             {effectiveMode === 'multi_agent_isolated' && focusedLabel ? (
               <div>{`${t('agent.workspace.mode.focusedLabel', 'Focused agent')}: ${focusedLabel}`}</div>
             ) : null}
-            <div className="text-[#666]">
+            <div className="text-slate-500 dark:text-slate-400">
               {effectiveMode === 'autonomous'
                 ? t(
                     'agent.workspace.mode.derivedRoleAutonomous',
@@ -246,7 +246,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
 
         {showTaskPicker ? (
           <div className="mt-4" data-testid="conversation-task-picker">
-            <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#666]">
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               {t('agent.workspace.task.label', 'Linked workspace task')}
             </div>
             <Select<string | null>
@@ -262,7 +262,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
               className="w-full"
               data-testid="conversation-task-select"
             />
-            <div className="mt-1 text-[11px] text-[#999]">
+            <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
               {t(
                 'agent.workspace.task.hint',
                 'Goal, budget and termination are driven by the linked task.'
@@ -270,7 +270,7 @@ export const ConversationModePanel = memo<ConversationModePanelProps>(
             </div>
             {linkedTask ? (
               <div
-                className="mt-2 text-[11px] text-[#666]"
+                className="mt-2 text-[11px] text-slate-500 dark:text-slate-400"
                 data-testid="conversation-linked-task-summary"
               >
                 {`${t('agent.workspace.task.summaryLabel', 'Linked task')}: ${linkedTask.title} · ${linkedTask.status}`}

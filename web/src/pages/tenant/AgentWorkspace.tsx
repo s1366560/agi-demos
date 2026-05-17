@@ -5,7 +5,7 @@
  * with project selector for choosing which project's context to use.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, lazy, useState, useEffect, useCallback, useMemo } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -15,8 +15,6 @@ import { Empty as AntEmpty } from 'antd';
 
 import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
-import { AgentChatContent } from '../../components/agent/AgentChatContent';
-import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useConversationListAutoRefresh } from '../../hooks/useConversationListAutoRefresh';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
@@ -26,6 +24,33 @@ import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 import type { Project } from '../../types/memory';
+
+const AgentChatContent = lazy(() =>
+  import('../../components/agent/AgentChatContent').then((module) => ({
+    default: module.AgentChatContent,
+  }))
+);
+
+const ContextDetailPanel = lazy(() =>
+  import('../../components/agent/context/ContextDetailPanel').then((module) => ({
+    default: module.ContextDetailPanel,
+  }))
+);
+
+function WorkspacePanelFallback() {
+  const { t } = useTranslation();
+
+  return (
+    <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
+      <div className="text-center">
+        <LazySpin size="large" />
+        <div className="mt-2 text-slate-500 dark:text-slate-400">
+          {t('agent.workspace.loading')}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * AgentWorkspace - Main component for tenant-level agent access
@@ -233,14 +258,14 @@ export const AgentWorkspace: FC = () => {
   return (
     <div className="w-full h-full relative">
       {effectiveProjectId ? (
-        <>
+        <Suspense fallback={<WorkspacePanelFallback />}>
           <AgentChatContent
             externalProjectId={effectiveProjectId}
             basePath={basePath}
             navigationQuery={navigationQuery}
           />
           <ContextDetailPanel />
-        </>
+        </Suspense>
       ) : (
         <div className="h-full flex items-center justify-center">
           <LazyEmpty

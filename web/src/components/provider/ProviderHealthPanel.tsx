@@ -330,7 +330,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
 
       {/* Response Time & Additional Stats */}
       <div className="px-5 pb-5">
-        <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/50 dark:to-slate-800/30">
+        <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40">
           <div className="flex items-center gap-4">
             <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
               <Gauge size={20} className="text-primary" />

@@ -8,6 +8,7 @@ import {
   Button,
   Badge,
   Card,
+  Empty,
   Tag,
   Modal,
   Form,
@@ -18,7 +19,6 @@ import {
   Space,
   message,
   Spin,
-  List,
   Avatar,
   Pagination,
   Collapse,
@@ -404,43 +404,46 @@ export const GeneDetail: FC = () => {
           </Button>
         </div>
 
-        <List
-          loading={reviewsLoading}
-          dataSource={reviews}
-          locale={{ emptyText: t('gene.noReviews') }}
-          renderItem={(review) => (
-            <List.Item
-              actions={[
+        {reviewsLoading ? (
+          <div className="flex justify-center py-8">
+            <Spin />
+          </div>
+        ) : reviews.length === 0 ? (
+          <Empty description={t('gene.noReviews')} />
+        ) : (
+          <div role="list" className="divide-y divide-slate-200 dark:divide-slate-800">
+            {reviews.map((review) => (
+              <div
+                key={review.id}
+                role="listitem"
+                className="flex items-start gap-3 py-4 first:pt-0 last:pb-0"
+              >
+                <Avatar icon={<User className="w-4 h-4 mt-1" />} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Text strong>{review.user_id}</Text>
+                    <Rate disabled value={review.rating} className="text-sm" />
+                    <Text type="secondary" className="ml-auto text-xs">
+                      {new Date(review.created_at).toLocaleDateString()}
+                    </Text>
+                  </div>
+                  <Paragraph className="mt-2 mb-0 text-slate-700 dark:text-slate-300">
+                    {review.content}
+                  </Paragraph>
+                </div>
                 <Button
                   type="text"
                   danger
+                  aria-label={t('gene.deleteReview')}
                   icon={<Trash2 className="w-4 h-4" />}
                   onClick={() => {
                     handleDeleteReview(review.id);
                   }}
-                />,
-              ]}
-            >
-              <List.Item.Meta
-                avatar={<Avatar icon={<User className="w-4 h-4 mt-1" />} />}
-                title={
-                  <div className="flex items-center gap-2">
-                    <Text strong>{review.user_id}</Text>
-                    <Rate disabled value={review.rating} className="text-sm" />
-                    <Text type="secondary" className="text-xs ml-auto">
-                      {new Date(review.created_at).toLocaleDateString()}
-                    </Text>
-                  </div>
-                }
-                description={
-                  <Paragraph className="mt-2 mb-0 text-slate-700 dark:text-slate-300">
-                    {review.content}
-                  </Paragraph>
-                }
-              />
-            </List.Item>
-          )}
-        />
+                />
+              </div>
+            ))}
+          </div>
+        )}
         {reviewsTotal > 0 && (
           <div className="flex justify-end mt-4">
             <Pagination

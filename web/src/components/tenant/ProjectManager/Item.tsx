@@ -79,8 +79,8 @@ export const Item: FC<ProjectManagerItemProps> = ({
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-blue-600 rounded-lg flex items-center justify-center">
-            <Folder className="h-4 w-4 text-white" />
+          <div className="w-8 h-8 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 flex items-center justify-center">
+            <Folder className="h-4 w-4" />
           </div>
           <div>
             <h4 className="text-sm font-medium text-gray-900 dark:text-white">{project.name}</h4>

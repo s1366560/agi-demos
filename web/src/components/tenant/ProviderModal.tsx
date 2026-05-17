@@ -406,8 +406,8 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -416,10 +416,18 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                {isEditing ? 'Edit Provider' : 'Add LLM Provider'}
+                {t(
+                  isEditing
+                    ? 'components.provider.modal.editTitle'
+                    : 'components.provider.modal.addTitle'
+                )}
               </h2>
               <p className="text-sm text-slate-500">
-                {isEditing ? 'Update provider configuration' : 'Configure a new AI model provider'}
+                {t(
+                  isEditing
+                    ? 'components.provider.modal.editDescription'
+                    : 'components.provider.modal.addDescription'
+                )}
               </p>
             </div>
           </div>
@@ -442,23 +450,32 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
         <div className="px-6 border-b border-slate-200 dark:border-slate-700">
           <nav className="flex gap-6">
             {[
-              { id: 'basic', label: 'Basic Info', icon: 'info' },
-              { id: 'models', label: 'Models', icon: 'psychology' },
-              { id: 'advanced', label: 'Advanced', icon: 'settings' },
+              { id: 'basic', labelKey: 'components.provider.modal.tabs.basic', icon: 'info' },
+              {
+                id: 'models',
+                labelKey: 'components.provider.modal.tabs.models',
+                icon: 'psychology',
+              },
+              {
+                id: 'advanced',
+                labelKey: 'components.provider.modal.tabs.advanced',
+                icon: 'settings',
+              },
             ].map((tab) => (
               <button
+                type="button"
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id as typeof activeTab);
                 }}
-                className={`flex items-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
+                className={`flex items-center gap-2 py-3 text-sm font-medium border-b transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 ${
                   activeTab === tab.id
                     ? 'border-primary text-primary'
                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
               >
                 {renderDynamicIcon(tab.icon, 18, '')}
-                {tab.label}
+                {t(tab.labelKey)}
               </button>
             ))}
           </nav>
@@ -487,7 +504,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="provider-name"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Provider Name *
+                    {t('components.provider.modal.labels.providerName')} *
                   </label>
                   <input
                     id="provider-name"
@@ -497,7 +514,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     onChange={(e) => {
                       setFormData((prev) => ({ ...prev, name: e.target.value }));
                     }}
-                    placeholder="e.g., Production OpenAI"
+                    placeholder={t('components.provider.modal.placeholders.providerName')}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                 </div>
@@ -507,7 +524,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="provider-type"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Provider Type *
+                    {t('components.provider.modal.labels.providerType')} *
                   </label>
                   <select
                     id="provider-type"
@@ -531,7 +548,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="api-key"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    API Key {!isEditing && '*'}
+                    {t('components.provider.modal.labels.apiKey')} {!isEditing && '*'}
                   </label>
                   <input
                     id="api-key"
@@ -543,17 +560,17 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     }}
                     placeholder={
                       isEditing
-                        ? 'Leave empty to keep current key'
+                        ? t('components.provider.modal.placeholders.keepCurrentKey')
                         : providerTypeRequiresApiKey(formData.provider_type)
-                          ? 'Enter your API key'
-                          : 'Optional for local providers'
+                          ? t('components.provider.modal.placeholders.enterApiKey')
+                          : t('components.provider.modal.placeholders.optionalLocalApiKey')
                     }
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
                     {providerTypeRequiresApiKey(formData.provider_type)
-                      ? 'Your API key is encrypted and stored securely.'
-                      : 'API key is optional for local providers and will be encrypted if provided.'}
+                      ? t('components.provider.modal.help.apiKeyRequired')
+                      : t('components.provider.modal.help.apiKeyOptional')}
                   </p>
                 </div>
 
@@ -598,7 +615,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="llm-model"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Primary LLM Model *
+                    {t('components.provider.modal.labels.primaryLlmModel')} *
                   </label>
                   <input
                     id="llm-model"
@@ -608,11 +625,11 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     onChange={(e) => {
                       setFormData((prev) => ({ ...prev, llm_model: e.target.value }));
                     }}
-                    placeholder="e.g., gpt-4o"
+                    placeholder={t('components.provider.modal.placeholders.primaryModel')}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Main model for complex tasks and entity extraction.
+                    {t('components.provider.modal.help.primaryModel')}
                   </p>
                 </div>
 
@@ -621,7 +638,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="llm-small-model"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Small/Fast Model
+                    {t('components.provider.modal.labels.smallFastModel')}
                   </label>
                   <input
                     id="llm-small-model"
@@ -630,11 +647,11 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     onChange={(e) => {
                       setFormData((prev) => ({ ...prev, llm_small_model: e.target.value }));
                     }}
-                    placeholder="e.g., gpt-4o-mini"
+                    placeholder={t('components.provider.modal.placeholders.smallModel')}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Faster model for simpler tasks and cost optimization.
+                    {t('components.provider.modal.help.smallModel')}
                   </p>
                 </div>
 
@@ -643,7 +660,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="embedding-model"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Embedding Model
+                    {t('components.provider.modal.labels.embeddingModel')}
                   </label>
                   <input
                     id="embedding-model"
@@ -652,11 +669,11 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     onChange={(e) => {
                       setFormData((prev) => ({ ...prev, embedding_model: e.target.value }));
                     }}
-                    placeholder="e.g., text-embedding-3-small"
+                    placeholder={t('components.provider.modal.placeholders.embeddingModel')}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Model for generating vector embeddings.
+                    {t('components.provider.modal.help.embeddingModel')}
                   </p>
                 </div>
 
@@ -665,7 +682,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="reranker-model"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Reranker Model
+                    {t('components.provider.modal.labels.rerankerModel')}
                   </label>
                   <input
                     id="reranker-model"
@@ -674,11 +691,11 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     onChange={(e) => {
                       setFormData((prev) => ({ ...prev, reranker_model: e.target.value }));
                     }}
-                    placeholder="e.g., gpt-4o-mini (optional)"
+                    placeholder={t('components.provider.modal.placeholders.rerankerModel')}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Model for reranking search results. Uses LLM if not specified.
+                    {t('components.provider.modal.help.rerankerModel')}
                   </p>
                 </div>
               </div>
@@ -692,7 +709,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     htmlFor="base-url"
                     className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5"
                   >
-                    Custom Base URL
+                    {t('components.provider.modal.labels.customBaseUrl')}
                   </label>
                   <input
                     id="base-url"
@@ -701,17 +718,17 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                     onChange={(e) => {
                       setFormData((prev) => ({ ...prev, base_url: e.target.value }));
                     }}
-                    placeholder="https://api.example.com/v1"
+                    placeholder={t('components.provider.modal.placeholders.baseUrl')}
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Override the default API endpoint. Useful for proxies or self-hosted models.
+                    {t('components.provider.modal.help.baseUrl')}
                   </p>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
                   <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Provider Information
+                    {t('components.provider.modal.providerInformation')}
                   </h4>
                   <div className="space-y-2 text-sm text-slate-500">
                     <p>
@@ -750,7 +767,7 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
               disabled={isSubmitting}
               className="px-5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -760,12 +777,16 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
               {isSubmitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin motion-reduce:animate-none ]" />
-                  Saving...
+                  {t('components.provider.modal.saving')}
                 </>
               ) : (
                 <>
                   <Save size={16} className="]" />
-                  {isEditing ? 'Update Provider' : 'Create Provider'}
+                  {t(
+                    isEditing
+                      ? 'components.provider.modal.updateProvider'
+                      : 'components.provider.modal.createProvider'
+                  )}
                 </>
               )}
             </button>

@@ -221,8 +221,8 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       {/* Confirmation modal for switching with active conversation */}
       <Modal
         title={
-          <span>
-            <AlertCircle style={{ color: '#faad14', marginRight: 8 }} size={16} />
+          <span className="inline-flex items-center gap-2">
+            <AlertCircle className="text-amber-500" size={16} />
             {text('switchTitle', 'Switch Project?')}
           </span>
         }

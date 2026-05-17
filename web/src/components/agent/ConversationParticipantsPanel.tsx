@@ -23,7 +23,7 @@ export interface ConversationParticipantsPanelProps {
 }
 
 const badgeBase =
-  'inline-flex h-[18px] items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-[#ebebeb] px-2 text-[11px] font-medium text-[#171717]';
+  'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-[11px] font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
 const modeLabel = (mode: string) => mode.replace(/_/g, ' ');
 
@@ -55,7 +55,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
     if (loading && !roster) {
       return (
         <aside className={className} aria-busy="true">
-          <p className="text-sm text-[#666]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {t('agent.participants.loading', { defaultValue: 'Loading roster...' })}
           </p>
         </aside>
@@ -65,7 +65,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
     if (error) {
       return (
         <aside className={className}>
-          <p className="text-sm text-[#ee0000]">
+          <p className="text-sm text-red-600 dark:text-red-400">
             {t('agent.participants.error', { defaultValue: 'Failed to load roster' })}
           </p>
         </aside>
@@ -97,7 +97,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
         })}
       >
         <header className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-[#666]">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {t('agent.participants.title', { defaultValue: 'Participants' })}
           </h3>
           <span className={badgeBase} title={effective_mode}>
@@ -106,7 +106,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
         </header>
 
         {participant_agents.length === 0 ? (
-          <p className="text-sm text-[#999]">
+          <p className="text-sm text-slate-400 dark:text-slate-500">
             {t('agent.participants.empty', { defaultValue: 'No agents in this conversation.' })}
           </p>
         ) : (
@@ -125,12 +125,12 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
               return (
                 <li
                   key={agentId}
-                  className="flex items-center justify-between gap-2 rounded-md border border-[rgba(0,0,0,0.08)] bg-white px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
                 >
                   <button
                     type="button"
                     onClick={() => onSelectAgent?.(agentId)}
-                    className="flex-1 text-left text-sm font-medium text-[#171717] hover:text-[#0070f3]"
+                    className="flex-1 text-left text-sm font-medium text-slate-900 hover:text-primary dark:text-slate-100 dark:hover:text-primary-400"
                   >
                     {participantLabel}
                   </button>
@@ -154,7 +154,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                         onClick={() => {
                           void setFocusedAgent(agentId);
                         }}
-                        className="rounded px-2 py-0.5 text-xs text-[#666] hover:bg-[#fafafa] hover:text-[#0070f3]"
+                        className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-primary-400"
                         title={t('agent.participants.setFocused', {
                           defaultValue: 'Set as focused agent',
                         })}
@@ -172,7 +172,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                         onClick={() => {
                           void setCoordinator(agentId);
                         }}
-                        className="rounded px-2 py-0.5 text-xs text-[#666] hover:bg-[#fafafa] hover:text-[#0070f3]"
+                        className="rounded px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-50 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-primary-400"
                         title={t('agent.participants.setCoordinator', {
                           defaultValue: 'Set as coordinator',
                         })}
@@ -192,7 +192,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                           onRemoveAgent?.(agentId);
                         })();
                       }}
-                      className="rounded px-2 py-0.5 text-xs text-[#999] hover:bg-[#fafafa] hover:text-[#ee0000]"
+                      className="rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-50 hover:text-red-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-red-400"
                       aria-label={t('agent.participants.remove', {
                         name: participantLabel,
                         defaultValue: `Remove ${participantLabel}`,
@@ -209,7 +209,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
         {effective_mode === 'autonomous' &&
           !coordinator_agent_id &&
           participant_agents.length > 0 && (
-            <p className="mt-3 text-xs text-[#ee0000]">
+            <p className="mt-3 text-xs text-red-600 dark:text-red-400">
               {t('agent.participants.autonomousRequiresCoordinator', {
                 defaultValue:
                   'Autonomous mode requires a coordinator. Click ★ on a participant to assign.',
@@ -219,16 +219,16 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
         {effective_mode === 'multi_agent_isolated' &&
           !focused_agent_id &&
           participant_agents.length > 0 && (
-            <p className="mt-3 text-xs text-[#666]">
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               {t('agent.participants.isolatedSuggestsFocused', {
                 defaultValue:
                   'Isolated mode works best with one focused agent. Click ◎ on a participant to set it.',
               })}
             </p>
           )}
-        <div className="mt-3 border-t border-[rgba(0,0,0,0.08)] pt-3">
+        <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           {availableToAdd.length === 0 ? (
-            <p className="text-xs text-[#999]">
+            <p className="text-xs text-slate-400 dark:text-slate-500">
               {t('agent.participants.noneAvailable', {
                 defaultValue:
                   'No more agents available. Add agents to the linked workspace to see them here.',
@@ -236,7 +236,10 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
             </p>
           ) : (
             <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-[#666]" htmlFor="add-participant-select">
+              <label
+                className="text-xs font-medium text-slate-500 dark:text-slate-400"
+                htmlFor="add-participant-select"
+              >
                 {t('agent.participants.addLabel', { defaultValue: 'Add agent' })}
               </label>
               <select
@@ -260,7 +263,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
                     }
                   })();
                 }}
-                className="flex-1 rounded border border-[rgba(0,0,0,0.08)] bg-white px-2 py-1 text-xs text-[#171717] focus:outline-none focus:ring-1 focus:ring-[#0070f3]"
+                className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="">
                   {t('agent.participants.addPlaceholder', { defaultValue: 'Select an agent…' })}
@@ -273,7 +276,7 @@ export const ConversationParticipantsPanel = memo<ConversationParticipantsPanelP
               </select>
             </div>
           )}
-          {addError && <p className="mt-2 text-xs text-[#ee0000]">{addError}</p>}
+          {addError && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{addError}</p>}
         </div>
       </aside>
     );

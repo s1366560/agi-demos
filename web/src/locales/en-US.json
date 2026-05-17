@@ -4837,7 +4837,7 @@
         "title": "Knowledge Graph"
       },
       "settings": {
-        "development": "Project settings are under development..."
+        "development": "Project settings"
       }
     }
   },
@@ -4955,6 +4955,29 @@
         "summaryLabel": "Linked task"
       }
     },
+    "taskList": {
+      "empty": "No tasks yet. The agent will create tasks when working on complex requests.",
+      "completedSummary": "{{completed}}/{{total}} completed",
+      "activeSummary": "{{count}} task in progress",
+      "activeSummary_one": "{{count}} task in progress",
+      "activeSummary_other": "{{count}} tasks in progress",
+      "priorityTitle": "{{priority}} priority"
+    },
+    "taskLanePanel": {
+      "empty": "No tasks yet. The agent will create lanes when working on complex requests.",
+      "doneSummary": "{{completed}}/{{total}} done",
+      "priorityTitle": "{{priority}} priority",
+      "advancesWith": "advances with",
+      "nextLaneRequires": "Next lane requires: {{artifact}}",
+      "emptyLane": "Empty.",
+      "lanes": {
+        "inProgress": "In progress",
+        "backlog": "Backlog",
+        "done": "Done",
+        "blocked": "Blocked",
+        "other": "Other"
+      }
+    },
     "groupChat": {
       "title": "Workspace Chat",
       "subtitle": "Collaborate with team members and agents"
@@ -4967,7 +4990,9 @@
       "title": "Agent Graph",
       "clear": "Clear",
       "noActiveRun": "No active graph run",
-      "noNodes": "Waiting for nodes to start..."
+      "noNodes": "Waiting for nodes to start...",
+      "outputKeys": "Output keys: {{keys}}",
+      "pattern": "Pattern"
     },
     "tableView": {
       "defaultTitle": "Data Table",
@@ -7082,6 +7107,12 @@
       "notePlaceholder": "Review note (optional)",
       "submissionNotePrefix": "Submission note:",
       "reviewNotePrefix": "Review note:",
+      "noSubmissionSelected": "Select a submission before reviewing.",
+      "approveSuccess": "Submission approved",
+      "rejectSuccess": "Submission rejected",
+      "reviewFailed": "Review failed",
+      "approveOk": "Approve",
+      "rejectOk": "Reject",
       "emptyDescription": "No {{status}} submissions"
     }
   },
@@ -7163,7 +7194,9 @@
       "versionLabel": "Version (semver)",
       "versionFormatHint": "Must follow MAJOR.MINOR.PATCH (e.g. 1.2.3)",
       "noteLabel": "Submission note (optional)",
-      "notePlaceholder": "Why is this Skill worth adding to the curated library?"
+      "notePlaceholder": "Why is this Skill worth adding to the curated library?",
+      "noSkillSelected": "Select a Skill before submitting.",
+      "failedMessage": "Submit failed"
     },
     "curated": {
       "eyebrow": "Library",
@@ -7182,6 +7215,10 @@
       "forkDialogContent": "Choose what to include when copying to your private library:",
       "forkIncludeExecutor": "Executor (tools + full_content)",
       "forkIncludeMetadata": "Metadata",
+      "forkOk": "Fork",
+      "forkSuccess": "Forked. New Skill ID: {{skillId}}",
+      "forkFailed": "Fork failed",
+      "noSkillSelected": "Select a curated Skill before forking.",
       "withdrawSuccess": "Submission withdrawn",
       "withdrawFailed": "Withdrawal failed",
       "noteLabel": "Note:",
@@ -7684,6 +7721,16 @@
       "empty": "No notifications yet.",
       "dismiss": "Dismiss notification"
     },
+    "deleteConfirmation": {
+      "cancel": "Cancel",
+      "deleting": "Deleting...",
+      "delete": "Delete"
+    },
+    "stateDisplay": {
+      "errorTitle": "Something went wrong",
+      "tryAgain": "Try Again",
+      "dismiss": "Dismiss"
+    },
     "layout": {
       "header": {
         "mobileMenu": "Menu",
@@ -7700,6 +7747,15 @@
         "activate": "Activate",
         "deactivate": "Deactivate"
       }
+    },
+    "workspaceSwitcher": {
+      "selectTenant": "Select Tenant",
+      "tenantConsole": "Tenant Console",
+      "selectProject": "Select Project",
+      "switchTenant": "Switch Tenant",
+      "createTenant": "Create Tenant",
+      "switchProject": "Switch Project",
+      "backToTenant": "Back to Tenant"
     },
     "provider": {
       "operationTypes": {
@@ -7756,14 +7812,110 @@
         "selectorTitle": "Select Provider for {{operation}}"
       },
       "modal": {
+        "addTitle": "Add LLM Provider",
+        "editTitle": "Edit Provider",
+        "addDescription": "Configure a new AI model provider",
+        "editDescription": "Update provider configuration",
         "setDefaultProvider": "Set as default provider",
         "type": "Type:",
         "created": "Created:",
         "updated": "Updated:",
-        "close": "Close provider dialog"
+        "close": "Close provider dialog",
+        "tabs": {
+          "basic": "Basic Info",
+          "models": "Models",
+          "advanced": "Advanced"
+        },
+        "labels": {
+          "providerName": "Provider Name",
+          "providerType": "Provider Type",
+          "apiKey": "API Key",
+          "primaryLlmModel": "Primary LLM Model",
+          "smallFastModel": "Small/Fast Model",
+          "embeddingModel": "Embedding Model",
+          "rerankerModel": "Reranker Model",
+          "customBaseUrl": "Custom Base URL"
+        },
+        "placeholders": {
+          "providerName": "e.g., Production OpenAI",
+          "keepCurrentKey": "Leave empty to keep current key",
+          "enterApiKey": "Enter your API key",
+          "optionalLocalApiKey": "Optional for local providers",
+          "primaryModel": "e.g., gpt-4o",
+          "smallModel": "e.g., gpt-4o-mini",
+          "embeddingModel": "e.g., text-embedding-3-small",
+          "rerankerModel": "e.g., gpt-4o-mini (optional)",
+          "baseUrl": "https://api.example.com/v1"
+        },
+        "help": {
+          "apiKeyRequired": "Your API key is encrypted and stored securely.",
+          "apiKeyOptional": "API key is optional for local providers and will be encrypted if provided.",
+          "primaryModel": "Main model for complex tasks and entity extraction.",
+          "smallModel": "Faster model for simpler tasks and cost optimization.",
+          "embeddingModel": "Model for generating vector embeddings.",
+          "rerankerModel": "Model for reranking search results. Uses LLM if not specified.",
+          "baseUrl": "Override the default API endpoint. Useful for proxies or self-hosted models."
+        },
+        "providerInformation": "Provider Information",
+        "saving": "Saving...",
+        "updateProvider": "Update Provider",
+        "createProvider": "Create Provider"
       },
       "config": {
+        "addTitle": "Add New Provider",
+        "editTitle": "Edit Provider",
+        "subtitle": "Configure your LLM provider settings",
+        "chooseProviderTitle": "Choose Your LLM Provider",
+        "chooseProviderDescription": "Select from supported AI model providers",
+        "steps": {
+          "provider": {
+            "label": "Select Provider",
+            "description": "Choose LLM provider"
+          },
+          "credentials": {
+            "label": "Credentials",
+            "description": "API key & config"
+          },
+          "models": {
+            "label": "Models",
+            "description": "Configure models"
+          },
+          "review": {
+            "label": "Review",
+            "description": "Review & save"
+          }
+        },
         "usePresetModel": "Use preset model",
+        "customModelNameOption": "Custom model name...",
+        "customModelPlaceholder": "Enter custom model name",
+        "loadingModels": "Loading models...",
+        "selectModel": "Select a model",
+        "fetchingModels": "Fetching available models...",
+        "primaryLlmModel": "Primary LLM Model",
+        "smallFastModelOptional": "Small/Fast Model (Optional)",
+        "embeddingModel": "Embedding Model",
+        "embeddingModelOptional": "Embedding Model (Optional)",
+        "rerankerModel": "Reranker Model",
+        "rerankerModelOptional": "Reranker Model (Optional)",
+        "selectOrEnterCustomModel": "Select or enter custom model...",
+        "active": "Active",
+        "setAsDefault": "Set as Default",
+        "userIdOptional": "User ID (Optional)",
+        "userIdPlaceholder": "End-user ID",
+        "timeoutMs": "Timeout (ms)",
+        "providerOptionsJson": "Provider Options (JSON)",
+        "poolRouting": "Pool & Routing",
+        "poolRoutingDescription": "Controls whether this provider participates in the tenant LLM pool (load balancing + auto-routing). Turn off to silence a broken provider without disabling it entirely.",
+        "poolEnabled": "Pool enabled",
+        "poolWeight": "Pool weight",
+        "poolWeightHint": "(>= 0, default 1.0)",
+        "modelTier": "Model tier",
+        "modelTierSmall": "small",
+        "modelTierMedium": "medium",
+        "modelTierLarge": "large",
+        "secondaryModels": "Secondary models",
+        "secondaryModelsHint": "(extra model names sharing this API key)",
+        "secondaryModelsPlaceholder": "Type a model name and press Enter",
         "modelInfo": "Model Info",
         "deprecated": "Deprecated",
         "context": "Context",
@@ -7772,20 +7924,37 @@
         "default": "Default",
         "float": "Float",
         "base64": "Base64",
+        "envDetectedTitle": "Environment Variables Detected",
+        "envDetectedDescription": "We found configuration in your environment variables. The fields below have been auto-filled.",
+        "providerName": "Provider Name",
+        "providerNamePlaceholder": "My OpenAI Provider",
+        "apiKey": "API Key",
+        "fromEnv": "From ENV",
+        "baseUrl": "Base URL",
+        "providerConfigurationJson": "Provider Configuration (JSON)",
         "primaryModel": "Primary Model:",
         "smallModel": "Small Model:",
         "embedding": "Embedding:",
         "reranker": "Reranker:",
         "status": "Status:",
         "custom": "Custom",
+        "rtcDescription": "Configure Volcengine RTC for real-time voice and video AI conversations. Leave blank to use environment variables as fallback.",
         "rtcTitle": "Voice & Video Call (RTC)",
         "rtcAppId": "RTC App ID:",
+        "rtcAppIdPlaceholder": "Your RTC App ID",
         "rtcAppKey": "RTC App Key:",
+        "rtcAppKeyPlaceholder": "Your RTC App Key",
         "accessKey": "Access Key:",
+        "accessKeyPlaceholder": "Your Volcengine Access Key",
         "secretKey": "Secret Key:",
+        "secretKeyPlaceholder": "Your Volcengine Secret Key",
         "speechAppId": "Speech App ID:",
+        "speechAppIdPlaceholder": "Speech App ID from Volcengine Speech Console",
         "speechAccessToken": "Speech Access Token:",
+        "speechAccessTokenPlaceholder": "Access Token from Volcengine Speech Console",
+        "doubaoEndpointId": "Doubao Endpoint ID",
         "endpointId": "Endpoint ID:",
+        "endpointIdPlaceholder": "Doubao model endpoint ID for voice chat",
         "close": "Close provider configuration"
       },
       "modelCatalog": {
@@ -8032,6 +8201,24 @@
       },
       "queryParameters": "Query Parameters",
       "executionMode": "Execution Mode",
+      "running": {
+        "webTitle": "Fetching web context",
+        "webDescription": "Collecting and ranking remote sources before returning results.",
+        "scrapeTitle": "Reading remote content",
+        "scrapeDescription": "Loading page content and extracting structured evidence.",
+        "searchTitle": "Searching knowledge graph",
+        "searchDescription": "Finding relevant entities, memories, and relationships.",
+        "createTitle": "Creating resource",
+        "createDescription": "Validating input and writing the requested resource.",
+        "graphTitle": "Querying graph data",
+        "graphDescription": "Running the graph query and preparing a concise result set.",
+        "defaultTitle": "Executing tool",
+        "defaultDescription": "Processing the request and waiting for the tool response.",
+        "inputAccepted": "Input accepted",
+        "modeActive": "{{mode}} mode active",
+        "partialResults": "{{count}} partial results",
+        "awaitingResponse": "Awaiting response"
+      },
       "scanningTitle": "Scanning knowledge graph...",
       "scanningDescription": "Searching for relevant entities and relationships",
       "searchCompleted": "Search completed",

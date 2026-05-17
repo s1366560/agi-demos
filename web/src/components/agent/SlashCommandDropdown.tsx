@@ -158,9 +158,9 @@ export const SlashCommandDropdown = memo(
         <div
           ref={listRef}
           className="absolute bottom-full left-0 right-0 mb-1 z-30 max-h-[280px] overflow-y-auto
-          rounded-xl border border-slate-200/80 dark:border-slate-700/80
-          bg-white/95 dark:bg-slate-800/95 backdrop-blur-md
-          shadow-xl shadow-slate-200/30 dark:shadow-black/30"
+          rounded-lg border border-slate-200 dark:border-slate-700
+          bg-slate-50 dark:bg-slate-800
+          shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20"
         >
           {/* Header */}
           <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">

@@ -65,14 +65,14 @@ export const UserMenu = React.memo(function UserMenu({
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => {
           setIsOpen(!isOpen);
         }}
         className="flex items-center gap-1.5 sm:gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label={t('components.layout.header.userMenu', 'User menu')}
-        type="button"
       >
-        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs sm:text-sm font-medium overflow-hidden flex-shrink-0">
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-xs font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900 sm:h-8 sm:w-8 sm:text-sm">
           {avatarUrl ? (
             <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
           ) : (

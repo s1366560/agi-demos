@@ -141,7 +141,7 @@ const DeviceSettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           onChange={(e) => {
             onChange(e.target.value);
           }}
-          className="mt-1 w-full px-2 py-1.5 bg-slate-700 border border-slate-600 rounded text-sm text-white focus:outline-none focus:border-blue-500"
+          className="mt-1 w-full rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
         >
           {devices.length === 0 && (
             <option value="">{t('agent.voiceCall.noDevices', 'No devices found')}</option>
@@ -157,9 +157,9 @@ const DeviceSettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   );
 
   return (
-    <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg p-4 shadow-xl z-50">
+    <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-slate-700 bg-slate-800 p-4 shadow-md">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-white">
+        <h3 className="text-sm font-medium text-slate-50">
           {t('agent.voiceCall.deviceSettings', 'Device Settings')}
         </h3>
         <button
@@ -167,7 +167,7 @@ const DeviceSettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           onClick={onClose}
           aria-label={t('agent.voiceCall.closeDeviceSettings', 'Close device settings')}
           title={t('agent.voiceCall.closeDeviceSettings', 'Close device settings')}
-          className="p-1 text-slate-400 hover:text-white transition-colors"
+          className="p-1 text-slate-400 transition-colors hover:text-slate-50"
         >
           <X size={14} />
         </button>
@@ -470,13 +470,13 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
     return createPortal(
       <div ref={panelRef} className="fixed z-50 top-0 left-0" style={{ willChange: 'transform' }}>
         <div
-          className="flex items-center gap-3 px-4 py-2 bg-slate-900/95 border border-slate-700/50 rounded-full shadow-2xl backdrop-blur-sm cursor-move"
+          className="flex cursor-move items-center gap-3 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 shadow-md"
           data-drag-handle
         >
           <div
             className={`w-3 h-3 rounded-full ${aiSpeaking ? 'bg-blue-500 animate-pulse motion-reduce:animate-none' : 'bg-green-500'}`}
           />
-          <span className="text-white text-sm font-mono">{formatDuration(duration)}</span>
+          <span className="font-mono text-sm text-slate-50">{formatDuration(duration)}</span>
           {isMuted && <MicOff size={14} className="text-red-400" />}
           <button
             type="button"
@@ -485,7 +485,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             }}
             aria-label={t('agent.voiceCall.expandPanel', 'Expand voice call panel')}
             title={t('agent.voiceCall.expandPanel', 'Expand voice call panel')}
-            className="p-1 text-slate-400 hover:text-white transition-colors"
+            className="p-1 text-slate-400 transition-colors hover:text-slate-50"
           >
             <Maximize2 size={14} />
           </button>
@@ -508,7 +508,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
 
   return createPortal(
     <div ref={panelRef} className="fixed z-50 top-0 left-0" style={{ willChange: 'transform' }}>
-      <div className="relative flex flex-col bg-slate-900/95 border border-slate-700/50 rounded-2xl shadow-2xl backdrop-blur-sm w-[380px] overflow-hidden">
+      <div className="relative flex w-[380px] flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-lg">
         {/* Drag Handle + Header */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 cursor-move"
@@ -586,14 +586,14 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
               <div
                 className={`
                   absolute inset-0 rounded-full border-4 flex items-center justify-center bg-slate-800
-                  transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
-                  ${aiSpeaking ? 'border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.4)] scale-105' : 'border-slate-700'}
+                  transition-[color,background-color,border-color,box-shadow,opacity] duration-300
+                  ${aiSpeaking ? 'border-blue-500 shadow-xl shadow-blue-500/30' : 'border-slate-700'}
                 `}
               >
                 <div
                   className={`
                     w-16 h-16 rounded-full bg-blue-500/20
-                    ${aiSpeaking ? 'animate-ping' : 'opacity-0'}
+                    ${aiSpeaking ? 'animate-pulse motion-reduce:animate-none' : 'opacity-0'}
                   `}
                 />
               </div>
@@ -698,7 +698,7 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
             type="button"
             onClick={handleEndCall}
             title={t('agent.voiceCall.endCall', { defaultValue: 'End call' })}
-            className="w-14 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:scale-105"
+            className="w-14 h-11 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 transition-[color,background-color,border-color,box-shadow,opacity]"
           >
             <PhoneOff size={22} />
           </button>

@@ -36,12 +36,12 @@ export const MobileSidebarDrawer: FC<MobileSidebarDrawerProps> = ({ open, onClos
     <div className="fixed inset-0 z-50 md:hidden">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 transition-opacity"
+        className="absolute inset-0 bg-slate-950/45 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
       {/* Drawer panel */}
-      <aside className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-white dark:bg-slate-900 shadow-2xl drawer-slide-in">
+      <aside className="absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-slate-50 dark:bg-slate-900 shadow-lg shadow-slate-950/20 drawer-slide-in">
         {children}
       </aside>
     </div>

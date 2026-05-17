@@ -102,7 +102,7 @@ export const ThreadView = memo<ThreadViewProps>(
         </button>
 
         {expanded && (
-          <div className="mt-2 pl-3 border-l-2 border-primary/20">
+          <div className="mt-2 border-l border-primary/20 pl-3">
             {loading ? (
               <div className="py-2">
                 <Loader2

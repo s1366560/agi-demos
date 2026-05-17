@@ -2,7 +2,7 @@
  * ConversationSidebar - Modern conversation list sidebar
  *
  * Features:
- * - Clean, modern design with glass morphism
+ * - Clean, modern design with low-noise surfaces
  * - Status indicators with animations
  * - HITL pending indicators
  * - Streaming indicators
@@ -667,7 +667,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
             <button
               type="button"
               onClick={onGroupChat}
-              className={`group mx-2 mb-1 flex w-[calc(100%-16px)] items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all ${
+              className={`group mx-2 mb-1 flex w-[calc(100%-16px)] items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-[color,background-color,border-color,box-shadow,opacity] ${
                 isGroupChatActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-text-secondary hover:bg-surface-muted dark:text-text-muted dark:hover:bg-surface-elevated'
@@ -710,7 +710,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
             onClick={onNew}
             className="text-center py-12 px-4 w-full hover:bg-slate-50 dark:hover:bg-slate-800/30 rounded-xl transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
           >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
               <MessageSquare size={24} className="text-slate-400" />
             </div>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
@@ -730,12 +730,12 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
         onOk={handleRenameSubmit}
         onCancel={handleRenameCancel}
         confirmLoading={isRenaming}
-        okText="Rename"
-        cancelText="Cancel"
+        okText={t('agent.sidebar.rename')}
+        cancelText={t('common.cancel')}
         className="modern-modal"
       >
         <LazyInput
-          placeholder="Enter conversation title"
+          placeholder={t('agent.sidebar.renamePlaceholder')}
           value={newTitle}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             setNewTitle(e.target.value);

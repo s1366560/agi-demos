@@ -18,13 +18,13 @@ import { AlertCircle, RefreshCw, Search } from 'lucide-react';
 
 import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
 
+import { PatternInspector } from '../../components/agent/patterns/PatternInspector';
 import {
-  PatternStats,
   PatternList,
-  PatternInspector,
   type WorkflowPattern as UIWorkflowPattern,
   type PatternStatus,
-} from '../../components/agent';
+} from '../../components/agent/patterns/PatternList';
+import { PatternStats } from '../../components/agent/patterns/PatternStats';
 import { patternService, PatternServiceError } from '../../services/patternService';
 
 import type { WorkflowPattern as APIWorkflowPattern } from '../../types/agent';
@@ -194,6 +194,7 @@ export function WorkflowPatterns() {
           </h2>
           <p className="text-slate-500 dark:text-slate-400 mb-4">{error}</p>
           <button
+            type="button"
             onClick={() => {
               void fetchPatterns();
             }}
@@ -220,6 +221,7 @@ export function WorkflowPatterns() {
         </div>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => {
               void fetchPatterns();
             }}

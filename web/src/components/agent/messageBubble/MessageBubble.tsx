@@ -2,7 +2,7 @@
  * MessageBubble - Modern message bubble component
  *
  * Compound Component Pattern for flexible message rendering.
- * Features modern glass-morphism design, smooth animations, and improved UX.
+ * Features quiet surfaces, smooth state changes, and focused message rendering.
  */
 
 import type React from 'react';
@@ -96,7 +96,7 @@ import type {
 
 const COUNT_FORMATTER_FALLBACK = new Intl.NumberFormat('en-US');
 const SUMMARY_PILL_CLASSES =
-  'inline-flex items-center gap-1 rounded-full border border-black/8 bg-black/[0.02] px-2.5 py-1 text-xs text-neutral-600';
+  'inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-neutral-600 dark:border-slate-700 dark:bg-slate-800/70';
 
 const formatCount = (
   value: number,
@@ -408,7 +408,7 @@ const ArtifactReferenceList: React.FC<{
             target="_blank"
             rel="noopener noreferrer"
             download
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200/60 bg-white/70 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700/60 dark:bg-slate-900/40 dark:text-slate-200"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700/70 dark:bg-slate-800 dark:text-slate-200"
           >
             <FileIcon size={16} className="text-slate-500 dark:text-slate-400" />
             <span className="truncate">{getArtifactLabel(artifact)}</span>
@@ -452,9 +452,9 @@ const UserMessage: React.FC<UserMessageProps> = memo(
 
     let gradientClass = '';
     if (isSubAgent) {
-      gradientClass = 'bg-gradient-to-r from-purple-500/30 via-purple-500/20 to-purple-500/30';
+      gradientClass = 'bg-purple-300/70 dark:bg-purple-700/60';
     } else if (isSkill) {
-      gradientClass = 'bg-gradient-to-r from-primary/30 via-primary/20 to-primary/30';
+      gradientClass = 'bg-primary/30';
     }
 
     return (
@@ -464,17 +464,17 @@ const UserMessage: React.FC<UserMessageProps> = memo(
           <div className={MESSAGE_MAX_WIDTH_CLASSES}>
             <div
               className={
-                isForced ? `relative ${gradientClass} rounded-xl rounded-br-sm p-px` : 'relative'
+                isForced ? `relative ${gradientClass} rounded-lg rounded-br-sm p-px` : 'relative'
               }
             >
               {/* Badge Icon for Forced Execution */}
               {isForced && (
                 <div
-                  className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-indigo-400 to-primary/90'}`}
+                  className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-slate-50 dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-purple-500' : 'bg-primary'}`}
                 >
                   {isSubAgent ? (
                     <svg
-                      className="w-2.5 h-2.5 text-white"
+                      className="w-2.5 h-2.5 text-slate-50"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -490,7 +490,11 @@ const UserMessage: React.FC<UserMessageProps> = memo(
                       <line x1="12" y1="17" x2="12" y2="21" />
                     </svg>
                   ) : (
-                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 16 16" fill="currentColor">
+                    <svg
+                      className="w-2.5 h-2.5 text-slate-50"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
                       <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
                     </svg>
                   )}
@@ -500,8 +504,8 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               <div
                 className={
                   isForced
-                    ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2'
-                    : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2 shadow-sm'
+                    ? 'bg-slate-50 dark:bg-slate-800 rounded-lg rounded-br-sm px-4 py-2'
+                    : 'bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg rounded-br-sm px-4 py-2 shadow-sm'
                 }
               >
                 <p className="text-sm leading-[1.5] whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
@@ -523,7 +527,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               )}
             </div>
           </div>
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 flex items-center justify-center flex-shrink-0 shadow-sm">
             <User size={16} className="text-slate-500 dark:text-slate-400" />
           </div>
         </div>
@@ -669,7 +673,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
         <Lightbulb size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
+        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/60 rounded-lg overflow-hidden">
           <button
             type="button"
             onClick={() => {
@@ -736,7 +740,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
         <Wrench size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
       <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-lg overflow-hidden shadow-sm">
           {/* Header */}
           <button
             type="button"
@@ -858,7 +862,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
         <Bot size={16} className="text-primary" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
+        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/60 rounded-lg overflow-hidden">
           <button
             type="button"
             onClick={() => {
@@ -888,9 +892,9 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
                 {steps.map((step: { description?: string }, index: number) => (
                   <div
                     key={index}
-                    className="flex items-start gap-3 p-3 bg-white/60 dark:bg-slate-800/40 rounded-lg border border-slate-200/50 dark:border-slate-700/30"
+                    className="flex items-start gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200/70 dark:border-slate-700/60"
                   >
-                    <span className="w-6 h-6 rounded-full bg-primary text-xs font-semibold flex items-center justify-center text-white flex-shrink-0 shadow-sm">
+                    <span className="w-6 h-6 rounded-full bg-primary text-xs font-semibold flex items-center justify-center text-slate-50 flex-shrink-0 shadow-sm">
                       {index + 1}
                     </span>
                     <span className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
@@ -1149,7 +1153,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
         <FileOutput size={16} className="text-emerald-600 dark:text-emerald-400" />
       </div>
       <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-emerald-50/70 dark:bg-emerald-900/15 rounded-xl p-3.5 border border-emerald-200/50 dark:border-emerald-800/30 shadow-sm">
+        <div className="bg-emerald-50 dark:bg-emerald-900/15 rounded-lg p-3.5 border border-emerald-200/60 dark:border-emerald-800/40 shadow-sm">
           {/* Header */}
           <div className="flex items-center gap-2 mb-2.5">
             {(() => {
@@ -1222,7 +1226,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
           )}
 
           {/* File Info */}
-          <div className="flex items-center gap-3 text-sm bg-white/60 dark:bg-slate-800/40 rounded-lg p-2.5 border border-emerald-100 dark:border-emerald-800/20">
+          <div className="flex items-center gap-3 text-sm bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5 border border-emerald-100 dark:border-emerald-800/30">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <File size={16} className="text-emerald-500 dark:text-emerald-400" />
               <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
@@ -1294,10 +1298,10 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
 
           {/* Additional metadata */}
           <div className="mt-3 flex items-center gap-2 text-2xs">
-            <span className="px-2 py-1 bg-white/50 dark:bg-slate-800/50 rounded text-slate-500 dark:text-slate-400 border border-emerald-100 dark:border-emerald-800/20">
+            <span className="px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-slate-500 dark:text-slate-400 border border-emerald-100 dark:border-emerald-800/30">
               {event.mimeType}
             </span>
-            <span className="capitalize px-2 py-1 bg-white/50 dark:bg-slate-800/50 rounded text-slate-500 dark:text-slate-400 border border-emerald-100 dark:border-emerald-800/20">
+            <span className="capitalize px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-slate-500 dark:text-slate-400 border border-emerald-100 dark:border-emerald-800/30">
               {event.category}
             </span>
           </div>

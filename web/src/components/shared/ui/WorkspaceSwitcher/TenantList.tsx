@@ -6,6 +6,8 @@
 
 import { useEffect, type KeyboardEvent } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Check, Plus } from 'lucide-react';
 
 import { useWorkspaceContext } from './WorkspaceContext';
@@ -17,10 +19,16 @@ export const TenantList: React.FC<TenantListProps> = ({
   currentTenant,
   onTenantSelect,
   onCreateTenant,
-  createLabel = 'Create Tenant',
+  createLabel,
 }) => {
+  const { t } = useTranslation();
   const { focusedIndex, setFocusedIndex, registerMenuItemRef, getMenuItemRef, setMenuItemsCount } =
     useWorkspaceContext();
+  const resolvedCreateLabel =
+    createLabel ??
+    t('components.workspaceSwitcher.createTenant', {
+      defaultValue: 'Create Tenant',
+    });
 
   // Update menu items count
   const totalItems = tenants.length + 1; // tenants + create button
@@ -127,7 +135,7 @@ export const TenantList: React.FC<TenantListProps> = ({
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
       >
         <Plus size={18} />
-        <span className="text-sm font-medium">{createLabel}</span>
+        <span className="text-sm font-medium">{resolvedCreateLabel}</span>
       </button>
     </>
   );

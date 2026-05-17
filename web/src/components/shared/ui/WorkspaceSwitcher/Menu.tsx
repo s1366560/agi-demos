@@ -54,7 +54,7 @@ export const WorkspaceSwitcherMenu: React.FC<WorkspaceMenuProps> = ({
   if (!isOpen) return null;
 
   const baseClasses =
-    'absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100';
+    'absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100';
 
   return (
     <div

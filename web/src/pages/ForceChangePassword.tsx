@@ -46,8 +46,8 @@ export const ForceChangePassword: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#121520]">
-      <div className="w-full max-w-md p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-800">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
+      <div className="w-full max-w-md p-8 bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-100 dark:border-slate-800">
         <div className="text-center mb-8">
           <div className="mx-auto w-12 h-12 flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
             <Lock size={20} className="text-blue-600 dark:text-blue-400" />

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
+import api from '../services/api';
+
 interface Notification {
   id: string;
   type: string;
@@ -38,7 +40,6 @@ export const useNotificationStore = create<NotificationState>()(
       fetchNotifications: async (unreadOnly = false) => {
         set({ isLoading: true });
         try {
-          const api = (await import('../services/api')).default;
           const response = await api.get<NotificationsResponse>('/notifications/', {
             params: { unread_only: unreadOnly },
           });
@@ -57,7 +58,6 @@ export const useNotificationStore = create<NotificationState>()(
 
       markAsRead: async (id: string) => {
         try {
-          const api = (await import('../services/api')).default;
           await api.put(`/notifications/${id}/read`);
 
           const { notifications } = get();
@@ -72,7 +72,6 @@ export const useNotificationStore = create<NotificationState>()(
 
       markAllAsRead: async () => {
         try {
-          const api = (await import('../services/api')).default;
           await api.put('/notifications/read-all');
 
           const { notifications } = get();
@@ -87,7 +86,6 @@ export const useNotificationStore = create<NotificationState>()(
 
       deleteNotification: async (id: string) => {
         try {
-          const api = (await import('../services/api')).default;
           await api.delete(`/notifications/${id}`);
 
           const { notifications } = get();

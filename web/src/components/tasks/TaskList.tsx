@@ -137,6 +137,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               <option value="pending">{t('components.taskList.status.pending', 'Pending')}</option>
             </select>
             <button
+              type="button"
               onClick={handleRefresh}
               disabled={refreshing}
               aria-label={t('components.taskList.refresh', 'Refresh tasks')}
@@ -204,6 +205,7 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
             <div className="flex items-center justify-end gap-2">
               {task.canRetry && (
                 <button
+                  type="button"
                   onClick={() => {
                     void handleRetry(task.id);
                   }}
@@ -214,6 +216,7 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
               )}
               {task.canStop && (
                 <button
+                  type="button"
                   onClick={() => {
                     void handleStop(task.id);
                   }}
@@ -254,6 +257,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
           </div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => {
                 setOffset(Math.max(0, offset - limit));
               }}
@@ -263,6 +267,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
               <ChevronLeft className="size-4" /> {t('common.previous', 'Previous')}
             </button>
             <button
+              type="button"
               onClick={() => {
                 setOffset(offset + limit);
               }}

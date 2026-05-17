@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { useProjectStore } from '@/stores/project';
@@ -14,6 +15,7 @@ interface WorkspaceSwitcherProps {
 }
 
 export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { projectId } = useParams();
   const [isOpen, setIsOpen] = useState(false);
@@ -212,10 +214,13 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
             </div>
             <div className="flex flex-col overflow-hidden">
               <h1 className="text-slate-900 dark:text-white text-sm font-bold leading-none tracking-tight truncate">
-                {currentTenant?.name || 'Select Tenant'}
+                {currentTenant?.name ||
+                  t('components.workspaceSwitcher.selectTenant', { defaultValue: 'Select Tenant' })}
               </h1>
               <p className="text-2xs text-slate-500 truncate leading-tight opacity-80">
-                Tenant Console
+                {t('components.workspaceSwitcher.tenantConsole', {
+                  defaultValue: 'Tenant Console',
+                })}
               </p>
             </div>
           </>
@@ -226,7 +231,10 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
             </div>
             <div className="flex flex-col overflow-hidden">
               <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-none truncate">
-                {displayProject?.name || 'Select Project'}
+                {displayProject?.name ||
+                  t('components.workspaceSwitcher.selectProject', {
+                    defaultValue: 'Select Project',
+                  })}
               </h1>
               <p className="text-2xs text-slate-500 dark:text-slate-400 font-medium truncate leading-tight opacity-80 mt-0.5">
                 {currentTenant?.name}
@@ -245,7 +253,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
           role="listbox"
           aria-orientation="vertical"
           aria-labelledby="workspace-switcher-label"
-          className="absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+          className="absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
         >
           <div className="p-2">
             {mode === 'tenant' ? (
@@ -254,7 +262,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                   id="workspace-switcher-label"
                   className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider"
                 >
-                  Switch Tenant
+                  {t('components.workspaceSwitcher.switchTenant', {
+                    defaultValue: 'Switch Tenant',
+                  })}
                 </div>
                 {tenants.map((tenant, index) => (
                   <button
@@ -302,7 +312,11 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
                 >
                   <span className="material-symbols-outlined text-[18px]">add</span>
-                  <span className="text-sm font-medium">Create Tenant</span>
+                  <span className="text-sm font-medium">
+                    {t('components.workspaceSwitcher.createTenant', {
+                      defaultValue: 'Create Tenant',
+                    })}
+                  </span>
                 </button>
               </>
             ) : (
@@ -311,7 +325,9 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                   id="workspace-switcher-label"
                   className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider"
                 >
-                  Switch Project
+                  {t('components.workspaceSwitcher.switchProject', {
+                    defaultValue: 'Switch Project',
+                  })}
                 </div>
                 {projects.map((project, index) => (
                   <button
@@ -355,7 +371,11 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
                 >
                   <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                  <span className="text-sm font-medium">Back to Tenant</span>
+                  <span className="text-sm font-medium">
+                    {t('components.workspaceSwitcher.backToTenant', {
+                      defaultValue: 'Back to Tenant',
+                    })}
+                  </span>
                 </button>
               </>
             )}

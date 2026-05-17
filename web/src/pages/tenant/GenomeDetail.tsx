@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Button, Card, Descriptions, Empty, List, Rate, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Descriptions, Empty, Rate, Spin, Tag, Typography } from 'antd';
 import { ArrowLeft } from 'lucide-react';
 
 import {
@@ -114,23 +114,20 @@ export const GenomeDetail: React.FC = () => {
         {genomeGenes.length === 0 ? (
           <Empty description={t('tenant.genomeDetail.noGenes', 'No genes in this genome')} />
         ) : (
-          <List
-            dataSource={genomeGenes}
-            renderItem={(gene) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={
-                    <div className="flex items-center gap-2">
-                      <Text strong>{gene.name}</Text>
-                      <Tag>{gene.version}</Tag>
-                      {gene.category && <Tag color="blue">{gene.category}</Tag>}
-                    </div>
-                  }
-                  description={gene.description || '-'}
-                />
-              </List.Item>
-            )}
-          />
+          <div role="list" className="divide-y divide-slate-200 dark:divide-slate-800">
+            {genomeGenes.map((gene) => (
+              <div key={gene.id} role="listitem" className="py-3 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Text strong>{gene.name}</Text>
+                  <Tag>{gene.version}</Tag>
+                  {gene.category && <Tag color="blue">{gene.category}</Tag>}
+                </div>
+                <Text type="secondary" className="mt-1 block text-sm">
+                  {gene.description || '-'}
+                </Text>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 

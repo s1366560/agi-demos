@@ -174,7 +174,7 @@ export function FinalResponseDisplay({ content, version, generatedAt }: FinalRes
       {/* Main Content */}
       <div
         ref={contentRef}
-        className={`flex-1 min-w-0 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md rounded-tl-none shadow-xl p-8 ${MARKDOWN_PROSE_CLASSES} text-slate-800 dark:text-slate-200`}
+        className={`flex-1 min-w-0 bg-slate-50 dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md rounded-tl-none shadow-sm p-8 ${MARKDOWN_PROSE_CLASSES} text-slate-800 dark:text-slate-200`}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-8 border-b border-slate-100 dark:border-border-dark pb-4 -mt-4">

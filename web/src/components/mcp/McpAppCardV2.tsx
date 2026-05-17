@@ -182,9 +182,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
       {/* Source Indicator */}
       <div
         className={`absolute top-0 left-0 right-0 h-0.5 ${
-          isAgentDeveloped
-            ? 'bg-gradient-to-r from-violet-500 to-purple-500'
-            : 'bg-gradient-to-r from-cyan-500 to-blue-500'
+          isAgentDeveloped ? 'bg-violet-500' : 'bg-cyan-500'
         }`}
       />
 
@@ -194,10 +192,10 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             {/* App Icon */}
             <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+              className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 ${
                 isAgentDeveloped
-                  ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'
-                  : 'bg-gradient-to-br from-cyan-50 to-blue-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
+                  ? 'text-violet-600 dark:text-violet-400'
+                  : 'text-cyan-600 dark:text-cyan-400'
               }`}
             >
               {isAgentDeveloped ? <Bot size={18} /> : <LayoutGrid size={18} />}
@@ -245,7 +243,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
         </div>
 
         {/* Resource URI */}
-        <div className="mb-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+        <div className="mb-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-1.5 mb-1">
             <Globe size={10} className="text-slate-400" />
             <span className="text-2xs text-slate-500 dark:text-slate-400 font-medium">
@@ -268,7 +266,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
 
         {/* Error Message */}
         {app.error_message && (
-          <div className="mb-3 p-2.5 bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-100 dark:border-red-800/30">
+          <div className="mb-3 p-2.5 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-100 dark:border-red-800/30">
             <div className="flex items-start gap-2">
               <AlertCircle size={12} className="text-red-500 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2 flex-1">

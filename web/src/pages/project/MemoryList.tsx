@@ -491,7 +491,7 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
       </div>
       <Link
         to={`${projectBasePath}/memories/new`}
-        className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+        className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity]"
       >
         <Plus size={18} />
         <span>{texts.addMemory}</span>
@@ -693,7 +693,7 @@ const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
         {progress !== undefined && (
           <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
+              className="h-full bg-indigo-600 transition-[width] duration-300 ease-out dark:bg-indigo-400"
               style={{ width: `${String(progress)}%` }}
             />
           </div>
@@ -903,9 +903,9 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
 
     return (
       <div
-        className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${className}`}
+        className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 ${className}`}
       >
-        <div className="bg-white dark:bg-surface-dark rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-surface-dark">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
             {texts.deleteTitle}
           </h3>

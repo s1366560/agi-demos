@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { Brain, ChevronsUpDown } from 'lucide-react';
@@ -22,10 +23,11 @@ import type { TenantWorkspaceSwitcherProps } from './types';
 export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = ({
   onTenantSelect,
   onCreateTenant,
-  createLabel = 'Create Tenant',
+  createLabel,
   triggerClassName = '',
   menuClassName = '',
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   // Store hooks - use selective selectors to prevent unnecessary re-renders
@@ -63,22 +65,35 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
         </div>
         <div className="flex flex-col overflow-hidden">
           <h1 className="text-slate-900 dark:text-white text-sm font-bold leading-none tracking-tight truncate">
-            {currentTenant?.name || 'Select Tenant'}
+            {currentTenant?.name ||
+              t('components.workspaceSwitcher.selectTenant', { defaultValue: 'Select Tenant' })}
           </h1>
           <p className="text-2xs text-slate-500 truncate leading-tight opacity-80">
-            Tenant Console
+            {t('components.workspaceSwitcher.tenantConsole', {
+              defaultValue: 'Tenant Console',
+            })}
           </p>
         </div>
         <ChevronsUpDown size={18} className="text-slate-400 ml-auto" />
       </WorkspaceSwitcherTrigger>
 
-      <WorkspaceSwitcherMenu label="Switch Tenant" className={menuClassName}>
+      <WorkspaceSwitcherMenu
+        label={t('components.workspaceSwitcher.switchTenant', {
+          defaultValue: 'Switch Tenant',
+        })}
+        className={menuClassName}
+      >
         <TenantList
           tenants={tenants}
           currentTenant={currentTenant}
           onTenantSelect={handleTenantSelect}
           onCreateTenant={handleCreateTenant}
-          createLabel={createLabel}
+          createLabel={
+            createLabel ??
+            t('components.workspaceSwitcher.createTenant', {
+              defaultValue: 'Create Tenant',
+            })
+          }
         />
       </WorkspaceSwitcherMenu>
     </WorkspaceSwitcherRoot>

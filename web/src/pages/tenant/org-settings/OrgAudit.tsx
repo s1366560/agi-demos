@@ -195,7 +195,7 @@ export const OrgAudit: React.FC = () => {
       {/* Header with actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t('tenant.orgSettings.audit.title')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -219,7 +219,7 @@ export const OrgAudit: React.FC = () => {
             onClick={() => {
               void handleExport('csv');
             }}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-slate-50 rounded-lg transition-colors disabled:opacity-50"
           >
             <Download size={16} />
             {t('tenant.orgSettings.audit.exportCsv')}
@@ -240,39 +240,39 @@ export const OrgAudit: React.FC = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
               <History size={16} className="text-primary-600 dark:text-primary-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{total}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{total}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('tenant.orgSettings.audit.stats.total')}
               </p>
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+            <div className="p-2 bg-blue-50 dark:bg-blue-950/40 rounded-lg">
               <List size={16} className="text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{logs.length}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{logs.length}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('tenant.orgSettings.audit.stats.thisPage')}
               </p>
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+            <div className="p-2 bg-purple-50 dark:bg-purple-950/40 rounded-lg">
               <BookOpen size={16} className="text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalPages}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{totalPages}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('tenant.orgSettings.audit.stats.pages')}
               </p>
@@ -282,7 +282,7 @@ export const OrgAudit: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Search
             id="audit-user-search"
@@ -340,11 +340,11 @@ export const OrgAudit: React.FC = () => {
           <LazySpin size="large" />
         </div>
       ) : logs.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 py-20">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 py-20">
           <LazyEmpty description={t('tenant.orgSettings.audit.noLogs')} />
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -467,7 +467,7 @@ export const OrgAudit: React.FC = () => {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                   {t('tenant.orgSettings.audit.colTimestamp')}
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white">
+                <p className="text-sm text-slate-900 dark:text-slate-100">
                   {formatTimestamp(selectedEntry.timestamp)}
                 </p>
               </div>
@@ -475,7 +475,7 @@ export const OrgAudit: React.FC = () => {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                   {t('tenant.orgSettings.audit.colActor')}
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white">
+                <p className="text-sm text-slate-900 dark:text-slate-100">
                   {selectedEntry.actor_name ?? selectedEntry.actor ?? '-'}
                 </p>
               </div>
@@ -483,13 +483,13 @@ export const OrgAudit: React.FC = () => {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                   {t('tenant.orgSettings.audit.colAction')}
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white">{selectedEntry.action}</p>
+                <p className="text-sm text-slate-900 dark:text-slate-100">{selectedEntry.action}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                   {t('tenant.orgSettings.audit.colResourceType')}
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white">
+                <p className="text-sm text-slate-900 dark:text-slate-100">
                   {selectedEntry.resource_type}
                 </p>
               </div>
@@ -497,7 +497,7 @@ export const OrgAudit: React.FC = () => {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                   {t('tenant.orgSettings.audit.colResourceId')}
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white font-mono">
+                <p className="text-sm text-slate-900 dark:text-slate-100 font-mono">
                   {selectedEntry.resource_id ?? '-'}
                 </p>
               </div>
@@ -505,7 +505,7 @@ export const OrgAudit: React.FC = () => {
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                   IP
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white font-mono">
+                <p className="text-sm text-slate-900 dark:text-slate-100 font-mono">
                   {selectedEntry.ip_address ?? '-'}
                 </p>
               </div>

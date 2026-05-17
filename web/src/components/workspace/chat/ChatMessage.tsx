@@ -74,7 +74,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
           </div>
 
           <div
-            className={`px-4 py-2 rounded-2xl shadow-sm text-sm whitespace-pre-wrap break-words ${
+            className={`px-4 py-2 rounded-lg shadow-sm text-sm whitespace-pre-wrap break-words ${
               isOwn
                 ? 'bg-blue-600 text-white rounded-tr-sm'
                 : 'bg-white border border-slate-100 text-slate-800 rounded-tl-sm'

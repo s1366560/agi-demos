@@ -171,19 +171,19 @@ const getHITLHeaderBgClass = (type: HITLType) => {
   }
 };
 
-// Get icon background gradient class
+// Get icon background class
 const getHITLIconBgClass = (type: HITLType) => {
   switch (type) {
     case 'clarification':
-      return 'from-blue-100 to-sky-100 dark:from-blue-900/40 dark:to-sky-900/30';
+      return 'bg-blue-100 dark:bg-blue-900/30';
     case 'decision':
-      return 'from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30';
+      return 'bg-amber-100 dark:bg-amber-900/30';
     case 'env_var':
-      return 'from-violet-100 to-purple-100 dark:from-violet-900/40 dark:to-purple-900/30';
+      return 'bg-violet-100 dark:bg-violet-900/30';
     case 'permission':
-      return 'from-rose-100 to-red-100 dark:from-rose-900/40 dark:to-red-900/30';
+      return 'bg-rose-100 dark:bg-rose-900/30';
     default:
-      return 'from-blue-100 to-sky-100 dark:from-blue-900/40 dark:to-sky-900/30';
+      return 'bg-blue-100 dark:bg-blue-900/30';
   }
 };
 
@@ -1014,7 +1014,7 @@ const PermissionContent: React.FC<{
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-100 to-red-100 dark:from-rose-900/40 dark:to-red-900/30 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
           <Shield className="w-4 h-4 text-rose-600 dark:text-rose-400" />
         </div>
         <div className="flex-1">
@@ -1256,7 +1256,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
       <div className="flex items-start gap-3 animate-fade-in-up">
         {/* Avatar - Unified with MessageBubble style */}
         <div
-          className={`w-8 h-8 rounded-xl bg-gradient-to-br ${iconBgClass} flex items-center justify-center flex-shrink-0 shadow-sm`}
+          className={`w-8 h-8 rounded-lg ${iconBgClass} flex items-center justify-center flex-shrink-0 shadow-sm`}
         >
           <span className={iconColorClass}>{icon}</span>
         </div>

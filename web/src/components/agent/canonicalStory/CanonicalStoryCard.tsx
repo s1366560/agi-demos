@@ -134,7 +134,7 @@ const ParsedStoryView: FC<{
 
   return (
     <div
-      className="rounded-md border border-slate-200/80 bg-white text-slate-800 shadow-[0_0_0_1px_rgba(0,0,0,0.02)] dark:border-slate-700/60 dark:bg-slate-900/40 dark:text-slate-100"
+      className="rounded-md border border-slate-200/80 bg-white text-slate-800 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/40 dark:text-slate-100"
       data-testid="canonical-story-card"
     >
       <button

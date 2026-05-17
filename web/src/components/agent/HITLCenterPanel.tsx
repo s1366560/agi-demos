@@ -35,10 +35,10 @@ type FilterType = 'all' | 'clarification' | 'decision' | 'env_var';
 const filterOptions: FilterType[] = ['all', 'clarification', 'decision', 'env_var'];
 
 const badgeBase =
-  'inline-flex h-[18px] items-center rounded-full border border-[rgba(0,0,0,0.08)] bg-[#ebebeb] px-2 text-[11px] font-medium text-[#171717]';
+  'inline-flex h-[18px] items-center rounded-full border border-slate-200 bg-slate-100 px-2 text-[11px] font-medium text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100';
 
 const actionBtnBase =
-  'inline-flex h-[26px] items-center rounded border border-[rgba(0,0,0,0.08)] px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex h-[26px] items-center rounded border border-slate-200 px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700';
 
 function getMetaString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   if (!metadata) return null;
@@ -158,10 +158,10 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         aria-label={t('agent.hitl.center.aria', { defaultValue: 'Pending HITL requests' })}
       >
         <header className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-[#666]">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {t('agent.hitl.center.title', { defaultValue: 'HITL Center' })}
             {visible.length > 0 && (
-              <span className="ml-2 rounded-full bg-[#171717] px-1.5 text-[10px] font-medium text-white">
+              <span className="ml-2 rounded-full bg-slate-900 px-1.5 text-[10px] font-medium text-slate-50 dark:bg-slate-100 dark:text-slate-900">
                 {visible.length}
               </span>
             )}
@@ -171,7 +171,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
             onChange={(e) => {
               setFilter(e.target.value as FilterType);
             }}
-            className="h-[26px] rounded border border-[rgba(0,0,0,0.08)] bg-white px-2 text-xs text-[#171717]"
+            className="h-[26px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             aria-label={t('agent.hitl.center.filterAria', {
               defaultValue: 'Filter by HITL type',
             })}
@@ -185,25 +185,29 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
         </header>
 
         {loading && visible.length === 0 && (
-          <p className="text-sm text-[#666]">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {t('agent.hitl.center.loading', { defaultValue: 'Loading...' })}
           </p>
         )}
 
         {error && (
-          <p className="text-sm text-[#ee0000]">
+          <p className="text-sm text-red-600 dark:text-red-400">
             {t('agent.hitl.center.error', { defaultValue: 'Failed to load HITL requests' })}
           </p>
         )}
 
         {!loading && !error && visible.length === 0 && (
-          <p className="text-sm text-[#999]">
+          <p className="text-sm text-slate-400 dark:text-slate-500">
             {t('agent.hitl.center.empty', { defaultValue: 'No pending requests.' })}
           </p>
         )}
 
         {resolveError && (
-          <p className="mb-2 text-xs text-[#ee0000]" role="alert" data-testid="hitl-resolve-error">
+          <p
+            className="mb-2 text-xs text-red-600 dark:text-red-400"
+            role="alert"
+            data-testid="hitl-resolve-error"
+          >
             {resolveError}
           </p>
         )}
@@ -218,7 +222,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
             return (
               <li
                 key={req.id}
-                className="rounded-md border border-[rgba(0,0,0,0.08)] bg-white px-3 py-2 hover:border-[#0070f3]"
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 hover:border-primary dark:border-slate-800 dark:bg-slate-900 dark:hover:border-primary-500"
                 data-testid="hitl-center-item"
               >
                 <button
@@ -243,8 +247,10 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                       </span>
                     )}
                   </div>
-                  <p className="line-clamp-2 text-sm text-[#171717]">{req.question}</p>
-                  <p className="mt-1 text-[11px] text-[#999]">
+                  <p className="line-clamp-2 text-sm text-slate-900 dark:text-slate-100">
+                    {req.question}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
                     {new Date(req.created_at).toLocaleString()}
                   </p>
                 </button>
@@ -253,7 +259,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                     <>
                       <button
                         type="button"
-                        className={`${actionBtnBase} border-[#0070f3] bg-[#0070f3] text-white hover:bg-[#0058c1]`}
+                        className={`${actionBtnBase} border-primary bg-primary text-white hover:bg-primary-600 dark:border-primary-500 dark:bg-primary-500 dark:hover:bg-primary-600`}
                         disabled={isResolving}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -265,7 +271,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                       </button>
                       <button
                         type="button"
-                        className={`${actionBtnBase} bg-white text-[#171717] hover:border-[#171717]`}
+                        className={`${actionBtnBase} bg-white text-slate-900 hover:border-slate-900 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-100`}
                         disabled={isResolving}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -279,7 +285,7 @@ export const HITLCenterPanel = memo<HITLCenterPanelProps>(
                   ) : (
                     <button
                       type="button"
-                      className={`${actionBtnBase} bg-white text-[#171717] hover:border-[#171717]`}
+                      className={`${actionBtnBase} bg-white text-slate-900 hover:border-slate-900 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-100`}
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectRequest?.(req.id);

@@ -10,17 +10,25 @@ const mockElements = {
   length: 0,
 };
 
+const mockLayout = {
+  run: vi.fn(),
+  stop: vi.fn(),
+};
+
 const mockCytoscapeInstance = {
   on: vi.fn(),
+  off: vi.fn(),
   // Both cyRef.current.elements() and cyRef.current.add need to work
   elements: vi.fn(() => mockElements),
   add: vi.fn(),
   remove: vi.fn(),
   style: vi.fn(),
-  layout: vi.fn(() => ({ run: vi.fn() })),
+  layout: vi.fn(() => mockLayout),
   fit: vi.fn(),
   png: vi.fn(() => 'data:image/png;base64,mock'),
+  stop: vi.fn(),
   destroy: vi.fn(),
+  destroyed: vi.fn(() => false),
   boxSelectionEnabled: vi.fn(),
   $: vi.fn(() => ({ unselect: vi.fn() })),
   ready: vi.fn((cb: any) => cb?.()),

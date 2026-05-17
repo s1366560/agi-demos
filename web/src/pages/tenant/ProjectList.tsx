@@ -137,7 +137,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         </div>
         <Link
           to={`/tenant/${currentTenant.id}/projects/new`}
-          className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+          className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity]"
         >
           <Plus size={16} />
           {t('tenant.projects.create')}
@@ -328,7 +328,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   </button>
 
                   {activeMenu === project.id && (
-                    <div className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-10">
+                    <div className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
                       <Link
                         to={`/tenant/${currentTenant.id}/projects/${project.id}/edit`}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
@@ -340,6 +340,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                         {t('common.edit')}
                       </Link>
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.preventDefault();
                           void handleDelete(project.id);
@@ -359,9 +360,9 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           {/* New Project Placeholder */}
           <Link
             to={`/tenant/${currentTenant.id}/projects/new`}
-            className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-[color,background-color,border-color,box-shadow,opacity,transform] group min-h-50"
+            className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-[color,background-color,border-color,box-shadow,opacity] group min-h-50"
           >
-            <div className="h-12 w-12 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:scale-110 transition-[color,background-color,border-color,box-shadow,opacity,transform]">
+            <div className="h-12 w-12 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-slate-400 group-hover:text-primary transition-[color,background-color,border-color,box-shadow,opacity]">
               <Plus size={24} />
             </div>
             <div className="text-center">
@@ -495,7 +496,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                           <MoreVertical size={16} />
                         </button>
                         {activeMenu === project.id && (
-                          <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-10">
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
                             <Link
                               to={`/tenant/${currentTenant.id}/projects/${project.id}/edit`}
                               className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
@@ -507,6 +508,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                               {t('common.edit')}
                             </Link>
                             <button
+                              type="button"
                               onClick={(e) => {
                                 e.preventDefault();
                                 void handleDelete(project.id);

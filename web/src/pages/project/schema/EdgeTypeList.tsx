@@ -478,7 +478,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
       >
         <EdgeTypeList.Header />
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark p-4 sm:p-6 lg:p-8">
-          <div className="max-w-[1600px] mx-auto flex flex-col bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-border-dark overflow-hidden shadow-xl min-h-[600px]">
+          <div className="mx-auto flex min-h-[600px] max-w-[1600px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-border-dark dark:bg-surface-dark">
             <EdgeTypeList.Toolbar />
             <div className="flex flex-1 flex-col overflow-visible lg:h-[600px] lg:flex-row lg:overflow-hidden">
               <EdgeTypeList.MasterPane edges={filteredEdges} onSelect={actions.setSelectedEdgeId} />
@@ -603,8 +603,9 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
         </button>
       </div>
       <button
+        type="button"
         onClick={() => handleCreate?.(null)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-blue-700 active:scale-95 dark:bg-primary sm:w-auto"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-blue-700 dark:bg-primary sm:w-auto"
       >
         <Plus className="w-5 h-5" />
         <span>{edgeText(t, 'createButton', TEXTS.create)}</span>
@@ -787,6 +788,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
           </div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => {
                 onDelete(selectedEdge.id);
               }}
@@ -796,6 +798,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
               {edgeText(t, 'detailDelete', TEXTS.detail.delete)}
             </button>
             <button
+              type="button"
               onClick={() => {
                 onEdit(selectedEdge);
               }}
@@ -864,6 +867,7 @@ const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
             </table>
             <div className="bg-slate-50 dark:bg-background-dark px-4 py-2 border-t border-slate-200 dark:border-border-dark">
               <button
+                type="button"
                 onClick={() => {
                   onEdit(selectedEdge);
                 }}
@@ -984,16 +988,28 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
       [attributes, setAttributes]
     );
 
+    useEffect(() => {
+      if (!isOpen) return undefined;
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          onClose();
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     return (
       <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end" role="dialog">
+        <div className="absolute inset-0 bg-slate-950/60 transition-opacity" onClick={onClose} />
         <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity"
-          onClick={onClose}
-        ></div>
-        <div
-          className="relative w-full max-w-3xl bg-white dark:bg-background-dark shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-border-dark animate-in slide-in-from-right duration-300"
+          className="relative flex h-full w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-lg animate-in slide-in-from-right duration-300 dark:border-border-dark dark:bg-background-dark"
           onClick={(e) => {
             e.stopPropagation();
           }}
@@ -1087,6 +1103,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                     {edgeText(t, 'modalDefinedAttributes', TEXTS.modal.definedAttributes)}
                   </h4>
                   <button
+                    type="button"
                     onClick={addAttribute}
                     className="text-blue-600 dark:text-primary text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-primary-light px-3 py-1.5 bg-blue-50 dark:bg-primary/10 rounded-lg border border-blue-200 dark:border-primary/20 transition-colors"
                   >
@@ -1098,7 +1115,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                   {attributes.map((attr, idx) => (
                     <div
                       key={idx}
-                      className="border border-blue-200 dark:border-primary/50 bg-white dark:bg-surface-dark rounded-xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-blue-100 dark:ring-primary/30"
+                      className="overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm ring-1 ring-blue-100 dark:border-primary/50 dark:bg-surface-dark dark:ring-primary/30"
                     >
                       <div className="bg-slate-50 dark:bg-surface-dark-alt px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-border-dark">
                         <div className="flex items-center gap-2">
@@ -1110,6 +1127,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                           </span>
                         </div>
                         <button
+                          type="button"
                           onClick={() => {
                             removeAttribute(idx);
                           }}
@@ -1208,14 +1226,16 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             </div>
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
               >
                 {edgeText(t, 'modalDiscard', TEXTS.modal.discard)}
               </button>
               <button
+                type="button"
                 onClick={onSave}
-                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity]"
               >
                 {edgeText(t, 'modalSave', TEXTS.modal.save)}
               </button>

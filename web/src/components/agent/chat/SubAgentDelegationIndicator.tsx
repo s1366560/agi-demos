@@ -67,23 +67,28 @@ const getStatusIcon = (status: string) => {
 
 export const SubAgentDelegationIndicator: FC<SubAgentDelegationIndicatorProps> = ({
   subagentName,
-  subagentColor = '#8B5CF6',
+  subagentColor,
   triggerType,
   taskDescription,
   status,
 }) => {
   const { t } = useTranslation();
-  const backgroundColor = `${subagentColor}20`;
-  const borderColor = `${subagentColor}40`;
+  const customColorStyle = subagentColor
+    ? {
+        color: subagentColor,
+        backgroundColor: `color-mix(in srgb, ${subagentColor} 12%, transparent)`,
+        borderColor: `color-mix(in srgb, ${subagentColor} 24%, transparent)`,
+      }
+    : undefined;
 
   return (
     <div
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm"
-      style={{
-        backgroundColor,
-        borderColor,
-        color: subagentColor,
-      }}
+      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
+        subagentColor
+          ? ''
+          : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800/40 dark:bg-blue-950/20 dark:text-blue-300'
+      }`}
+      style={customColorStyle}
       data-testid="subagent-delegation-indicator"
     >
       <div className="flex items-center gap-1.5">

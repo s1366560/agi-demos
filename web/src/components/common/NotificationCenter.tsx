@@ -216,6 +216,21 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
     useNotifications();
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
   return (
     <div className={`relative ${className}`}>
       <button
@@ -242,7 +257,7 @@ export const NotificationCenter = memo<NotificationCenterProps>(({ className = '
         <div
           role="dialog"
           aria-label={t('notifications.title', 'Notifications')}
-          className="absolute right-0 mt-2 w-[360px] max-h-[480px] overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl z-50 flex flex-col"
+          className="absolute right-0 z-50 mt-2 flex max-h-[480px] w-[360px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900"
         >
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 dark:border-slate-700">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">

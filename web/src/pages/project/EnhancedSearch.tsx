@@ -756,8 +756,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               `}
                 >
                   <div className="absolute top-4 left-4 z-10 flex gap-2">
-                    <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-1 flex gap-1">
+                    <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                       <button
+                        type="button"
                         onClick={() => {
                           setIsResultsCollapsed(!isResultsCollapsed);
                         }}
@@ -769,6 +770,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                       </button>
                       {highlightNodeIds.length > 0 && (
                         <button
+                          type="button"
                           onClick={() => {
                             setIsSubgraphMode(!isSubgraphMode);
                           }}

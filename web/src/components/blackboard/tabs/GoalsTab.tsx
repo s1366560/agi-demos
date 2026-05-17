@@ -932,7 +932,7 @@ export function GoalsTab({
       'ring-2',
       'ring-primary',
       'bg-primary/10',
-      'transition-all',
+      'transition-[color,background-color,border-color,box-shadow,opacity]',
       'duration-300'
     );
     window.setTimeout(() => {
@@ -940,7 +940,7 @@ export function GoalsTab({
         'ring-2',
         'ring-primary',
         'bg-primary/10',
-        'transition-all',
+        'transition-[color,background-color,border-color,box-shadow,opacity]',
         'duration-300'
       );
     }, 1600);

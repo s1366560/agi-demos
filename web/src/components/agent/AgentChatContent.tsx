@@ -14,7 +14,7 @@
  */
 
 import * as React from 'react';
-import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useCallback, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -52,30 +52,25 @@ import {
   downloadConversationMarkdown,
   downloadConversationPdf,
 } from '../../utils/exportConversation';
-import { WorkspaceGroupChatPanel } from '../workspace/chat/WorkspaceGroupChatPanel';
 import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
-import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
 import { subscribeToAgentChatSearchRequests } from './chat/searchEvents';
 import { ShortcutOverlay } from './chat/ShortcutOverlay';
-import { ConversationCompareView } from './comparison/ConversationCompareView';
-import { ConversationPickerModal } from './comparison/ConversationPickerModal';
 import { ConversationAgentBadge } from './ConversationAgentBadge';
 import { EmptyState } from './EmptyState';
 import { EvidenceBundleDrawer } from './evidence/EvidenceBundleDrawer';
+import { InputBar } from './InputBar';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { groupTimelineEvents, getSubAgentSummaries } from './message/groupTimelineEvents';
+import { MessageArea } from './MessageArea';
+import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 import { Resizer } from './Resizer';
-import { RightPanel } from './RightPanel';
-import { SandboxSection } from './SandboxSection';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
 import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
-
-import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
 
 import type {
   AgentTask,
@@ -103,6 +98,41 @@ interface AgentChatContentProps {
 const INPUT_MIN_HEIGHT = 140;
 const INPUT_MAX_HEIGHT = 560;
 const INPUT_DEFAULT_HEIGHT = 180;
+
+const CanvasPanel = lazy(() =>
+  import('./canvas/CanvasPanel').then((module) => ({ default: module.CanvasPanel }))
+);
+const RightPanel = lazy(() =>
+  import('./RightPanel').then((module) => ({ default: module.RightPanel }))
+);
+const SandboxSection = lazy(() =>
+  import('./SandboxSection').then((module) => ({ default: module.SandboxSection }))
+);
+const WorkspaceGroupChatPanel = lazy(() =>
+  import('../workspace/chat/WorkspaceGroupChatPanel').then((module) => ({
+    default: module.WorkspaceGroupChatPanel,
+  }))
+);
+const ConversationCompareView = lazy(() =>
+  import('./comparison/ConversationCompareView').then((module) => ({
+    default: module.ConversationCompareView,
+  }))
+);
+const ConversationPickerModal = lazy(() =>
+  import('./comparison/ConversationPickerModal').then((module) => ({
+    default: module.ConversationPickerModal,
+  }))
+);
+
+function AgentPanelFallback() {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-slate-50 text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+      {t('agent.workspace.loading')}
+    </div>
+  );
+}
 
 export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
   ({
@@ -566,7 +596,11 @@ ${content}`;
 
     // Sandbox content for code/desktop/focus split modes
     const sandboxContent = useMemo(
-      () => <SandboxSection sandboxId={activeSandboxId || null} />,
+      () => (
+        <Suspense fallback={<AgentPanelFallback />}>
+          <SandboxSection sandboxId={activeSandboxId || null} />
+        </Suspense>
+      ),
       [activeSandboxId]
     );
 
@@ -663,7 +697,7 @@ ${content}`;
           />
         </div>
         <div
-          className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
+          className="relative flex flex-shrink-0 flex-col border-t border-slate-200/60 bg-white shadow-md dark:border-slate-700/50 dark:bg-slate-900"
           style={{ height: inputHeight }}
         >
           <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
@@ -909,30 +943,32 @@ ${content}`;
     if (compareMode && activeConversationId) {
       return (
         <div className={`flex flex-col h-full w-full overflow-hidden ${className}`}>
-          <ConversationCompareView
-            projectId={projectId || ''}
-            leftConversationId={activeConversationId}
-            rightConversationId={compareConversationId}
-            conversations={conversations}
-            onClose={() => {
-              setCompareMode(false);
-              setCompareConversationId(null);
-            }}
-            onSelectRight={() => {
-              setShowComparePicker(true);
-            }}
-          />
-          <ConversationPickerModal
-            visible={showComparePicker}
-            currentConversationId={activeConversationId}
-            conversations={conversations}
-            onSelect={(id) => {
-              setCompareConversationId(id);
-            }}
-            onClose={() => {
-              setShowComparePicker(false);
-            }}
-          />
+          <Suspense fallback={<AgentPanelFallback />}>
+            <ConversationCompareView
+              projectId={projectId || ''}
+              leftConversationId={activeConversationId}
+              rightConversationId={compareConversationId}
+              conversations={conversations}
+              onClose={() => {
+                setCompareMode(false);
+                setCompareConversationId(null);
+              }}
+              onSelectRight={() => {
+                setShowComparePicker(true);
+              }}
+            />
+            <ConversationPickerModal
+              visible={showComparePicker}
+              currentConversationId={activeConversationId}
+              conversations={conversations}
+              onSelect={(id) => {
+                setCompareConversationId(id);
+              }}
+              onClose={() => {
+                setShowComparePicker(false);
+              }}
+            />
+          </Suspense>
           {statusBarWithLayout}
         </div>
       );
@@ -944,17 +980,19 @@ ${content}`;
         <SplitPaneLayout
           leftContent={chatColumn}
           rightContent={
-            <RightPanel
-              tasks={tasks}
-              sandboxId={activeSandboxId}
-              executionPathDecision={executionPathDecision}
-              selectionTrace={selectionTrace}
-              policyFiltered={policyFiltered}
-              executionNarrative={executionNarrative}
-              latestToolsetChange={latestToolsetChange}
-              agentNodes={rawAgentNodes}
-              collapsed={false}
-            />
+            <Suspense fallback={<AgentPanelFallback />}>
+              <RightPanel
+                tasks={tasks}
+                sandboxId={activeSandboxId}
+                executionPathDecision={executionPathDecision}
+                selectionTrace={selectionTrace}
+                policyFiltered={policyFiltered}
+                executionNarrative={executionNarrative}
+                latestToolsetChange={latestToolsetChange}
+                agentNodes={rawAgentNodes}
+                collapsed={false}
+              />
+            </Suspense>
           }
           splitRatio={splitRatio}
           onSplitRatioChange={setSplitRatio}
@@ -987,29 +1025,31 @@ ${content}`;
         <SplitPaneLayout
           leftContent={chatColumn}
           rightContent={
-            <CanvasPanel
-              onSendPrompt={(prompt) => {
-                void handleSend(prompt);
-              }}
-              onUpdateModelContext={(ctx) => {
-                const convId = useAgentV3Store.getState().activeConversationId;
-                if (convId) {
-                  const convState = useAgentV3Store.getState().conversationStates.get(convId);
-                  const currentCtx = convState?.appModelContext ?? {};
-                  const controlFields: Record<string, unknown> = {};
-                  if ('llm_overrides' in currentCtx) {
-                    controlFields.llm_overrides = currentCtx.llm_overrides;
+            <Suspense fallback={<AgentPanelFallback />}>
+              <CanvasPanel
+                onSendPrompt={(prompt) => {
+                  void handleSend(prompt);
+                }}
+                onUpdateModelContext={(ctx) => {
+                  const convId = useAgentV3Store.getState().activeConversationId;
+                  if (convId) {
+                    const convState = useAgentV3Store.getState().conversationStates.get(convId);
+                    const currentCtx = convState?.appModelContext ?? {};
+                    const controlFields: Record<string, unknown> = {};
+                    if ('llm_overrides' in currentCtx) {
+                      controlFields.llm_overrides = currentCtx.llm_overrides;
+                    }
+                    if ('llm_model_override' in currentCtx) {
+                      controlFields.llm_model_override = currentCtx.llm_model_override;
+                    }
+                    const mergedCtx = { ...ctx, ...controlFields };
+                    useAgentV3Store.getState().updateConversationState(convId, {
+                      appModelContext: Object.keys(mergedCtx).length > 0 ? mergedCtx : null,
+                    });
                   }
-                  if ('llm_model_override' in currentCtx) {
-                    controlFields.llm_model_override = currentCtx.llm_model_override;
-                  }
-                  const mergedCtx = { ...ctx, ...controlFields };
-                  useAgentV3Store.getState().updateConversationState(convId, {
-                    appModelContext: Object.keys(mergedCtx).length > 0 ? mergedCtx : null,
-                  });
-                }
-              }}
-            />
+                }}
+              />
+            </Suspense>
           }
           splitRatio={splitRatio}
           onSplitRatioChange={setSplitRatio}
@@ -1028,12 +1068,14 @@ ${content}`;
         <SplitPaneLayout
           leftContent={chatColumn}
           rightContent={
-            <WorkspaceGroupChatPanel
-              tenantId={tenantId}
-              projectId={projectId || ''}
-              workspaceId={effectiveWorkspaceId}
-              onWorkspaceChange={setCollabWorkspaceOverride}
-            />
+            <Suspense fallback={<AgentPanelFallback />}>
+              <WorkspaceGroupChatPanel
+                tenantId={tenantId}
+                projectId={projectId || ''}
+                workspaceId={effectiveWorkspaceId}
+                onWorkspaceChange={setCollabWorkspaceOverride}
+              />
+            </Suspense>
           }
           splitRatio={splitRatio}
           onSplitRatioChange={setSplitRatio}

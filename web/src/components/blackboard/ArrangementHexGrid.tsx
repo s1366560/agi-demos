@@ -138,7 +138,7 @@ export function ArrangementHexGrid({
               strokeOpacity={isCenter ? 0.82 : isSelected ? 0.92 : isKeyboardTarget ? 0.72 : 0.24}
               strokeWidth={isCenter ? 3 : isSelected ? 2.5 : isKeyboardTarget ? 2 : 1}
               strokeDasharray={isMoveTarget ? '10 6' : undefined}
-              className="transition-all duration-200 motion-reduce:transition-none"
+              className="transition-[fill,stroke,opacity] duration-200 motion-reduce:transition-none"
             />
 
             {isCenter && (

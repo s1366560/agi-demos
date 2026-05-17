@@ -187,14 +187,14 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
       aria-label={t('agent.onboarding.ariaLabel', { defaultValue: 'Onboarding tour' })}
     >
       {/* Backdrop - only when no spotlight target */}
-      {!targetRect && <div className="absolute inset-0 bg-black/55" style={{ transition }} />}
+      {!targetRect && <div className="absolute inset-0 bg-slate-950/45" style={{ transition }} />}
 
       {/* Spotlight ring */}
       {targetRect && <div style={spotlightStyle} />}
 
       {/* Tooltip card */}
       <div
-        className="absolute z-[102] w-[360px] rounded-xl bg-white dark:bg-slate-800 shadow-2xl border border-slate-200/80 dark:border-slate-700/80 p-5"
+        className="absolute z-[102] w-[360px] rounded-lg bg-slate-50 dark:bg-slate-800 shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 border border-slate-200 dark:border-slate-700 p-5"
         style={{
           top: cardPos.top,
           left: cardPos.left,

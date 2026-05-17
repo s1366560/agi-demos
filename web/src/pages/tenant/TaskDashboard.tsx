@@ -240,6 +240,7 @@ const TaskDashboardInner: React.FC<{
         </div>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={handleRefresh}
             disabled={refreshing}
             className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"

@@ -292,8 +292,9 @@ function SearchModeButton({
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-2 ${
+      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,box-shadow,opacity] flex items-center gap-2 ${
         isActive
           ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
           : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
@@ -315,8 +316,9 @@ interface HistoryButtonProps {
 function HistoryButton({ count, show, onClick, label }: HistoryButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`px-3 py-2 rounded-lg text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1.5 ${
+      className={`px-3 py-2 rounded-lg text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity] flex items-center gap-1.5 ${
         show
           ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
           : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
@@ -336,8 +338,9 @@ interface ExportButtonProps {
 function ExportButton({ onClick, label }: ExportButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="px-3 py-2 rounded-lg text-xs font-semibold bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1.5"
+      className="px-3 py-2 rounded-lg text-xs font-semibold bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition-[color,background-color,border-color,box-shadow,opacity] flex items-center gap-1.5"
     >
       <Download className="w-3.5 h-3.5" />
       {label}
@@ -365,6 +368,7 @@ function SearchHistoryDropdown({
       </div>
       {history.map((item, idx) => (
         <button
+          type="button"
           key={idx}
           onClick={() => {
             onSelect(item);
@@ -453,6 +457,7 @@ function SearchInput({
       {showVoiceButton && (
         <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
           <button
+            type="button"
             onClick={onVoiceSearch}
             className={`p-1.5 rounded-lg transition-colors ${
               isListening
@@ -479,9 +484,10 @@ interface SearchButtonProps {
 function SearchButton({ loading, onClick, searchingLabel, retrieveLabel }: SearchButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={loading}
-      className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95 shrink-0 disabled:opacity-50"
+      className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity] shrink-0 disabled:opacity-50"
     >
       <span>{loading ? searchingLabel : retrieveLabel}</span>
       <ArrowRight className="w-5 h-5" />
@@ -498,6 +504,7 @@ function ConfigToggle({ isOpen, onClick }: ConfigToggleProps) {
   return (
     <div className="hidden lg:flex items-center">
       <button
+        type="button"
         onClick={onClick}
         className={`p-3 h-[46px] rounded-lg transition-colors border ${
           isOpen

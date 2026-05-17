@@ -126,6 +126,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             handleAddClick(type);
           }}
@@ -172,18 +173,22 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
+                      type="button"
                       onClick={() => {
                         handleEditClick(assignment);
                       }}
+                      aria-label={t('components.provider.assignment.editTitle')}
                       className="p-1.5 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                       title={t('components.provider.assignment.editTitle')}
                     >
                       <Pencil size={16} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         void handleUnassign(assignment.provider_id, type);
                       }}
+                      aria-label={t('components.provider.assignment.removeTitle')}
                       className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       title={t('components.provider.assignment.removeTitle')}
                     >

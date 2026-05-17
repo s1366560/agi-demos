@@ -55,15 +55,9 @@ export const NewTenant: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 z-0 opacity-40 dark:opacity-20 pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl transform -translate-y-1/2"></div>
-          <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl transform translate-y-1/3"></div>
-        </div>
-
-        <div className="w-full max-w-[540px] z-10">
-          <div className="bg-surface-light dark:bg-surface-dark rounded-2xl shadow-xl dark:shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <main className="relative flex flex-grow items-center justify-center overflow-hidden px-4 py-12 sm:px-6 lg:px-8">
+        <div className="z-10 w-full max-w-[540px]">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-surface-light shadow-sm dark:border-slate-800 dark:bg-surface-dark">
             <div className="p-8 pb-4">
               <div className="flex flex-col gap-2">
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -168,7 +162,7 @@ export const NewTenant: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isLoading || !formData.name.trim()}
-                  className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-[color,background-color,border-color,box-shadow,opacity,transform] transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-[color,background-color,border-color,box-shadow,opacity] disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />

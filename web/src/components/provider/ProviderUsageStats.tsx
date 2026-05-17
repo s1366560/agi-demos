@@ -19,6 +19,19 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
     const fetchStats = async () => {
       try {
         setLoading(true);
@@ -40,7 +53,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
@@ -48,7 +61,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
           role="dialog"
           aria-modal="true"
           aria-labelledby="provider-usage-stats-title"
-          className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden"
+          className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden"
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -62,6 +75,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
               <p className="text-sm text-slate-500 dark:text-slate-400">{provider.name}</p>
             </div>
             <button
+              type="button"
               onClick={onClose}
               aria-label={t('common.close')}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
@@ -88,7 +102,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
               <>
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-4">
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 dark:border-blue-900/30 dark:bg-blue-900/10 p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <BarChart3 size={16} className="text-blue-500" />
                       <span className="text-sm text-blue-700 dark:text-blue-400">
@@ -100,7 +114,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                     </p>
                   </div>
 
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-xl p-4">
+                  <div className="rounded-lg border border-purple-100 bg-purple-50 dark:border-purple-900/30 dark:bg-purple-900/10 p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Activity size={16} className="text-purple-500" />
                       <span className="text-sm text-purple-700 dark:text-purple-400">
@@ -118,7 +132,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                     </div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl p-4">
+                  <div className="rounded-lg border border-green-100 bg-green-50 dark:border-green-900/30 dark:bg-green-900/10 p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <DollarSign size={16} className="text-green-500" />
                       <span className="text-sm text-green-700 dark:text-green-400">
@@ -130,7 +144,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                     </p>
                   </div>
 
-                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl p-4">
+                  <div className="rounded-lg border border-orange-100 bg-orange-50 dark:border-orange-900/30 dark:bg-orange-900/10 p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Gauge size={16} className="text-orange-500" />
                       <span className="text-sm text-orange-700 dark:text-orange-400">
@@ -144,7 +158,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                 </div>
 
                 {/* Additional Info */}
-                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-6">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-700/50 p-6">
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
                     {t('components.provider.usage.details')}
                   </h3>
@@ -193,6 +207,7 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
           {/* Footer */}
           <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-end">
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >

@@ -157,6 +157,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             </span>
           </div>
           <button
+            type="button"
             onClick={() => {
               setIsCreateModalOpen(true);
             }}
@@ -216,6 +217,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
           <div className="flex space-x-2">
             <button
+              type="button"
               onClick={() => {
                 void loadMemories();
               }}
@@ -224,6 +226,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               {t('memory.manager.search')}
             </button>
             <button
+              type="button"
               onClick={() => {
                 setSearchTerm('');
                 setFilterType('all');
@@ -261,6 +264,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             </p>
             {!searchTerm && filterType === 'all' && !filterUser && (
               <button
+                type="button"
                 onClick={() => {
                   setIsCreateModalOpen(true);
                 }}

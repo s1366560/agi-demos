@@ -163,13 +163,13 @@ export default function EdgeMapList() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-slate-100 overflow-hidden">
       {/* Header */}
-      <div className="w-full flex-none border-b border-slate-200 bg-white px-4 pb-4 pt-6 dark:border-border-dark/50 dark:bg-background-dark sm:px-6 lg:px-8">
+      <div className="w-full flex-none border-b border-slate-200 bg-slate-50 px-4 pb-4 pt-6 dark:border-border-dark/50 dark:bg-background-dark sm:px-6 lg:px-8">
         <div className="max-w-[1600px] mx-auto flex flex-col gap-4">
           <div className="flex flex-wrap justify-between items-end gap-4">
             <div className="flex flex-col gap-2 max-w-3xl">
-              <h1 className="text-slate-900 dark:text-white text-3xl font-black leading-tight tracking-tight">
+              <h1 className="text-slate-900 dark:text-slate-100 text-3xl font-black leading-tight tracking-tight">
                 {t('project.schema.mappings.title')}
               </h1>
               <p className="text-slate-500 dark:text-text-muted text-base font-normal">
@@ -182,7 +182,7 @@ export default function EdgeMapList() {
                 onClick={() => {
                   void loadData();
                 }}
-                className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-4 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:border-border-dark dark:bg-surface-dark dark:text-white dark:hover:bg-surface-dark-alt"
+                className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-4 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200 dark:border-border-dark dark:bg-surface-dark dark:text-slate-100 dark:hover:bg-surface-dark-alt"
               >
                 {t('project.schema.mappings.refresh', 'Refresh')}
               </button>
@@ -190,7 +190,7 @@ export default function EdgeMapList() {
                 type="button"
                 disabled={edgeTypes.length === 0}
                 onClick={openDefaultAddModal}
-                className="flex h-10 items-center justify-center rounded-lg bg-blue-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-colors hover:bg-blue-700 dark:bg-primary"
+                className="flex h-10 items-center justify-center rounded-lg bg-blue-600 px-6 text-sm font-bold text-slate-50 shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-primary"
               >
                 {t('project.schema.mappings.add_mapping_button', 'Add Mapping')}
               </button>
@@ -205,7 +205,7 @@ export default function EdgeMapList() {
           {/* Toolbar */}
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap justify-between gap-4">
-              <div className="flex w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-1 dark:border-border-dark dark:bg-surface-dark/50 sm:w-auto">
+              <div className="flex w-full min-w-0 flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-border-dark dark:bg-surface-dark/50 sm:w-auto">
                 <div className="group relative min-w-0 flex-1 sm:flex-none">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="text-slate-400 dark:text-text-muted w-5 h-5" />
@@ -216,7 +216,7 @@ export default function EdgeMapList() {
                     onChange={(event) => {
                       setSearchQuery(event.target.value);
                     }}
-                    className="block w-full rounded-md border-none bg-transparent py-2 pl-10 pr-3 text-sm text-slate-900 outline-none placeholder-slate-400 focus:ring-1 focus:ring-blue-600 dark:text-white dark:placeholder-text-muted dark:focus:ring-primary sm:w-64"
+                    className="block w-full rounded-md border-none bg-transparent py-2 pl-10 pr-3 text-sm text-slate-900 outline-none placeholder-slate-400 focus:ring-1 focus:ring-blue-600 dark:text-slate-100 dark:placeholder-text-muted dark:focus:ring-primary sm:w-64"
                     placeholder={t('project.schema.mappings.search_placeholder')}
                     type="text"
                   />
@@ -226,7 +226,7 @@ export default function EdgeMapList() {
                   type="button"
                   onClick={handleExport}
                   aria-label={t('project.schema.overview.export_schema')}
-                  className="p-2 text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
+                  className="p-2 text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 rounded hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
                   title={t('project.schema.overview.export_schema')}
                 >
                   <Download className="w-5 h-5" />
@@ -235,7 +235,7 @@ export default function EdgeMapList() {
               <button
                 type="button"
                 onClick={handleResetDefaults}
-                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-text-muted dark:hover:bg-surface-dark dark:hover:text-white"
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-text-muted dark:hover:bg-surface-dark dark:hover:text-slate-100"
               >
                 <RotateCcw className="w-5 h-5" />
                 <span>{t('project.schema.mappings.reset_defaults')}</span>
@@ -245,9 +245,9 @@ export default function EdgeMapList() {
             {/* Filter Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Source Filter */}
-              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark p-4 hover:border-blue-400 dark:hover:border-primary/50 transition-colors group">
+              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark p-4 hover:border-blue-400 dark:hover:border-primary/50 transition-colors group">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                     <ArrowRight className="text-blue-600 dark:text-primary group-hover:translate-x-1 transition-transform w-5 h-5" />
                     <h2 className="text-sm font-bold">
                       {t('project.schema.mappings.filter_source.title')}
@@ -275,9 +275,9 @@ export default function EdgeMapList() {
               </div>
 
               {/* Target Filter */}
-              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark p-4 hover:border-blue-400 dark:hover:border-primary/50 transition-colors group">
+              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 dark:border-border-dark bg-slate-50 dark:bg-surface-dark p-4 hover:border-blue-400 dark:hover:border-primary/50 transition-colors group">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                     <ArrowDown className="text-blue-600 dark:text-primary group-hover:translate-y-1 transition-transform w-5 h-5" />
                     <h2 className="text-sm font-bold">
                       {t('project.schema.mappings.filter_target.title')}
@@ -311,10 +311,10 @@ export default function EdgeMapList() {
                   setHideEmpty(!hideEmpty);
                 }}
                 aria-pressed={hideEmpty}
-                className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-blue-400 dark:border-border-dark dark:bg-surface-dark dark:hover:border-primary/50"
+                className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition-colors hover:border-blue-400 dark:border-border-dark dark:bg-surface-dark dark:hover:border-primary/50"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                     <EyeOff className="text-slate-400 dark:text-text-muted w-5 h-5" />
                     <h2 className="text-sm font-bold">
                       {t('project.schema.mappings.empty_cells.title')}
@@ -324,7 +324,7 @@ export default function EdgeMapList() {
                     className={`w-8 h-4 ${hideEmpty ? 'bg-blue-600 dark:bg-primary' : 'bg-slate-200 dark:bg-border-dark'} rounded-full relative transition-colors`}
                   >
                     <div
-                      className={`absolute top-1 bg-white size-2 rounded-full transition-[left] ${hideEmpty ? 'left-5' : 'left-1'}`}
+                      className={`absolute top-1 bg-slate-50 size-2 rounded-full transition-[left] ${hideEmpty ? 'left-5' : 'left-1'}`}
                     ></div>
                   </div>
                 </div>
@@ -336,7 +336,7 @@ export default function EdgeMapList() {
           </div>
 
           {/* Matrix Table */}
-          <div className="flex flex-col flex-1 min-h-[500px] border border-slate-200 dark:border-border-dark rounded-xl bg-white dark:bg-background-dark shadow-2xl overflow-hidden relative">
+          <div className="flex flex-col flex-1 min-h-[500px] border border-slate-200 dark:border-border-dark rounded-lg bg-slate-50 dark:bg-background-dark shadow-sm overflow-hidden relative">
             {/* Legend */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
               <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -366,7 +366,7 @@ export default function EdgeMapList() {
             </div>
 
             {/* Table */}
-            <div className="overflow-auto w-full h-full bg-white dark:bg-background-dark">
+            <div className="overflow-auto w-full h-full bg-slate-50 dark:bg-background-dark">
               <table className="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
                   <tr>
@@ -384,7 +384,7 @@ export default function EdgeMapList() {
                     {filteredCols.map((col) => (
                       <th
                         key={col}
-                        className="sticky top-0 z-40 bg-slate-50 dark:bg-surface-dark p-3 border-b border-slate-200 dark:border-border-dark min-w-[240px] text-slate-900 dark:text-white font-semibold text-sm"
+                        className="sticky top-0 z-40 bg-slate-50 dark:bg-surface-dark p-3 border-b border-slate-200 dark:border-border-dark min-w-[240px] text-slate-900 dark:text-slate-100 font-semibold text-sm"
                       >
                         <div className="flex items-center gap-2">
                           <div className="size-6 rounded bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center">
@@ -400,7 +400,7 @@ export default function EdgeMapList() {
                   {filteredRows.map((row) => (
                     <tr key={row} className="group">
                       {/* Row Header */}
-                      <td className="sticky left-0 z-30 bg-slate-50 dark:bg-surface-dark p-3 border-r border-slate-200 dark:border-border-dark font-medium text-slate-900 dark:text-white shadow-md group-hover:bg-slate-100 dark:group-hover:bg-surface-dark-alt transition-colors">
+                      <td className="sticky left-0 z-30 bg-slate-50 dark:bg-surface-dark p-3 border-r border-slate-200 dark:border-border-dark font-medium text-slate-900 dark:text-slate-100 shadow-sm group-hover:bg-slate-100 dark:group-hover:bg-surface-dark-alt transition-colors">
                         <div className="flex items-center gap-2">
                           <div className="size-6 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                             <span className="text-xs font-bold">{row.charAt(0)}</span>
@@ -419,7 +419,7 @@ export default function EdgeMapList() {
                         return (
                           <td
                             key={`${row}-${col}`}
-                            className="p-3 bg-white dark:bg-background-dark hover:bg-slate-50 dark:hover:bg-surface-dark border-r border-slate-200/50 dark:border-border-dark/30 transition-colors align-top min-h-[80px]"
+                            className="p-3 bg-slate-50 dark:bg-background-dark hover:bg-slate-100 dark:hover:bg-surface-dark border-r border-slate-200/50 dark:border-border-dark/30 transition-colors align-top min-h-[80px]"
                           >
                             <div className="flex flex-wrap gap-2">
                               {cellMappings.map((map) => (
@@ -441,7 +441,7 @@ export default function EdgeMapList() {
                                     aria-label={t('project.schema.mappings.remove_mapping', {
                                       edge: map.edge_type,
                                     })}
-                                    className="rounded text-current opacity-0 transition-opacity hover:text-red-600 group-hover/chip:opacity-100 dark:hover:text-white"
+                                    className="rounded text-current opacity-0 transition-opacity hover:text-red-600 group-hover/chip:opacity-100 dark:hover:text-slate-100"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -456,7 +456,7 @@ export default function EdgeMapList() {
                                   source: row,
                                   target: col,
                                 })}
-                                className="text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10"
+                                className="text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 rounded-full size-6 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800"
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -476,19 +476,19 @@ export default function EdgeMapList() {
       {/* Add Mapping Modal */}
       {isAddModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50"
           onClick={() => {
             setIsAddModalOpen(false);
           }}
         >
           <div
-            className="mx-4 w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl dark:border-border-dark dark:bg-surface-dark"
+            className="mx-4 w-full max-w-md rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-lg dark:border-border-dark dark:bg-surface-dark"
             onClick={(e) => {
               e.stopPropagation();
             }}
           >
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 {t('project.schema.mappings.modal.title')}
               </h3>
               <button
@@ -497,18 +497,18 @@ export default function EdgeMapList() {
                   setIsAddModalOpen(false);
                 }}
                 aria-label={t('project.schema.mappings.close_modal')}
-                className="text-slate-400 dark:text-text-muted hover:text-slate-900 dark:hover:text-white"
+                className="rounded p-1 text-slate-400 dark:text-text-muted hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-border-dark dark:hover:text-slate-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between bg-slate-100 dark:bg-background-dark p-3 rounded-lg border border-slate-200 dark:border-border-dark">
-                <span className="font-bold text-slate-900 dark:text-white">
+                <span className="font-bold text-slate-900 dark:text-slate-100">
                   {newMapData.source}
                 </span>
                 <ArrowRight className="text-slate-400 dark:text-text-muted w-4 h-4" />
-                <span className="font-bold text-slate-900 dark:text-white">
+                <span className="font-bold text-slate-900 dark:text-slate-100">
                   {newMapData.target}
                 </span>
               </div>
@@ -519,7 +519,7 @@ export default function EdgeMapList() {
                 </label>
                 <select
                   aria-label={t('project.schema.mappings.modal.select_edge')}
-                  className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none focus:border-blue-600 dark:focus:border-primary"
+                  className="w-full bg-slate-50 dark:bg-background-dark border border-slate-200 dark:border-border-dark rounded-lg text-sm text-slate-900 dark:text-slate-100 px-3 py-2 outline-none focus:border-blue-600 dark:focus:border-primary"
                   value={newMapData.edge}
                   onChange={(e) => {
                     setNewMapData({ ...newMapData, edge: e.target.value });
@@ -539,7 +539,7 @@ export default function EdgeMapList() {
                   onClick={() => {
                     setIsAddModalOpen(false);
                   }}
-                  className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-slate-100 border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
                 >
                   {t('project.schema.mappings.modal.cancel')}
                 </button>
@@ -548,7 +548,7 @@ export default function EdgeMapList() {
                   onClick={() => {
                     void handleCreate();
                   }}
-                  className="px-4 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20"
+                  className="px-4 py-2 text-sm font-bold text-slate-50 bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-sm"
                 >
                   {t('project.schema.mappings.modal.add')}
                 </button>

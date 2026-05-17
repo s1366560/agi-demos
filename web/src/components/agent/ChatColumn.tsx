@@ -92,7 +92,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         <ChatSearch timeline={timeline} visible={chatSearchVisible} onClose={onChatSearchClose} />
       </div>
       <div
-        className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white dark:bg-slate-900 relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
+        className="relative flex flex-shrink-0 flex-col border-t border-slate-200/60 bg-white shadow-md dark:border-slate-700/50 dark:bg-slate-900"
         style={{ height: inputHeight }}
       >
         <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">

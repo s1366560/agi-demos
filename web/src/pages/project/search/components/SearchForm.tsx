@@ -239,7 +239,7 @@ export const SearchForm = memo<SearchFormProps>(
               type="button"
               onClick={onSearch}
               disabled={loading}
-              className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95 shrink-0 disabled:opacity-50"
+              className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity] shrink-0 disabled:opacity-50"
             >
               <span>
                 {loading
@@ -250,6 +250,7 @@ export const SearchForm = memo<SearchFormProps>(
             </button>
             <div className="hidden lg:flex items-center">
               <button
+                type="button"
                 onClick={onConfigToggle}
                 className={`p-3 h-[46px] rounded-lg transition-colors border ${
                   isConfigOpen
@@ -285,8 +286,9 @@ interface SearchModeButtonProps {
 const SearchModeButton = memo<SearchModeButtonProps>(
   ({ mode, currentMode, onClick, icon, label }) => (
     <button
+      type="button"
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-2 ${
+      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,box-shadow,opacity] flex items-center gap-2 ${
         mode === currentMode
           ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
           : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'

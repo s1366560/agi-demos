@@ -594,10 +594,10 @@ export const UserList: React.FC = () => {
                   {currentPage}
                 </span>
                 <button
+                  type="button"
                   aria-label={t('common.next')}
                   className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-dark text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={currentPage >= totalPages}
-                  type="button"
                   onClick={() => {
                     setPage((current) => Math.min(current + 1, totalPages));
                   }}

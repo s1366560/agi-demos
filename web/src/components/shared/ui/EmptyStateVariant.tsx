@@ -185,7 +185,7 @@ const EmptyStateSimpleComponent: FC<EmptyStateSimpleProps> = ({
       {Icon && (
         <div
           className="
-            w-14 h-14 rounded-2xl
+            w-14 h-14 rounded-lg
             bg-slate-100 dark:bg-slate-800
             flex items-center justify-center mb-4
           "

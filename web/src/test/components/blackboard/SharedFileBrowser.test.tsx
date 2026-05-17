@@ -158,7 +158,7 @@ describe('SharedFileBrowser', () => {
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
     fireEvent.click(await screen.findByTitle('blackboard.files.delete'));
-    fireEvent.click(await screen.findByRole('button', { name: 'common.yes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
 
     await waitFor(() => {
       expect(deleteFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1');
@@ -174,7 +174,7 @@ describe('SharedFileBrowser', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('load exploded');
 
-    fireEvent.click(screen.getByRole('button', { name: /common.retry/i }));
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
 
     await waitFor(() => {
       expect(listFilesMock).toHaveBeenCalledTimes(2);

@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Button, Card, Empty, List, Skeleton, Space, Tag, Typography, message } from 'antd';
+import { Badge, Button, Card, Empty, Skeleton, Space, Tag, Typography, message } from 'antd';
 import { Bot, MessageSquarePlus } from 'lucide-react';
 
 import { definitionsService } from '@/services/agent/definitionsService';
@@ -105,15 +105,17 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
           }
         />
       ) : (
-        <List
-          dataSource={agents}
-          rowKey="id"
-          renderItem={(agent) => {
+        <div role="list" className="divide-y divide-slate-200 dark:divide-slate-800">
+          {agents.map((agent) => {
             const displayName = agent.display_name ?? agent.name;
             const successPct =
               agent.success_rate == null ? null : Math.round(agent.success_rate * 100);
             return (
-              <List.Item className="!flex !flex-col !items-stretch !gap-3 sm:!flex-row sm:!items-center">
+              <div
+                key={agent.id}
+                role="listitem"
+                className="flex flex-col items-stretch gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"
+              >
                 <div className="flex min-w-0 flex-1 gap-3">
                   <div
                     aria-hidden
@@ -172,10 +174,10 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
                 >
                   {t('project.agentTeammates.startConversation')}
                 </Button>
-              </List.Item>
+              </div>
             );
-          }}
-        />
+          })}
+        </div>
       )}
     </Card>
   );

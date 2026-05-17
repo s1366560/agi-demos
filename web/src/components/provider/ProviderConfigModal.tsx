@@ -330,13 +330,44 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const steps: { key: Step; label: string; icon: LucideIcon; description: string }[] = [
     {
       key: 'provider',
-      label: 'Select Provider',
+      label: t('components.provider.config.steps.provider.label', {
+        defaultValue: 'Select Provider',
+      }),
       icon: Bot,
-      description: 'Choose LLM provider',
+      description: t('components.provider.config.steps.provider.description', {
+        defaultValue: 'Choose LLM provider',
+      }),
     },
-    { key: 'credentials', label: 'Credentials', icon: Key, description: 'API key & config' },
-    { key: 'models', label: 'Models', icon: Brain, description: 'Configure models' },
-    { key: 'review', label: 'Review', icon: CheckCircle, description: 'Review & save' },
+    {
+      key: 'credentials',
+      label: t('components.provider.config.steps.credentials.label', {
+        defaultValue: 'Credentials',
+      }),
+      icon: Key,
+      description: t('components.provider.config.steps.credentials.description', {
+        defaultValue: 'API key & config',
+      }),
+    },
+    {
+      key: 'models',
+      label: t('components.provider.config.steps.models.label', {
+        defaultValue: 'Models',
+      }),
+      icon: Brain,
+      description: t('components.provider.config.steps.models.description', {
+        defaultValue: 'Configure models',
+      }),
+    },
+    {
+      key: 'review',
+      label: t('components.provider.config.steps.review.label', {
+        defaultValue: 'Review',
+      }),
+      icon: CheckCircle,
+      description: t('components.provider.config.steps.review.description', {
+        defaultValue: 'Review & save',
+      }),
+    },
   ];
 
   const fetchModels = useCallback(async (type: ProviderType) => {
@@ -549,7 +580,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   const handleTestConnection = useCallback(async () => {
     if (!formData.api_key && !isEditing && providerTypeRequiresApiKey(formData.provider_type)) {
-      setTestResult({ success: false, message: t('tenant.providers.connectionTest.apiKeyRequired') });
+      setTestResult({
+        success: false,
+        message: t('tenant.providers.connectionTest.apiKeyRequired'),
+      });
       return;
     }
 
@@ -598,10 +632,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     } catch (err) {
       setTestResult({
         success: false,
-        message: getProviderErrorMessage(
-          err,
-          t('tenant.providers.connectionTest.failed')
-        ),
+        message: getProviderErrorMessage(err, t('tenant.providers.connectionTest.failed')),
       });
     } finally {
       setIsTesting(false);
@@ -742,6 +773,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   };
 
   const getLlmOptions = () => {
+    const customModelOptionLabel = t('components.provider.config.customModelNameOption', {
+      defaultValue: 'Custom model name...',
+    });
     const catalogProvider = resolveCatalogProviderType(formData.provider_type);
     const fallbackLlmModels =
       availableModels.chat.length > 0
@@ -765,11 +799,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     );
     return [
       ...chatModels.map((m) => ({ value: m, label: m })),
-      { value: '__custom__', label: 'Custom model name...' },
+      { value: '__custom__', label: customModelOptionLabel },
     ];
   };
 
   const getEmbeddingOptions = () => {
+    const customModelOptionLabel = t('components.provider.config.customModelNameOption', {
+      defaultValue: 'Custom model name...',
+    });
     const catalogProvider = resolveCatalogProviderType(formData.provider_type);
     const embedModels = Array.from(
       new Set([
@@ -781,11 +818,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     );
     return [
       ...embedModels.map((m) => ({ value: m, label: m })),
-      { value: '__custom__', label: 'Custom model name...' },
+      { value: '__custom__', label: customModelOptionLabel },
     ];
   };
 
   const getRerankerOptions = () => {
+    const customModelOptionLabel = t('components.provider.config.customModelNameOption', {
+      defaultValue: 'Custom model name...',
+    });
     const catalogProvider = resolveCatalogProviderType(formData.provider_type);
     const rerankModels = Array.from(
       new Set([
@@ -801,7 +841,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     );
     return [
       ...rerankModels.map((m) => ({ value: m, label: m })),
-      { value: '__custom__', label: 'Custom model name...' },
+      { value: '__custom__', label: customModelOptionLabel },
     ];
   };
 
@@ -815,27 +855,47 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const showRerankerFields =
     category === 'reranker' || (category === 'chat' && !!providerMeta?.hasNativeRerank);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-slate-950/60 transition-opacity" onClick={onClose} />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-lg shadow-xl overflow-hidden">
+        <div className="relative w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-800">
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/40">
             <div>
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                {isEditing ? 'Edit Provider' : 'Add New Provider'}
+                {isEditing
+                  ? t('components.provider.config.editTitle', {
+                      defaultValue: 'Edit Provider',
+                    })
+                  : t('components.provider.config.addTitle', {
+                      defaultValue: 'Add New Provider',
+                    })}
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Configure your LLM provider settings
+                {t('components.provider.config.subtitle', {
+                  defaultValue: 'Configure your LLM provider settings',
+                })}
               </p>
             </div>
             <button
@@ -864,7 +924,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <React.Fragment key={step.key}>
                     <div className="flex items-center">
                       <div
-                        className={`flex items-center justify-center w-8 h-8 rounded-lg border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
+                        className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity,transform] ${
                           isCompleted
                             ? 'bg-primary border-primary text-white'
                             : isCurrent
@@ -905,21 +965,26 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               <div className="space-y-4">
                 <div className="text-center mb-6">
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-                    Choose Your LLM Provider
+                    {t('components.provider.config.chooseProviderTitle', {
+                      defaultValue: 'Choose Your LLM Provider',
+                    })}
                   </h3>
                   <p className="text-slate-500 dark:text-slate-400">
-                    Select from supported AI model providers
+                    {t('components.provider.config.chooseProviderDescription', {
+                      defaultValue: 'Select from supported AI model providers',
+                    })}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {PROVIDERS.map((p) => (
                     <button
+                      type="button"
                       key={p.value}
                       onClick={() => {
                         void handleProviderSelect(p.value);
                       }}
-                      className={`p-4 rounded-xl border-2 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left hover:shadow-md ${
+                      className={`p-4 rounded-lg border transition-[color,background-color,border-color,box-shadow,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 text-left hover:shadow-md ${
                         formData.provider_type === p.value
                           ? 'border-primary bg-primary/5 dark:bg-primary/10'
                           : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'
@@ -942,11 +1007,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <Sparkles size={20} className="text-green-600 dark:text-green-400 mt-0.5" />
                     <div>
                       <h4 className="text-sm font-medium text-green-800 dark:text-green-300">
-                        Environment Variables Detected
+                        {t('components.provider.config.envDetectedTitle', {
+                          defaultValue: 'Environment Variables Detected',
+                        })}
                       </h4>
                       <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
-                        We found configuration in your environment variables. The fields below have
-                        been auto-filled.
+                        {t('components.provider.config.envDetectedDescription', {
+                          defaultValue:
+                            'We found configuration in your environment variables. The fields below have been auto-filled.',
+                        })}
                       </p>
                     </div>
                   </div>
@@ -954,7 +1023,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Provider Name
+                      {t('components.provider.config.providerName', {
+                        defaultValue: 'Provider Name',
+                      })}
                     </label>
                     <input
                       type="text"
@@ -963,17 +1034,19 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         setFormData({ ...formData, name: e.target.value });
                       }}
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="My OpenAI Provider"
+                      placeholder={t('components.provider.config.providerNamePlaceholder', {
+                        defaultValue: 'My OpenAI Provider',
+                      })}
                     />
                   </div>
 
                   {providerTypeRequiresApiKey(formData.provider_type) && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        API Key
+                        {t('components.provider.config.apiKey', { defaultValue: 'API Key' })}
                         {!isEditing && envProviders[formData.provider_type]?.api_key && (
                           <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                            From ENV
+                            {t('components.provider.config.fromEnv', { defaultValue: 'From ENV' })}
                           </span>
                         )}
                       </label>
@@ -991,6 +1064,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           }
                         />
                         <button
+                          type="button"
                           onClick={() => {
                             void handleTestConnection();
                           }}
@@ -1003,7 +1077,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               className="animate-spin motion-reduce:animate-none"
                             />
                           ) : (
-                            'Test'
+                            t('common.test', { defaultValue: 'Test' })
                           )}
                         </button>
                       </div>
@@ -1023,10 +1097,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Base URL (Optional)
+                      {t('components.provider.config.baseUrl', { defaultValue: 'Base URL' })}{' '}
+                      <span className="font-normal text-slate-500">
+                        ({t('common.optional', { defaultValue: 'Optional' })})
+                      </span>
                       {!isEditing && envProviders[formData.provider_type]?.base_url && (
                         <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          From ENV
+                          {t('components.provider.config.fromEnv', { defaultValue: 'From ENV' })}
                         </span>
                       )}
                     </label>
@@ -1043,7 +1120,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Provider Configuration (JSON)
+                      {t('components.provider.config.providerConfigurationJson', {
+                        defaultValue: 'Provider Configuration (JSON)',
+                      })}
                     </label>
                     <textarea
                       value={configJsonStr}
@@ -1089,8 +1168,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         className="hidden p-4 space-y-3 border-t border-slate-200 dark:border-slate-600"
                       >
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                          Configure Volcengine RTC for real-time voice and video AI conversations.
-                          Leave blank to use environment variables as fallback.
+                          {t('components.provider.config.rtcDescription', {
+                            defaultValue:
+                              'Configure Volcengine RTC for real-time voice and video AI conversations. Leave blank to use environment variables as fallback.',
+                          })}
                         </p>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
@@ -1105,7 +1186,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Your RTC App ID"
+                            placeholder={t('components.provider.config.rtcAppIdPlaceholder', {
+                              defaultValue: 'Your RTC App ID',
+                            })}
                           />
                         </div>
                         <div>
@@ -1121,7 +1204,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Your RTC App Key"
+                            placeholder={t('components.provider.config.rtcAppKeyPlaceholder', {
+                              defaultValue: 'Your RTC App Key',
+                            })}
                           />
                         </div>
                         <div>
@@ -1137,7 +1222,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Your Volcengine Access Key"
+                            placeholder={t('components.provider.config.accessKeyPlaceholder', {
+                              defaultValue: 'Your Volcengine Access Key',
+                            })}
                           />
                         </div>
                         <div>
@@ -1153,7 +1240,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Your Volcengine Secret Key"
+                            placeholder={t('components.provider.config.secretKeyPlaceholder', {
+                              defaultValue: 'Your Volcengine Secret Key',
+                            })}
                           />
                         </div>
                         <div>
@@ -1172,7 +1261,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Speech App ID from Volcengine Speech Console"
+                            placeholder={t('components.provider.config.speechAppIdPlaceholder', {
+                              defaultValue: 'Speech App ID from Volcengine Speech Console',
+                            })}
                           />
                         </div>
                         <div>
@@ -1191,12 +1282,19 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Access Token from Volcengine Speech Console"
+                            placeholder={t(
+                              'components.provider.config.speechAccessTokenPlaceholder',
+                              {
+                                defaultValue: 'Access Token from Volcengine Speech Console',
+                              }
+                            )}
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                            Doubao Endpoint ID
+                            {t('components.provider.config.doubaoEndpointId', {
+                              defaultValue: 'Doubao Endpoint ID',
+                            })}
                           </label>
                           <input
                             type="text"
@@ -1210,7 +1308,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               setConfigJsonStr(JSON.stringify(newConfig, null, 2));
                             }}
                             className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
-                            placeholder="Doubao model endpoint ID for voice chat"
+                            placeholder={t('components.provider.config.endpointIdPlaceholder', {
+                              defaultValue: 'Doubao model endpoint ID for voice chat',
+                            })}
                           />
                         </div>
                       </div>
@@ -1228,7 +1328,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                       />
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Active
+                        {t('components.provider.config.active', {
+                          defaultValue: 'Active',
+                        })}
                       </span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -1241,7 +1343,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                       />
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Set as Default
+                        {t('components.provider.config.setAsDefault', {
+                          defaultValue: 'Set as Default',
+                        })}
                       </span>
                     </label>
                   </div>
@@ -1255,7 +1359,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {isLoadingModels && (
                   <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
                     <Loader2 size={16} className="animate-spin motion-reduce:animate-none" />
-                    Fetching available models...
+                    {t('components.provider.config.fetchingModels', {
+                      defaultValue: 'Fetching available models...',
+                    })}
                   </div>
                 )}
 
@@ -1264,7 +1370,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                        Primary LLM Model
+                        {t('components.provider.config.primaryLlmModel', {
+                          defaultValue: 'Primary LLM Model',
+                        })}
                       </label>
                       {useCustomModel.llm ? (
                         <div className="flex gap-2">
@@ -1274,7 +1382,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             onChange={(e) => {
                               setFormData({ ...formData, llm_model: e.target.value });
                             }}
-                            placeholder="Enter custom model name"
+                            placeholder={t('components.provider.config.customModelPlaceholder', {
+                              defaultValue: 'Enter custom model name',
+                            })}
                             className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                           />
                           <button
@@ -1310,7 +1420,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           options={getLlmOptions()}
                           className="w-full h-[42px] custom-ant-select"
                           disabled={isLoadingModels}
-                          placeholder={isLoadingModels ? 'Loading models...' : 'Select a model'}
+                          placeholder={
+                            isLoadingModels
+                              ? t('components.provider.config.loadingModels', {
+                                  defaultValue: 'Loading models...',
+                                })
+                              : t('components.provider.config.selectModel', {
+                                  defaultValue: 'Select a model',
+                                })
+                          }
                         />
                       )}
                     </div>
@@ -1411,7 +1529,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {showLlmFields && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Small/Fast Model (Optional)
+                      {t('components.provider.config.smallFastModelOptional', {
+                        defaultValue: 'Small/Fast Model (Optional)',
+                      })}
                     </label>
                     {useCustomModel.small ? (
                       <div className="flex gap-2">
@@ -1421,7 +1541,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           onChange={(e) => {
                             setFormData({ ...formData, llm_small_model: e.target.value });
                           }}
-                          placeholder="Enter custom model name"
+                          placeholder={t('components.provider.config.customModelPlaceholder', {
+                            defaultValue: 'Enter custom model name',
+                          })}
                           className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                         <button
@@ -1752,7 +1874,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {showEmbeddingFields && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      {category === 'embedding' ? 'Embedding Model' : 'Embedding Model (Optional)'}
+                      {category === 'embedding'
+                        ? t('components.provider.config.embeddingModel', {
+                            defaultValue: 'Embedding Model',
+                          })
+                        : t('components.provider.config.embeddingModelOptional', {
+                            defaultValue: 'Embedding Model (Optional)',
+                          })}
                     </label>
                     {useCustomModel.embedding ? (
                       <div className="flex gap-2">
@@ -1762,7 +1890,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           onChange={(e) => {
                             setFormData({ ...formData, embedding_model: e.target.value });
                           }}
-                          placeholder="Enter custom model name"
+                          placeholder={t('components.provider.config.customModelPlaceholder', {
+                            defaultValue: 'Enter custom model name',
+                          })}
                           className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                         <button
@@ -1873,7 +2003,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                              User ID (Optional)
+                              {t('components.provider.config.userIdOptional', {
+                                defaultValue: 'User ID (Optional)',
+                              })}
                             </label>
                             <input
                               type="text"
@@ -1881,13 +2013,17 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               onChange={(e) => {
                                 setFormData({ ...formData, embedding_user: e.target.value });
                               }}
-                              placeholder="End-user ID"
+                              placeholder={t('components.provider.config.userIdPlaceholder', {
+                                defaultValue: 'End-user ID',
+                              })}
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                             />
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                              Timeout (ms)
+                              {t('components.provider.config.timeoutMs', {
+                                defaultValue: 'Timeout (ms)',
+                              })}
                             </label>
                             <input
                               type="number"
@@ -1903,7 +2039,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                         <div>
                           <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                            Provider Options (JSON)
+                            {t('components.provider.config.providerOptionsJson', {
+                              defaultValue: 'Provider Options (JSON)',
+                            })}
                           </label>
                           <textarea
                             value={formData.embedding_provider_options_json}
@@ -1927,7 +2065,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {showRerankerFields && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      {category === 'reranker' ? 'Reranker Model' : 'Reranker Model (Optional)'}
+                      {category === 'reranker'
+                        ? t('components.provider.config.rerankerModel', {
+                            defaultValue: 'Reranker Model',
+                          })
+                        : t('components.provider.config.rerankerModelOptional', {
+                            defaultValue: 'Reranker Model (Optional)',
+                          })}
                     </label>
                     {useCustomModel.reranker ? (
                       <div className="flex gap-2">
@@ -1937,7 +2081,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           onChange={(e) => {
                             setFormData({ ...formData, reranker_model: e.target.value });
                           }}
-                          placeholder="Enter custom model name"
+                          placeholder={t('components.provider.config.customModelPlaceholder', {
+                            defaultValue: 'Enter custom model name',
+                          })}
                           className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                         <button
@@ -1973,7 +2119,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         options={getRerankerOptions()}
                         className="w-full h-[42px] custom-ant-select"
                         disabled={isLoadingModels}
-                        placeholder="Select or enter custom model..."
+                        placeholder={t('components.provider.config.selectOrEnterCustomModel', {
+                          defaultValue: 'Select or enter custom model...',
+                        })}
                       />
                     )}
                   </div>
@@ -1985,12 +2133,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                          Pool & Routing
+                          {t('components.provider.config.poolRouting', {
+                            defaultValue: 'Pool & Routing',
+                          })}
                         </h4>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Controls whether this provider participates in the tenant LLM pool (load
-                          balancing + auto-routing). Turn off to silence a broken provider without
-                          disabling it entirely.
+                          {t('components.provider.config.poolRoutingDescription', {
+                            defaultValue:
+                              'Controls whether this provider participates in the tenant LLM pool (load balancing + auto-routing). Turn off to silence a broken provider without disabling it entirely.',
+                          })}
                         </p>
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer shrink-0 ml-4">
@@ -2003,7 +2154,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                         />
                         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                          Pool enabled
+                          {t('components.provider.config.poolEnabled', {
+                            defaultValue: 'Pool enabled',
+                          })}
                         </span>
                       </label>
                     </div>
@@ -2011,9 +2164,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                          Pool weight
+                          {t('components.provider.config.poolWeight', {
+                            defaultValue: 'Pool weight',
+                          })}
                           <span className="text-slate-400 font-normal ml-1">
-                            (≥ 0, default 1.0)
+                            {t('components.provider.config.poolWeightHint', {
+                              defaultValue: '(>= 0, default 1.0)',
+                            })}
                           </span>
                         </label>
                         <InputNumber
@@ -2033,8 +2190,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                       <div>
                         <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                          Model tier
-                          <span className="text-slate-400 font-normal ml-1">(optional)</span>
+                          {t('components.provider.config.modelTier', {
+                            defaultValue: 'Model tier',
+                          })}
+                          <span className="text-slate-400 font-normal ml-1">
+                            ({t('common.optional', { defaultValue: 'Optional' })})
+                          </span>
                         </label>
                         <Select
                           value={formData.model_tier || undefined}
@@ -2047,9 +2208,24 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           allowClear
                           placeholder="auto"
                           options={[
-                            { value: 'small', label: 'small' },
-                            { value: 'medium', label: 'medium' },
-                            { value: 'large', label: 'large' },
+                            {
+                              value: 'small',
+                              label: t('components.provider.config.modelTierSmall', {
+                                defaultValue: 'small',
+                              }),
+                            },
+                            {
+                              value: 'medium',
+                              label: t('components.provider.config.modelTierMedium', {
+                                defaultValue: 'medium',
+                              }),
+                            },
+                            {
+                              value: 'large',
+                              label: t('components.provider.config.modelTierLarge', {
+                                defaultValue: 'large',
+                              }),
+                            },
                           ]}
                           className="w-full h-[36px] custom-ant-select"
                           disabled={!formData.pool_enabled}
@@ -2059,9 +2235,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
                     <div>
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                        Secondary models
+                        {t('components.provider.config.secondaryModels', {
+                          defaultValue: 'Secondary models',
+                        })}
                         <span className="text-slate-400 font-normal ml-1">
-                          (extra model names sharing this API key)
+                          {t('components.provider.config.secondaryModelsHint', {
+                            defaultValue: '(extra model names sharing this API key)',
+                          })}
                         </span>
                       </label>
                       <Select
@@ -2071,7 +2251,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           setFormData({ ...formData, secondary_models: values });
                         }}
                         tokenSeparators={[',', ' ']}
-                        placeholder="Type a model name and press Enter"
+                        placeholder={t('components.provider.config.secondaryModelsPlaceholder', {
+                          defaultValue: 'Type a model name and press Enter',
+                        })}
                         className="w-full custom-ant-select"
                         disabled={!formData.pool_enabled}
                       />
@@ -2316,6 +2498,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
             <button
+              type="button"
               onClick={
                 currentStep === 'provider'
                   ? onClose
@@ -2327,12 +2510,15 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               }
               className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
-              {currentStep === 'provider' ? 'Cancel' : 'Back'}
+              {currentStep === 'provider'
+                ? t('common.cancel', { defaultValue: 'Cancel' })
+                : t('common.back', { defaultValue: 'Back' })}
             </button>
 
             <div className="flex items-center gap-3">
               {currentStep === 'review' ? (
                 <button
+                  type="button"
                   onClick={() => {
                     void handleSubmit();
                   }}
@@ -2350,6 +2536,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={() => {
                     setCurrentStep(
                       steps[steps.findIndex((s) => s.key === currentStep) + 1]?.key ?? 'review'

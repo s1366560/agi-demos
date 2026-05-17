@@ -104,6 +104,7 @@ export function ChatHistorySidebar({
       <div className="p-4 flex flex-col h-full space-y-4">
         {/* New Chat Button */}
         <button
+          type="button"
           onClick={onNewChat}
           aria-label={t('agent.chatHistory.newConversationAria', {
             defaultValue: 'New conversation',
@@ -146,6 +147,7 @@ export function ChatHistorySidebar({
               </h3>
               {recentConversations.map((conversation) => (
                 <button
+                  type="button"
                   key={conversation.id}
                   onClick={() => onSelectConversation?.(conversation.id)}
                   aria-label={conversation.title}
@@ -196,6 +198,7 @@ export function ChatHistorySidebar({
               </h3>
               {olderConversations.map((conversation) => (
                 <button
+                  type="button"
                   key={conversation.id}
                   onClick={() => onSelectConversation?.(conversation.id)}
                   aria-label={conversation.title}

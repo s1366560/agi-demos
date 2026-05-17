@@ -74,7 +74,8 @@ const ExecutionItem = memo<{
   onToggleExpand: (id: string) => void;
 }>(({ execution, onClear, onKill, isExpanded, onToggleExpand }) => {
   const { t } = useTranslation();
-  const infoColor = useThemeColor('--color-info', '#3b82f6');
+  const infoColor = useThemeColor('--color-info', 'var(--color-info)');
+  const progressRailColor = useThemeColor('--color-border-subtle', 'var(--color-border-subtle)');
 
   const statusBg =
     execution.status === 'running'
@@ -145,7 +146,7 @@ const ExecutionItem = memo<{
                 percent={execution.progress}
                 size="small"
                 strokeColor={infoColor}
-                railColor="rgba(148,163,184,0.2)"
+                railColor={progressRailColor}
                 showInfo={false}
                 className="!mb-0"
               />

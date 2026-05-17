@@ -121,10 +121,12 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
   return (
     <Card
       size="small"
-      className="code-executor-result-card"
+      className={`code-executor-result-card ${
+        result.success
+          ? 'border-green-200 bg-green-50 dark:border-green-800/60 dark:bg-green-950/30'
+          : 'border-red-200 bg-red-50 dark:border-red-800/60 dark:bg-red-950/30'
+      }`}
       style={{
-        backgroundColor: result.success ? '#f6ffed' : '#fff1f0',
-        border: `1px solid ${result.success ? '#b7eb8f' : '#ffccc7'}`,
         marginTop: 8,
       }}
     >
@@ -217,18 +219,7 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
                             defaultValue: 'stdout:',
                           })}
                         </Text>
-                        <pre
-                          style={{
-                            backgroundColor: '#f5f5f5',
-                            padding: 8,
-                            borderRadius: 4,
-                            fontSize: 11,
-                            maxHeight: 150,
-                            overflow: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
+                        <pre className="max-h-[150px] overflow-auto whitespace-pre-wrap break-words rounded bg-slate-100 p-2 text-[11px] text-slate-800 dark:bg-slate-900 dark:text-slate-200">
                           {result.stdout}
                         </pre>
                       </div>
@@ -240,18 +231,7 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
                             defaultValue: 'stderr:',
                           })}
                         </Text>
-                        <pre
-                          style={{
-                            backgroundColor: '#fff1f0',
-                            padding: 8,
-                            borderRadius: 4,
-                            fontSize: 11,
-                            maxHeight: 150,
-                            overflow: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                          }}
-                        >
+                        <pre className="max-h-[150px] overflow-auto whitespace-pre-wrap break-words rounded bg-red-50 p-2 text-[11px] text-red-900 dark:bg-red-950/40 dark:text-red-200">
                           {result.stderr}
                         </pre>
                       </div>

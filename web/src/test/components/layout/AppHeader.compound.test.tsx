@@ -89,6 +89,22 @@ vi.mock('@/stores/theme', () => ({
   }),
 }));
 
+const mockNotificationState = {
+  notifications: [],
+  unreadCount: 0,
+  isLoading: false,
+  fetchNotifications: vi.fn().mockResolvedValue(undefined),
+  markAsRead: vi.fn().mockResolvedValue(undefined),
+  markAllAsRead: vi.fn().mockResolvedValue(undefined),
+  deleteNotification: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('@/stores/notification', () => ({
+  useNotificationStore: vi.fn((selector) =>
+    selector ? selector(mockNotificationState) : mockNotificationState
+  ),
+}));
+
 function renderWithHeader(node: React.ReactNode) {
   return render(<MemoryRouter initialEntries={['/tenant']}>{node}</MemoryRouter>);
 }

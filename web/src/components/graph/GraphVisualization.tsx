@@ -412,8 +412,9 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       {/* Floating Toolbar (Left) */}
       <div className="absolute top-6 left-6 flex flex-col gap-2 z-10">
-        <div className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col">
+        <div className="flex flex-col overflow-hidden rounded-lg border border-slate-700 bg-surface-dark shadow-lg">
           <button
+            type="button"
             onClick={() => {
               setInteractionMode('select');
             }}
@@ -424,6 +425,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             <MousePointer2 className="w-5 h-5" />
           </button>
           <button
+            type="button"
             onClick={() => {
               setInteractionMode('pan');
             }}
@@ -434,8 +436,9 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             <Move className="w-5 h-5" />
           </button>
         </div>
-        <div className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col mt-2">
+        <div className="mt-2 flex flex-col overflow-hidden rounded-lg border border-slate-700 bg-surface-dark shadow-lg">
           <button
+            type="button"
             onClick={handleZoomIn}
             className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 border-b border-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             title={t('project.graph.graphVisualization.zoomIn')}
@@ -444,6 +447,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             <Plus className="w-5 h-5" />
           </button>
           <button
+            type="button"
             onClick={handleZoomOut}
             className="p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset"
             title={t('project.graph.graphVisualization.zoomOut')}
@@ -453,8 +457,9 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
           </button>
         </div>
         <button
+          type="button"
           onClick={handleResetView}
-          className="bg-surface-dark border border-slate-700 rounded-lg shadow-xl p-2.5 text-slate-400 hover:text-white hover:bg-slate-700 mt-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="mt-2 rounded-lg border border-slate-700 bg-surface-dark p-2.5 text-slate-400 shadow-lg transition-colors duration-150 hover:bg-slate-700 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           title={t('project.graph.graphVisualization.resetView')}
           aria-label={t('project.graph.graphVisualization.resetView')}
         >
@@ -464,7 +469,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       {/* Legend / Filters (Bottom Left) */}
       <div className="absolute bottom-6 left-6 z-10">
-        <div className="bg-surface-dark/90 backdrop-blur border border-slate-700 rounded-lg p-3 shadow-xl">
+        <div className="rounded-lg border border-slate-700 bg-surface-dark p-3 shadow-lg">
           <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
             {t('project.graph.graphVisualization.entityTypes')}
           </div>
@@ -511,13 +516,14 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
       {/* Node Details Panel (Right) */}
       {selectedNode && (
-        <div className="absolute top-6 right-6 bottom-6 w-80 bg-surface-dark border border-slate-700 shadow-2xl rounded-lg z-20 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-          <div className="p-5 border-b border-slate-700 bg-gradient-to-r from-blue-900/20 to-transparent">
+        <div className="absolute bottom-6 right-6 top-6 z-20 flex w-80 flex-col overflow-hidden rounded-lg border border-slate-700 bg-surface-dark shadow-lg animate-in slide-in-from-right duration-300">
+          <div className="p-5 border-b border-slate-700 bg-slate-900/60">
             <div className="flex justify-between items-start mb-2">
               <div className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border border-blue-500/30">
                 {selectedNode.type}
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setSelectedNode(null);
                 }}
@@ -546,7 +552,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
               </div>
               <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                 <div
-                  className="bg-gradient-to-r from-emerald-500 to-blue-600 h-full rounded-full"
+                  className="bg-emerald-500 h-full rounded-full"
                   style={{ width: `${String(getNodeImpactScore(selectedNode.entity))}%` }}
                 ></div>
               </div>

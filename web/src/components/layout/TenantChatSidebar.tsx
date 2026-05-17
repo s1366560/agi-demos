@@ -654,8 +654,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           </div>
         ) : (
           <div className="flex items-center gap-3 w-full min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-sm shrink-0">
-              <Bot className="text-white" size={24} />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 dark:bg-slate-100">
+              <Bot className="text-slate-50 dark:text-slate-900" size={24} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">

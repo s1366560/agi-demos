@@ -268,7 +268,7 @@ export const MemoryDetail: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Top Navigation Bar (Breadcrumbs + Toolbar) */}
-        <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-surface-light/80 dark:bg-surface-dark/80 backdrop-blur-md flex items-center justify-between px-6 z-10 sticky top-0">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-surface-light px-6 dark:border-slate-800 dark:bg-surface-dark">
           {/* Breadcrumbs */}
           <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
             <Link
@@ -468,7 +468,7 @@ export const MemoryDetail: React.FC = () => {
                   {/* Progress Bar */}
                   <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
+                      className="h-full bg-indigo-600 transition-[width] duration-300 ease-out dark:bg-indigo-400"
                       style={{ width: `${String(processingProgress?.progress ?? 0)}%` }}
                     />
                   </div>

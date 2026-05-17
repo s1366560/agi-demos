@@ -156,7 +156,7 @@ export const MentionPopover = memo(
       };
 
       return (
-        <div className="absolute bottom-full left-0 mb-2 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-72 max-h-64 overflow-hidden">
+        <div className="absolute bottom-full left-0 mb-2 z-50 bg-slate-50 dark:bg-slate-800 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 border border-slate-200 dark:border-slate-700 w-72 max-h-64 overflow-hidden">
           <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700">
             <span className="text-xs text-slate-400">
               {t('agent.mentions.title', 'Mention entities or memories')}

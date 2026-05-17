@@ -320,7 +320,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
     return (
       <div
         ref={panelRef}
-        className="absolute bottom-full left-0 right-0 mb-2 mx-3 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-fade-in-up"
+        className="absolute bottom-full left-0 right-0 mb-2 mx-3 bg-slate-50 dark:bg-slate-800 rounded-lg shadow-lg shadow-slate-200/40 dark:shadow-slate-950/20 border border-slate-200 dark:border-slate-700 overflow-hidden z-50 animate-fade-in-up"
         style={{ maxHeight: '420px' }}
       >
         {/* Header */}

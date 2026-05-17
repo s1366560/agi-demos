@@ -87,19 +87,13 @@ export const GeneCard: React.FC<GeneCardProps> = ({ gene, onEdit, onDelete, onTo
 
         <div className="flex items-center gap-4 flex-shrink-0">
           <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-            {/* biome-ignore lint/a11y/useSemanticElements: requested by audit */}
-            <div
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                }
-              }}
-              className="p-1 cursor-pointer rounded hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-600"
+            <button
+              type="button"
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={t('common.moreActions', 'More actions')}
             >
               <MoreHorizontal size={18} />
-            </div>
+            </button>
           </Dropdown>
         </div>
       </div>

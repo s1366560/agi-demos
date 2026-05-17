@@ -1689,8 +1689,8 @@ const CanvasEmptyState = memo(() => {
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/20 flex items-center justify-center mb-4">
-        <FileCode2 size={28} className="text-violet-500 dark:text-violet-400" />
+      <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+        <FileCode2 size={28} className="text-slate-500 dark:text-slate-300" />
       </div>
       <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">
         {t('agent.canvas.emptyTitle', 'Canvas')}
@@ -1823,7 +1823,7 @@ export const CanvasPanel = memo<{
   }, [onSendPrompt, activeTab]);
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 overflow-hidden">
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
       <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
       {activeTab ? (
         <>

@@ -256,6 +256,7 @@ export const Support: React.FC = () => {
       <div className="mb-6">
         {!showNewTicket ? (
           <button
+            type="button"
             onClick={() => {
               setShowNewTicket(true);
             }}
@@ -266,6 +267,7 @@ export const Support: React.FC = () => {
           </button>
         ) : (
           <button
+            type="button"
             onClick={() => {
               setShowNewTicket(false);
             }}

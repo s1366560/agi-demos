@@ -3,18 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import {
-  Alert,
-  Button,
-  Card,
-  Descriptions,
-  Empty,
-  List,
-  message,
-  Spin,
-  Tag,
-  Typography,
-} from 'antd';
+import { Alert, Button, Card, Descriptions, Empty, message, Spin, Tag, Typography } from 'antd';
 import { ArrowLeft, Copy, Rocket } from 'lucide-react';
 
 import { instanceTemplateService } from '../../services/instanceTemplateService';
@@ -180,23 +169,20 @@ export const TemplateDetail: React.FC = () => {
             description={t('tenant.templateDetail.noItems', 'No genes assigned to this template')}
           />
         ) : (
-          <List
-            dataSource={items}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={
-                    <div className="flex items-center gap-2">
-                      <Text strong>{getGeneName(item.item_slug)}</Text>
-                      <Tag>{item.item_type}</Tag>
-                      <Tag>#{item.display_order}</Tag>
-                    </div>
-                  }
-                  description={item.item_slug}
-                />
-              </List.Item>
-            )}
-          />
+          <div role="list" className="divide-y divide-slate-200 dark:divide-slate-800">
+            {items.map((item) => (
+              <div key={item.id} role="listitem" className="py-3 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Text strong>{getGeneName(item.item_slug)}</Text>
+                  <Tag>{item.item_type}</Tag>
+                  <Tag>#{item.display_order}</Tag>
+                </div>
+                <Text type="secondary" className="mt-1 block text-sm">
+                  {item.item_slug}
+                </Text>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 

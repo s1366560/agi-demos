@@ -48,6 +48,27 @@ describe('ProviderConfigModal', () => {
     });
   });
 
+  it('calls onClose when Escape is pressed', async () => {
+    const onClose = vi.fn();
+    render(
+      <ProviderConfigModal
+        isOpen
+        onClose={onClose}
+        onSuccess={vi.fn()}
+        initialProviderType="openai"
+      />
+    );
+
+    await waitFor(() => {
+      expect(providerAPI.detectEnvKeys).toHaveBeenCalled();
+      expect(providerAPI.listModels).toHaveBeenCalledWith('openai');
+    });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('tests a new provider through the live connection API', async () => {
     const { container } = render(
       <ProviderConfigModal

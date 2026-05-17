@@ -93,7 +93,7 @@ export const McpToolsTabV2: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 flex items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                 <Wrench size={20} className="text-violet-600 dark:text-violet-400" />
               </div>
               <div>
@@ -107,7 +107,7 @@ export const McpToolsTabV2: React.FC = () => {
             </div>
             <div className="w-px h-10 bg-slate-200 dark:bg-slate-700" />
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 flex items-center justify-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                 <Server size={20} className="text-blue-600 dark:text-blue-400" />
               </div>
               <div>

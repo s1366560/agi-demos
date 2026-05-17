@@ -651,10 +651,11 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
             </p>
           </div>
           <button
+            type="button"
             onClick={() => {
               handleCreate(null);
             }}
-            className="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-blue-600 dark:bg-primary hover:bg-blue-700 dark:hover:bg-primary-light text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+            className="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-blue-600 dark:bg-primary hover:bg-blue-700 dark:hover:bg-primary-light text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity]"
           >
             <Plus className="w-5 h-5" />
             <span>{entityText(t, 'createButton', TEXTS.create)}</span>
@@ -723,6 +724,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
         </div>
         <div className="h-6 w-px bg-slate-200 dark:bg-border-dark mx-1"></div>
         <button
+          type="button"
           onClick={() => {
             setViewMode('list');
           }}
@@ -737,6 +739,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
           <List className="w-5 h-5" />
         </button>
         <button
+          type="button"
           onClick={() => {
             setViewMode('grid');
           }}
@@ -891,6 +894,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
       </div>
       <div className="col-span-1 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
         <button
+          type="button"
           onClick={handleEdit}
           className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-primary/20 text-slate-400 dark:text-text-muted hover:text-blue-600 dark:hover:text-primary transition-colors"
           title={entityText(t, 'edit', TEXTS.edit)}
@@ -899,6 +903,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
           <FileEdit className="w-4 h-4" />
         </button>
         <button
+          type="button"
           onClick={handleDelete}
           className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/20 text-slate-400 dark:text-text-muted hover:text-red-600 dark:hover:text-red-400 transition-colors"
           title={entityText(t, 'delete', TEXTS.delete)}
@@ -929,7 +934,7 @@ const TableInternal: React.FC<TableProps> = React.memo(({ entities, onEdit, onDe
   }
 
   return (
-    <div className="flex flex-col rounded-xl border border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark overflow-hidden shadow-xl">
+    <div className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-border-dark dark:bg-surface-dark">
       <EntityTypeList.TableHeader />
       <div className="divide-y divide-slate-200 dark:divide-border-dark">
         {entities.map((entity) => (
@@ -1063,6 +1068,21 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
       setActiveTab('attributes');
     }, [editingEntity, setAttributes, setFormData]);
 
+    useEffect(() => {
+      if (!isOpen) return undefined;
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          onClose();
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [isOpen, onClose]);
+
     const addAttribute = useCallback(() => {
       setAttributes([
         ...attributes,
@@ -1093,12 +1113,9 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
 
     return (
       <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end" role="dialog">
+        <div className="absolute inset-0 bg-slate-950/60 transition-opacity" onClick={onClose} />
         <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity"
-          onClick={onClose}
-        ></div>
-        <div
-          className="relative w-full max-w-3xl bg-white dark:bg-background-dark shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-border-dark animate-in slide-in-from-right duration-300"
+          className="relative flex h-full w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-lg animate-in slide-in-from-right duration-300 dark:border-border-dark dark:bg-background-dark"
           onClick={(e) => {
             e.stopPropagation();
           }}
@@ -1136,6 +1153,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
           <div className="flex-1 overflow-y-auto">
             <div className="flex border-b border-slate-200 dark:border-border-dark sticky top-0 bg-white dark:bg-background-dark z-10 px-6 pt-2">
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab('general');
                 }}
@@ -1148,6 +1166,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 {entityText(t, 'generalSettings', TEXTS.generalSettings)}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab('attributes');
                 }}
@@ -1160,6 +1179,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 {entityText(t, 'attributesSchema', TEXTS.attributesSchema)}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab('relationships');
                 }}
@@ -1240,6 +1260,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                         {entityText(t, 'modal.definedAttributes', TEXTS.modal.definedAttributes)}
                       </h4>
                       <button
+                        type="button"
                         onClick={addAttribute}
                         className="text-blue-600 dark:text-primary text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-primary-light px-3 py-1.5 bg-blue-50 dark:bg-primary/10 rounded-lg border border-blue-200 dark:border-primary/20 transition-colors"
                       >
@@ -1251,7 +1272,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       {attributes.map((attr, idx) => (
                         <div
                           key={idx}
-                          className="border border-blue-200 dark:border-primary/50 bg-white dark:bg-surface-dark rounded-xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-blue-100 dark:ring-primary/30"
+                          className="overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm ring-1 ring-blue-100 dark:border-primary/50 dark:bg-surface-dark dark:ring-primary/30"
                         >
                           <div className="bg-slate-50 dark:bg-surface-dark-alt px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-border-dark">
                             <div className="flex items-center gap-2">
@@ -1263,6 +1284,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               </span>
                             </div>
                             <button
+                              type="button"
                               onClick={() => {
                                 removeAttribute(idx);
                               }}
@@ -1500,14 +1522,16 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
             </div>
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-text-muted hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-border-dark rounded-lg hover:bg-slate-100 dark:hover:bg-border-dark transition-colors"
               >
                 {entityText(t, 'modal.discard', TEXTS.modal.discard)}
               </button>
               <button
+                type="button"
                 onClick={onSave}
-                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity,transform] active:scale-95"
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-primary rounded-lg hover:bg-blue-700 dark:hover:bg-primary-light shadow-lg shadow-blue-900/20 transition-[color,background-color,border-color,box-shadow,opacity]"
               >
                 {entityText(t, 'modal.save', TEXTS.modal.save)}
               </button>

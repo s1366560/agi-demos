@@ -146,8 +146,8 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
+      <div className="mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Folder className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -156,6 +156,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             </h2>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
             aria-label={t('project.create.closeAria')}
@@ -167,6 +168,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         <div className="border-b border-gray-200 dark:border-slate-800">
           <nav className="flex space-x-8 px-6">
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('basic');
               }}
@@ -182,6 +184,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               </div>
             </button>
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('memory');
               }}
@@ -197,6 +200,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               </div>
             </button>
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('graph');
               }}
@@ -212,6 +216,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               </div>
             </button>
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('sandbox');
               }}

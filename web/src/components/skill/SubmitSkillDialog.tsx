@@ -53,7 +53,7 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (!skill) throw new Error('no skill');
+      if (!skill) throw new Error(t('skill.submit.noSkillSelected'));
       return curatedSkillAPI.submit(skill.id, {
         proposed_semver: semver,
         submission_note: note || null,
@@ -64,7 +64,7 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
       onClose();
     },
     onError: (err: Error) => {
-      message.error(err.message || 'Submit failed');
+      message.error(err.message || t('skill.submit.failedMessage'));
     },
   });
 
@@ -83,7 +83,7 @@ export function SubmitSkillDialog({ skill, open, onClose }: SubmitSkillDialogPro
         mutation.mutate();
       }}
       okText={t('skill.submit.okText')}
-      okButtonProps={{ disabled: invalidSemver }}
+      okButtonProps={{ disabled: invalidSemver || !skill }}
       confirmLoading={mutation.isPending}
     >
       <Space orientation="vertical" className="w-full" size="middle">

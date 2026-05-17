@@ -31,31 +31,31 @@ const getStatusConfig = (status: string): { color: string; bgColor: string; labe
     case 'active':
       return {
         color: 'text-green-600 dark:text-green-400',
-        bgColor: 'bg-green-100 dark:bg-green-900/30',
+        bgColor: 'bg-green-50 dark:bg-green-950/40',
         label: 'Active',
       };
     case 'maintenance':
       return {
         color: 'text-orange-600 dark:text-orange-400',
-        bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+        bgColor: 'bg-orange-50 dark:bg-orange-950/40',
         label: 'Maintenance',
       };
     case 'error':
       return {
         color: 'text-red-600 dark:text-red-400',
-        bgColor: 'bg-red-100 dark:bg-red-900/30',
+        bgColor: 'bg-red-50 dark:bg-red-950/40',
         label: 'Error',
       };
     case 'inactive':
       return {
         color: 'text-slate-600 dark:text-slate-400',
-        bgColor: 'bg-slate-100 dark:bg-slate-700',
+        bgColor: 'bg-slate-100 dark:bg-slate-800',
         label: 'Inactive',
       };
     default:
       return {
         color: 'text-slate-600 dark:text-slate-400',
-        bgColor: 'bg-slate-100 dark:bg-slate-700',
+        bgColor: 'bg-slate-100 dark:bg-slate-800',
         label: 'Unknown',
       };
   }
@@ -84,7 +84,7 @@ const ClusterCard: React.FC<ClusterCardProps> = ({ cluster, onViewDetails }) => 
   const statusConfig = getStatusConfig(cluster.status);
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 hover:shadow-md transition-shadow">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 transition-shadow hover:shadow-sm dark:border-slate-700 dark:bg-slate-900">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${statusConfig.bgColor}`}>
@@ -94,7 +94,7 @@ const ClusterCard: React.FC<ClusterCardProps> = ({ cluster, onViewDetails }) => 
             })}
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900 dark:text-white">{cluster.name}</h3>
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">{cluster.name}</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">{cluster.compute_provider}</p>
           </div>
         </div>
@@ -105,18 +105,17 @@ const ClusterCard: React.FC<ClusterCardProps> = ({ cluster, onViewDetails }) => 
         </span>
       </div>
 
-      {/* Cluster metrics placeholder */}
       <div className="mt-4 grid grid-cols-2 gap-4">
-        <div className="text-center p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-          <p className="text-lg font-bold text-slate-900 dark:text-white">
+        <div className="rounded-lg bg-slate-100 p-2 text-center dark:bg-slate-800">
+          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
             {cluster.health_status ?? 'N/A'}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.orgSettings.clusters.health')}
           </p>
         </div>
-        <div className="text-center p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-          <p className="text-lg font-bold text-slate-900 dark:text-white">{cluster.status}</p>
+        <div className="rounded-lg bg-slate-100 p-2 text-center dark:bg-slate-800">
+          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{cluster.status}</p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('tenant.orgSettings.clusters.status')}
           </p>
@@ -196,7 +195,7 @@ export const OrgClusters: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t('tenant.orgSettings.clusters.title')}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -204,11 +203,11 @@ export const OrgClusters: React.FC = () => {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             void navigate(`/tenant/${currentTenant.id}/clusters`);
           }}
-          type="button"
-          className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           <Settings size={16} />
           {t('tenant.orgSettings.clusters.manage')}
@@ -217,22 +216,22 @@ export const OrgClusters: React.FC = () => {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+            <div className="rounded-lg bg-blue-50 p-2 dark:bg-blue-950/40">
               <Cloud size={16} className="text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.total}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.total}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t('tenant.orgSettings.clusters.stats.total')}
               </p>
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+            <div className="rounded-lg bg-green-50 p-2 dark:bg-green-950/40">
               <CheckCircle size={16} className="text-green-600 dark:text-green-400" />
             </div>
             <div>
@@ -245,9 +244,9 @@ export const OrgClusters: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+            <div className="rounded-lg bg-orange-50 p-2 dark:bg-orange-950/40">
               <Wrench size={16} className="text-orange-600 dark:text-orange-400" />
             </div>
             <div>
@@ -260,9 +259,9 @@ export const OrgClusters: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+            <div className="rounded-lg bg-red-50 p-2 dark:bg-red-950/40">
               <AlertCircle size={16} className="text-red-600 dark:text-red-400" />
             </div>
             <div>
@@ -278,20 +277,20 @@ export const OrgClusters: React.FC = () => {
       {/* Clusters grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 size={16} className="animate-spin text-primary text-3xl" />
+          <Loader2 size={32} className="animate-spin text-primary" />
         </div>
       ) : clusters.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
-          <CloudOff size={16} className="text-slate-300 dark:text-slate-600 text-5xl" />
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-12 text-center dark:border-slate-700 dark:bg-slate-900">
+          <CloudOff size={48} className="mx-auto text-slate-300 dark:text-slate-600" />
           <p className="text-slate-500 dark:text-slate-400 mt-4">
             {t('tenant.orgSettings.clusters.noClusters')}
           </p>
           <button
+            type="button"
             onClick={() => {
               void navigate(`/tenant/${currentTenant.id}/clusters`);
             }}
-            type="button"
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-sm font-medium"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-slate-50 transition-colors hover:bg-primary-dark"
           >
             {t('tenant.orgSettings.clusters.addCluster')}
           </button>

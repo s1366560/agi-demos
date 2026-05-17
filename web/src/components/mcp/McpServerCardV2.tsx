@@ -278,6 +278,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
             <Tooltip title={t('mcp.serverCard.actions.syncTooltip')}>
               <button
+                type="button"
                 onClick={() => {
                   onSync(server);
                 }}
@@ -295,6 +296,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
 
             <Tooltip title={t('mcp.serverCard.actions.testTooltip')}>
               <button
+                type="button"
                 onClick={() => {
                   onTest(server);
                 }}

@@ -137,17 +137,20 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
               {/* Streaming dots */}
               {isStreaming && (
-                <span className="flex gap-0.5 flex-shrink-0" aria-hidden="true">
+                <span
+                  className="flex flex-shrink-0 items-center gap-1 motion-reduce:hidden"
+                  aria-hidden="true"
+                >
                   <span
-                    className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"
+                    className="h-1 w-1 rounded-full bg-slate-400 animate-pulse"
                     style={{ animationDelay: '0ms' }}
                   />
                   <span
-                    className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"
+                    className="h-1 w-1 rounded-full bg-slate-400 animate-pulse"
                     style={{ animationDelay: '150ms' }}
                   />
                   <span
-                    className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"
+                    className="h-1 w-1 rounded-full bg-slate-400 animate-pulse"
                     style={{ animationDelay: '300ms' }}
                   />
                 </span>

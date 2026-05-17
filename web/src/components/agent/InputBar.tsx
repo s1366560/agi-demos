@@ -535,7 +535,7 @@ export const InputBar = memo<InputBarProps>(
           {/* Selected Skill Badge */}
           {selectedSkill && (
             <div className="px-4 pt-3 flex-shrink-0">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/10 dark:to-primary/15 text-primary border border-primary/20 dark:border-primary/30 rounded-full text-xs font-medium">
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary dark:border-primary/30 dark:bg-primary/10">
                 <Zap size={12} />
                 <span>/{selectedSkill.name}</span>
                 <button
@@ -549,7 +549,7 @@ export const InputBar = memo<InputBarProps>(
                     name: selectedSkill.name,
                     defaultValue: 'Remove /{{name}} skill',
                   })}
-                  className="ml-0.5 p-0.5 hover:bg-primary/10 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="ml-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={10} />
                 </button>
@@ -560,7 +560,7 @@ export const InputBar = memo<InputBarProps>(
           {/* Selected SubAgent Badge */}
           {selectedSubAgent && (
             <div className="px-4 pt-3 flex-shrink-0">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/5 to-purple-500/10 dark:from-purple-500/10 dark:to-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20 dark:border-purple-500/30 rounded-full text-xs font-medium">
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-600 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-400">
                 <Workflow size={12} />
                 <span>@{selectedSubAgent}</span>
                 <button
@@ -574,7 +574,7 @@ export const InputBar = memo<InputBarProps>(
                     name: selectedSubAgent,
                     defaultValue: 'Remove @{{name}} subagent',
                   })}
-                  className="ml-0.5 p-0.5 hover:bg-purple-500/10 rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="ml-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-purple-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 >
                   <X size={10} />
                 </button>

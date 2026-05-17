@@ -93,6 +93,7 @@ const NodeItem = memo<{
   isExpanded: boolean;
   onToggleExpand: (id: string) => void;
 }>(({ node, isExpanded, onToggleExpand }) => {
+  const { t } = useTranslation();
   const hasDetails = Boolean(
     node.errorMessage || node.skipReason || (node.outputKeys && node.outputKeys.length > 0)
   );
@@ -161,7 +162,9 @@ const NodeItem = memo<{
               {node.outputKeys && node.outputKeys.length > 0 && (
                 <div className="p-2 rounded bg-white/60 dark:bg-slate-900/40 border border-slate-200/30 dark:border-slate-700/20">
                   <p className="text-2xs text-slate-500 dark:text-slate-400 truncate">
-                    Output keys: {node.outputKeys.join(', ')}
+                    {t('agent.graph.outputKeys', 'Output keys: {{keys}}', {
+                      keys: node.outputKeys.join(', '),
+                    })}
                   </p>
                 </div>
               )}
@@ -279,7 +282,7 @@ const AgentRosterDrawer = memo(() => {
             <div className="px-3 py-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/40 dark:border-slate-700/30">
               <div className="flex items-center justify-between">
                 <span className="text-2xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Pattern
+                  {t('agent.graph.pattern', 'Pattern')}
                 </span>
                 <span className="text-xs font-medium text-slate-600 dark:text-slate-300 line-clamp-1">
                   {activeRun.pattern}

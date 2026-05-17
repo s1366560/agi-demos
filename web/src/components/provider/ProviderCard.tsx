@@ -321,6 +321,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       {/* Card Footer - Actions */}
       <div className="flex items-center gap-1 p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
         <button
+          type="button"
           onClick={() => {
             onCheckHealth(provider.id);
           }}
@@ -341,6 +342,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         {provider.resilience?.circuit_breaker_state &&
           provider.resilience.circuit_breaker_state !== 'closed' && (
             <button
+              type="button"
               onClick={() => {
                 onResetCircuitBreaker(provider.provider_type);
               }}
@@ -361,9 +363,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
         {onViewStats && (
           <button
+            type="button"
             onClick={() => {
               onViewStats(provider);
             }}
+            aria-label={t('components.provider.card.actions.viewStatistics', {
+              defaultValue: 'View Statistics',
+            })}
             className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
             title={t('components.provider.card.actions.viewStatistics', {
               defaultValue: 'View Statistics',
@@ -374,9 +380,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         )}
 
         <button
+          type="button"
           onClick={() => {
             onAssign(provider);
           }}
+          aria-label={t('components.provider.card.actions.assignToTenant', {
+            defaultValue: 'Assign to Tenant',
+          })}
           className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title={t('components.provider.card.actions.assignToTenant', {
             defaultValue: 'Assign to Tenant',
@@ -386,9 +396,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         </button>
 
         <button
+          type="button"
           onClick={() => {
             onEdit(provider);
           }}
+          aria-label={t('common.edit')}
           className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title={t('common.edit')}
         >
@@ -396,9 +408,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         </button>
 
         <button
+          type="button"
           onClick={() => {
             onDelete(provider.id);
           }}
+          aria-label={t('common.delete')}
           className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title={t('common.delete')}
         >

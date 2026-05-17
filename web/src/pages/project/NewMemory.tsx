@@ -426,7 +426,7 @@ export const NewMemory: React.FC = () => {
               {/* Progress Bar */}
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-[width] duration-300 ease-out"
+                  className="h-full bg-indigo-600 transition-[width] duration-300 ease-out dark:bg-indigo-400"
                   style={{ width: `${currentTask.progress.toString()}%` }}
                 />
               </div>
@@ -466,7 +466,7 @@ export const NewMemory: React.FC = () => {
           )}
 
           {/* Main Entry Card */}
-          <div className="flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark shadow-sm overflow-hidden">
+          <div className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-surface-light shadow-sm dark:border-slate-800 dark:bg-surface-dark">
             {/* Metadata Inputs */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 border-b border-slate-100 dark:border-slate-800">
               {/* Title */}

@@ -431,6 +431,23 @@ describe('EntityTypeList Compound Component', () => {
       }
     });
 
+    it('should call onClose when Escape is pressed', async () => {
+      const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
+      const onClose = vi.fn();
+      render(
+        <EntityTypeList.Modal
+          isOpen={true}
+          onClose={onClose}
+          onSave={vi.fn()}
+          editingEntity={null}
+        />
+      );
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     it('should call onSave when save button clicked', async () => {
       const { EntityTypeList } = await import('../../../../pages/project/schema/EntityTypeList');
       const onSave = vi.fn();

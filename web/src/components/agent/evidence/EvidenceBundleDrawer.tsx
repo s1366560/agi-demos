@@ -33,18 +33,18 @@ const ItemRow: React.FC<ItemRowProps> = ({ artifact }) => {
       href={artifact.url ?? '#'}
       target={artifact.url ? '_blank' : undefined}
       rel="noreferrer"
-      className="flex items-start gap-3 rounded-md px-3 py-2 hover:bg-[#fafafa] dark:hover:bg-slate-800/60 border border-transparent hover:border-[rgba(0,0,0,0.08)] dark:hover:border-slate-700"
+      className="flex items-start gap-3 rounded-md border border-transparent px-3 py-2 hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
     >
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-[#171717] dark:text-slate-100 truncate">
+        <div className="text-[13px] font-medium text-slate-900 dark:text-slate-100 truncate">
           {artifact.filename}
         </div>
-        <div className="text-[11px] text-[#666] dark:text-slate-400 truncate">
+        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
           {artifact.mimeType} · {sizeKb} KB
           {artifact.sourceTool ? ` · ${artifact.sourceTool}` : ''}
         </div>
       </div>
-      <span className="text-[11px] text-[#999] dark:text-slate-500 shrink-0">
+      <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">
         {new Date(artifact.createdAt).toLocaleTimeString()}
       </span>
     </a>

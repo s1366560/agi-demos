@@ -575,7 +575,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none"
               data-testid="scroll-indicator"
             >
-              <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
+              <div className="flex items-center px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200/70 dark:border-slate-700/70 opacity-80">
                 <Loader2 className="animate-spin text-primary mr-2" size={16} />
                 <span className="text-xs text-slate-500">
                   {scrollIndicatorChild?.props.label ||
@@ -649,7 +649,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           onClick={() => {
                             if (event.id) togglePinEvent(event.id);
                           }}
-                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-all duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+                          className="touch-target flex-shrink-0 p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 md:group-focus-within/pin:opacity-100 transition-[color,background-color,border-color,box-shadow,opacity] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                           aria-label={t('agent.actions.unpin', 'Unpin')}
                         >
                           <PinOff size={12} />
@@ -824,7 +824,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       }}
                       className={
                         isFocused
-                          ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-xl transition-shadow duration-200'
+                          ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-lg transition-shadow duration-200'
                           : ''
                       }
                     >
@@ -848,7 +848,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                             onClick={() => {
                               turnCollapse.toggle(turnIdForItem);
                             }}
-                            className={`absolute -bottom-1 right-2 inline-flex items-center gap-1 rounded-md border border-slate-200/70 bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 backdrop-blur transition-opacity hover:text-slate-800 dark:border-slate-700/60 dark:bg-slate-800/70 dark:text-slate-400 dark:hover:text-slate-100 ${
+                            className={`absolute -bottom-1 right-2 inline-flex items-center gap-1 rounded-md border border-slate-200/70 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 transition-opacity hover:text-slate-800 dark:border-slate-700/60 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-100 ${
                               isTurnFolded
                                 ? 'opacity-100'
                                 : 'opacity-0 group-hover/turn:opacity-100 focus:opacity-100'
@@ -943,6 +943,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           {/* Scroll to bottom button */}
           {includeScrollButton && showScrollButton && (
             <button
+              type="button"
               onClick={contextValue.scroll.scrollToBottom}
               className="touch-target absolute bottom-6 right-6 z-10 flex items-center justify-center w-11 h-11 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 animate-fade-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
               title={

@@ -107,6 +107,7 @@ export const NotificationPanel: React.FC = () => {
   return (
     <div className="relative" ref={panelRef}>
       <button
+        type="button"
         onClick={togglePanel}
         className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label={t('common.notifications.title')}
@@ -121,7 +122,7 @@ export const NotificationPanel: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-12 w-96 bg-white dark:bg-slate-900 rounded-lg shadow-xl border border-slate-200 dark:border-slate-800 z-50">
+        <div className="absolute right-0 top-12 z-50 w-96 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <h3 className="font-semibold text-slate-900 dark:text-white">
               {t('common.notifications.title')}
@@ -129,6 +130,7 @@ export const NotificationPanel: React.FC = () => {
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={() => {
                     void markAllAsRead();
                   }}
@@ -138,6 +140,7 @@ export const NotificationPanel: React.FC = () => {
                 </button>
               )}
               <button
+                type="button"
                 onClick={closePanel}
                 aria-label={t('common.notifications.close', { defaultValue: 'Close' })}
               >
@@ -190,6 +193,7 @@ export const NotificationPanel: React.FC = () => {
                     <div className="flex items-center gap-1 ml-2">
                       {!notification.is_read && (
                         <button
+                          type="button"
                           onClick={(e) => {
                             handleInlineMarkAsRead(e, notification.id);
                           }}
@@ -201,6 +205,7 @@ export const NotificationPanel: React.FC = () => {
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={(e) => {
                           handleInlineDelete(e, notification.id);
                         }}

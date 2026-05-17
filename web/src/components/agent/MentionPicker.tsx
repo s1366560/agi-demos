@@ -101,7 +101,7 @@ export const MentionPicker = memo<MentionPickerProps>(
         onKeyDown={handleKey}
         className={
           className ??
-          'absolute z-20 w-60 overflow-hidden rounded-md border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_4px_8px_rgba(0,0,0,0.04),0_16px_24px_rgba(0,0,0,0.06)]'
+          'absolute z-20 w-60 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900'
         }
       >
         <ul ref={listRef} className="max-h-60 overflow-auto py-1">
@@ -117,17 +117,21 @@ export const MentionPicker = memo<MentionPickerProps>(
                 onMentionSelected(candidate.agent_id);
               }}
               className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-sm ${
-                idx === activeIndex ? 'bg-[#fafafa] text-[#0070f3]' : 'text-[#171717]'
+                idx === activeIndex
+                  ? 'bg-slate-50 text-primary dark:bg-slate-800 dark:text-primary-400'
+                  : 'text-slate-900 dark:text-slate-100'
               }`}
             >
               <span className="truncate">
                 @{candidate.agent_id}
                 {candidate.display_name ? (
-                  <span className="ml-2 text-xs text-[#666]">{candidate.display_name}</span>
+                  <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                    {candidate.display_name}
+                  </span>
                 ) : null}
               </span>
               {candidate.label ? (
-                <span className="rounded-full bg-[#ebebeb] px-2 py-0.5 text-[11px] text-[#171717]">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-900 dark:bg-slate-800 dark:text-slate-100">
                   {candidate.label}
                 </span>
               ) : null}

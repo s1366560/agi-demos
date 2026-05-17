@@ -124,10 +124,10 @@ export const TemplateMarketplace: React.FC = () => {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             void handleSeed();
           }}
-          type="button"
           className="px-3 py-1.5 text-xs rounded-md border border-slate-300 dark:border-slate-600
             text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
         >
@@ -242,10 +242,10 @@ export const TemplateMarketplace: React.FC = () => {
                   {tpl.author && <span>{tpl.author}</span>}
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     void handleInstall(tpl.id);
                   }}
-                  type="button"
                   disabled={installing.has(tpl.id)}
                   className="px-2.5 py-1 text-xs rounded-md bg-blue-500 hover:bg-blue-600
                     text-white disabled:opacity-50 transition-colors flex items-center gap-1"

@@ -8,21 +8,17 @@
 import { lazy, Suspense } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+
+import remarkGfm from 'remark-gfm';
 
 import { formatDateTime, formatDistanceToNow, formatTimeOnly } from '../../../utils/date';
 import { getOptionDescriptionText, getOptionLabelText } from '../../../utils/hitlOptionDisplay';
 import { safeMarkdownComponents } from '../chat/markdownPlugins';
 
-// Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
+// Lazy load math-only markdown extras to reduce initial bundle size.
 export const MarkdownRenderer = lazy(async () => {
-  const [
-    { default: ReactMarkdown },
-    { default: remarkGfm },
-    { default: remarkMath },
-    { default: rehypeKatex },
-  ] = await Promise.all([
-    import('react-markdown'),
-    import('remark-gfm'),
+  const [{ default: remarkMath }, { default: rehypeKatex }] = await Promise.all([
     import('remark-math'),
     import('rehype-katex'),
   ]);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -35,6 +35,21 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,7 +71,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-slate-950/60" onClick={onClose} />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
@@ -64,7 +79,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="assign-provider-title"
-          className="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden"
+          className="relative w-full max-w-md overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-800"
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
@@ -75,6 +90,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
               {t('components.provider.assign.title')}
             </h2>
             <button
+              type="button"
               onClick={onClose}
               aria-label={t('common.close')}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"

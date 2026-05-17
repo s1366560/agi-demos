@@ -141,7 +141,7 @@ export const SearchConfig = memo<SearchConfigProps>(
         {/* Mobile Backdrop */}
         {showMobileConfig && (
           <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+            className="fixed inset-0 z-40 bg-slate-950/60 lg:hidden"
             onClick={onMobileConfigClose}
           />
         )}
@@ -707,6 +707,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
           <div className="flex flex-wrap gap-1.5">
             {['Person', 'Organization', 'Location', 'Event', 'Concept', 'Product'].map((type) => (
               <button
+                type="button"
                 key={type}
                 onClick={() => {
                   onToggleEntityType(type);
@@ -732,6 +733,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
           <div className="flex flex-wrap gap-1.5">
             {displayTags.map((tag) => (
               <button
+                type="button"
                 key={tag}
                 onClick={() => {
                   onToggleTag(tag);

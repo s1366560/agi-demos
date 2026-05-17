@@ -42,14 +42,13 @@ export const MemoryGraph: React.FC = () => {
         />
       </CytoscapeGraph>
 
-      {/* Node Detail Panel - Fixed to right side */}
       <div
         data-testid="graph-node-detail-panel"
-        className={`absolute inset-x-4 bottom-4 top-auto z-20 flex max-h-[70%] w-auto flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl transition-transform duration-300 dark:border-[#2b324a] dark:bg-[#1e2332] sm:bottom-6 sm:left-auto sm:right-6 sm:top-6 sm:max-h-none sm:w-80 ${selectedNode ? 'translate-y-0 sm:translate-x-0' : 'translate-y-[120%] sm:translate-x-[120%] sm:translate-y-0'}`}
+        className={`absolute inset-x-4 bottom-4 top-auto z-20 flex max-h-[70%] w-auto flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg transition-transform duration-200 dark:border-slate-700 dark:bg-slate-900 sm:bottom-6 sm:left-auto sm:right-6 sm:top-6 sm:max-h-none sm:w-80 ${selectedNode ? 'translate-y-0 sm:translate-x-0' : 'translate-y-[120%] sm:translate-x-[120%] sm:translate-y-0'}`}
       >
         {selectedNode ? (
           <>
-            <div className="p-5 border-b border-slate-200 dark:border-[#2b324a] bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/10 dark:to-transparent">
+            <div className="border-b border-slate-200 bg-slate-100 p-5 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex justify-between items-start mb-2">
                 <div
                   className={`px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wide border ${NODE_TYPE_CLASSES[selectedNode.type]}`}
@@ -62,12 +61,12 @@ export const MemoryGraph: React.FC = () => {
                   onClick={() => {
                     setSelectedNode(null);
                   }}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
+                  className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                 >
                   <X size={20} />
                 </button>
               </div>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">
                 {selectedNode.name}
               </h2>
               {selectedNode.uuid && (
@@ -87,7 +86,7 @@ export const MemoryGraph: React.FC = () => {
                     <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
                       {t('project.graph.node_detail.connections')}
                     </span>
-                    <span className="text-slate-900 dark:text-white font-bold text-sm">
+                    <span className="text-slate-900 dark:text-slate-100 font-bold text-sm">
                       {connectionCount}
                     </span>
                   </div>
@@ -134,7 +133,7 @@ export const MemoryGraph: React.FC = () => {
 
               {/* Context Info */}
               {selectedNode.tenant_id && (
-                <div className="pt-4 border-t border-slate-200 dark:border-[#2b324a]">
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                   <div className="space-y-2 text-xs text-slate-500">
                     <div className="flex items-center gap-2">
                       <Building2 size={16} />

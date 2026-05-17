@@ -142,6 +142,9 @@ export function CytoscapeGraphViewport({
   const currentTheme = THEME_COLORS[computedTheme];
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
+  const activeLayoutRef = useRef<cytoscape.Layouts | null>(null);
+  const isMountedRef = useRef(true);
+  const loadGraphDataRef = useRef<(() => Promise<void>) | null>(null);
 
   // Dynamic import state for cytoscape (bundle-dynamic-imports)
   const [cytoscapeFactory, setCytoscapeFactory] = useState<CytoscapeFactory | null>(null);
@@ -155,6 +158,14 @@ export function CytoscapeGraphViewport({
   useEffect(() => {
     onNodeClickRef.current = onNodeClick;
   }, [onNodeClick]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Dynamic import cytoscape
   useEffect(() => {
@@ -272,7 +283,7 @@ export function CytoscapeGraphViewport({
       });
 
       const cy = cyRef.current;
-      if (!cy) {
+      if (!isMountedRef.current || !cy || cy.destroyed()) {
         return;
       }
 
@@ -280,8 +291,14 @@ export function CytoscapeGraphViewport({
       cy.elements().remove();
       cy.add(elements);
 
-      const layoutOpts = toCytoscapeLayoutOptions(config.layout);
-      cy.layout(layoutOpts).run();
+      const layoutOpts = {
+        ...toCytoscapeLayoutOptions(config.layout),
+        animate: false,
+      };
+      activeLayoutRef.current?.stop();
+      const layout = cy.layout(layoutOpts);
+      activeLayoutRef.current = layout;
+      layout.run();
 
       const nextNodeCount = elements.filter((element) => element.group === 'nodes').length;
       const nextEdgeCount = elements.filter((element) => element.group === 'edges').length;
@@ -293,11 +310,19 @@ export function CytoscapeGraphViewport({
       const fallbackMessage = t('graph.cytoscapeViewport.loadDataFailed', {
         defaultValue: 'Failed to load graph data',
       });
-      setError(getErrorMessage(err, fallbackMessage));
+      if (isMountedRef.current) {
+        setError(getErrorMessage(err, fallbackMessage));
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [config, t]);
+
+  useEffect(() => {
+    loadGraphDataRef.current = loadGraphData;
+  }, [loadGraphData]);
 
   // Initialize Cytoscape
   useEffect(() => {
@@ -346,18 +371,23 @@ export function CytoscapeGraphViewport({
 
     // Listen for reload event
     const handleReload = () => {
-      void loadGraphData();
+      void loadGraphDataRef.current?.();
     };
     window.addEventListener('cytoscape-reload', handleReload);
 
     return () => {
       window.removeEventListener('cytoscape-reload', handleReload);
-      cy.destroy();
+      activeLayoutRef.current?.stop();
+      activeLayoutRef.current = null;
+      cy.off('tap', 'node', handleNodeTap);
+      cy.off('tap', handleBackgroundTap);
       if (cyRef.current === cy) {
         cyRef.current = null;
       }
+      cy.stop(true, true);
+      cy.destroy();
     };
-  }, [cytoscapeFactory, onNodeSelect, setCyInstance, cytoscapeStyles, loadGraphData, t]);
+  }, [cytoscapeFactory, onNodeSelect, setCyInstance, cytoscapeStyles, t]);
 
   // Update styles when theme changes
   useEffect(() => {
@@ -380,7 +410,7 @@ export function CytoscapeGraphViewport({
   return (
     <div className="relative min-h-[420px] flex-1">
       {loading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90">
           <div className="text-center">
             <Loader2
               size={36}
@@ -394,7 +424,7 @@ export function CytoscapeGraphViewport({
       )}
 
       {error && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90">
           <div className="text-center">
             <AlertCircle size={36} className="text-red-600 mx-auto" />
             <p className="text-slate-600 dark:text-slate-400 mt-2">{error}</p>

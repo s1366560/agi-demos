@@ -282,6 +282,7 @@ export const ProviderList: React.FC = () => {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             handleCreate();
           }}
@@ -295,6 +296,7 @@ export const ProviderList: React.FC = () => {
       {/* View Toggle */}
       <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit">
         <button
+          type="button"
           onClick={() => {
             setActiveTab('my-providers');
           }}
@@ -307,6 +309,7 @@ export const ProviderList: React.FC = () => {
           {t('tenant.providers.tabs.myProviders')}
         </button>
         <button
+          type="button"
           onClick={() => {
             setActiveTab('marketplace');
           }}
@@ -319,6 +322,7 @@ export const ProviderList: React.FC = () => {
           {t('tenant.providers.tabs.marketplace')}
         </button>
         <button
+          type="button"
           onClick={() => {
             setActiveTab('assignments');
           }}
@@ -347,6 +351,7 @@ export const ProviderList: React.FC = () => {
               <AlertCircle size={20} className="text-red-600" />
               <span className="text-red-800 dark:text-red-200">{error}</span>
               <button
+                type="button"
                 onClick={() => {
                   void loadProviders();
                 }}
@@ -420,6 +425,7 @@ export const ProviderList: React.FC = () => {
                 {/* View Mode Toggle */}
                 <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden shrink-0">
                   <button
+                    type="button"
                     onClick={() => {
                       setViewMode('cards');
                     }}
@@ -430,6 +436,7 @@ export const ProviderList: React.FC = () => {
                     <LayoutGrid size={18} />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setViewMode('table');
                     }}
@@ -467,6 +474,7 @@ export const ProviderList: React.FC = () => {
                     </p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => {
                       handleCreate();
                     }}
@@ -605,7 +613,7 @@ export const ProviderList: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             <div className="flex-shrink-0">
-                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                                 <Bot size={20} className="text-primary" />
                               </div>
                             </div>
@@ -687,6 +695,7 @@ export const ProviderList: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-2">
                             <button
+                              type="button"
                               onClick={() => {
                                 void handleCheckHealth(provider.id);
                               }}
@@ -704,6 +713,7 @@ export const ProviderList: React.FC = () => {
                               )}
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 handleEdit(provider);
                               }}
@@ -713,6 +723,7 @@ export const ProviderList: React.FC = () => {
                               <Pencil size={18} />
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 void handleDelete(provider.id);
                               }}
@@ -740,7 +751,7 @@ export const ProviderList: React.FC = () => {
               key={providerMeta.value}
               className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center text-center hover:shadow-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
             >
-              <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 text-4xl">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-slate-50 text-4xl dark:bg-slate-800">
                 {providerMeta.icon}
               </div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
@@ -761,6 +772,7 @@ export const ProviderList: React.FC = () => {
                   <ExternalLink size={14} />
                 </a>
                 <button
+                  type="button"
                   onClick={() => {
                     handleCreate(providerMeta.value);
                   }}

@@ -38,7 +38,7 @@ export class BlackboardErrorBoundary extends Component<
       return (
         <div
           role="alert"
-          className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-error/25 bg-error/10 p-8 text-center"
+          className="flex flex-col items-center justify-center gap-4 rounded-lg border border-error/25 bg-error/10 p-8 text-center"
         >
           <div className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {this.props.fallbackLabel ?? 'Something went wrong'}
@@ -49,7 +49,7 @@ export class BlackboardErrorBoundary extends Component<
           <button
             type="button"
             onClick={this.handleRetry}
-            className="min-h-10 rounded-2xl border border-error/25 bg-surface-light px-5 text-sm font-medium text-status-text-error transition motion-reduce:transition-none hover:bg-error/15 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-white/5 dark:text-status-text-error-dark"
+            className="min-h-10 rounded-lg border border-error/25 bg-surface-light px-5 text-sm font-medium text-status-text-error transition-colors motion-reduce:transition-none hover:bg-error/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:bg-white/5 dark:text-status-text-error-dark"
           >
             {this.props.retryLabel ?? 'Try again'}
           </button>

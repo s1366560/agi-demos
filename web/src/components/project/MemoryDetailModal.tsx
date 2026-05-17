@@ -86,8 +86,22 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
     setError(null);
   }, [memoryProp]);
 
-  const memory =
-    memoryProp && displayMemory?.id === memoryProp.id ? displayMemory : memoryProp;
+  const memory = memoryProp && displayMemory?.id === memoryProp.id ? displayMemory : memoryProp;
+
+  useEffect(() => {
+    if (!isOpen || !memory) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, memory, onClose]);
 
   if (!isOpen || !memory) return null;
 
@@ -186,12 +200,12 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
   const hasMetadata = Object.keys(memory.metadata).length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="memory-detail-title"
-        className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden"
+        className="mx-4 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900"
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
@@ -207,6 +221,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             {isEditing ? (
               <>
                 <button
+                  type="button"
                   onClick={() => {
                     void handleSave();
                   }}
@@ -222,6 +237,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   )}
                 </button>
                 <button
+                  type="button"
                   onClick={handleCancel}
                   disabled={isLoading}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:opacity-50"
@@ -234,6 +250,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
             ) : (
               <>
                 <button
+                  type="button"
                   onClick={handleEdit}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   aria-label={t('memory.detail.editAria')}
@@ -242,6 +259,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   <Edit3 className="h-4 w-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     void handleShare();
                   }}
@@ -252,6 +270,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
                   <Share2 className="h-4 w-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={handleDownload}
                   className="p-2 text-gray-400 dark:text-slate-500 hover:text-purple-600 dark:hover:text-purple-400 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   aria-label={t('memory.detail.downloadAria')}
@@ -262,6 +281,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
               </>
             )}
             <button
+              type="button"
               onClick={onClose}
               aria-label={t('memory.detail.closeAria')}
               className="p-2 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"

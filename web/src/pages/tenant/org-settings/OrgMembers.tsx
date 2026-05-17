@@ -176,10 +176,10 @@ export const OrgMembers: React.FC = () => {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => {
             setIsAddModalOpen(true);
           }}
-          type="button"
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors text-sm font-medium"
         >
           <UserPlus size={16} />

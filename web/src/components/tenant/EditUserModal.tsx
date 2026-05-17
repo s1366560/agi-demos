@@ -71,8 +71,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         ];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-md mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
+      <div className="mx-4 w-full max-w-md rounded-lg bg-white shadow-lg dark:bg-slate-900">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             {t('tenant.users.actions.edit')}
@@ -90,8 +90,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         <div className="p-6 space-y-4">
           {/* User Info */}
           <div className="flex items-center space-x-4 pb-4 border-b border-gray-200 dark:border-slate-800">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-medium text-lg">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 dark:bg-slate-100">
+              <span className="text-lg font-medium text-slate-50 dark:text-slate-900">
                 {user.name.charAt(0).toUpperCase()}
               </span>
             </div>
