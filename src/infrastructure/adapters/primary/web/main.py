@@ -176,7 +176,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     graph_service = await initialize_graph_service()
 
     # Initialize Workflow Engine
-    workflow_engine = await initialize_workflow_engine()
+    workflow_engine = await initialize_workflow_engine(graph_service)
 
     # Initialize Background Task Manager
     from src.infrastructure.adapters.secondary.background_tasks import task_manager
