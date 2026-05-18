@@ -11,11 +11,13 @@ import re
 import shlex
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 SANDBOX_NATIVE_PROVIDER = "sandbox_native"
 SANDBOX_NATIVE_PROVIDER_ALIASES = frozenset({SANDBOX_NATIVE_PROVIDER, "memstack-sandbox"})
+DRONE_PROVIDER = "drone"
 PIPELINE_EVIDENCE_KEY = "pipeline_evidence_refs"
 DEFAULT_PIPELINE_TIMEOUT_SECONDS = 600
 DEFAULT_PREVIEW_PORT = 3000
@@ -106,6 +108,7 @@ class PipelineContractSpec:
     agent_managed: bool = True
     contract_source: str = "metadata"
     contract_confidence: float = 1.0
+    provider_config: dict[str, Any] = field(default_factory=dict)
 
     def commands_json(self) -> list[dict[str, Any]]:
         return [stage.to_json() for stage in self.stages]
@@ -125,6 +128,7 @@ class PipelineStageResult:
     duration_ms: int = 0
     log_ref: str | None = None
     artifact_refs: tuple[str, ...] = ()
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -141,6 +145,9 @@ class PipelineRunResult:
     health_url: str | None = None
     deployment_status: str | None = None
     deployment_pid: int | None = None
+    external_id: str | None = None
+    external_url: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def build_pipeline_contract_from_metadata(
@@ -173,6 +180,7 @@ def build_pipeline_contract_from_metadata(
         "agent_proposal" if isinstance(config.get("agent_proposal"), dict) else "metadata"
     )
     contract_confidence = _confidence(config.get("contract_confidence"), fallback=1.0)
+    provider_config = _provider_config(config, provider)
     services = _configured_service_specs(
         config,
         preview_port=preview_port,
@@ -182,9 +190,9 @@ def build_pipeline_contract_from_metadata(
     )
 
     stages = _configured_stage_specs(config, timeout_seconds)
-    if not stages:
+    if provider == SANDBOX_NATIVE_PROVIDER and not stages:
         stages = _default_stage_specs(timeout_seconds)
-    if auto_deploy:
+    if provider == SANDBOX_NATIVE_PROVIDER and auto_deploy:
         if services:
             stages.extend(
                 _service_stage_specs(
@@ -217,7 +225,38 @@ def build_pipeline_contract_from_metadata(
         agent_managed=agent_managed,
         contract_source=contract_source,
         contract_confidence=contract_confidence,
+        provider_config=provider_config,
     )
+
+
+def _provider_config(config: dict[str, Any], provider: str) -> dict[str, Any]:
+    output: dict[str, Any] = {}
+    raw_provider_config = config.get("provider_config")
+    if isinstance(raw_provider_config, Mapping):
+        provider_config = raw_provider_config.get(provider)
+        if isinstance(provider_config, Mapping):
+            output.update(dict(provider_config))
+        else:
+            output.update(dict(raw_provider_config))
+    provider_section = config.get(provider)
+    if isinstance(provider_section, Mapping):
+        output.update(dict(provider_section))
+    for key in (
+        "repo",
+        "repository",
+        "branch",
+        "commit",
+        "target",
+        "params",
+        "build_params",
+        "server_url",
+        "server_url_env",
+        "token_env",
+        "poll_interval_seconds",
+    ):
+        if key in config and key not in output:
+            output[key] = config[key]
+    return output
 
 
 class SandboxNativePipelineProvider:
@@ -696,6 +735,7 @@ def _compact(value: str, *, limit: int = 4000) -> str:
 
 
 __all__ = [
+    "DRONE_PROVIDER",
     "PIPELINE_EVIDENCE_KEY",
     "SANDBOX_NATIVE_PROVIDER",
     "PipelineContractSpec",

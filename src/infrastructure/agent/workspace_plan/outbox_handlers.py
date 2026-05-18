@@ -63,6 +63,7 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgePort,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    WorkspacePipelineRunModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
@@ -112,6 +113,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
+from src.infrastructure.agent.workspace_plan.drone import DronePipelineProvider
 from src.infrastructure.agent.workspace_plan.factory import (
     _project_verification_to_task,
     build_sql_orchestrator,
@@ -123,8 +125,10 @@ from src.infrastructure.agent.workspace_plan.iteration_review import (
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxHandler
 from src.infrastructure.agent.workspace_plan.pipeline import (
+    DRONE_PROVIDER,
     SANDBOX_NATIVE_PROVIDER,
     PipelineContractSpec,
+    PipelineRunResult,
     PipelineServiceSpec,
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
@@ -2777,10 +2781,6 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             )
             return
 
-        runner = _WorkspaceSandboxCommandRunner(
-            project_id=workspace.project_id,
-            tenant_id=workspace.tenant_id,
-        )
         contract = _pipeline_contract_for_workspace(
             project_id=workspace.project_id,
             workspace_id=workspace_id,
@@ -2807,7 +2807,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 ),
             )
             return
-        if contract.provider != SANDBOX_NATIVE_PROVIDER:
+        if contract.provider not in {SANDBOX_NATIVE_PROVIDER, DRONE_PROVIDER}:
             await _suspend_plan_for_pipeline(
                 session=session,
                 plan=plan,
@@ -2863,6 +2863,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 "contract_source": contract.contract_source,
                 "contract_confidence": contract.contract_confidence,
                 "services": contract.services_json(),
+                "provider_config": contract.provider_config,
             },
         )
         run = await pipeline_repo.create_run(
@@ -2877,6 +2878,24 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
         )
         await _mark_pipeline_running(session=session, plan=plan, node=node, run_id=run.id)
 
+        if contract.provider == DRONE_PROVIDER:
+            await _run_drone_pipeline(
+                session=session,
+                pipeline_repo=pipeline_repo,
+                plan=plan,
+                node=node,
+                run=run,
+                contract=contract,
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                node_id=node_id,
+            )
+            return
+
+        runner = _WorkspaceSandboxCommandRunner(
+            project_id=workspace.project_id,
+            tenant_id=workspace.tenant_id,
+        )
         provider = SandboxNativePipelineProvider(runner)
         stage_results = []
         evidence_refs: list[str] = []
@@ -3042,6 +3061,112 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
     return _handle
 
 
+async def _run_drone_pipeline(
+    *,
+    session: AsyncSession,
+    pipeline_repo: SqlWorkspacePipelineRepository,
+    plan: Plan,
+    node: PlanNode,
+    run: WorkspacePipelineRunModel,
+    contract: PipelineContractSpec,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> None:
+    result = await DronePipelineProvider().run(contract)
+    await _persist_external_pipeline_result(
+        session=session,
+        pipeline_repo=pipeline_repo,
+        plan=plan,
+        node=node,
+        run=run,
+        contract=contract,
+        result=result,
+        workspace_id=workspace_id,
+        plan_id=plan_id,
+        node_id=node_id,
+    )
+
+
+async def _persist_external_pipeline_result(
+    *,
+    session: AsyncSession,
+    pipeline_repo: SqlWorkspacePipelineRepository,
+    plan: Plan,
+    node: PlanNode,
+    run: WorkspacePipelineRunModel,
+    contract: PipelineContractSpec,
+    result: PipelineRunResult,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> None:
+    for stage_result in result.stage_results:
+        stage_row = await pipeline_repo.create_stage_run(
+            run_id=run.id,
+            workspace_id=workspace_id,
+            stage=stage_result.stage,
+            command=stage_result.command,
+            metadata={
+                "provider": contract.provider,
+                **dict(stage_result.metadata or {}),
+            },
+        )
+        await pipeline_repo.finish_stage_run(
+            stage_row,
+            status=stage_result.status,
+            exit_code=stage_result.exit_code,
+            stdout_preview=stage_result.stdout_preview,
+            stderr_preview=stage_result.stderr_preview,
+            log_ref=stage_result.log_ref,
+            artifact_refs=list(stage_result.artifact_refs),
+            metadata={
+                "duration_ms_observed": stage_result.duration_ms,
+                **dict(stage_result.metadata or {}),
+            },
+        )
+
+    evidence_refs = list(result.evidence_refs)
+    evidence_refs.append(f"pipeline_run:{result.status}:{run.id}")
+    if result.external_id:
+        evidence_refs.append(f"pipeline_run_external:{contract.provider}:{result.external_id}")
+    await pipeline_repo.finish_run(
+        run,
+        status=result.status,
+        reason=result.reason,
+        metadata={
+            "stage_count": len(result.stage_results),
+            "service_count": len(contract.services),
+            **dict(result.metadata or {}),
+        },
+    )
+    await _finish_pipeline_on_node(
+        session=session,
+        plan=plan,
+        node=node,
+        run_id=run.id,
+        status=result.status,
+        reason=result.reason,
+        evidence_refs=list(dict.fromkeys(evidence_refs)),
+        preview_url=result.preview_url,
+        health_url=result.health_url,
+    )
+    await SqlWorkspacePlanOutboxRepository(session).enqueue(
+        plan_id=plan_id,
+        workspace_id=workspace_id,
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": workspace_id,
+            "plan_id": plan_id,
+            "node_id": node_id,
+            "pipeline_run_id": run.id,
+            "pipeline_status": result.status,
+            "pipeline_external_id": result.external_id,
+        },
+        metadata={"source": f"workspace_plan.{contract.provider}_pipeline_run_completed"},
+    )
+
+
 async def _pipeline_root_metadata(
     *,
     session: AsyncSession,
@@ -3083,6 +3208,8 @@ def _pipeline_contract_for_workspace(
 
 
 def _needs_agent_managed_pipeline_proposal(contract: PipelineContractSpec) -> bool:
+    if contract.provider != SANDBOX_NATIVE_PROVIDER:
+        return False
     if not contract.agent_managed or not contract.auto_deploy:
         return False
     if contract.contract_source != PLANNING_CONTRACT_SOURCE:
@@ -3091,7 +3218,7 @@ def _needs_agent_managed_pipeline_proposal(contract: PipelineContractSpec) -> bo
 
 
 def _requires_preview_deployment(contract: PipelineContractSpec) -> bool:
-    return contract.auto_deploy
+    return contract.provider == SANDBOX_NATIVE_PROVIDER and contract.auto_deploy
 
 
 def _node_has_required_deployment_health(

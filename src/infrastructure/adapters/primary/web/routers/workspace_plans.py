@@ -307,6 +307,9 @@ class WorkspacePipelineStageRunResponse(BaseModel):
     stage: str
     status: str
     service_id: str | None = None
+    external_id: str | None = None
+    external_url: str | None = None
+    step_name: str | None = None
     command: str | None = None
     exit_code: int | None = None
     stdout_preview: str | None = None
@@ -323,6 +326,8 @@ class WorkspacePipelineRunResponse(BaseModel):
     provider: str
     status: str
     reason: str | None = None
+    external_id: str | None = None
+    external_url: str | None = None
     node_id: str | None = None
     attempt_id: str | None = None
     commit_ref: str | None = None
@@ -1363,11 +1368,14 @@ def _to_pipeline_run_response(
     run: WorkspacePipelineRunModel,
     stages: list[WorkspacePipelineStageRunModel],
 ) -> WorkspacePipelineRunResponse:
+    metadata = dict(run.metadata_json or {})
     return WorkspacePipelineRunResponse(
         id=run.id,
         provider=run.provider,
         status=run.status,
         reason=run.reason,
+        external_id=_metadata_string(metadata.get("external_id")),
+        external_url=_metadata_string(metadata.get("external_url")),
         node_id=run.node_id,
         attempt_id=run.attempt_id,
         commit_ref=run.commit_ref,
@@ -1388,6 +1396,9 @@ def _to_pipeline_stage_response(
         stage=stage.stage,
         status=stage.status,
         service_id=_metadata_string(metadata.get("service_id")) or None,
+        external_id=_metadata_string(metadata.get("external_id")) or None,
+        external_url=_metadata_string(metadata.get("external_url")) or None,
+        step_name=_metadata_string(metadata.get("drone_step")) or None,
         command=stage.command,
         exit_code=stage.exit_code,
         stdout_preview=stage.stdout_preview,
@@ -2180,7 +2191,9 @@ def _verification_summary(events: list[WorkspacePlanEventModel]) -> dict[str, in
 
 def _verification_feedback_counts(events: list[WorkspacePlanEventModel]) -> dict[str, int]:
     counts: Counter[str] = Counter()
-    routed_events = [event for event in events if event.event_type == "verification_feedback_routed"]
+    routed_events = [
+        event for event in events if event.event_type == "verification_feedback_routed"
+    ]
     source_events = routed_events or [
         event for event in events if event.event_type == "verification_completed"
     ]
@@ -4447,7 +4460,9 @@ async def request_workspace_plan_delivery_contract_regeneration(
         )
         workspace_model = result.scalar_one_or_none()
         if workspace_model is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("workspace_not_found"))
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_("workspace_not_found")
+            )
 
         metadata = dict(workspace_model.metadata_json or {})
         delivery = dict(metadata.get("delivery_cicd") or {})

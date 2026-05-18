@@ -553,6 +553,9 @@ export interface WorkspacePipelineStageRun {
   stage: string;
   status: string;
   service_id?: string | null | undefined;
+  external_id?: string | null | undefined;
+  external_url?: string | null | undefined;
+  step_name?: string | null | undefined;
   command?: string | null | undefined;
   exit_code?: number | null | undefined;
   stdout_preview?: string | null | undefined;
@@ -569,6 +572,8 @@ export interface WorkspacePipelineRun {
   provider: string;
   status: string;
   reason?: string | null | undefined;
+  external_id?: string | null | undefined;
+  external_url?: string | null | undefined;
   node_id?: string | null | undefined;
   attempt_id?: string | null | undefined;
   commit_ref?: string | null | undefined;

@@ -520,6 +520,17 @@ function DeliveryPanel({
             Provider {delivery.provider}
             {run ? ` · run ${shortId(run.id)} · ${run.status}` : ' · no pipeline run yet'}
           </p>
+          {run?.external_url && (
+            <a
+              href={run.external_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-flex max-w-full items-center gap-1 break-all text-xs leading-5 text-brand-primary hover:underline"
+            >
+              <span className="min-w-0 truncate">{run.external_id ?? run.external_url}</span>
+              <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden />
+            </a>
+          )}
           {delivery.code_root && (
             <p className="mt-1 break-all font-mono text-[11px] leading-5 text-text-secondary dark:text-text-muted">
               {delivery.code_root}
