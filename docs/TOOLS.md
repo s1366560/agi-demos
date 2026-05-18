@@ -46,6 +46,7 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Memory | `memory_search`, `memory_get`, `memory_create`, `memory_update`, `memory_delete` | Project memory lookup and mutation through application services. |
 | HITL | `ask_clarification`, `request_decision`, `request_env_var`, `check_env_vars`, `get_env_var` | Pause for human clarification, decision, environment variables, or secret lookup. |
 | Todo/task | `todoread`, `todowrite` | Session task list updates that emit task events. |
+| Agent definitions | `agent_definition_manage` | Create, inspect, update, and delete agent definitions, including tool/skill/MCP/workspace/session/delegation policy fields. |
 | Delegation | `delegate_to_subagent`, `parallel_delegate_subagents`, `agent_spawn`, `agent_send`, `agent_stop`, `agent_list`, `agent_history`, `agent_sessions` | Subagent and multi-agent execution support. |
 | Session communication | `sessions_list`, `sessions_history`, `sessions_send`, `sessions_*_v2`, `subagents_v2` | Conversation/session-level coordination and nested session tools. |
 | Workspace | `workspace_assign_task`, `workspace_cancel_task`, `workspace_report_progress`, `workspace_report_complete`, `workspace_report_blocked`, `workspace_chat_send`, `workspace_chat_read`, `workspace_request_clarification`, `workspace_respond_clarification`, `workspace_health_verdict` | Workspace plan/task collaboration and WTP reporting. |

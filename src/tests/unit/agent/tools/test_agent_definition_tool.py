@@ -352,6 +352,62 @@ class TestAgentDefinitionManageTool:
         created_call = orch.create_agent.call_args[0][0]
         assert created_call.agent_to_agent_allowlist == ["builtin:sisyphus", "sisyphus"]
 
+    async def test_create_with_full_capability_policy_fields(self) -> None:
+        orch = _mock_orchestrator()
+        orch.create_agent.return_value = _make_agent()
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="create",
+            name="policy-rich-agent",
+            system_prompt="You can use scoped system capabilities.",
+            allowed_tools=["web_search", "skill_loader"],
+            allowed_skills=["research"],
+            allowed_mcp_servers=["filesystem"],
+            persona_files=["SOUL.md"],
+            workspace_dir=".memstack/agents/policy-rich-agent",
+            workspace_config={
+                "base_path": ".memstack/agents/policy-rich-agent",
+                "max_size_mb": 256,
+                "shared_files": ["AGENTS.md"],
+                "sandbox_scope": "shared",
+            },
+            can_spawn=True,
+            max_spawn_depth=2,
+            max_retries=3,
+            fallback_models=["gpt-4o-mini"],
+            metadata={"owner": "qa"},
+            session_policy={"dm_scope": "per_chat", "max_messages": 20},
+            delegate_config={
+                "capability_tier": "read_write",
+                "max_delegation_depth": 2,
+                "allowed_tools": ["web_search"],
+                "budget_limit_tokens": 1000,
+            },
+        )
+
+        assert result.is_error is False
+        created_call = orch.create_agent.call_args[0][0]
+        assert created_call.allowed_tools == ["web_search", "skill_loader"]
+        assert created_call.allowed_skills == ["research"]
+        assert created_call.allowed_mcp_servers == ["filesystem"]
+        assert created_call.persona_files == ["SOUL.md"]
+        assert created_call.workspace_dir == ".memstack/agents/policy-rich-agent"
+        assert created_call.workspace_config.max_size_mb == 256
+        assert created_call.workspace_config.shared_files == ["AGENTS.md"]
+        assert created_call.workspace_config.sandbox_scope.value == "shared"
+        assert created_call.can_spawn is True
+        assert created_call.max_spawn_depth == 2
+        assert created_call.max_retries == 3
+        assert created_call.fallback_models == ["gpt-4o-mini"]
+        assert created_call.metadata["owner"] == "qa"
+        assert created_call.session_policy is not None
+        assert created_call.session_policy.dm_scope.value == "per_chat"
+        assert created_call.delegate_config is not None
+        assert created_call.delegate_config.capability_tier.value == "read_write"
+
     async def test_update_trigger_fields(self) -> None:
         orch = _mock_orchestrator()
         agent = _make_agent()
@@ -392,6 +448,53 @@ class TestAgentDefinitionManageTool:
         updated_call = orch.update_agent.call_args[0][0]
         assert updated_call.agent_to_agent_enabled is True
         assert updated_call.agent_to_agent_allowlist == ["sender-1", "sender-2"]
+
+    async def test_update_with_full_capability_policy_fields(self) -> None:
+        orch = _mock_orchestrator()
+        existing = _make_agent()
+        orch.get_agent.return_value = existing
+        orch.update_agent.return_value = existing
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="update",
+            agent_id="agent-123",
+            allowed_tools=["terminal"],
+            allowed_skills=["python-executor"],
+            allowed_mcp_servers=["github"],
+            persona_files=["USER.md"],
+            workspace_dir=".memstack/agents/updated",
+            workspace_config={"type": "isolated", "retention_days": 7},
+            max_spawn_depth=4,
+            max_retries=2,
+            fallback_models=["gpt-4o-mini"],
+            metadata={"tier": "gold"},
+            session_policy={"dm_scope": "global", "session_ttl_hours": 12},
+            delegate_config={
+                "capability_tier": "read_only",
+                "max_delegation_depth": 0,
+            },
+        )
+
+        assert result.is_error is False
+        updated_call = orch.update_agent.call_args[0][0]
+        assert updated_call.allowed_tools == ["terminal"]
+        assert updated_call.allowed_skills == ["python-executor"]
+        assert updated_call.allowed_mcp_servers == ["github"]
+        assert updated_call.persona_files == ["USER.md"]
+        assert updated_call.workspace_dir == ".memstack/agents/updated"
+        assert updated_call.workspace_config.retention_days == 7
+        assert updated_call.workspace_config.sandbox_scope.value == "agent"
+        assert updated_call.max_spawn_depth == 4
+        assert updated_call.max_retries == 2
+        assert updated_call.fallback_models == ["gpt-4o-mini"]
+        assert updated_call.metadata == {"tier": "gold"}
+        assert updated_call.session_policy is not None
+        assert updated_call.session_policy.dm_scope.value == "global"
+        assert updated_call.delegate_config is not None
+        assert updated_call.delegate_config.max_delegation_depth == 0
 
     # ------------------------------------------------------------------
     # Partial-update semantics — PR1 acceptance criteria
