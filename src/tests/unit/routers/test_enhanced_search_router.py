@@ -21,6 +21,11 @@ def _neo4j_result(records: list[dict]) -> Mock:
     return Mock(records=records)
 
 
+class FakeNeo4jDateTime:
+    def isoformat(self) -> str:
+        return "2026-05-17T12:34:56+00:00"
+
+
 @pytest.mark.unit
 class TestEnhancedSearchRouter:
     @pytest.mark.asyncio
@@ -59,6 +64,50 @@ class TestEnhancedSearchRouter:
             'RELATES_TO") MATCH (n) DETACH DELETE n //'
         ]
         assert traversal_kwargs["project_id"] == test_project_db.id
+
+    @pytest.mark.asyncio
+    async def test_graph_traversal_serializes_neo4j_datetime_values(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(
+            side_effect=[
+                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
+                _neo4j_result(
+                    [
+                        {
+                            "props": {
+                                "uuid": "entity-2",
+                                "name": "Related Entity",
+                                "summary": "A related node",
+                                "created_at": FakeNeo4jDateTime(),
+                            },
+                            "labels": ["Entity", "Organization"],
+                        }
+                    ]
+                ),
+            ]
+        )
+
+        response = await search_by_graph_traversal(
+            start_entity_uuid="entity-1",
+            max_depth=2,
+            relationship_types=None,
+            limit=50,
+            tenant_id=None,
+            project_id=None,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response["total"] == 1
+        result = response["results"][0]
+        assert result["created_at"] == "2026-05-17T12:34:56+00:00"
+        assert result["metadata"]["created_at"] == "2026-05-17T12:34:56+00:00"
 
     @pytest.mark.asyncio
     async def test_graph_traversal_rejects_unjoined_start_project(

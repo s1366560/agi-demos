@@ -18,6 +18,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.primary.web.routers.graph import (
     _ensure_graph_project_access,
     _graph_project_scope,
+    _sanitize_graph_value,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -82,7 +83,9 @@ def _parse_optional_datetime(value: str | None, field: str) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         if field == "since":
-            raise HTTPException(status_code=400, detail=_("Invalid 'since' datetime format")) from None
+            raise HTTPException(
+                status_code=400, detail=_("Invalid 'since' datetime format")
+            ) from None
         raise HTTPException(status_code=400, detail=_("Invalid 'until' datetime format")) from None
 
 
@@ -283,7 +286,7 @@ async def search_by_graph_traversal(
 
         items = []
         for r in result.records:
-            props = r["props"]
+            props = {key: _sanitize_graph_value(value) for key, value in r["props"].items()}
             labels = r["labels"]
 
             # Extract specific entity type from labels (exclude base labels)
