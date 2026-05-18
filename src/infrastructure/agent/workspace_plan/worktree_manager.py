@@ -365,7 +365,17 @@ def worktree_setup_command(
     return "\n".join(
         [
             "set -e",
+            f"mkdir -p {code_root}",
             f"cd {code_root}",
+            "if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then",
+            "  git init >/dev/null",
+            "fi",
+            'git config user.email >/dev/null 2>&1 || git config user.email "workspace-agent@memstack.local"',
+            'git config user.name >/dev/null 2>&1 || git config user.name "Workspace Agent"',
+            "if ! git rev-parse --verify HEAD >/dev/null 2>&1; then",
+            "  git add -A",
+            '  git commit --allow-empty -m "chore: initialize workspace code root" >/dev/null',
+            "fi",
             'repo_name="$(basename "$(pwd)")"',
             'fallback_remote="$(dirname "$(pwd)")/.memstack/git-remotes/${repo_name}.git"',
             "if ! git remote get-url origin >/dev/null 2>&1; then",

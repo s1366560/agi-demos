@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -811,6 +813,31 @@ def test_worktree_setup_command_installs_local_push_remote_when_missing() -> Non
     assert 'git init --bare "$fallback_remote"' in command
     assert 'git remote add origin "$fallback_remote"' in command
     assert "git config push.default current" in command
+
+
+def test_worktree_setup_command_initializes_greenfield_code_root(tmp_path: Path) -> None:
+    sandbox_code_root = tmp_path / "greenfield"
+    worktree_path = tmp_path / ".memstack" / "worktrees" / "attempt-1"
+
+    command = _worktree_setup_command(
+        sandbox_code_root=str(sandbox_code_root),
+        worktree_path=str(worktree_path),
+        branch_name="workspace/node-1-attempt-1",
+        base_ref="HEAD",
+    )
+
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (sandbox_code_root / ".git").is_dir()
+    assert (worktree_path / ".git").exists()
+    assert "git_head=" in result.stdout
 
 
 def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
