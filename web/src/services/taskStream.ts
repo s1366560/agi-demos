@@ -40,6 +40,22 @@ export function parseTaskSseEvent(rawEvent: string): TaskSseEvent | null {
   };
 }
 
+function findEventSeparator(buffer: string): { index: number; length: number } | null {
+  const lfIndex = buffer.indexOf('\n\n');
+  const crlfIndex = buffer.indexOf('\r\n\r\n');
+
+  if (lfIndex === -1 && crlfIndex === -1) {
+    return null;
+  }
+  if (lfIndex === -1) {
+    return { index: crlfIndex, length: 4 };
+  }
+  if (crlfIndex === -1) {
+    return { index: lfIndex, length: 2 };
+  }
+  return crlfIndex < lfIndex ? { index: crlfIndex, length: 4 } : { index: lfIndex, length: 2 };
+}
+
 export async function streamTaskEvents(
   taskId: string,
   signal: AbortSignal,
@@ -98,14 +114,14 @@ export async function streamTaskEvents(
     }
 
     buffer += decoder.decode(value, { stream: true });
-    let separatorIndex = buffer.indexOf('\n\n');
-    while (separatorIndex !== -1) {
-      const rawEvent = buffer.slice(0, separatorIndex);
-      buffer = buffer.slice(separatorIndex + 2);
+    let separator = findEventSeparator(buffer);
+    while (separator) {
+      const rawEvent = buffer.slice(0, separator.index);
+      buffer = buffer.slice(separator.index + separator.length);
       if (await consumeEvent(rawEvent)) {
         return;
       }
-      separatorIndex = buffer.indexOf('\n\n');
+      separator = findEventSeparator(buffer);
     }
   }
 
