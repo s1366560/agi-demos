@@ -237,21 +237,27 @@ async def _has_project_admin_access(
     return tenant_role_result.scalar_one_or_none() is not None
 
 
-async def _resolve_extraction_content(
+async def _resolve_extraction_input(
     payload: dict[str, Any],
     current_user: User,
     db: AsyncSession,
-) -> str:
-    """Resolve extraction text from direct content/text or an accessible memory."""
+) -> tuple[str, str | None, str | None]:
+    """Resolve extraction text and scope from direct content/text or an accessible memory."""
     content = payload.get("content")
     if content is None:
         content = payload.get("text")
     if isinstance(content, str) and content:
-        return content
+        project_id = payload.get("project_id")
+        tenant_id = payload.get("tenant_id")
+        return (
+            content,
+            project_id if isinstance(project_id, str) else None,
+            tenant_id if isinstance(tenant_id, str) else None,
+        )
 
     memory_id = payload.get("memory_id")
     if not isinstance(memory_id, str) or not memory_id:
-        return ""
+        return "", None, None
 
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))
@@ -261,7 +267,12 @@ async def _resolve_extraction_content(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Memory not found"))
 
     await _verify_memory_read_access(cast(Memory, mem), current_user, db)
-    return cast(Memory, mem).content or ""
+    memory = cast(Memory, mem)
+    project_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == memory.project_id))
+    )
+    project = project_result.scalar_one_or_none()
+    return memory.content or "", memory.project_id, getattr(project, "tenant_id", None)
 
 
 router = APIRouter(prefix="/api/v1", tags=["memories"])
@@ -344,11 +355,25 @@ async def extract_entities(
     payload: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> dict[str, Any]:
-    content = await _resolve_extraction_content(payload, current_user, db)
-    tokens = [t for t in content.split() if t[:1].isupper()]
-    entities = [{"name": t.strip(",.()"), "type": "Entity", "confidence": 0.5} for t in tokens[:10]]
-    return {"entities": entities, "source": "rule_based"}
+    content, project_id, tenant_id = await _resolve_extraction_input(payload, current_user, db)
+    extractor = getattr(graph_service, "extract_entities", None)
+    if graph_service is None or not callable(extractor):
+        raise HTTPException(status_code=503, detail=_("Graph extraction service not available"))
+
+    try:
+        entities = await cast(Any, extractor)(
+            content=content,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=str(current_user.id),
+        )
+    except Exception as e:
+        logger.error("Entity extraction failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_("Failed to extract entities")) from e
+
+    return {"entities": entities, "source": "knowledge_graph"}
 
 
 @router.post("/memories/extract-relationships")
@@ -356,21 +381,27 @@ async def extract_relationships(
     payload: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> dict[str, Any]:
-    content = await _resolve_extraction_content(payload, current_user, db)
-    words = [w.strip(",.()") for w in content.split() if w]
-    relationships = []
-    for i in range(0, min(len(words), 6), 3):
-        if i + 2 < len(words):
-            relationships.append(
-                {
-                    "source": words[i],
-                    "target": words[i + 1],
-                    "type": "related_to",
-                    "confidence": 0.4,
-                }
-            )
-    return {"relationships": relationships, "source": "rule_based"}
+    content, project_id, tenant_id = await _resolve_extraction_input(payload, current_user, db)
+    extractor = getattr(graph_service, "extract_relationships", None)
+    if graph_service is None or not callable(extractor):
+        raise HTTPException(status_code=503, detail=_("Graph extraction service not available"))
+
+    entities = payload.get("entities")
+    try:
+        relationships = await cast(Any, extractor)(
+            content=content,
+            entities=entities if isinstance(entities, list) else None,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=str(current_user.id),
+        )
+    except Exception as e:
+        logger.error("Relationship extraction failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=_("Failed to extract relationships")) from e
+
+    return {"relationships": relationships, "source": "knowledge_graph"}
 
 
 @router.post("/memories/", response_model=MemoryResponse, status_code=status.HTTP_201_CREATED)
@@ -874,9 +905,21 @@ async def _submit_reprocessing_workflow(
     current_user: User,
     db: AsyncSession,
     workflow_engine: WorkflowEnginePort,
+    graph_service: GraphServicePort | None = None,
 ) -> None:
     """Submit memory for reprocessing via Temporal workflow."""
     try:
+        if graph_service is not None:
+            try:
+                await graph_service.delete_episode_by_memory_id(memory.id)
+                logger.info("Cleaned old graph state before updating memory %s", memory.id)
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to clean old graph state before updating memory %s: %s",
+                    memory.id,
+                    cleanup_error,
+                )
+
         # Get project for tenant_id
         project_result = await db.execute(
             refresh_select_statement(select(Project).where(Project.id == memory.project_id))
@@ -1003,7 +1046,13 @@ async def update_memory(
 
     # 6. Reprocess if needed
     if should_reprocess:
-        await _submit_reprocessing_workflow(memory, current_user, db, workflow_engine)
+        await _submit_reprocessing_workflow(
+            memory,
+            current_user,
+            db,
+            workflow_engine,
+            graph_service,
+        )
 
     # 7. Save to database
     await db.commit()

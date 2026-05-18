@@ -20,35 +20,43 @@ class TestMemoryExtractionRouter:
         self,
         test_db: AsyncSession,
         test_user: User,
+        mock_graph_service,
     ) -> None:
         response = await extract_entities(
             {"text": "Alice met Bob in Paris"},
             current_user=test_user,
             db=test_db,
+            graph_service=mock_graph_service,
         )
 
         assert [entity["name"] for entity in response["entities"]] == ["Alice", "Bob", "Paris"]
+        assert response["source"] == "knowledge_graph"
+        mock_graph_service.extract_entities.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_extract_relationships_accepts_frontend_text_payload(
         self,
         test_db: AsyncSession,
         test_user: User,
+        mock_graph_service,
     ) -> None:
         response = await extract_relationships(
             {"text": "Alice met Bob in Paris"},
             current_user=test_user,
             db=test_db,
+            graph_service=mock_graph_service,
         )
 
         assert response["relationships"] == [
             {
                 "source": "Alice",
-                "target": "met",
-                "type": "related_to",
-                "confidence": 0.4,
+                "target": "Bob",
+                "type": "MET",
+                "relationship_type": "MET",
             }
         ]
+        assert response["source"] == "knowledge_graph"
+        mock_graph_service.extract_relationships.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_extract_entities_rejects_inaccessible_memory_id(
@@ -56,6 +64,7 @@ class TestMemoryExtractionRouter:
         test_db: AsyncSession,
         test_project_db: Project,
         another_user: User,
+        mock_graph_service,
     ) -> None:
         memory = Memory(
             id="memory-extract-private",
@@ -84,6 +93,7 @@ class TestMemoryExtractionRouter:
                 {"memory_id": memory.id},
                 current_user=another_user,
                 db=test_db,
+                graph_service=mock_graph_service,
             )
 
         assert exc_info.value.status_code == 403

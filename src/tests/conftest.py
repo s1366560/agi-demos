@@ -440,6 +440,23 @@ def mock_graph_service(mock_neo4j_client):
     service.delete_episode_by_memory_id = AsyncMock(return_value=True)
     service.remove_episode = AsyncMock(return_value=True)
     service.remove_episode_by_memory_id = AsyncMock(return_value=True)
+    service.extract_entities = AsyncMock(
+        return_value=[
+            {"name": "Alice", "type": "Person", "entity_type": "Person"},
+            {"name": "Bob", "type": "Person", "entity_type": "Person"},
+            {"name": "Paris", "type": "Location", "entity_type": "Location"},
+        ]
+    )
+    service.extract_relationships = AsyncMock(
+        return_value=[
+            {
+                "source": "Alice",
+                "target": "Bob",
+                "type": "MET",
+                "relationship_type": "MET",
+            }
+        ]
+    )
 
     return service
 

@@ -94,6 +94,7 @@ class TestMemoryService:
         assert result.processing_status == ProcessingStatus.PENDING.value
         mock_memory_repo.save.assert_awaited_once_with(existing_memory)
 
+        mock_graphiti_client.delete_episode_by_memory_id.assert_awaited_once_with(memory_id)
         mock_graphiti_client.add_episode.assert_awaited_once()
         episode = mock_graphiti_client.add_episode.call_args.args[0]
         assert episode.content == "New Content"
@@ -128,6 +129,7 @@ class TestMemoryService:
         assert result.processing_status == ProcessingStatus.COMPLETED.value
         mock_memory_repo.save.assert_awaited_once_with(existing_memory)
         mock_graphiti_client.add_episode.assert_not_awaited()
+        mock_graphiti_client.delete_episode_by_memory_id.assert_not_awaited()
 
     async def test_delete_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory deletion with proper graph cleanup."""

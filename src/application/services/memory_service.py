@@ -271,9 +271,19 @@ class MemoryService:
         await self._memory_repo.save(memory)
         logger.info(f"Updated memory {memory_id}")
 
-        # If content changed, create new episode for reprocessing
+        # If content changed, forget the stale graph state and create a new episode.
         if content_changed:
             try:
+                try:
+                    await self._graph_service.delete_episode_by_memory_id(memory_id)
+                    logger.info(f"Cleaned old graph state before reprocessing memory {memory_id}")
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to clean old graph state before reprocessing memory %s: %s",
+                        memory_id,
+                        cleanup_error,
+                    )
+
                 episode = Episode(
                     id=Episode.generate_id(),
                     name=memory.title,

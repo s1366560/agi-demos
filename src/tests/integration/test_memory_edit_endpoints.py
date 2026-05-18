@@ -22,7 +22,12 @@ class TestMemoryUpdateEndpoint:
     """Test PATCH /memories/{memory_id} endpoint."""
 
     async def test_update_memory_success(
-        self, async_client: AsyncClient, db: AsyncSession, test_user: User, test_memory_db: "Memory"
+        self,
+        async_client: AsyncClient,
+        db: AsyncSession,
+        test_user: User,
+        test_memory_db: "Memory",
+        mock_graph_service,
     ):
         """Test successful memory update with version increment."""
         # Arrange
@@ -44,6 +49,7 @@ class TestMemoryUpdateEndpoint:
         assert data["title"] == "Updated Title"
         assert data["content"] == "Updated content"
         assert data["version"] == original_version + 1
+        mock_graph_service.delete_episode_by_memory_id.assert_awaited_with(test_memory_db.id)
 
     async def test_update_memory_version_conflict(
         self, async_client: AsyncClient, test_memory_db: "Memory"
