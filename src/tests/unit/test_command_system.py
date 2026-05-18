@@ -976,14 +976,14 @@ class TestBuiltinCommands:
         assert result.args["subagent_name"] == "coder"
         assert result.args["task"] == "write tests"
 
-    async def test_kill_delegates_to_subagents_v2(
+    async def test_kill_delegates_to_subagents(
         self, registry_with_builtins: CommandRegistry
     ) -> None:
         invocation = registry_with_builtins.parse_and_resolve("/kill run-abc123")
         assert invocation is not None
         result = await invocation.definition.handler(invocation, {})
         assert isinstance(result, ToolCallResult)
-        assert result.tool_name == "subagents_v2"
+        assert result.tool_name == "subagents"
         assert result.args["action"] == "kill"
         assert result.args["target"] == "run-abc123"
 
@@ -997,14 +997,14 @@ class TestBuiltinCommands:
         assert result.level == "warning"
         assert "Usage" in result.text
 
-    async def test_steer_delegates_to_subagents_v2(
+    async def test_steer_delegates_to_subagents(
         self, registry_with_builtins: CommandRegistry
     ) -> None:
         invocation = registry_with_builtins.parse_and_resolve("/steer #1 focus on security")
         assert invocation is not None
         result = await invocation.definition.handler(invocation, {})
         assert isinstance(result, ToolCallResult)
-        assert result.tool_name == "subagents_v2"
+        assert result.tool_name == "subagents"
         assert result.args["action"] == "steer"
         assert result.args["target"] == "#1"
         assert result.args["instruction"] == "focus on security"

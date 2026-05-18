@@ -54,14 +54,14 @@ def _json(data: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# sessions_list
+# peer_sessions_list
 # ---------------------------------------------------------------------------
 
 
 @tool_define(
-    name="sessions_list",
+    name="peer_sessions_list",
     description=(
-        "List other active agent sessions (conversations) in the "
+        "List other active peer agent sessions (conversations) in the "
         "current project. Use this to discover peer agents you can "
         "collaborate with. Returns session IDs, titles, message "
         "counts, and timestamps."
@@ -111,7 +111,7 @@ async def sessions_list_tool(
             output=_json({"sessions": sessions, "count": len(sessions)}),
         )
     except Exception as exc:
-        logger.warning("sessions_list failed: %s", exc)
+        logger.warning("peer_sessions_list failed: %s", exc)
         return ToolResult(
             output=_json({"error": f"Failed to list sessions: {exc}"}),
             is_error=True,
@@ -119,15 +119,15 @@ async def sessions_list_tool(
 
 
 # ---------------------------------------------------------------------------
-# sessions_history
+# peer_sessions_history
 # ---------------------------------------------------------------------------
 
 
 @tool_define(
-    name="sessions_history",
+    name="peer_sessions_history",
     description=(
-        "Read the message history of another session (conversation) "
-        "in the same project. Use after sessions_list to inspect "
+        "Read the message history of another peer session (conversation) "
+        "in the same project. Use after peer_sessions_list to inspect "
         "what a peer agent has been doing."
     ),
     parameters={
@@ -187,7 +187,7 @@ async def sessions_history_tool(
             is_error=True,
         )
     except Exception as exc:
-        logger.warning("sessions_history failed: %s", exc)
+        logger.warning("peer_sessions_history failed: %s", exc)
         return ToolResult(
             output=_json({"error": f"Failed to get history: {exc}"}),
             is_error=True,
@@ -195,14 +195,14 @@ async def sessions_history_tool(
 
 
 # ---------------------------------------------------------------------------
-# sessions_send
+# peer_sessions_send
 # ---------------------------------------------------------------------------
 
 
 @tool_define(
-    name="sessions_send",
+    name="peer_sessions_send",
     description=(
-        "Send a message to another agent session (conversation) in "
+        "Send a message to another peer agent session (conversation) in "
         "the same project. The message appears as a system message "
         "in the target session. Use this for inter-agent "
         "communication and coordination."
@@ -264,7 +264,7 @@ async def sessions_send_tool(
             is_error=True,
         )
     except Exception as exc:
-        logger.warning("sessions_send failed: %s", exc)
+        logger.warning("peer_sessions_send failed: %s", exc)
         return ToolResult(
             output=_json({"error": f"Failed to send message: {exc}"}),
             is_error=True,

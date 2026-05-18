@@ -453,13 +453,16 @@ class TestSessionsHistoryMetadataConsistency:
 
 
 # ---------------------------------------------------------------------------
-# Tool-level tests (sessions_list_tool, etc.)
+# Tool-level tests (peer_sessions_list_tool, etc.)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestSessionsListTool:
-    """Tests for the sessions_list @tool_define tool."""
+    """Tests for the peer_sessions_list @tool_define tool."""
+
+    def test_tool_name(self) -> None:
+        assert sessions_list_tool.name == "peer_sessions_list"
 
     async def test_returns_sessions(self) -> None:
         conv_repo = AsyncMock()
@@ -491,7 +494,10 @@ class TestSessionsListTool:
 
 @pytest.mark.unit
 class TestSessionsHistoryTool:
-    """Tests for the sessions_history @tool_define tool."""
+    """Tests for the peer_sessions_history @tool_define tool."""
+
+    def test_tool_name(self) -> None:
+        assert sessions_history_tool.name == "peer_sessions_history"
 
     async def test_returns_history(self) -> None:
         conv = _make_conversation()
@@ -558,7 +564,10 @@ class TestSessionsHistoryTool:
 
 @pytest.mark.unit
 class TestSessionsSendTool:
-    """Tests for the sessions_send @tool_define tool."""
+    """Tests for the peer_sessions_send @tool_define tool."""
+
+    def test_tool_name(self) -> None:
+        assert sessions_send_tool.name == "peer_sessions_send"
 
     async def test_sends_message(self) -> None:
         conv = _make_conversation()

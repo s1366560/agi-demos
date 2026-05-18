@@ -95,6 +95,9 @@ TOOL_SUMMARIES: dict[str, str] = {
     "sessions_ack": ("Acknowledge and resolve a human-in-the-loop request from a sub-agent."),
     "sessions_timeline": ("View the event timeline of a sub-agent session for debugging."),
     "sessions_overview": ("Get an overview of all active sessions with resource utilization."),
+    "peer_sessions_list": ("List peer agent conversations in the current project."),
+    "peer_sessions_history": ("Read message history from a peer agent conversation."),
+    "peer_sessions_send": ("Send a message to a peer agent conversation."),
     # --- Environment ---
     "get_env_var": ("Read an environment variable value from the sandbox runtime."),
     "request_env_var": ("Ask the user to provide a required environment variable (e.g. API key)."),
@@ -159,6 +162,9 @@ TOOL_ORDER: list[str] = [
     "sessions_ack",
     "sessions_timeline",
     "sessions_overview",
+    "peer_sessions_list",
+    "peer_sessions_history",
+    "peer_sessions_send",
     # Skills & plugins
     "skill",
     "skill_loader",

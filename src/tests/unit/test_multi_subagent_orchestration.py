@@ -111,7 +111,6 @@ class TestTopologicalSort:
         assert ids.index("t3") < ids.index("t4")
 
 
-
 # === Sessionized Runtime Tests ===
 
 
@@ -191,7 +190,6 @@ class TestSessionizedRuntime:
         announce_types = [event.get("type") for event in announce_events]
         assert "completion_retry" in announce_types
         assert "completion_delivered" in announce_types
-
 
     async def test_launch_session_emits_lifecycle_hooks(self):
         sa = _make_subagent("researcher")
@@ -344,12 +342,13 @@ class TestNestedSessionToolInjection:
                 events.append(event)
 
         assert "delegate_to_subagent" in captured_tool_names
-        assert "subagents_v2" in captured_tool_names
-        assert "sessions_list_v2" in captured_tool_names
-        assert "sessions_history_v2" in captured_tool_names
+        assert "subagents" in captured_tool_names
+        assert "sessions_list" in captured_tool_names
+        assert "sessions_history" in captured_tool_names
         assert "sessions_wait" in captured_tool_names
-        assert "sessions_timeline_v2" in captured_tool_names
+        assert "sessions_timeline" in captured_tool_names
         assert "sessions_overview" in captured_tool_names
+        assert not any(name.endswith("_v2") for name in captured_tool_names)
         assert events[-1]["type"] == "complete"
 
     async def test_execute_subagent_skips_nested_tools_at_depth_limit(self):
@@ -392,8 +391,8 @@ class TestNestedSessionToolInjection:
                 events.append(event)
 
         assert "delegate_to_subagent" not in captured_tool_names
-        assert "subagents_v2" not in captured_tool_names
-        assert "sessions_list_v2" not in captured_tool_names
+        assert "subagents" not in captured_tool_names
+        assert "sessions_list" not in captured_tool_names
         assert events[-1]["type"] == "complete"
 
 

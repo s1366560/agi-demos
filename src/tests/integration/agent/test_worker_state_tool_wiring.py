@@ -156,11 +156,11 @@ class TestSessionCommToolsWiring:
         mock_session_factory = MagicMock(return_value=mock_session)
 
         mock_list_tool = MagicMock()
-        mock_list_tool.name = "sessions_list"
+        mock_list_tool.name = "peer_sessions_list"
         mock_history_tool = MagicMock()
-        mock_history_tool.name = "sessions_history"
+        mock_history_tool.name = "peer_sessions_history"
         mock_send_tool = MagicMock()
-        mock_send_tool.name = "sessions_send"
+        mock_send_tool.name = "peer_sessions_send"
         mock_configure = MagicMock()
         mock_service_cls = MagicMock()
 
@@ -213,9 +213,9 @@ class TestSessionCommToolsWiring:
             _add_session_comm_tools(tools, project_id="proj-001", redis_client=MagicMock())
 
         # Assert
-        assert "sessions_list" in tools
-        assert "sessions_history" in tools
-        assert "sessions_send" in tools
+        assert "peer_sessions_list" in tools
+        assert "peer_sessions_history" in tools
+        assert "peer_sessions_send" in tools
         assert len(tools) == 3
         assert mock_service_cls.call_args is not None
         assert "agent_execution_event_repo" in mock_service_cls.call_args.kwargs

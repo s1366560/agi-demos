@@ -361,7 +361,7 @@ async def _handle_kill(
         )
 
     return ToolCallResult(
-        tool_name="subagents_v2",
+        tool_name="subagents",
         args={"action": "kill", "target": target},
     )
 
@@ -387,7 +387,7 @@ async def _handle_steer(
 
     target, instruction = parts
     return ToolCallResult(
-        tool_name="subagents_v2",
+        tool_name="subagents",
         args={"action": "steer", "target": target, "instruction": instruction},
     )
 

@@ -1526,11 +1526,11 @@ def _add_session_comm_tools(
     project_id: str,
     redis_client: Any,
 ) -> None:
-    """Configure and register agent-to-agent session communication tools.
+    """Configure and register peer agent session communication tools.
 
     Uses the module-level DI pattern (``configure_session_comm``) to inject
     a ``SessionCommService`` backed by per-request DB repositories, then
-    adds the three session comm tool functions to the tool dictionary.
+    adds the three peer session comm tool functions to the tool dictionary.
     """
     try:
         from src.application.services.session_comm_service import SessionCommService
@@ -1568,7 +1568,7 @@ def _add_session_comm_tools(
         tools[sessions_history_tool.name] = sessions_history_tool
         tools[sessions_send_tool.name] = sessions_send_tool
         logger.info(
-            "Agent Worker: Session comm tools added for project %s",
+            "Agent Worker: Peer session comm tools added for project %s",
             project_id,
         )
     except Exception as e:

@@ -49,7 +49,8 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Todo/task | `todoread`, `todowrite` | Session task list updates that emit task events. |
 | Agent definitions | `agent_definition_manage` | Create, inspect, update, and delete agent definitions, including tool/skill/MCP/workspace/session/delegation policy fields. |
 | Delegation | `delegate_to_subagent`, `parallel_delegate_subagents`, `agent_spawn`, `agent_send`, `agent_stop`, `agent_list`, `agent_history`, `agent_sessions` | Subagent and multi-agent execution support. |
-| Session communication | `sessions_list`, `sessions_history`, `sessions_send`, `sessions_*_v2`, `subagents_v2` | Conversation/session-level coordination and nested session tools. |
+| SubAgent sessions | `sessions_spawn`, `sessions_list`, `sessions_history`, `sessions_timeline`, `sessions_send`, `sessions_wait`, `sessions_ack`, `sessions_overview`, `subagents` | SubAgent session lifecycle, follow-up, waiting, acknowledgement, and control. |
+| Peer session communication | `peer_sessions_list`, `peer_sessions_history`, `peer_sessions_send` | Conversation-level coordination with other peer agent sessions in the same project. |
 | Workspace | `workspace_assign_task`, `workspace_cancel_task`, `workspace_report_progress`, `workspace_report_complete`, `workspace_report_blocked`, `workspace_chat_send`, `workspace_chat_read`, `workspace_request_clarification`, `workspace_respond_clarification`, `workspace_health_verdict` | Workspace plan/task collaboration and WTP reporting. |
 | Multi-agent action | `assign_task`, `refuse_task`, `request_human_input`, `escalate`, `mark_conflict`, `declare_progress`, `signal_goal_complete` | Structured inter-agent action events. |
 | Skills | `skill`, `skill_loader`, `skill_installer`, `skill_sync` | Load, install, sync, or invoke skills. |

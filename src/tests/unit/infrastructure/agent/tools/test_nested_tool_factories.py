@@ -65,6 +65,38 @@ class TestNestedDelegateToolDefinitions:
 
 @pytest.mark.unit
 class TestNestedSessionToolDefinitions:
+    def test_nested_session_tool_names_do_not_use_v2_suffixes(self) -> None:
+        async def cancel_callback(_run_id: str) -> bool:
+            return True
+
+        tools = make_nested_session_tool_defs(
+            run_registry=SubAgentRunRegistry(),
+            conversation_id="conv-1",
+            requester_session_key="parent-1",
+            visibility_default="tree",
+            observability_stats_provider=None,
+            subagent_names=["worker"],
+            subagent_descriptions={"worker": "Does bounded work"},
+            cancel_callback=cancel_callback,
+            restart_callback=None,
+            max_active_runs=4,
+            max_active_runs_per_lineage=4,
+            max_children_per_requester=4,
+            delegation_depth=0,
+            max_delegation_depth=2,
+        )
+
+        names = [tool.name for tool in tools]
+        assert names == [
+            "sessions_list",
+            "sessions_history",
+            "sessions_timeline",
+            "sessions_overview",
+            "sessions_wait",
+            "subagents",
+        ]
+        assert not any(name.endswith("_v2") for name in names)
+
     @pytest.mark.asyncio
     async def test_sessions_list_execute_without_ctx_uses_stub_context(self) -> None:
         async def cancel_callback(_run_id: str) -> bool:

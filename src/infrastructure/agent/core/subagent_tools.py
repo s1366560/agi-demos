@@ -488,15 +488,15 @@ class SubAgentToolBuilder:
         # Look up all @tool_define tools (delegate + session) from the registry
         _all_tool_names = [
             "delegate_to_subagent",
-            "sessions_spawn_v2",
-            "sessions_list_v2",
-            "sessions_history_v2",
-            "sessions_timeline_v2",
+            "sessions_spawn",
+            "sessions_list",
+            "sessions_history",
+            "sessions_timeline",
             "sessions_overview",
             "sessions_wait",
             "sessions_ack",
-            "sessions_send_v2",
-            "subagents_v2",
+            "sessions_send",
+            "subagents",
         ]
         registry = get_registered_tools()
         tools_dict: dict[str, Any] = {}

@@ -450,7 +450,7 @@ def _spawn_success_result(
 
 
 @tool_define(
-    name="sessions_spawn_v2",
+    name="sessions_spawn",
     description=(
         "Spawn a detached SubAgent session for long-running work. "
         "Use sessions_list or sessions_history to inspect progress."
@@ -594,7 +594,7 @@ def _spawn_resolve_agent_id(
 
 
 @tool_define(
-    name="sessions_list_v2",
+    name="sessions_list",
     description=(
         "List active SubAgent sessions for this conversation. "
         "Use status='active' for pending/running runs."
@@ -690,7 +690,7 @@ async def sessions_list_tool(
 
 
 @tool_define(
-    name="sessions_history_v2",
+    name="sessions_history",
     description="List historical SubAgent sessions (including terminal runs).",
     parameters={
         "type": "object",
@@ -854,7 +854,7 @@ def _timeline_append_ack_events(
 
 
 @tool_define(
-    name="sessions_timeline_v2",
+    name="sessions_timeline",
     description="Replay run lifecycle timeline and announce history by run_id.",
     parameters={
         "type": "object",
@@ -1712,7 +1712,7 @@ async def _send_spawn_with_retry(
 
 
 @tool_define(
-    name="sessions_send_v2",
+    name="sessions_send",
     description=(
         "Send a follow-up task to an existing SubAgent session lineage "
         "by run_id. Creates a new child run with parent_run_id metadata."
@@ -2621,7 +2621,7 @@ async def _ctrl_handle_steer(
 
 
 @tool_define(
-    name="subagents_v2",
+    name="subagents",
     description=(
         "SubAgent control plane. Actions: "
         "list (available agents + active counts), "
