@@ -124,6 +124,9 @@ const SubAgentList = lazy(() =>
 const SkillList = lazy(() =>
   import('./pages/tenant/SkillList').then((m) => ({ default: m.SkillList }))
 );
+const SkillDetail = lazy(() =>
+  import('./pages/tenant/SkillDetail').then((m) => ({ default: m.SkillDetail }))
+);
 const CuratedSkills = lazy(() => import('./pages/tenant/CuratedSkills'));
 const AdminSkillReview = lazy(() => import('./pages/admin/AdminSkillReview'));
 const TemplateMarketplace = lazy(() =>
@@ -790,6 +793,14 @@ function App() {
                 }
               />
               <Route
+                path="skills/:skillId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <SkillDetail />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="curated-skills"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1340,6 +1351,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <SkillList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/skills/:skillId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <SkillDetail />
                   </Suspense>
                 }
               />

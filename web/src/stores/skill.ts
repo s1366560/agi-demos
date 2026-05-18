@@ -67,9 +67,11 @@ interface SkillState {
 
   // Actions - Skill CRUD
   listSkills: (params?: {
+    search?: string | undefined;
     status?: string | undefined;
     scope?: string | undefined;
     skip?: number | undefined;
+    offset?: number | undefined;
     limit?: number | undefined;
   }) => Promise<void>;
   listSystemSkills: () => Promise<void>;

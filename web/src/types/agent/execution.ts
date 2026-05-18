@@ -206,11 +206,21 @@ export interface SkillResponse {
   status: 'active' | 'disabled' | 'deprecated';
   scope: 'system' | 'tenant' | 'project';
   is_system_skill: boolean;
+  source?: 'filesystem' | 'database' | 'hybrid' | 'plugin' | undefined;
+  file_path?: string | null | undefined;
   created_at: string;
   updated_at: string;
   metadata?: Record<string, unknown> | undefined;
+  agent_modes: string[];
+  license?: string | null;
+  compatibility?: string | null;
+  allowed_tools_raw?: string | null;
+  spec_version: string;
   current_version: number;
   version_label: string | null;
+  parent_curated_id?: string | null;
+  semver?: string | null;
+  revision_hash?: string | null;
 }
 
 /**
@@ -221,9 +231,13 @@ export interface SkillCreate {
   description: string;
   tools: string[];
   full_content?: string | undefined;
-  project_id?: string | undefined;
+  project_id?: string | null | undefined;
   scope?: 'tenant' | 'project' | undefined;
   metadata?: Record<string, unknown> | undefined;
+  license?: string | null | undefined;
+  compatibility?: string | null | undefined;
+  allowed_tools_raw?: string | null | undefined;
+  spec_version?: string | null | undefined;
 }
 
 /**
@@ -236,6 +250,10 @@ export interface SkillUpdate {
   full_content?: string | undefined;
   status?: 'active' | 'disabled' | 'deprecated' | undefined;
   metadata?: Record<string, unknown> | undefined;
+  license?: string | null | undefined;
+  compatibility?: string | null | undefined;
+  allowed_tools_raw?: string | null | undefined;
+  spec_version?: string | null | undefined;
 }
 
 /**
@@ -255,6 +273,70 @@ export interface SkillContentResponse {
   full_content: string | null;
   scope: 'system' | 'tenant' | 'project';
   is_system_skill: boolean;
+}
+
+export interface SkillVersionResponse {
+  id: string;
+  skill_id: string;
+  version_number: number;
+  version_label: string | null;
+  change_summary: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface SkillVersionDetailResponse extends SkillVersionResponse {
+  skill_md_content: string;
+  resource_files: Record<string, unknown> | null;
+}
+
+export interface SkillVersionListResponse {
+  versions: SkillVersionResponse[];
+  total: number;
+}
+
+export interface SkillPackagePayload {
+  skill_md_content: string;
+  resource_files?: Record<string, string> | undefined;
+}
+
+export interface SkillImportRequest extends SkillPackagePayload {
+  scope?: 'tenant' | 'project' | undefined;
+  project_id?: string | null | undefined;
+  overwrite?: boolean | undefined;
+  change_summary?: string | null | undefined;
+}
+
+export interface SkillZipImportRequest {
+  scope?: 'tenant' | 'project' | undefined;
+  project_id?: string | null | undefined;
+  overwrite?: boolean | undefined;
+  change_summary?: string | null | undefined;
+}
+
+export interface SkillInstallRequest {
+  curated_id: string;
+  project_id?: string | null | undefined;
+  overwrite?: boolean | undefined;
+}
+
+export interface SkillUpgradeRequest {
+  curated_id?: string | null | undefined;
+  change_summary?: string | null | undefined;
+}
+
+export interface SkillLifecycleResponse {
+  action: string;
+  skill: SkillResponse;
+  version_number: number | null;
+  version_label: string | null;
+}
+
+export interface SkillPackageResponse extends SkillPackagePayload {
+  format: string;
+  skill: SkillResponse;
+  version_number: number | null;
+  version_label: string | null;
 }
 
 /**

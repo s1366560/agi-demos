@@ -52,6 +52,8 @@ const mockSkill: SkillResponse = {
   is_system_skill: false,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+  agent_modes: ['*'],
+  spec_version: '1.0',
   current_version: 1,
   version_label: null,
 };

@@ -1,7 +1,7 @@
 /**
  * Curated Skills page (P2-4).
  *
- * Tenants can fork approved skill snapshots and review their own submissions.
+ * Tenants can install approved skill snapshots and review their own submissions.
  */
 
 import { useMemo, useState } from 'react';
@@ -11,7 +11,6 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Button,
-  Checkbox,
   Empty,
   Modal,
   Popconfirm,
@@ -23,7 +22,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { GitFork, Library, Undo2 } from 'lucide-react';
+import { Library, PackagePlus, Undo2 } from 'lucide-react';
 
 import {
   curatedSkillAPI,
@@ -90,7 +89,7 @@ function groupBySource(items: CuratedSkill[]): VersionGroup[] {
     });
 }
 
-function ForkDialog({
+function InstallDialog({
   curated,
   open,
   onClose,
@@ -101,24 +100,21 @@ function ForkDialog({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [includeExecutor, setIncludeExecutor] = useState(true);
-  const [includeMetadata, setIncludeMetadata] = useState(true);
+  const [overwrite, setOverwrite] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => {
       if (!curated) throw new Error(t('skill.curated.noSkillSelected'));
-      return curatedSkillAPI.fork(curated.id, {
-        include_executor: includeExecutor,
-        include_metadata: includeMetadata,
-      });
+      return curatedSkillAPI.install(curated.id, { overwrite });
     },
     onSuccess: (result) => {
-      message.success(t('skill.curated.forkSuccess', { skillId: result.skill_id }));
+      message.success(t('skill.curated.installSuccess', { name: result.skill.name }));
       void qc.invalidateQueries({ queryKey: ['skills'] });
+      setOverwrite(false);
       onClose();
     },
     onError: (err: Error) => {
-      message.error(err.message || t('skill.curated.forkFailed'));
+      message.error(err.message || t('skill.curated.installFailed'));
     },
   });
 
@@ -126,38 +122,24 @@ function ForkDialog({
 
   return (
     <Modal
-      title={curated ? `Fork "${name}" v${curated.semver}` : 'Fork'}
+      title={curated ? t('skill.curated.installTitle', { name, version: curated.semver }) : ''}
       open={open}
       onCancel={onClose}
       onOk={() => {
         mutation.mutate();
       }}
-      okText={t('skill.curated.forkOk')}
+      okText={t('skill.curated.installOk')}
       okButtonProps={{ disabled: !curated }}
       confirmLoading={mutation.isPending}
     >
       <div className="space-y-4">
-        <Text type="secondary">{t('skill.curated.forkDialogContent')}</Text>
-        <div className={`rounded-[6px] p-3 ${surface}`}>
-          <Checkbox
-            checked={includeExecutor}
-            onChange={(e) => {
-              setIncludeExecutor(e.target.checked);
-            }}
-          >
-            {t('skill.curated.forkIncludeExecutor')}
-          </Checkbox>
-          <div className="mt-3">
-            <Checkbox
-              checked={includeMetadata}
-              onChange={(e) => {
-                setIncludeMetadata(e.target.checked);
-              }}
-            >
-              {t('skill.curated.forkIncludeMetadata')}
-            </Checkbox>
-          </div>
-        </div>
+        <Text type="secondary">{t('skill.curated.installDialogContent')}</Text>
+        <label
+          className={`flex items-center justify-between gap-3 rounded-[6px] p-3 text-sm ${surface} ${mutedText}`}
+        >
+          <span>{t('skill.curated.installOverwrite')}</span>
+          <Switch checked={overwrite} onChange={setOverwrite} />
+        </label>
       </div>
     </Modal>
   );
@@ -165,10 +147,10 @@ function ForkDialog({
 
 function VersionedCuratedRow({
   group,
-  onFork,
+  onInstall,
 }: {
   group: VersionGroup;
-  onFork: (curated: CuratedSkill) => void;
+  onInstall: (curated: CuratedSkill) => void;
 }) {
   const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string>(group.versions[0]?.id ?? '');
@@ -217,13 +199,13 @@ function VersionedCuratedRow({
       </div>
       <Button
         type="primary"
-        icon={<GitFork size={14} />}
+        icon={<PackagePlus size={14} />}
         onClick={() => {
-          onFork(selected);
+          onInstall(selected);
         }}
         disabled={isDeprecated}
       >
-        {t('skill.curated.forkButton')}
+        {t('skill.curated.installButton')}
       </Button>
     </div>
   );
@@ -236,7 +218,7 @@ function CuratedTab() {
     queryKey: ['skills', 'curated', { includeDeprecated }],
     queryFn: () => curatedSkillAPI.list({ include_deprecated: includeDeprecated }),
   });
-  const [forkTarget, setForkTarget] = useState<CuratedSkill | null>(null);
+  const [installTarget, setInstallTarget] = useState<CuratedSkill | null>(null);
 
   const groups = useMemo(() => groupBySource(data ?? []), [data]);
 
@@ -263,15 +245,15 @@ function CuratedTab() {
       ) : (
         <div className={`overflow-hidden rounded-[6px] ${surface}`}>
           {groups.map((group) => (
-            <VersionedCuratedRow key={group.key} group={group} onFork={setForkTarget} />
+            <VersionedCuratedRow key={group.key} group={group} onInstall={setInstallTarget} />
           ))}
         </div>
       )}
-      <ForkDialog
-        curated={forkTarget}
-        open={forkTarget !== null}
+      <InstallDialog
+        curated={installTarget}
+        open={installTarget !== null}
         onClose={() => {
-          setForkTarget(null);
+          setInstallTarget(null);
         }}
       />
     </>

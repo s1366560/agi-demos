@@ -13,6 +13,14 @@ import type {
   SkillUpdate,
   SkillsListResponse,
   SkillContentResponse,
+  SkillImportRequest,
+  SkillZipImportRequest,
+  SkillInstallRequest,
+  SkillLifecycleResponse,
+  SkillPackageResponse,
+  SkillUpgradeRequest,
+  SkillVersionDetailResponse,
+  SkillVersionListResponse,
   TenantSkillConfigResponse,
   TenantSkillConfigListResponse,
   SystemSkillStatus,
@@ -22,9 +30,13 @@ import type {
 const api = httpClient;
 
 export interface SkillListParams {
+  search?: string | undefined;
+  q?: string | undefined;
   status?: 'active' | 'disabled' | 'deprecated' | null | undefined;
   scope?: 'system' | 'tenant' | 'project' | null | undefined;
+  project_id?: string | null | undefined;
   skip?: number | undefined;
+  offset?: number | undefined;
   limit?: number | undefined;
 }
 
@@ -98,6 +110,88 @@ export const skillAPI = {
   updateContent: async (skillId: string, fullContent: string): Promise<SkillResponse> => {
     return await api.put<SkillResponse>(`/skills/${skillId}/content`, {
       full_content: fullContent,
+    });
+  },
+
+  /**
+   * Import a complete AgentSkills.io package.
+   */
+  importPackage: async (data: SkillImportRequest): Promise<SkillLifecycleResponse> => {
+    return await api.post<SkillLifecycleResponse>('/skills/import', data);
+  },
+
+  /**
+   * Import a zipped Agent Skills directory containing SKILL.md and bundled files.
+   */
+  importZip: async (
+    file: File,
+    data: SkillZipImportRequest = {}
+  ): Promise<SkillLifecycleResponse> => {
+    const formData = new FormData();
+    formData.append('archive', file);
+    formData.append('scope', data.scope ?? 'tenant');
+    formData.append('overwrite', String(data.overwrite ?? false));
+    if (data.project_id) {
+      formData.append('project_id', data.project_id);
+    }
+    if (data.change_summary) {
+      formData.append('change_summary', data.change_summary);
+    }
+    return await api.upload<SkillLifecycleResponse>('/skills/import/zip', formData);
+  },
+
+  /**
+   * Export a Skill as an AgentSkills.io package.
+   */
+  exportPackage: async (skillId: string): Promise<SkillPackageResponse> => {
+    return await api.get<SkillPackageResponse>(`/skills/${skillId}/export`);
+  },
+
+  /**
+   * Install a curated skill into the private library.
+   */
+  install: async (data: SkillInstallRequest): Promise<SkillLifecycleResponse> => {
+    return await api.post<SkillLifecycleResponse>('/skills/install', data);
+  },
+
+  /**
+   * Upgrade an installed Skill to a curated revision.
+   */
+  upgrade: async (
+    skillId: string,
+    data: SkillUpgradeRequest = {}
+  ): Promise<SkillLifecycleResponse> => {
+    return await api.post<SkillLifecycleResponse>(`/skills/${skillId}/upgrade`, data);
+  },
+
+  /**
+   * List version snapshots for a Skill.
+   */
+  listVersions: async (
+    skillId: string,
+    params: { limit?: number | undefined; offset?: number | undefined } = {}
+  ): Promise<SkillVersionListResponse> => {
+    return await api.get<SkillVersionListResponse>(`/skills/${skillId}/versions`, { params });
+  },
+
+  /**
+   * Read a specific version snapshot.
+   */
+  getVersion: async (
+    skillId: string,
+    versionNumber: number
+  ): Promise<SkillVersionDetailResponse> => {
+    return await api.get<SkillVersionDetailResponse>(
+      `/skills/${skillId}/versions/${String(versionNumber)}`
+    );
+  },
+
+  /**
+   * Roll a Skill back to a previous version snapshot.
+   */
+  rollback: async (skillId: string, versionNumber: number): Promise<SkillResponse> => {
+    return await api.post<SkillResponse>(`/skills/${skillId}/rollback`, {
+      version_number: versionNumber,
     });
   },
 };

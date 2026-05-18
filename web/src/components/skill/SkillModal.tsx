@@ -9,7 +9,7 @@ import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Modal, Form, Input, Tabs, Tag, message } from 'antd';
+import { Modal, Form, Input, Select, Tabs, Tag, message } from 'antd';
 import { Info } from 'lucide-react';
 
 import { useSkillStore, useSkillSubmitting } from '../../stores/skill';
@@ -20,6 +20,41 @@ const { TextArea } = Input;
 
 const surface =
   'border border-[oklch(0.9_0.006_255)] bg-[oklch(0.99_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.18_0.006_255)]';
+const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
+
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+type SkillScopeValue = 'tenant' | 'project';
+
+interface SkillFormValues {
+  name: string;
+  description: string;
+  scope: SkillScopeValue;
+  project_id?: string;
+  full_content?: string;
+  metadata?: string;
+  license?: string;
+  compatibility?: string;
+  allowed_tools_raw?: string;
+  spec_version?: string;
+}
+
+function compact(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseMetadata(value: string | undefined): Record<string, unknown> | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return JSON.parse(trimmed) as Record<string, unknown>;
+}
+
+function formatMetadata(metadata: Record<string, unknown> | undefined): string {
+  return JSON.stringify(metadata ?? {}, null, 2);
+}
 
 interface SkillModalProps {
   isOpen: boolean;
@@ -31,6 +66,7 @@ interface SkillModalProps {
 export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, skill }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
+  const scopeValue = Form.useWatch('scope', form) as SkillScopeValue | undefined;
   const [activeTab, setActiveTab] = useState('basic');
   const [tools, setTools] = useState<string[]>([]);
   const [toolInput, setToolInput] = useState('');
@@ -49,9 +85,26 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
       form.setFieldsValue({
         name: skill.name,
         description: skill.description,
+        scope: skill.scope === 'project' ? 'project' : 'tenant',
+        project_id: skill.project_id ?? undefined,
+        full_content: skill.full_content ?? '',
+        metadata: formatMetadata(skill.metadata),
+        license: skill.license ?? '',
+        compatibility: skill.compatibility ?? '',
+        allowed_tools_raw: skill.allowed_tools_raw ?? skill.tools.join(' '),
+        spec_version: skill.spec_version,
       });
     } else {
       form.resetFields();
+      form.setFieldsValue({
+        scope: 'tenant',
+        full_content: '',
+        metadata: '{}',
+        license: '',
+        compatibility: '',
+        allowed_tools_raw: '',
+        spec_version: '1.0',
+      });
     }
 
     const resetTimer = window.setTimeout(() => {
@@ -68,7 +121,7 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     try {
-      const values = (await form.validateFields()) as { name: string; description: string };
+      const values = (await form.validateFields()) as SkillFormValues;
 
       // Validate that at least one tool exists
       if (tools.length === 0) {
@@ -77,17 +130,30 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
         return;
       }
 
-      const data: SkillCreate | SkillUpdate = {
+      const metadata = parseMetadata(values.metadata);
+      const allowedToolsRaw = compact(values.allowed_tools_raw) ?? tools.join(' ');
+      const commonData = {
         name: values.name,
         description: values.description,
         tools,
+        full_content: compact(values.full_content),
+        metadata,
+        license: compact(values.license) ?? null,
+        compatibility: compact(values.compatibility) ?? null,
+        allowed_tools_raw: allowedToolsRaw,
+        spec_version: compact(values.spec_version) ?? '1.0',
       };
 
       if (skill) {
-        await updateSkill(skill.id, data);
+        await updateSkill(skill.id, commonData as SkillUpdate);
         message.success(t('tenant.skills.updateSuccess'));
       } else {
-        await createSkill(data as SkillCreate);
+        const data: SkillCreate = {
+          ...commonData,
+          scope: values.scope,
+          project_id: values.scope === 'project' ? compact(values.project_id) : undefined,
+        };
+        await createSkill(data);
         message.success(t('tenant.skills.createSuccess'));
       }
 
@@ -97,8 +163,21 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
       if (err.errorFields) {
         // Form validation error - switch to the tab with the error
         const firstErrorField = err.errorFields[0]?.name?.[0];
-        if (firstErrorField && ['name', 'description'].includes(firstErrorField)) {
+        if (
+          firstErrorField &&
+          ['name', 'description', 'scope', 'project_id'].includes(firstErrorField)
+        ) {
           setActiveTab('basic');
+        } else if (
+          firstErrorField &&
+          ['full_content', 'allowed_tools_raw'].includes(firstErrorField)
+        ) {
+          setActiveTab('package');
+        } else if (
+          firstErrorField &&
+          ['metadata', 'license', 'compatibility', 'spec_version'].includes(firstErrorField)
+        ) {
+          setActiveTab('metadata');
         }
       }
       // API errors handled by store
@@ -121,6 +200,22 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
     setTools((currentTools) => currentTools.filter((item) => item !== tool));
   }, []);
 
+  const metadataRules = [
+    {
+      validator: (_: unknown, value: string | undefined) => {
+        try {
+          const parsed = parseMetadata(value);
+          if (parsed !== undefined && (Array.isArray(parsed) || typeof parsed !== 'object')) {
+            throw new Error('metadata must be an object');
+          }
+          return Promise.resolve();
+        } catch {
+          return Promise.reject(new Error(t('tenant.skills.modal.metadataInvalid')));
+        }
+      },
+    },
+  ];
+
   // Tab items
   const tabItems = [
     {
@@ -137,7 +232,7 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
                 message: t('tenant.skills.modal.nameRequired'),
               },
               {
-                pattern: /^[a-zA-Z][a-zA-Z0-9_-]*$/,
+                pattern: SKILL_NAME_PATTERN,
                 message: t('tenant.skills.modal.namePattern'),
               },
             ]}
@@ -157,6 +252,43 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
           >
             <TextArea rows={4} placeholder={t('tenant.skills.modal.descriptionPlaceholder')} />
           </Form.Item>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Form.Item
+              name="scope"
+              label={t('tenant.skills.modal.scope')}
+              rules={[
+                {
+                  required: true,
+                  message: t('tenant.skills.modal.scopeRequired'),
+                },
+              ]}
+            >
+              <Select
+                disabled={isEditMode}
+                options={[
+                  { value: 'tenant', label: t('tenant.skills.modal.scopeTenant') },
+                  { value: 'project', label: t('tenant.skills.modal.scopeProject') },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="project_id"
+              label={t('tenant.skills.modal.projectId')}
+              rules={[
+                {
+                  required: scopeValue === 'project',
+                  message: t('tenant.skills.modal.projectIdRequired'),
+                },
+              ]}
+            >
+              <Input
+                placeholder={t('tenant.skills.modal.projectIdPlaceholder')}
+                disabled={isEditMode || scopeValue !== 'project'}
+              />
+            </Form.Item>
+          </div>
         </div>
       ),
     },
@@ -225,6 +357,53 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
               </div>
             </div>
           </div>
+        </div>
+      ),
+    },
+    {
+      key: 'package',
+      label: t('tenant.skills.modal.package'),
+      children: (
+        <div className="space-y-4">
+          <Form.Item name="allowed_tools_raw" label={t('tenant.skills.modal.allowedToolsRaw')}>
+            <Input placeholder={t('tenant.skills.modal.allowedToolsRawPlaceholder')} />
+          </Form.Item>
+          <Form.Item name="full_content" label={t('tenant.skills.modal.fullContent')}>
+            <TextArea
+              rows={12}
+              placeholder={t('tenant.skills.modal.fullContentPlaceholder')}
+              className="font-mono text-xs"
+            />
+          </Form.Item>
+          <div className={`rounded-[6px] p-3 text-sm ${surface} ${mutedText}`}>
+            {t('tenant.skills.modal.fullContentHint')}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'metadata',
+      label: t('tenant.skills.modal.metadata'),
+      children: (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Form.Item name="spec_version" label={t('tenant.skills.modal.specVersion')}>
+              <Input placeholder="1.0" />
+            </Form.Item>
+            <Form.Item name="license" label={t('tenant.skills.modal.license')}>
+              <Input placeholder={t('tenant.skills.modal.licensePlaceholder')} />
+            </Form.Item>
+          </div>
+          <Form.Item name="compatibility" label={t('tenant.skills.modal.compatibility')}>
+            <TextArea rows={3} placeholder={t('tenant.skills.modal.compatibilityPlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="metadata"
+            label={t('tenant.skills.modal.metadataJson')}
+            rules={metadataRules}
+          >
+            <TextArea rows={9} className="font-mono text-xs" />
+          </Form.Item>
         </div>
       ),
     },

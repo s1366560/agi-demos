@@ -7,6 +7,8 @@
 
 import { httpClient } from './client/httpClient';
 
+import type { SkillLifecycleResponse } from '@/types/agent';
+
 export interface CuratedSkill {
   id: string;
   semver: string;
@@ -24,6 +26,11 @@ export interface CuratedForkRequest {
   include_executor?: boolean;
   include_metadata?: boolean;
   project_id?: string | null;
+}
+
+export interface CuratedInstallRequest {
+  project_id?: string | null;
+  overwrite?: boolean;
 }
 
 export type SubmissionStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
@@ -72,6 +79,12 @@ export const curatedSkillAPI = {
       `/skills/curated/${id}/fork`,
       body
     ),
+
+  install: (id: string, body: CuratedInstallRequest = {}) =>
+    httpClient.post<SkillLifecycleResponse>('/skills/install', {
+      curated_id: id,
+      ...body,
+    }),
 
   submit: (skillId: string, body: SkillSubmitPayload) =>
     httpClient.post<SkillSubmission>(`/skills/${skillId}/submit`, body),

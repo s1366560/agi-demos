@@ -407,6 +407,16 @@ class SkillService:
             agent_modes=skill.agent_modes,
             scope=skill.scope,
             is_system_skill=skill.is_system_skill,
+            license=skill.license,
+            compatibility=skill.compatibility,
+            allowed_tools_raw=skill.allowed_tools_raw,
+            allowed_tools_parsed=skill.allowed_tools_parsed,
+            spec_version=skill.spec_version,
+            current_version=skill.current_version,
+            version_label=skill.version_label,
+            parent_curated_id=skill.parent_curated_id,
+            semver=skill.semver,
+            revision_hash=skill.revision_hash,
         )
 
     async def get_skill_by_name(

@@ -1,12 +1,40 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
 
+from src.domain.model.agent.skill import Skill, SkillScope
+from src.domain.model.agent.skill.skill_version import SkillVersion
+from src.domain.model.agent.skill_source import SkillSource
 from src.infrastructure.adapters.primary.web.routers import skills as router
+
+SAMPLE_SKILL_MD = """---
+name: alpha-skill
+description: Searches, installs, and exports agent skills.
+allowed-tools: Bash(git:*) Read
+metadata:
+  version: "1.2.3"
+  author: test-suite
+---
+
+# Alpha Skill
+
+Use when managing Agent Skills packages.
+"""
+
+
+def _make_zip(files: dict[str, bytes | str]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for path, content in files.items():
+            data = content.encode("utf-8") if isinstance(content, str) else content
+            archive.writestr(path, data)
+    return buffer.getvalue()
 
 
 class _SkillRepository:
@@ -17,6 +45,105 @@ class _SkillRepository:
 class _Container:
     def skill_repository(self) -> _SkillRepository:
         return _SkillRepository()
+
+
+class _MemorySkillRepository:
+    def __init__(self) -> None:
+        self.skills_by_id: dict[str, Skill] = {}
+        self.skills_by_name: dict[str, Skill] = {}
+
+    async def create(self, skill: Skill) -> Skill:
+        self.skills_by_id[skill.id] = skill
+        self.skills_by_name[skill.name] = skill
+        return skill
+
+    async def get_by_id(self, skill_id: str) -> Skill | None:
+        return self.skills_by_id.get(skill_id)
+
+    async def get_by_name(
+        self,
+        tenant_id: str,
+        name: str,
+        scope: SkillScope | None = None,
+    ) -> Skill | None:
+        skill = self.skills_by_name.get(name)
+        if not skill or skill.tenant_id != tenant_id:
+            return None
+        if scope and skill.scope != scope:
+            return None
+        return skill
+
+    async def update(self, skill: Skill) -> Skill:
+        self.skills_by_id[skill.id] = skill
+        self.skills_by_name[skill.name] = skill
+        return skill
+
+    async def delete(self, skill_id: str) -> bool:
+        self.skills_by_id.pop(skill_id, None)
+        return True
+
+    async def list_by_tenant(self, *_args: object, **_kwargs: object) -> list[Skill]:
+        return list(self.skills_by_id.values())
+
+    async def list_by_project(self, project_id: str, *_args: object, **_kwargs: object) -> list[Skill]:
+        return [skill for skill in self.skills_by_id.values() if skill.project_id == project_id]
+
+    async def count_by_tenant(self, *_args: object, **_kwargs: object) -> int:
+        return len(self.skills_by_id)
+
+
+class _MemoryContainer:
+    def __init__(self, repo: _MemorySkillRepository) -> None:
+        self._repo = repo
+
+    def skill_repository(self) -> _MemorySkillRepository:
+        return self._repo
+
+
+class _MemoryVersionRepository:
+    def __init__(self, db: SimpleNamespace) -> None:
+        self._db = db
+
+    async def create(self, version: SkillVersion) -> SkillVersion:
+        self._db.versions.append(version)
+        return version
+
+    async def get_by_version(self, skill_id: str, version_number: int) -> SkillVersion | None:
+        return next(
+            (
+                version
+                for version in self._db.versions
+                if version.skill_id == skill_id and version.version_number == version_number
+            ),
+            None,
+        )
+
+    async def list_by_skill(
+        self, skill_id: str, limit: int = 50, offset: int = 0
+    ) -> list[SkillVersion]:
+        versions = [version for version in self._db.versions if version.skill_id == skill_id]
+        return versions[offset : offset + limit]
+
+    async def get_latest(self, skill_id: str) -> SkillVersion | None:
+        versions = [version for version in self._db.versions if version.skill_id == skill_id]
+        return max(versions, key=lambda version: version.version_number, default=None)
+
+    async def get_max_version_number(self, skill_id: str) -> int:
+        versions = [version.version_number for version in self._db.versions if version.skill_id == skill_id]
+        return max(versions, default=0)
+
+    async def count_by_skill(self, skill_id: str) -> int:
+        return len([version for version in self._db.versions if version.skill_id == skill_id])
+
+
+class _CuratedDb:
+    def __init__(self, curated_rows: list[SimpleNamespace]) -> None:
+        self.curated_by_id = {row.id: row for row in curated_rows}
+        self.versions: list[SkillVersion] = []
+        self.commit = AsyncMock()
+
+    async def get(self, _model: object, object_id: str) -> object | None:
+        return self.curated_by_id.get(object_id)
 
 
 @pytest.mark.unit
@@ -40,6 +167,419 @@ async def test_create_skill_sanitizes_domain_validation_error(
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
     assert exc_info.value.detail == "Invalid skill request"
     assert "Bad Name" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+def test_skill_response_exposes_source_fields() -> None:
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="filesystem-skill",
+        description="Loaded from a local SKILL.md file",
+        tools=["Read"],
+    )
+    skill.source = SkillSource.FILESYSTEM
+    skill.file_path = "/repo/.memstack/skills/filesystem-skill/SKILL.md"
+
+    response = router.skill_to_response(skill)
+
+    assert response.source == "filesystem"
+    assert response.file_path == "/repo/.memstack/skills/filesystem-skill/SKILL.md"
+
+
+@pytest.mark.unit
+async def test_create_skill_preserves_agentskills_spec_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+
+    response = await router.create_skill(
+        request=SimpleNamespace(),
+        data=router.SkillCreate(
+            name="spec-skill",
+            description="Creates a skill with Agent Skills metadata",
+            tools=["Read"],
+            metadata={"author": "test-suite"},
+            license="MIT",
+            compatibility="Requires git and internet access",
+            allowed_tools_raw="Bash(git:*) Read",
+            spec_version="1.0",
+        ),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.license == "MIT"
+    assert response.compatibility == "Requires git and internet access"
+    assert response.allowed_tools_raw == "Bash(git:*) Read"
+    assert response.spec_version == "1.0"
+    assert response.metadata == {
+        "author": "test-suite",
+        "agentskills": {
+            "license": "MIT",
+            "compatibility": "Requires git and internet access",
+            "allowed_tools": "Bash(git:*) Read",
+            "spec_version": "1.0",
+        },
+    }
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+def test_skill_package_parser_reads_agentskills_metadata() -> None:
+    parsed, metadata, tools = router._parse_skill_package(SAMPLE_SKILL_MD)
+
+    assert parsed.name == "alpha-skill"
+    assert parsed.description == "Searches, installs, and exports agent skills."
+    assert tools == ["Bash", "Read"]
+    assert metadata["author"] == "test-suite"
+    assert metadata["agentskills"]["allowed_tools"] == "Bash(git:*) Read"
+    assert router._extract_version_label_from_parsed(parsed) == "1.2.3"
+
+
+@pytest.mark.unit
+def test_skill_md_builder_emits_agentskills_frontmatter_fields() -> None:
+    skill_md = router._build_skill_md_from_payload(
+        {
+            "name": "frontmatter-skill",
+            "description": "Exports optional Agent Skills fields",
+            "tools": ["Read"],
+            "metadata": {
+                "agentskills": {
+                    "license": "Apache-2.0",
+                    "compatibility": "Requires Python 3.12+",
+                    "allowed_tools": "Bash(uv:*) Read",
+                }
+            },
+        },
+        semver="1.2.3",
+    )
+
+    parsed, metadata, tools = router._parse_skill_package(skill_md)
+
+    assert parsed.license == "Apache-2.0"
+    assert parsed.compatibility == "Requires Python 3.12+"
+    assert parsed.allowed_tools_raw == "Bash(uv:*) Read"
+    assert metadata["version"] == "1.2.3"
+    assert tools == ["Bash", "Read"]
+
+
+@pytest.mark.unit
+def test_skill_zip_parser_reads_skill_md_and_resources() -> None:
+    content = _make_zip(
+        {
+            "alpha-skill/SKILL.md": SAMPLE_SKILL_MD,
+            "alpha-skill/references/README.md": "details",
+            "alpha-skill/assets/logo.bin": b"\x89PNG",
+        }
+    )
+
+    skill_md_content, resource_files = router._parse_skill_zip_package(content)
+
+    assert skill_md_content == SAMPLE_SKILL_MD
+    assert resource_files["references/README.md"] == "details"
+    assert resource_files["assets/logo.bin"].startswith("base64:")
+
+
+@pytest.mark.unit
+def test_skill_zip_parser_rejects_ambiguous_packages() -> None:
+    content = _make_zip(
+        {
+            "one/SKILL.md": SAMPLE_SKILL_MD,
+            "two/SKILL.md": SAMPLE_SKILL_MD,
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        router._parse_skill_zip_package(content)
+
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.unit
+def test_skill_search_matches_name_description_version_and_metadata() -> None:
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+        metadata={"author": "platform"},
+    )
+    skill.semver = "1.2.3"
+
+    assert router._skill_matches_search(skill, "platform")
+    assert router._skill_matches_search(skill, "1.2")
+    assert router._skill_matches_search(skill, "packages")
+    assert not router._skill_matches_search(skill, "billing")
+
+
+@pytest.mark.unit
+async def test_import_skill_package_creates_skill_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock(), versions=[])
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+
+    response = await router.import_skill_package(
+        request=SimpleNamespace(),
+        data=router.SkillImportRequest(
+            skill_md_content=SAMPLE_SKILL_MD,
+            resource_files={"references/README.md": "details"},
+        ),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.action == "import"
+    assert response.skill.name == "alpha-skill"
+    assert response.skill.current_version == 1
+    assert response.version_label == "1.2.3"
+    assert db.versions[0].resource_files == {"references/README.md": "details"}
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_import_skill_zip_package_creates_skill_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock(), versions=[])
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+    archive = SimpleNamespace(
+        filename="alpha-skill.zip",
+        read=AsyncMock(
+            return_value=_make_zip(
+                {
+                    "alpha-skill/SKILL.md": SAMPLE_SKILL_MD,
+                    "alpha-skill/references/README.md": "details",
+                }
+            )
+        ),
+    )
+
+    response = await router.import_skill_zip_package(
+        request=SimpleNamespace(),
+        archive=archive,
+        scope="tenant",
+        project_id=None,
+        overwrite=False,
+        change_summary=None,
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.action == "import"
+    assert response.skill.name == "alpha-skill"
+    assert db.versions[0].resource_files == {"references/README.md": "details"}
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_get_skill_reads_filesystem_skill_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.application.services.skill_service import SkillService
+
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace()
+    filesystem_skill = Skill.create(
+        tenant_id="tenant-1",
+        name="filesystem-skill",
+        description="Loaded from SKILL.md",
+        tools=["Read"],
+    )
+    filesystem_skill.source = SkillSource.FILESYSTEM
+    filesystem_skill.file_path = "/repo/skills/filesystem-skill/SKILL.md"
+
+    class _FilesystemSkillService:
+        async def list_available_skills(self, *_args: object, **_kwargs: object) -> list[Skill]:
+            return [filesystem_skill]
+
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        SkillService,
+        "create",
+        staticmethod(lambda **_kwargs: _FilesystemSkillService()),
+    )
+
+    response = await router.get_skill(
+        request=SimpleNamespace(),
+        skill_id="filesystem-skill",
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.name == "filesystem-skill"
+    assert response.source == "filesystem"
+    assert response.file_path == "/repo/skills/filesystem-skill/SKILL.md"
+
+
+@pytest.mark.unit
+async def test_export_skill_package_uses_latest_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+        full_content=SAMPLE_SKILL_MD,
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(
+        versions=[
+            SkillVersion(
+                id="version-1",
+                skill_id=skill.id,
+                version_number=1,
+                version_label="1.2.3",
+                skill_md_content=SAMPLE_SKILL_MD,
+                resource_files={"assets/template.txt": "template"},
+            )
+        ]
+    )
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+
+    response = await router.export_skill_package(
+        request=SimpleNamespace(),
+        skill_id=skill.id,
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.skill.name == "alpha-skill"
+    assert response.version_number == 1
+    assert response.resource_files == {"assets/template.txt": "template"}
+    assert response.skill_md_content == SAMPLE_SKILL_MD
+
+
+@pytest.mark.unit
+async def test_install_curated_skill_creates_skill_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    curated = SimpleNamespace(
+        id="curated-1",
+        status="active",
+        semver="1.2.4",
+        revision_hash="hash-new",
+        payload={
+            "name": "alpha-skill",
+            "description": "Installed curated skill",
+            "tools": ["Read"],
+            "metadata": {"category": "ops"},
+            "resource_files": {"references/README.md": "installed"},
+        },
+    )
+    db = _CuratedDb([curated])
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+
+    response = await router.install_curated_skill(
+        request=SimpleNamespace(),
+        data=router.SkillInstallRequest(curated_id=curated.id),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.action == "install"
+    assert response.skill.name == "alpha-skill"
+    assert response.skill.parent_curated_id == "curated-1"
+    assert response.skill.semver == "1.2.4"
+    assert response.skill.revision_hash == "hash-new"
+    assert response.skill.metadata == {
+        "category": "ops",
+        "installed_from_curated_id": "curated-1",
+        "curated_revision_hash": "hash-new",
+    }
+    assert response.version_number == 1
+    assert response.version_label == "1.2.4"
+    assert db.versions[0].created_by == "install"
+    assert db.versions[0].resource_files == {"references/README.md": "installed"}
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_upgrade_skill_updates_curated_lineage_and_creates_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    existing = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Old curated skill",
+        tools=["Read"],
+        metadata={"installed_from_curated_id": "curated-old"},
+    )
+    existing.parent_curated_id = "curated-old"
+    existing.semver = "1.0.0"
+    existing.revision_hash = "hash-old"
+    await repo.create(existing)
+    curated = SimpleNamespace(
+        id="curated-2",
+        status="active",
+        semver="2.0.0",
+        revision_hash="hash-new",
+        payload={
+            "name": "alpha-skill",
+            "description": "Upgraded curated skill",
+            "tools": ["Read", "Bash"],
+            "metadata": {"category": "ops"},
+        },
+    )
+    db = _CuratedDb([curated])
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+
+    response = await router.upgrade_skill(
+        request=SimpleNamespace(),
+        skill_id=existing.id,
+        data=router.SkillUpgradeRequest(curated_id=curated.id),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.action == "upgrade"
+    assert response.skill.description == "Upgraded curated skill"
+    assert response.skill.tools == ["Read", "Bash"]
+    assert response.skill.parent_curated_id == "curated-2"
+    assert response.skill.semver == "2.0.0"
+    assert response.skill.revision_hash == "hash-new"
+    assert response.skill.metadata == {
+        "category": "ops",
+        "installed_from_curated_id": "curated-2",
+        "curated_revision_hash": "hash-new",
+    }
+    assert response.version_number == 1
+    assert response.version_label == "2.0.0"
+    assert db.versions[0].created_by == "upgrade"
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
