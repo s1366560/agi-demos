@@ -101,6 +101,40 @@ def _default_tenant_id_for_user(current_user: User) -> str:
     return tenant_ids[0]
 
 
+def _catalog_provider_key(provider_type: str) -> str:
+    """Normalize specialized provider variants to model catalog provider keys."""
+    normalized = provider_type.strip().lower()
+    for suffix in ("_coding", "_embedding", "_reranker"):
+        if normalized.endswith(suffix):
+            normalized = normalized.removesuffix(suffix)
+            break
+    if normalized == "azure_openai":
+        return "azure_openai"
+    return normalized
+
+
+def _categorize_catalog_models(provider_type: str) -> dict[str, list[str]]:
+    """Build chat/embedding/rerank model lists from the loaded catalog."""
+    from src.infrastructure.llm.model_catalog import get_model_catalog_service
+
+    catalog = get_model_catalog_service()
+    provider_key = _catalog_provider_key(provider_type)
+    models = catalog.list_models(provider=provider_key)
+    categorized: dict[str, list[str]] = {"chat": [], "embedding": [], "rerank": []}
+    for model in models:
+        capabilities = {str(cap).lower() for cap in model.capabilities}
+        if "embedding" in capabilities:
+            categorized["embedding"].append(model.name)
+        elif "rerank" in capabilities or "reranking" in capabilities:
+            categorized["rerank"].append(model.name)
+        elif "chat" in capabilities or "completion" in capabilities:
+            categorized["chat"].append(model.name)
+
+    for names in categorized.values():
+        names.sort()
+    return categorized
+
+
 async def require_admin(current_user: User = Depends(get_current_user_with_roles)) -> User:
     """Dependency to require admin role."""
     if not _is_admin(current_user):
@@ -242,6 +276,24 @@ async def search_catalog_models(
     }
 
 
+@router.post("/models/catalog/refresh")
+async def refresh_catalog_models(
+    current_user: User = Depends(require_admin),
+) -> dict[str, Any]:
+    """
+    Refresh the embedded model catalog snapshot from models.dev.
+
+    Requires admin access because this performs a server-side network fetch
+    and rewrites the local model snapshot artifact.
+    """
+    from src.infrastructure.llm.model_catalog import get_model_catalog_service
+
+    catalog = get_model_catalog_service()
+    info = catalog.refresh_from_remote()
+    logger.info("Model catalog refreshed from models.dev by user %s", current_user.id)
+    return {"status": "refreshed", "snapshot": info}
+
+
 @router.get("/models/{provider_type}")
 async def list_models_for_provider_type(
     provider_type: str,
@@ -252,6 +304,14 @@ async def list_models_for_provider_type(
 
     Returns categorized models (chat, embedding, rerank) for the provider.
     """
+    catalog_models = _categorize_catalog_models(provider_type)
+    if any(catalog_models.values()):
+        return {
+            "provider_type": provider_type,
+            "models": catalog_models,
+            "source": "models.dev",
+        }
+
     # Categorized models for each provider type
     models_data = {
         "openai": {
@@ -262,17 +322,17 @@ async def list_models_for_provider_type(
         "openrouter": {
             "chat": ["openai/gpt-4o", "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet"],
             "embedding": ["openai/text-embedding-3-small"],
-            "rerank": ["openai/gpt-4o-mini"],
+            "rerank": [],
         },
         "dashscope": {
             "chat": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],
             "embedding": ["text-embedding-v3", "text-embedding-v2"],
-            "rerank": ["qwen3-rerank", "qwen-turbo"],
+            "rerank": ["qwen3-rerank"],
         },
         "zai": {
             "chat": ["glm-4-plus", "glm-4-flash", "glm-4-air"],
             "embedding": ["embedding-3", "embedding-2"],
-            "rerank": ["glm-4-flash"],
+            "rerank": [],
         },
         "kimi": {
             "chat": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
@@ -282,12 +342,12 @@ async def list_models_for_provider_type(
         "ollama": {
             "chat": ["llama3.1:8b", "qwen2.5:7b", "mistral-nemo"],
             "embedding": ["nomic-embed-text"],
-            "rerank": ["llama3.1:8b"],
+            "rerank": [],
         },
         "lmstudio": {
             "chat": ["local-model"],
             "embedding": ["text-embedding-nomic-embed-text-v1.5"],
-            "rerank": ["local-model"],
+            "rerank": [],
         },
         "gemini": {
             "chat": [
@@ -297,7 +357,7 @@ async def list_models_for_provider_type(
                 "gemini-1.5-flash-002",
             ],
             "embedding": ["text-embedding-004"],
-            "rerank": ["gemini-1.5-flash"],
+            "rerank": [],
         },
         "anthropic": {
             "chat": [
@@ -306,7 +366,7 @@ async def list_models_for_provider_type(
                 "claude-3-opus-20240229",
             ],
             "embedding": [],
-            "rerank": ["claude-3-5-haiku-20241022"],
+            "rerank": [],
         },
         "groq": {
             "chat": [
@@ -321,12 +381,12 @@ async def list_models_for_provider_type(
         "deepseek": {
             "chat": ["deepseek-chat", "deepseek-coder"],
             "embedding": [],
-            "rerank": ["deepseek-chat"],
+            "rerank": [],
         },
         "minimax": {
             "chat": ["abab6.5-chat", "abab6.5s-chat", "MiniMax-Text-01"],
             "embedding": ["embo-01"],
-            "rerank": ["abab6.5-chat"],
+            "rerank": [],
         },
         "cohere": {
             "chat": ["command-r-plus", "command-r"],
@@ -336,7 +396,7 @@ async def list_models_for_provider_type(
         "mistral": {
             "chat": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
             "embedding": ["mistral-embed"],
-            "rerank": ["mistral-small-latest"],
+            "rerank": [],
         },
         "azure_openai": {
             "chat": ["gpt-4o", "gpt-4", "gpt-4o-mini", "gpt-35-turbo"],
@@ -403,6 +463,7 @@ async def list_models_for_provider_type(
     return {
         "provider_type": provider_type,
         "models": models_data[provider_type],
+        "source": "static-fallback",
     }
 
 
@@ -423,6 +484,7 @@ async def detect_env_providers(
         "detected_providers": {
             name: {
                 "provider_type": name,
+                "operation_type": config.get("operation_type", "llm"),
                 "api_key": config.get("api_key"),
                 "base_url": config.get("base_url"),
                 "llm_model": config.get("llm_model"),

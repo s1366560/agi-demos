@@ -30,6 +30,7 @@ import {
   ProviderConfig,
   ProviderCreate,
   ProviderHealth,
+  ProviderOperationType,
   ProviderType,
   ProviderUpdate,
 } from '../../types/memory';
@@ -72,6 +73,7 @@ interface ProviderModalConfig extends LLMConfigOverrides {
 interface ProviderFormData {
   name: string;
   provider_type: ProviderType;
+  operation_type: ProviderOperationType;
   api_key: string;
   base_url: string;
   llm_model: string;
@@ -120,6 +122,13 @@ const getProviderCategory = (pt: ProviderType): ProviderCategory => {
   if (pt.endsWith('_embedding')) return 'embedding';
   if (pt.endsWith('_reranker')) return 'reranker';
   return 'chat';
+};
+
+const operationForProviderType = (pt: ProviderType): ProviderOperationType => {
+  const category = getProviderCategory(pt);
+  if (category === 'embedding') return 'embedding';
+  if (category === 'reranker') return 'rerank';
+  return 'llm';
 };
 
 const resolvePrimaryLlmModel = (models?: ProviderModels | null): string =>
@@ -265,6 +274,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       string,
       {
         provider_type: string;
+        operation_type: ProviderOperationType;
         api_key: string | null;
         base_url: string | null;
         llm_model: string | null;
@@ -287,6 +297,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [formData, setFormData] = useState<ProviderFormData>({
     name: '',
     provider_type: 'openai' as ProviderType,
+    operation_type: 'llm',
     api_key: '',
     base_url: '',
     llm_model: 'gpt-4o',
@@ -420,6 +431,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       setFormData({
         name: provider.name,
         provider_type: provider.provider_type,
+        operation_type: provider.operation_type,
         api_key: '',
         base_url: provider.base_url ?? '',
         llm_model: provider.llm_model ?? '',
@@ -460,11 +472,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
       // Default state for new provider
       const defaultProvider = initialProviderType ?? 'openai';
+      const defaultOperation = operationForProviderType(defaultProvider);
       const providerMeta = PROVIDERS.find((p) => p.value === defaultProvider);
 
       setFormData({
         name: providerMeta?.label ?? '',
         provider_type: defaultProvider,
+        operation_type: defaultOperation,
         api_key: '',
         base_url: '',
         llm_model: '',
@@ -493,7 +507,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           const primaryModel = resolvePrimaryLlmModel(models);
           setFormData((prev) => ({
             ...prev,
-            llm_model: primaryModel,
+            llm_model: defaultOperation === 'llm' ? primaryModel : '',
             llm_small_model: resolveSmallLlmModel(models, primaryModel),
             embedding_model: models.embedding[0] ?? '',
             reranker_model: models.rerank[0] ?? '',
@@ -509,7 +523,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   newData.base_url = envValues.base_url;
                   newData.use_custom_base_url = true;
                 }
-                if (envValues.llm_model) newData.llm_model = envValues.llm_model;
+                newData.operation_type = envValues.operation_type;
+                if (envValues.llm_model && newData.operation_type === 'llm') {
+                  newData.llm_model = envValues.llm_model;
+                }
                 if (envValues.llm_small_model) newData.llm_small_model = envValues.llm_small_model;
                 if (envValues.embedding_model) newData.embedding_model = envValues.embedding_model;
                 if (envValues.reranker_model) newData.reranker_model = envValues.reranker_model;
@@ -534,6 +551,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   const handleProviderSelect = async (type: ProviderType) => {
     const providerMeta = PROVIDERS.find((p) => p.value === type);
+    const nextOperation = operationForProviderType(type);
 
     // Fetch models first
     const models = await fetchModels(type);
@@ -543,8 +561,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       const newData = {
         ...prev,
         provider_type: type,
+        operation_type: nextOperation,
         name: providerMeta?.label ?? prev.name,
-        llm_model: primaryModel,
+        llm_model: nextOperation === 'llm' ? primaryModel : '',
         llm_small_model: resolveSmallLlmModel(models, primaryModel),
         embedding_model: models?.embedding[0] ?? '',
         embedding_dimensions: '1536', // Default, user can change
@@ -558,7 +577,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           newData.base_url = envValues.base_url;
           newData.use_custom_base_url = true;
         }
-        if (envValues.llm_model) newData.llm_model = envValues.llm_model;
+        newData.operation_type = envValues.operation_type;
+        if (envValues.llm_model && newData.operation_type === 'llm') {
+          newData.llm_model = envValues.llm_model;
+        }
         if (envValues.llm_small_model) newData.llm_small_model = envValues.llm_small_model;
         if (envValues.embedding_model) newData.embedding_model = envValues.embedding_model;
         if (envValues.reranker_model) newData.reranker_model = envValues.reranker_model;
@@ -597,21 +619,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         return;
       }
 
-      const categoryForTest = getProviderCategory(formData.provider_type);
-      const providerMetaForTest = PROVIDERS.find(
-        (p) => p.value === resolveCatalogProviderType(formData.provider_type)
-      );
-      const includeLlmFields = categoryForTest === 'chat' || categoryForTest === 'coding';
-      const includeEmbeddingFields =
-        categoryForTest === 'embedding' ||
-        (categoryForTest === 'chat' && !!providerMetaForTest?.hasEmbedding);
-      const includeRerankerFields =
-        categoryForTest === 'reranker' ||
-        (categoryForTest === 'chat' && !!providerMetaForTest?.hasNativeRerank);
+      const includeLlmFields = formData.operation_type === 'llm';
+      const includeEmbeddingFields = formData.operation_type === 'embedding';
+      const includeRerankerFields = formData.operation_type === 'rerank';
 
       const testData: ProviderCreate = {
         name: formData.name || `${formData.provider_type}-connection-test`,
         provider_type: formData.provider_type,
+        operation_type: formData.operation_type,
         api_key: formData.api_key,
         base_url: formData.base_url || undefined,
         llm_model: includeLlmFields ? formData.llm_model : undefined,
@@ -649,6 +664,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           (isEditing || !!formData.api_key || !providerTypeRequiresApiKey(formData.provider_type))
         );
       case 'models':
+        if (formData.operation_type === 'embedding') return !!formData.embedding_model;
+        if (formData.operation_type === 'rerank') return !!formData.reranker_model;
         return !!formData.llm_model;
       case 'review':
         return true;
@@ -673,27 +690,31 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         : undefined;
 
       const embeddingConfig: EmbeddingConfig = {};
-      if (formData.embedding_model.trim()) {
+      if (showEmbeddingFields && formData.embedding_model.trim()) {
         embeddingConfig.model = formData.embedding_model.trim();
       }
-      if (embeddingDimensions !== undefined) {
+      if (showEmbeddingFields && embeddingDimensions !== undefined) {
         embeddingConfig.dimensions = embeddingDimensions;
       }
-      if (formData.embedding_encoding_format) {
+      if (showEmbeddingFields && formData.embedding_encoding_format) {
         embeddingConfig.encoding_format = formData.embedding_encoding_format;
       }
-      if (formData.embedding_user.trim()) {
+      if (showEmbeddingFields && formData.embedding_user.trim()) {
         embeddingConfig.user = formData.embedding_user.trim();
       }
-      if (embeddingTimeout !== undefined) {
+      if (showEmbeddingFields && embeddingTimeout !== undefined) {
         embeddingConfig.timeout = embeddingTimeout;
       }
-      if (embeddingProviderOptions && Object.keys(embeddingProviderOptions).length > 0) {
+      if (
+        showEmbeddingFields &&
+        embeddingProviderOptions &&
+        Object.keys(embeddingProviderOptions).length > 0
+      ) {
         embeddingConfig.provider_options = embeddingProviderOptions;
       }
 
       const config = { ...formData.config };
-      if (Object.keys(embeddingConfig).length > 0) {
+      if (showEmbeddingFields && Object.keys(embeddingConfig).length > 0) {
         config.embedding = embeddingConfig;
       } else {
         delete config.embedding;
@@ -703,6 +724,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         const updateData: ProviderUpdate = {
           name: formData.name,
           provider_type: formData.provider_type,
+          operation_type: formData.operation_type,
           base_url: formData.base_url || undefined,
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
@@ -736,6 +758,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         const createData: ProviderCreate = {
           name: formData.name,
           provider_type: formData.provider_type,
+          operation_type: formData.operation_type,
           api_key: formData.api_key,
           base_url: formData.base_url || undefined,
           llm_model: formData.llm_model,
@@ -845,15 +868,29 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     ];
   };
 
-  const category = getProviderCategory(formData.provider_type);
-  const providerMeta = PROVIDERS.find(
-    (p) => p.value === resolveCatalogProviderType(formData.provider_type)
-  );
-  const showLlmFields = category === 'chat' || category === 'coding';
-  const showEmbeddingFields =
-    category === 'embedding' || (category === 'chat' && !!providerMeta?.hasEmbedding);
-  const showRerankerFields =
-    category === 'reranker' || (category === 'chat' && !!providerMeta?.hasNativeRerank);
+  const showLlmFields = formData.operation_type === 'llm';
+  const showEmbeddingFields = formData.operation_type === 'embedding';
+  const showRerankerFields = formData.operation_type === 'rerank';
+
+  const handleOperationSelect = (operation: ProviderOperationType) => {
+    const primaryModel = formData.llm_model || resolvePrimaryLlmModel(availableModels);
+    setFormData({
+      ...formData,
+      operation_type: operation,
+      llm_model: operation === 'llm' ? primaryModel : '',
+      llm_small_model:
+        operation === 'llm'
+          ? formData.llm_small_model || resolveSmallLlmModel(availableModels, primaryModel)
+          : '',
+      embedding_model:
+        operation === 'embedding'
+          ? formData.embedding_model || availableModels.embedding[0] || ''
+          : '',
+      reranker_model:
+        operation === 'rerank' ? formData.reranker_model || availableModels.rerank[0] || '' : '',
+    });
+    setTestResult(null);
+  };
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -1365,6 +1402,39 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   </div>
                 )}
 
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    {t('components.provider.config.operationType', {
+                      defaultValue: 'Operation Type',
+                    })}
+                  </label>
+                  <Select
+                    value={formData.operation_type}
+                    onChange={handleOperationSelect}
+                    options={[
+                      {
+                        value: 'llm',
+                        label: t('components.provider.config.operationTypeLlm', {
+                          defaultValue: 'LLM',
+                        }),
+                      },
+                      {
+                        value: 'embedding',
+                        label: t('components.provider.config.operationTypeEmbedding', {
+                          defaultValue: 'Embedding',
+                        }),
+                      },
+                      {
+                        value: 'rerank',
+                        label: t('components.provider.config.operationTypeRerank', {
+                          defaultValue: 'Rerank',
+                        }),
+                      },
+                    ]}
+                    className="w-full h-[42px] custom-ant-select"
+                  />
+                </div>
+
                 {/* Primary LLM Model */}
                 {showLlmFields && (
                   <>
@@ -1874,13 +1944,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {showEmbeddingFields && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      {category === 'embedding'
-                        ? t('components.provider.config.embeddingModel', {
-                            defaultValue: 'Embedding Model',
-                          })
-                        : t('components.provider.config.embeddingModelOptional', {
-                            defaultValue: 'Embedding Model (Optional)',
-                          })}
+                      {t('components.provider.config.embeddingModel', {
+                        defaultValue: 'Embedding Model',
+                      })}
                     </label>
                     {useCustomModel.embedding ? (
                       <div className="flex gap-2">
@@ -2065,13 +2131,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 {showRerankerFields && (
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      {category === 'reranker'
-                        ? t('components.provider.config.rerankerModel', {
-                            defaultValue: 'Reranker Model',
-                          })
-                        : t('components.provider.config.rerankerModelOptional', {
-                            defaultValue: 'Reranker Model (Optional)',
-                          })}
+                      {t('components.provider.config.rerankerModel', {
+                        defaultValue: 'Reranker Model',
+                      })}
                     </label>
                     {useCustomModel.reranker ? (
                       <div className="flex gap-2">

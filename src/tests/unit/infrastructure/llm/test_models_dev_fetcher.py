@@ -53,12 +53,19 @@ def test_fetch_models_dev_can_read_local_payload(tmp_path: Path) -> None:
     assert fetch_models_dev(local_path=payload_path) == {"openai": {"models": {}}}
 
 
-def test_convert_to_model_metadata_skips_non_chat_and_missing_providers() -> None:
+def test_convert_to_model_metadata_includes_embedding_and_missing_providers() -> None:
     raw = {
         "openai": {
             "models": {
                 "gpt-test": _chat_model_payload(),
-                "embed-test": {"modalities": {"input": ["text"], "output": []}},
+                "embed-test": _chat_model_payload(
+                    name="Embedding Test",
+                    id="embed-test",
+                    family="embedding",
+                    modalities={"input": ["text"], "output": []},
+                    tool_call=False,
+                    structured_output=False,
+                ),
             }
         }
     }
@@ -68,7 +75,7 @@ def test_convert_to_model_metadata_skips_non_chat_and_missing_providers() -> Non
         providers={"openai": "openai", "missing": "missing"},
     )
 
-    assert list(converted) == ["gpt-test"]
+    assert list(converted) == ["gpt-test", "embed-test"]
     meta = converted["gpt-test"]
     assert meta.provider == "openai"
     assert meta.context_length == 128000
@@ -78,6 +85,14 @@ def test_convert_to_model_metadata_skips_non_chat_and_missing_providers() -> Non
     assert meta.supports_seed is True
     assert meta.temperature_range == [0.0, 2.0]
     assert ModelCapability.FUNCTION_CALLING.value in meta.capabilities
+
+    embedding_meta = converted["embed-test"]
+    assert embedding_meta.provider == "openai"
+    assert embedding_meta.supports_streaming is False
+    assert embedding_meta.supports_json_mode is False
+    assert embedding_meta.supports_temperature is False
+    assert embedding_meta.supports_top_p is False
+    assert embedding_meta.capabilities == [ModelCapability.EMBEDDING.value]
 
 
 def test_convert_single_model_applies_reasoning_and_budget_overrides() -> None:
@@ -122,12 +137,13 @@ def test_convert_single_model_handles_invalid_release_date() -> None:
 
 def test_derive_capabilities_combines_tools_vision_and_code() -> None:
     caps = _derive_capabilities(
+        "devstral-test",
         {
             "id": "devstral-test",
             "family": "code",
             "tool_call": True,
             "modalities": {"input": ["text", "video"]},
-        }
+        },
     )
 
     assert caps == [
@@ -136,6 +152,26 @@ def test_derive_capabilities_combines_tools_vision_and_code() -> None:
         ModelCapability.VISION,
         ModelCapability.CODE,
     ]
+
+
+def test_convert_single_model_classifies_rerank_models() -> None:
+    meta = _convert_single_model(
+        "qwen3-rerank",
+        _chat_model_payload(
+            name="Qwen3 Rerank",
+            id="qwen3-rerank",
+            family="rerank",
+            modalities={"input": ["text"], "output": []},
+            tool_call=False,
+            structured_output=False,
+        ),
+        "dashscope",
+    )
+
+    assert meta is not None
+    assert meta.capabilities == [ModelCapability.RERANK.value]
+    assert meta.supports_streaming is False
+    assert meta.supports_response_format is False
 
 
 def test_metadata_to_dict_and_generate_snapshot_are_deterministic(tmp_path: Path) -> None:

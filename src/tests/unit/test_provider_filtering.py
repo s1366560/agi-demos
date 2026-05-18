@@ -231,7 +231,9 @@ class TestProviderResolutionServiceFiltering:
 
     async def test_provider_qualified_model_skips_mismatched_default(self) -> None:
         minimax = _make_provider(name="minimax-default", provider_type=ProviderType.MINIMAX)
-        volcengine = _make_provider(name="volcengine-fallback", provider_type=ProviderType.VOLCENGINE)
+        volcengine = _make_provider(
+            name="volcengine-fallback", provider_type=ProviderType.VOLCENGINE
+        )
         svc = self._make_service(
             default_provider=minimax,
             fallback_provider=volcengine,
@@ -243,7 +245,9 @@ class TestProviderResolutionServiceFiltering:
 
     async def test_unqualified_model_uses_catalog_provider_matching(self) -> None:
         minimax = _make_provider(name="minimax-default", provider_type=ProviderType.MINIMAX)
-        volcengine = _make_provider(name="volcengine-fallback", provider_type=ProviderType.VOLCENGINE)
+        volcengine = _make_provider(
+            name="volcengine-fallback", provider_type=ProviderType.VOLCENGINE
+        )
         svc = self._make_service(
             default_provider=minimax,
             fallback_provider=volcengine,
@@ -288,7 +292,9 @@ class TestProviderResolutionServiceFiltering:
 
     async def test_provider_prefix_takes_precedence_over_catalog_fuzzy(self) -> None:
         minimax = _make_provider(name="minimax-default", provider_type=ProviderType.MINIMAX)
-        volcengine = _make_provider(name="volcengine-fallback", provider_type=ProviderType.VOLCENGINE)
+        volcengine = _make_provider(
+            name="volcengine-fallback", provider_type=ProviderType.VOLCENGINE
+        )
         svc = self._make_service(
             default_provider=minimax,
             fallback_provider=volcengine,
@@ -311,7 +317,9 @@ class TestProviderResolutionServiceFiltering:
             name="volcengine-embedding",
             provider_type=ProviderType.VOLCENGINE_EMBEDDING,
         )
-        volcengine_llm = _make_provider(name="volcengine-llm", provider_type=ProviderType.VOLCENGINE)
+        volcengine_llm = _make_provider(
+            name="volcengine-llm", provider_type=ProviderType.VOLCENGINE
+        )
         svc = self._make_service(
             default_provider=minimax,
             fallback_provider=volcengine_llm,
@@ -323,3 +331,34 @@ class TestProviderResolutionServiceFiltering:
             model_id="volcengine/doubao-1.5-pro-32k",
         )
         assert result.name == "volcengine-llm"
+
+    async def test_embedding_resolution_requires_embedding_operation_provider(self) -> None:
+        llm_provider = _make_provider(name="llm-provider", provider_type=ProviderType.OPENAI)
+        embedding_provider = _make_provider(
+            name="embedding-provider",
+            provider_type=ProviderType.OPENAI,
+            operation_type=OperationType.EMBEDDING,
+            llm_model=None,
+            embedding_model="text-embedding-3-small",
+        )
+        svc = self._make_service(
+            default_provider=llm_provider,
+            fallback_provider=embedding_provider,
+            active_providers=[llm_provider, embedding_provider],
+        )
+
+        result = await svc.resolve_provider(operation_type=OperationType.EMBEDDING)
+
+        assert result.name == "embedding-provider"
+        svc.repository.find_default_provider.assert_awaited_with(OperationType.EMBEDDING)
+
+    async def test_rerank_resolution_does_not_fallback_to_llm_provider(self) -> None:
+        llm_provider = _make_provider(name="llm-provider", provider_type=ProviderType.OPENAI)
+        svc = self._make_service(
+            default_provider=llm_provider,
+            fallback_provider=llm_provider,
+            active_providers=[llm_provider],
+        )
+
+        with pytest.raises(NoActiveProviderError):
+            await svc.resolve_provider(operation_type=OperationType.RERANK)

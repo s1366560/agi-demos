@@ -92,9 +92,9 @@ class ProviderService:
             logger.info(f"Provider '{config.name}' already exists, returning existing provider")
             return existing
 
-        # If this is marked as default, unset other defaults
+        # If this is marked as default, unset other defaults for the same operation role.
         if config.is_default:
-            await self._clear_default_providers()
+            await self._clear_default_providers(config.operation_type)
 
         # Create provider (idempotent - returns existing if another process created it)
         provider = await self.repository.create(config)
@@ -142,6 +142,7 @@ class ProviderService:
             tenant_id=provider.tenant_id,
             name=provider.name,
             provider_type=provider.provider_type,
+            operation_type=provider.operation_type,
             base_url=provider.base_url,
             llm_model=provider.llm_model,
             llm_small_model=provider.llm_small_model,
@@ -176,9 +177,19 @@ class ProviderService:
             return None
         original_provider_type = existing.provider_type
 
-        # If setting as default, unset other defaults
-        if config.is_default and not existing.is_default:
-            await self._clear_default_providers()
+        target_operation = config.operation_type or existing.operation_type
+        will_be_default = (
+            config.is_default if config.is_default is not None else existing.is_default
+        )
+
+        # If setting as default, unset other defaults for the target operation role.
+        if will_be_default and (
+            not existing.is_default or target_operation != existing.operation_type
+        ):
+            await self._clear_default_providers(
+                target_operation,
+                exclude_provider_id=provider_id,
+            )
 
         # Update provider
         updated = await self.repository.update(provider_id, config)
@@ -266,7 +277,9 @@ class ProviderService:
         )
 
         try:
-            status, error_message = await self._check_provider_endpoint(provider, config.api_key or "")
+            status, error_message = await self._check_provider_endpoint(
+                provider, config.api_key or ""
+            )
             response_time_ms = int((time.time() - start_time) * 1000)
         except Exception as e:
             logger.error("Provider connection test failed for %s: %s", config.provider_type, e)
@@ -447,10 +460,7 @@ class ProviderService:
 
         location = str(config.get("location") or config.get("region") or "us-central1")
         api_base = (base_url or f"https://{location}-aiplatform.googleapis.com/v1").rstrip("/")
-        url = (
-            f"{api_base}/projects/{project_id}/locations/{location}"
-            "/publishers/google/models"
-        )
+        url = f"{api_base}/projects/{project_id}/locations/{location}/publishers/google/models"
         return await self._http_health_check(
             client,
             url=url,
@@ -478,6 +488,7 @@ class ProviderService:
             if provider.is_active
             and provider.is_enabled
             and provider.provider_type == provider_type
+            and ProviderService._coerce_operation_type(provider.operation_type) == OperationType.LLM
         ]
         checker = get_health_checker()
         if not candidates:
@@ -522,6 +533,14 @@ class ProviderService:
         provider = await self.repository.get_by_id(provider_id)
         if not provider:
             raise ValueError(f"Provider not found: {provider_id}")
+        provider_operation_type = self._coerce_operation_type(
+            getattr(provider, "operation_type", OperationType.LLM)
+        )
+        if provider_operation_type != operation_type:
+            raise ValueError(
+                f"Provider operation_type '{provider_operation_type.value}' "
+                f"cannot be assigned for '{operation_type.value}'"
+            )
 
         mapping = await self.repository.assign_provider_to_tenant(
             tenant_id, provider_id, priority, operation_type
@@ -697,11 +716,35 @@ class ProviderService:
             provider_id, tenant_id, operation_type, start_date, end_date
         )
 
-    async def _clear_default_providers(self) -> None:
-        """Unset default flag from all providers."""
+    @staticmethod
+    def _coerce_operation_type(value: object) -> OperationType:
+        """Normalize operation type values from domain models, ORM rows, or tests."""
+        if isinstance(value, OperationType):
+            return value
+        if isinstance(value, str):
+            try:
+                return OperationType(value)
+            except ValueError:
+                return OperationType.LLM
+        return OperationType.LLM
+
+    async def _clear_default_providers(
+        self,
+        operation_type: OperationType = OperationType.LLM,
+        *,
+        exclude_provider_id: UUID | None = None,
+    ) -> None:
+        """Unset default flag from providers in the same operation role."""
         providers = await self.repository.list_all()
         for provider in providers:
-            if provider.is_default:
+            provider_operation_type = self._coerce_operation_type(
+                getattr(provider, "operation_type", OperationType.LLM)
+            )
+            if (
+                provider.is_default
+                and provider_operation_type == operation_type
+                and provider.id != exclude_provider_id
+            ):
                 await self.repository.update(
                     provider.id, ProviderConfigUpdate(name=None, api_key=None, is_default=False)
                 )

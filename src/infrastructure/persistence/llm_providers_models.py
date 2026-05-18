@@ -46,6 +46,9 @@ class LLMProvider(Base):
     # Provider identification
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    operation_type: Mapped[str] = mapped_column(
+        String(20), default="llm", server_default="llm", nullable=False
+    )
 
     # Credentials (encrypted at rest)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
@@ -116,7 +119,12 @@ class LLMProvider(Base):
             "provider_type IN ('openai', 'openrouter', 'dashscope', 'gemini', 'anthropic', 'groq', 'azure_openai', 'cohere', 'mistral', 'bedrock', 'vertex', 'deepseek', 'minimax', 'zai', 'kimi', 'volcengine', 'ollama', 'lmstudio', 'dashscope_coding', 'dashscope_embedding', 'dashscope_reranker', 'kimi_coding', 'kimi_embedding', 'kimi_reranker', 'minimax_coding', 'minimax_embedding', 'minimax_reranker', 'zai_coding', 'zai_embedding', 'zai_reranker', 'volcengine_coding', 'volcengine_embedding', 'volcengine_reranker')",
             name="llm_providers_valid_type",
         ),
+        CheckConstraint(
+            "operation_type IN ('llm', 'embedding', 'rerank')",
+            name="llm_providers_valid_operation_type",
+        ),
         Index("idx_llm_providers_type", "provider_type"),
+        Index("idx_llm_providers_operation", "operation_type"),
         Index("idx_llm_providers_active", "is_active", postgresql_where=is_active),
         Index("idx_llm_providers_default", "is_default", postgresql_where=is_default),
         Index(

@@ -43,6 +43,7 @@ class TestProviderRepository:
         assert provider.provider_type == ProviderType.OPENAI
         assert provider.api_key_encrypted is not None
         assert provider.llm_model == "gpt-4o"
+        assert provider.embedding_model is None
         assert provider.is_active is True
         assert provider.is_default is False
 
@@ -54,8 +55,8 @@ class TestProviderRepository:
         config = ProviderConfigCreate(
             name="test-openai-embedding-config",
             provider_type=ProviderType.OPENAI,
+            operation_type=OperationType.EMBEDDING,
             api_key="sk-test-key-12345",
-            llm_model="gpt-4o",
             embedding_config=EmbeddingConfig(
                 model="text-embedding-3-large",
                 dimensions=1024,
@@ -186,8 +187,8 @@ class TestProviderRepository:
             ProviderConfigCreate(
                 name="provider-update-embedding-config",
                 provider_type=ProviderType.OPENAI,
+                operation_type=OperationType.EMBEDDING,
                 api_key="sk-test",
-                llm_model="gpt-4o",
                 embedding_model="text-embedding-3-small",
             )
         )
@@ -355,9 +356,10 @@ class TestProviderRepository:
         embedding_provider = await repository.create(
             ProviderConfigCreate(
                 name="tenant-embedding-provider",
-                provider_type=ProviderType.DASHSCOPE,
+                provider_type=ProviderType.DASHSCOPE_EMBEDDING,
+                operation_type=OperationType.EMBEDDING,
                 api_key="sk-test-embedding",
-                llm_model="qwen-plus",
+                embedding_model="text-embedding-v3",
             )
         )
 
@@ -381,11 +383,10 @@ class TestProviderRepository:
 
         assert llm_found is not None
         assert embedding_found is not None
-        assert rerank_fallback is not None
+        assert rerank_fallback is None
         assert llm_found.id == llm_provider.id
         assert embedding_found.id == embedding_provider.id
-        # No rerank-specific mapping: should fallback to LLM mapping.
-        assert rerank_fallback.id == llm_provider.id
+        # Operation roles are isolated: no rerank-specific mapping means no provider.
 
     @pytest.mark.asyncio
     async def test_resolve_provider_hierarchy(self, db_session):

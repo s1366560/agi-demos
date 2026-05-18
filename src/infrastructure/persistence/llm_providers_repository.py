@@ -104,6 +104,53 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             # Keep read path resilient for historical malformed JSON.
             return None
 
+    @staticmethod
+    def _operation_type_from_value(value: str | OperationType | None) -> OperationType:
+        """Normalize operation type storage values."""
+        if isinstance(value, OperationType):
+            return value
+        if isinstance(value, str):
+            try:
+                return OperationType(value)
+            except ValueError:
+                return OperationType.LLM
+        return OperationType.LLM
+
+    @staticmethod
+    def _apply_operation_field_separation(
+        orm: LLMProviderORM,
+        updated_config: dict[str, Any],
+    ) -> bool:
+        """Clear model fields that do not belong to the row's operation role."""
+        operation_type = SQLAlchemyProviderRepository._operation_type_from_value(orm.operation_type)
+        config_changed = False
+
+        if operation_type == OperationType.LLM:
+            if orm.embedding_model is not None:
+                orm.embedding_model = None
+            if orm.reranker_model is not None:
+                orm.reranker_model = None
+            if "embedding" in updated_config:
+                updated_config.pop("embedding", None)
+                config_changed = True
+            return config_changed
+
+        orm.llm_model = None
+        orm.llm_small_model = None
+        orm.pool_enabled = False
+        orm.model_tier = None
+        orm.secondary_models = None
+
+        if operation_type == OperationType.EMBEDDING:
+            orm.reranker_model = None
+            return config_changed
+
+        orm.embedding_model = None
+        if "embedding" in updated_config:
+            updated_config.pop("embedding", None)
+            config_changed = True
+        return config_changed
+
     def _orm_to_config(self, orm: LLMProviderORM, tenant_id: str = "default") -> ProviderConfig:
         """Convert ORM model to domain model."""
         embedding_config = self._extract_embedding_config(orm)
@@ -115,6 +162,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             id=orm.id,
             name=orm.name,
             provider_type=ProviderType(orm.provider_type),
+            operation_type=OperationType(getattr(orm, "operation_type", OperationType.LLM.value)),
             tenant_id=tenant_id,
             api_key_encrypted=orm.api_key_encrypted,
             base_url=orm.base_url,
@@ -145,29 +193,44 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             # Encrypt API key before storing
             storable_api_key = to_storable_api_key(config.provider_type, config.api_key)
             api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
-            embedding_payload = self._build_embedding_payload(
-                config.embedding_model,
-                config.embedding_config,
+            operation_type = config.operation_type
+            embedding_payload = (
+                self._build_embedding_payload(
+                    config.embedding_model,
+                    config.embedding_config,
+                )
+                if operation_type == OperationType.EMBEDDING
+                else None
             )
             provider_config = dict(config.config or {})
             if embedding_payload:
                 provider_config["embedding"] = embedding_payload
             elif isinstance(provider_config.get("embedding"), dict):
-                embedding_payload = dict(provider_config["embedding"])
+                if operation_type == OperationType.EMBEDDING:
+                    embedding_payload = dict(provider_config["embedding"])
+                else:
+                    provider_config.pop("embedding", None)
 
             # Build values dict for insert
             values = {
                 "id": uuid4(),
                 "name": config.name,
                 "provider_type": config.provider_type.value,
+                "operation_type": operation_type.value,
                 "api_key_encrypted": api_key_encrypted,
                 "base_url": config.base_url,
-                "llm_model": config.llm_model,
-                "llm_small_model": config.llm_small_model,
+                "llm_model": config.llm_model if operation_type == OperationType.LLM else None,
+                "llm_small_model": (
+                    config.llm_small_model if operation_type == OperationType.LLM else None
+                ),
                 "embedding_model": (
                     embedding_payload.get("model") if embedding_payload else config.embedding_model
+                )
+                if operation_type == OperationType.EMBEDDING
+                else None,
+                "reranker_model": (
+                    config.reranker_model if operation_type == OperationType.RERANK else None
                 ),
-                "reranker_model": config.reranker_model,
                 "config": provider_config,
                 "is_active": config.is_active,
                 "is_default": config.is_default,
@@ -179,11 +242,15 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                     json.dumps(config.blocked_models) if config.blocked_models else None
                 ),
                 "pool_weight": config.pool_weight,
-                "pool_enabled": config.pool_enabled,
-                "model_tier": config.model_tier,
-                "secondary_models": list(config.secondary_models)
-                if config.secondary_models
-                else None,
+                "pool_enabled": config.pool_enabled
+                if operation_type == OperationType.LLM
+                else False,
+                "model_tier": config.model_tier if operation_type == OperationType.LLM else None,
+                "secondary_models": (
+                    list(config.secondary_models)
+                    if operation_type == OperationType.LLM and config.secondary_models
+                    else None
+                ),
             }
 
             # Use PostgreSQL ON CONFLICT DO NOTHING for atomic upsert
@@ -269,6 +336,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         if config.provider_type is not None:
             orm.provider_type = config.provider_type.value
+        if config.operation_type is not None:
+            orm.operation_type = config.operation_type.value
         if config.is_active is not None:
             orm.is_active = config.is_active
         if config.is_default is not None:
@@ -286,9 +355,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         self._apply_pool_field_updates(orm, config)
 
     @staticmethod
-    def _apply_pool_field_updates(
-        orm: LLMProviderORM, config: ProviderConfigUpdate
-    ) -> None:
+    def _apply_pool_field_updates(orm: LLMProviderORM, config: ProviderConfigUpdate) -> None:
         """Apply pool/routing field updates (pool_weight, pool_enabled, model_tier, secondary_models)."""
         if config.pool_weight is not None:
             orm.pool_weight = config.pool_weight
@@ -381,6 +448,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         elif config.embedding_model is not None:
             should_update_config = self._apply_embedding_model_update(orm, config, updated_config)
 
+        if self._apply_operation_field_separation(orm, updated_config):
+            should_update_config = True
+
         if should_update_config:
             orm.config = updated_config
 
@@ -424,7 +494,10 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         return cast(bool, await self._run_with_session(op))
 
     @override
-    async def find_default_provider(self) -> ProviderConfig | None:
+    async def find_default_provider(
+        self,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ProviderConfig | None:
         """Find the default provider."""
 
         async def op(session: AsyncSession) -> ProviderConfig | None:
@@ -432,6 +505,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 select(LLMProviderORM)
                 .where(LLMProviderORM.is_default)
                 .where(LLMProviderORM.is_active)
+                .where(LLMProviderORM.operation_type == operation_type.value)
             )
             orm = result.scalar_one_or_none()
             return self._orm_to_config(orm) if orm else None
@@ -439,13 +513,17 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         return cast("ProviderConfig | None", await self._run_with_session(op))
 
     @override
-    async def find_first_active_provider(self) -> ProviderConfig | None:
+    async def find_first_active_provider(
+        self,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
 
         async def op(session: AsyncSession) -> ProviderConfig | None:
             result = await session.execute(
                 select(LLMProviderORM)
                 .where(LLMProviderORM.is_active)
+                .where(LLMProviderORM.operation_type == operation_type.value)
                 .order_by(LLMProviderORM.created_at)
                 .limit(1)
             )
@@ -470,23 +548,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 .where(TenantProviderMappingORM.tenant_id == tenant_id)
                 .where(TenantProviderMappingORM.operation_type == operation_value)
                 .where(LLMProviderORM.is_active)
+                .where(LLMProviderORM.operation_type == operation_value)
                 .order_by(TenantProviderMappingORM.priority)
                 .limit(1)
             )
             result = await session.execute(query)
             orm = result.scalar_one_or_none()
-            if orm is None and operation_type != OperationType.LLM:
-                fallback_query = (
-                    select(LLMProviderORM)
-                    .join(TenantProviderMappingORM)
-                    .where(TenantProviderMappingORM.tenant_id == tenant_id)
-                    .where(TenantProviderMappingORM.operation_type == OperationType.LLM.value)
-                    .where(LLMProviderORM.is_active)
-                    .order_by(TenantProviderMappingORM.priority)
-                    .limit(1)
-                )
-                fallback_result = await session.execute(fallback_query)
-                orm = fallback_result.scalar_one_or_none()
             return self._orm_to_config(orm, tenant_id=tenant_id) if orm else None
 
         return cast("ProviderConfig | None", await self._run_with_session(op))
@@ -519,13 +586,13 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         if not provider:
             # Try default provider
-            provider = await self.find_default_provider()
+            provider = await self.find_default_provider(operation_type)
             if provider:
                 resolution_source = "default"
 
         if not provider:
             # Fallback to first active provider
-            provider = await self.find_first_active_provider()
+            provider = await self.find_first_active_provider(operation_type)
             if provider:
                 resolution_source = "fallback"
 

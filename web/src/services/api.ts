@@ -469,6 +469,7 @@ export const providerAPI = {
       embedding: string[];
       rerank: string[];
     };
+    source?: string;
   }> => {
     return await api.get(`/llm-providers/models/${providerType}`);
   },
@@ -494,6 +495,7 @@ export const providerAPI = {
       string,
       {
         provider_type: string;
+        operation_type: 'llm' | 'embedding' | 'rerank';
         api_key: string | null;
         base_url: string | null;
         llm_model: string | null;

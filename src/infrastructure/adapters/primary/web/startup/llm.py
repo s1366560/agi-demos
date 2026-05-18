@@ -42,7 +42,11 @@ async def sync_health_checker_providers() -> int:
         repository = SQLAlchemyProviderRepository(session=session)
         all_active = await repository.list_active()
 
-    providers = [provider for provider in all_active if provider.is_active and provider.is_enabled]
+    providers = [
+        provider
+        for provider in all_active
+        if provider.is_active and provider.is_enabled and provider.operation_type.value == "llm"
+    ]
     providers_by_type: dict[ProviderType, list[ProviderConfig]] = defaultdict(list)
     for provider in providers:
         providers_by_type[provider.provider_type].append(provider)

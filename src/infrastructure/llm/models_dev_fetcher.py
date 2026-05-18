@@ -36,13 +36,20 @@ _SNAPSHOT_PATH = Path(__file__).parent / "models_snapshot.json"
 # models.dev provider ID -> codebase ProviderType value
 PROVIDER_MAP: dict[str, str] = {
     "openai": "openai",
+    "openrouter": "openrouter",
     "anthropic": "anthropic",
     "google": "gemini",
+    "google-vertex": "vertex",
     "deepseek": "deepseek",
     "alibaba": "dashscope",
+    "alibaba-cn": "dashscope",
+    "azure": "azure_openai",
+    "amazon-bedrock": "bedrock",
     "minimax": "minimax",
+    "minimax-cn": "minimax",
     "zhipuai": "zai",
     "moonshotai": "kimi",
+    "moonshotai-cn": "kimi",
     "mistral": "mistral",
     "groq": "groq",
     "cohere": "cohere",
@@ -130,7 +137,11 @@ def convert_to_model_metadata(
             try:
                 meta = _convert_single_model(model_id, model_data, codebase_provider)
                 if meta is not None:
-                    result[meta.name] = meta
+                    result_key = meta.name
+                    existing = result.get(result_key)
+                    if existing is not None and existing.provider != meta.provider:
+                        result_key = f"{codebase_provider}/{meta.name}"
+                    result[result_key] = meta
             except Exception:
                 logger.warning(
                     "Failed to convert model '%s' from provider '%s'",
@@ -186,35 +197,38 @@ def generate_snapshot(
 # ---------------------------------------------------------------------------
 
 
-def _convert_single_model(  # noqa: PLR0915
+def _convert_single_model(  # noqa: PLR0912, PLR0915
     model_id: str,
     data: dict[str, Any],
     codebase_provider: str,
 ) -> ModelMetadata | None:
     """Convert a single models.dev model entry to ``ModelMetadata``."""
-    # Skip embedding/reranking models (no chat capability)
     modalities_raw = data.get("modalities", {})
     output_modalities = modalities_raw.get("output", [])
-    if not output_modalities:
+    input_modalities = modalities_raw.get("input", [])
+    if not output_modalities and not input_modalities:
         return None
+
+    model_kind = _classify_model_kind(model_id, data)
 
     # Build limits
     limit = data.get("limit", {})
-    context_length = limit.get("context", 128000)
-    max_output_tokens = limit.get("output", 4096)
+    context_length = max(int(limit.get("context") or 128000), 1024)
+    max_output_tokens = max(int(limit.get("output") or 4096), 1)
 
     # Use explicit input limit when present, otherwise derive
     if "input" in limit:
-        max_input_tokens: int | None = limit["input"]
+        raw_input_limit = int(limit["input"] or 0)
+        max_input_tokens: int | None = raw_input_limit if raw_input_limit >= 1 else None
     else:
         max_input_tokens = None  # Will be derived at runtime as context - output
 
     # Build capabilities
-    capabilities = _derive_capabilities(data)
+    capabilities = _derive_capabilities(model_id, data)
 
     # Build modalities (deduplicated union of input + output)
-    input_mods: list[str] = modalities_raw.get("input", [])
-    output_mods: list[str] = modalities_raw.get("output", [])
+    input_mods: list[str] = input_modalities
+    output_mods: list[str] = output_modalities
     all_modalities = list(dict.fromkeys(input_mods + output_mods))
 
     # Build costs
@@ -234,7 +248,10 @@ def _convert_single_model(  # noqa: PLR0915
     name = model_id
 
     # Interleaved reasoning config
-    interleaved: dict[str, str] | None = data.get("interleaved")
+    interleaved_raw = data.get("interleaved")
+    interleaved: dict[str, str] | None = (
+        interleaved_raw if isinstance(interleaved_raw, dict) else None
+    )
 
     # Budget overrides
     budget_ratio = 0.9
@@ -283,6 +300,18 @@ def _convert_single_model(  # noqa: PLR0915
         supports_seed = False
         supports_stop = False
 
+    if model_kind != "chat":
+        supports_temperature = False
+        supports_tool_call = False
+        supports_structured_output = False
+        supports_attachment = False
+        supports_response_format = False
+        supports_seed = False
+        supports_stop = False
+        supports_frequency_penalty = False
+        supports_presence_penalty = False
+        supports_top_p = False
+
     # Temperature range per provider
     temperature_range: list[float] | None = None
     if supports_temperature:
@@ -304,8 +333,9 @@ def _convert_single_model(  # noqa: PLR0915
         input_cost_per_1m=cost.get("input"),
         output_cost_per_1m=cost.get("output"),
         capabilities=capabilities,
-        supports_streaming=True,  # Assume all chat models stream
-        supports_json_mode=supports_structured_output or supports_tool_call,
+        supports_streaming=model_kind == "chat",
+        supports_json_mode=model_kind == "chat"
+        and (supports_structured_output or supports_tool_call),
         provider=codebase_provider,
         modalities=all_modalities,
         family=family,
@@ -327,7 +357,7 @@ def _convert_single_model(  # noqa: PLR0915
         knowledge_cutoff=knowledge_cutoff,
         open_weights=open_weights,
         # B1.1 extended parameter support fields
-        supports_response_format=supports_response_format,
+        supports_response_format=model_kind == "chat" and supports_response_format,
         supports_seed=supports_seed,
         supports_stop=supports_stop,
         supports_frequency_penalty=supports_frequency_penalty,
@@ -338,21 +368,57 @@ def _convert_single_model(  # noqa: PLR0915
     )
 
 
-def _derive_capabilities(data: dict[str, Any]) -> list[ModelCapability]:
-    """Derive ``ModelCapability`` list from models.dev fields."""
-    caps: list[ModelCapability] = [ModelCapability.CHAT]
+def _classify_model_kind(model_id: str, data: dict[str, Any]) -> str:
+    """Classify models.dev model purpose from structured model metadata fields."""
+    family = str(data.get("family") or "").lower()
+    name = str(data.get("name") or "").lower()
+    model_key = model_id.lower()
+    haystack = f"{family} {name} {model_key}"
+    if "rerank" in haystack or "reranker" in haystack:
+        return "rerank"
+    if "embedding" in haystack or "embed" in haystack:
+        return "embedding"
+    output_modalities = data.get("modalities", {}).get("output", [])
+    input_modalities = data.get("modalities", {}).get("input", [])
+    if "image" in output_modalities:
+        return "image_editing" if "image" in input_modalities else "image_generation"
+    if "video" in output_modalities:
+        return "video_generation"
+    return "chat"
 
-    if data.get("tool_call"):
+
+def _derive_capabilities(model_id: str, data: dict[str, Any]) -> list[ModelCapability]:
+    """Derive ``ModelCapability`` list from models.dev fields."""
+    model_kind = _classify_model_kind(model_id, data)
+    if model_kind == "embedding":
+        caps: list[ModelCapability] = [ModelCapability.EMBEDDING]
+    elif model_kind == "rerank":
+        caps = [ModelCapability.RERANK]
+    elif model_kind == "image_editing":
+        caps = [ModelCapability.IMAGE_EDITING]
+    elif model_kind == "image_generation":
+        caps = [ModelCapability.IMAGE_GENERATION]
+    elif model_kind == "video_generation":
+        caps = [ModelCapability.VIDEO_GENERATION]
+    else:
+        caps = [ModelCapability.CHAT]
+
+    if model_kind == "chat" and data.get("tool_call"):
         caps.append(ModelCapability.FUNCTION_CALLING)
 
     modalities_input = data.get("modalities", {}).get("input", [])
-    if "image" in modalities_input or "video" in modalities_input:
+    if model_kind == "chat" and ("image" in modalities_input or "video" in modalities_input):
         caps.append(ModelCapability.VISION)
 
     # Code capability heuristic: check family or model id
     family = (data.get("family") or "").lower()
-    model_id = (data.get("id") or "").lower()
-    if "code" in family or "codex" in model_id or "coder" in model_id or "devstral" in model_id:
+    configured_model_id = (data.get("id") or model_id).lower()
+    if model_kind == "chat" and (
+        "code" in family
+        or "codex" in configured_model_id
+        or "coder" in configured_model_id
+        or "devstral" in configured_model_id
+    ):
         caps.append(ModelCapability.CODE)
 
     return caps
@@ -491,15 +557,10 @@ if __name__ == "__main__":
     if not args.force and _SNAPSHOT_PATH.exists():
         import os
 
-        mtime = datetime.fromtimestamp(
-            os.path.getmtime(_SNAPSHOT_PATH), tz=UTC
-        )
+        mtime = datetime.fromtimestamp(os.path.getmtime(_SNAPSHOT_PATH), tz=UTC)
         age_days = (datetime.now(UTC) - mtime).days
         if age_days < 7:
-            print(
-                f"Snapshot is {age_days} days old (< 7 days). "
-                f"Use --force to regenerate anyway."
-            )
+            print(f"Snapshot is {age_days} days old (< 7 days). Use --force to regenerate anyway.")
             raise SystemExit(0)
 
     raw = fetch_models_dev(local_path=args.local)

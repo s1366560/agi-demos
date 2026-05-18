@@ -356,6 +356,16 @@ class OperationType(StrEnum):
     RERANK = "rerank"
 
 
+def infer_operation_type_from_provider_type(provider_type: ProviderType) -> OperationType:
+    """Infer operation role from provider type variants."""
+    value = provider_type.value
+    if value.endswith("_embedding"):
+        return OperationType.EMBEDDING
+    if value.endswith("_reranker"):
+        return OperationType.RERANK
+    return OperationType.LLM
+
+
 # ============================================================================
 # Provider Configuration Models
 # ============================================================================
@@ -383,6 +393,10 @@ class ProviderConfigBase(BaseModel):
 
     name: str = Field(..., min_length=1, description="Human-readable provider name")
     provider_type: ProviderType = Field(..., description="Provider type (openai, dashscope, etc.)")
+    operation_type: OperationType = Field(
+        OperationType.LLM,
+        description="Provider operation role: llm, embedding, or rerank",
+    )
     tenant_id: str | None = Field("default", description="Tenant/group ID")
     base_url: str | None = Field(None, description="Custom base URL for API calls")
     llm_model: str | None = Field(
@@ -454,6 +468,14 @@ class ProviderConfigBase(BaseModel):
             raise ValueError("Provider name cannot be empty")
         return v.strip()
 
+    @model_validator(mode="after")
+    def normalize_operation_type(self) -> "ProviderConfigBase":
+        """Keep legacy provider variants aligned with explicit operation roles."""
+        inferred = infer_operation_type_from_provider_type(self.provider_type)
+        if inferred != OperationType.LLM:
+            self.operation_type = inferred
+        return self
+
 
 class ProviderConfigCreate(ProviderConfigBase):
     """Model for creating a new provider (includes API key)"""
@@ -470,17 +492,25 @@ class ProviderConfigCreate(ProviderConfigBase):
     def validate_api_key_requirement(self) -> "ProviderConfigCreate":
         """Require API key for remote providers while allowing local providers."""
         if self.provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}:
-            return self
+            return self._validate_required_model()
 
         if not self.api_key:
             raise ValueError("API key cannot be empty")
 
-        # Require llm_model for chat/coding providers, not for embedding/reranker
-        pt = self.provider_type.value if self.provider_type else ""
-        is_embedding = pt.endswith("_embedding")
-        is_reranker = pt.endswith("_reranker")
-        if not is_embedding and not is_reranker and not self.llm_model:
+        return self._validate_required_model()
+
+    def _validate_required_model(self) -> "ProviderConfigCreate":
+        """Require the model field that matches this provider's operation role."""
+        if self.operation_type == OperationType.LLM and not self.llm_model:
             raise ValueError("llm_model is required for chat and coding providers")
+        if self.operation_type == OperationType.EMBEDDING:
+            embedding_model = self.embedding_model or (
+                self.embedding_config.model if self.embedding_config else None
+            )
+            if not embedding_model:
+                raise ValueError("embedding_model is required for embedding providers")
+        if self.operation_type == OperationType.RERANK and not self.reranker_model:
+            raise ValueError("reranker_model is required for rerank providers")
 
         return self
 
@@ -490,6 +520,7 @@ class ProviderConfigUpdate(BaseModel):
 
     name: str | None = Field(None, min_length=1)
     provider_type: ProviderType | None = None
+    operation_type: OperationType | None = None
     api_key: str | None = Field(None, min_length=1)
     base_url: str | None = None
     llm_model: str | None = None

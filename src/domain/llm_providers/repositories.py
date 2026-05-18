@@ -68,11 +68,17 @@ class ProviderRepository(ABC):
         """
 
     @abstractmethod
-    async def find_default_provider(self) -> ProviderConfig | None:
+    async def find_default_provider(
+        self,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ProviderConfig | None:
         """Find the default provider."""
 
     @abstractmethod
-    async def find_first_active_provider(self) -> ProviderConfig | None:
+    async def find_first_active_provider(
+        self,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
 
     @abstractmethod

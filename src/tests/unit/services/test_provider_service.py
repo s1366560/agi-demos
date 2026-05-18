@@ -107,6 +107,38 @@ class TestProviderService:
         service.repository.update.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_create_provider_clears_only_same_operation_default(self, service):
+        """Default providers are scoped independently per operation type."""
+        config = ProviderConfigCreate(
+            name="new-embedding-default",
+            provider_type=ProviderType.OPENAI,
+            operation_type=OperationType.EMBEDDING,
+            api_key="sk-test",
+            embedding_model="text-embedding-3-small",
+            is_default=True,
+        )
+
+        llm_default = MagicMock()
+        llm_default.id = uuid4()
+        llm_default.is_default = True
+        llm_default.operation_type = OperationType.LLM
+
+        embedding_default = MagicMock()
+        embedding_default.id = uuid4()
+        embedding_default.is_default = True
+        embedding_default.operation_type = OperationType.EMBEDDING
+
+        service.repository.get_by_name.return_value = None
+        service.repository.list_all.return_value = [llm_default, embedding_default]
+        service.repository.update = AsyncMock()
+        service.repository.create.return_value = MagicMock()
+
+        await service.create_provider(config)
+
+        service.repository.update.assert_called_once()
+        assert service.repository.update.await_args.args[0] == embedding_default.id
+
+    @pytest.mark.asyncio
     async def test_update_provider_success(self, service):
         """Test successful provider update."""
         provider_id = uuid4()
@@ -327,9 +359,7 @@ class TestProviderService:
             "https://us-central1-aiplatform.googleapis.com/v1/projects/project-1/"
             "locations/us-central1/publishers/google/models"
         )
-        assert mock_health_check.await_args.kwargs["headers"] == {
-            "Authorization": "Bearer token-1"
-        }
+        assert mock_health_check.await_args.kwargs["headers"] == {"Authorization": "Bearer token-1"}
 
     @pytest.mark.asyncio
     async def test_vertex_health_check_requires_project_id(self, service):
@@ -367,7 +397,9 @@ class TestProviderService:
         service.repository.delete.return_value = True
         service.repository.list_active.return_value = [remaining_provider]
 
-        with patch("src.application.services.provider_service.get_health_checker") as mock_get_checker:
+        with patch(
+            "src.application.services.provider_service.get_health_checker"
+        ) as mock_get_checker:
             checker = MagicMock()
             mock_get_checker.return_value = checker
             await service.delete_provider(provider_id)

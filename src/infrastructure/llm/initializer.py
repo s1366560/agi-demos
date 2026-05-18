@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 
 from src.application.services.provider_service import ProviderService
-from src.domain.llm_providers.models import ProviderConfigCreate, ProviderType
+from src.domain.llm_providers.models import OperationType, ProviderConfigCreate, ProviderType
 from src.infrastructure.llm.provider_credentials import should_require_api_key
 
 logger = logging.getLogger(__name__)
@@ -118,11 +118,8 @@ async def _create_and_verify_provider(
         _ = encryption_service.decrypt(created_provider.api_key_encrypted)
 
         logger.info(
-            f"Created and verified default LLM provider: {created_provider.name} "
-            f"({created_provider.provider_type}) with models: "
-            f"LLM={created_provider.llm_model}, "
-            f"Embedding={created_provider.embedding_model}, "
-            f"Rerank={created_provider.reranker_model or 'using LLM model'}"
+            f"Created and verified default provider: {created_provider.name} "
+            f"({created_provider.provider_type}, operation={created_provider.operation_type})"
         )
         return True
 
@@ -183,22 +180,27 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
         )
         resolved_provider_name = _LOCAL_FALLBACK_PROVIDER
 
-    provider_config = _build_provider_config(resolved_provider_name)
-    if provider_config is None and resolved_provider_name != _LOCAL_FALLBACK_PROVIDER:
+    provider_configs = _build_provider_configs(resolved_provider_name)
+    if not provider_configs and resolved_provider_name != _LOCAL_FALLBACK_PROVIDER:
         logger.warning(
             f"Could not build provider config for '{resolved_provider_name}': API key not found. "
             f"Falling back to local provider '{_LOCAL_FALLBACK_PROVIDER}'."
         )
-        provider_config = _build_provider_config(_LOCAL_FALLBACK_PROVIDER)
+        provider_configs = _build_provider_configs(_LOCAL_FALLBACK_PROVIDER)
 
-    if provider_config is None:
+    if not provider_configs:
         logger.warning(
             f"Could not build provider config for '{resolved_provider_name}' "
             f"or fallback '{_LOCAL_FALLBACK_PROVIDER}'."
         )
         return False
 
-    return await _create_and_verify_provider(provider_service, provider_config)
+    created_any = False
+    for provider_config in provider_configs:
+        created_any = (
+            await _create_and_verify_provider(provider_service, provider_config)
+        ) or created_any
+    return created_any
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +208,7 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
 # ---------------------------------------------------------------------------
 # Each entry maps a canonical provider name (or alias set) to a callable that
 # reads the relevant env vars and returns a dict with the provider settings.
-# This replaces the long if/elif chain in _build_provider_config.
+# This replaces the long if/elif chain in provider env config building.
 
 
 def _env_gemini() -> dict[str, Any]:
@@ -214,7 +216,7 @@ def _env_gemini() -> dict[str, Any]:
         "api_key": os.getenv("GEMINI_API_KEY"),
         "llm_model": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
         "embedding_model": os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-004"),
-        "reranker_model": os.getenv("GEMINI_RERANK_MODEL", "gemini-2.0-flash"),
+        "reranker_model": os.getenv("GEMINI_RERANK_MODEL"),
     }
 
 
@@ -226,8 +228,7 @@ def _env_zai() -> dict[str, Any]:
         or os.getenv("ZHIPU_SMALL_MODEL", "glm-4-flash"),
         "embedding_model": os.getenv("ZAI_EMBEDDING_MODEL")
         or os.getenv("ZHIPU_EMBEDDING_MODEL", "embedding-3"),
-        "reranker_model": os.getenv("ZAI_RERANK_MODEL")
-        or os.getenv("ZHIPU_RERANK_MODEL", "glm-4-flash"),
+        "reranker_model": os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL"),
         "base_url": os.getenv("ZAI_BASE_URL")
         or os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
     }
@@ -239,7 +240,7 @@ def _env_dashscope() -> dict[str, Any]:
         "llm_model": os.getenv("DASHSCOPE_MODEL", "qwen-plus"),
         "llm_small_model": os.getenv("DASHSCOPE_SMALL_MODEL", "qwen-turbo"),
         "embedding_model": os.getenv("DASHSCOPE_EMBEDDING_MODEL", "text-embedding-v3"),
-        "reranker_model": os.getenv("DASHSCOPE_RERANK_MODEL", "qwen-turbo"),
+        "reranker_model": os.getenv("DASHSCOPE_RERANK_MODEL"),
         "base_url": os.getenv(
             "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
         ),
@@ -252,7 +253,7 @@ def _env_openai() -> dict[str, Any]:
         "llm_model": os.getenv("OPENAI_MODEL", "gpt-4o"),
         "llm_small_model": os.getenv("OPENAI_SMALL_MODEL", "gpt-4o-mini"),
         "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
-        "reranker_model": os.getenv("OPENAI_RERANK_MODEL", "gpt-4o-mini"),
+        "reranker_model": os.getenv("OPENAI_RERANK_MODEL"),
         "base_url": os.getenv("OPENAI_BASE_URL"),
     }
 
@@ -263,7 +264,7 @@ def _env_openrouter() -> dict[str, Any]:
         "llm_model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o"),
         "llm_small_model": os.getenv("OPENROUTER_SMALL_MODEL", "openai/gpt-4o-mini"),
         "embedding_model": os.getenv("OPENROUTER_EMBEDDING_MODEL", "openai/text-embedding-3-small"),
-        "reranker_model": os.getenv("OPENROUTER_RERANK_MODEL", "openai/gpt-4o-mini"),
+        "reranker_model": os.getenv("OPENROUTER_RERANK_MODEL"),
         "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
     }
 
@@ -273,7 +274,7 @@ def _env_deepseek() -> dict[str, Any]:
         "api_key": os.getenv("DEEPSEEK_API_KEY"),
         "llm_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
         "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-coder"),
-        "reranker_model": os.getenv("DEEPSEEK_RERANK_MODEL", "deepseek-chat"),
+        "reranker_model": os.getenv("DEEPSEEK_RERANK_MODEL"),
         "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
     }
 
@@ -284,7 +285,7 @@ def _env_minimax() -> dict[str, Any]:
         "llm_model": os.getenv("MINIMAX_MODEL", "MiniMax-M2.5"),
         "llm_small_model": os.getenv("MINIMAX_SMALL_MODEL", "MiniMax-M2.5-highspeed"),
         "embedding_model": os.getenv("MINIMAX_EMBEDDING_MODEL", "embo-01"),
-        "reranker_model": os.getenv("MINIMAX_RERANK_MODEL", "MiniMax-M2.5-highspeed"),
+        "reranker_model": os.getenv("MINIMAX_RERANK_MODEL"),
         "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
     }
 
@@ -295,7 +296,7 @@ def _env_kimi() -> dict[str, Any]:
         "llm_model": os.getenv("KIMI_MODEL", "moonshot-v1-8k"),
         "llm_small_model": os.getenv("KIMI_SMALL_MODEL", "moonshot-v1-8k"),
         "embedding_model": os.getenv("KIMI_EMBEDDING_MODEL", "kimi-embedding-1"),
-        "reranker_model": os.getenv("KIMI_RERANK_MODEL", "kimi-rerank-1"),
+        "reranker_model": os.getenv("KIMI_RERANK_MODEL"),
         "base_url": os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),
     }
 
@@ -306,7 +307,7 @@ def _env_anthropic() -> dict[str, Any]:
         "llm_model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20240620"),
         "llm_small_model": os.getenv("ANTHROPIC_SMALL_MODEL", "claude-3-haiku-20240307"),
         "embedding_model": os.getenv("ANTHROPIC_EMBEDDING_MODEL", ""),
-        "reranker_model": os.getenv("ANTHROPIC_RERANK_MODEL", "claude-3-haiku-20240307"),
+        "reranker_model": os.getenv("ANTHROPIC_RERANK_MODEL"),
         "base_url": os.getenv("ANTHROPIC_BASE_URL"),
     }
 
@@ -317,7 +318,7 @@ def _env_ollama() -> dict[str, Any]:
         "llm_model": os.getenv("OLLAMA_MODEL", "llama3.1:8b"),
         "llm_small_model": os.getenv("OLLAMA_SMALL_MODEL", "llama3.1:8b"),
         "embedding_model": os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"),
-        "reranker_model": os.getenv("OLLAMA_RERANK_MODEL", "llama3.1:8b"),
+        "reranker_model": os.getenv("OLLAMA_RERANK_MODEL"),
         "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
     }
 
@@ -330,7 +331,7 @@ def _env_lmstudio() -> dict[str, Any]:
         "embedding_model": os.getenv(
             "LMSTUDIO_EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5"
         ),
-        "reranker_model": os.getenv("LMSTUDIO_RERANK_MODEL", "local-model"),
+        "reranker_model": os.getenv("LMSTUDIO_RERANK_MODEL"),
         "base_url": os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
     }
 
@@ -341,7 +342,7 @@ def _env_volcengine() -> dict[str, Any]:
         "llm_model": os.getenv("VOLCENGINE_MODEL", "doubao-1.5-pro-32k"),
         "llm_small_model": os.getenv("VOLCENGINE_SMALL_MODEL", "doubao-1.5-lite-32k"),
         "embedding_model": os.getenv("VOLCENGINE_EMBEDDING_MODEL", "doubao-embedding"),
-        "reranker_model": os.getenv("VOLCENGINE_RERANK_MODEL", "doubao-1.5-pro-32k"),
+        "reranker_model": os.getenv("VOLCENGINE_RERANK_MODEL"),
         "base_url": os.getenv("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
     }
 
@@ -411,45 +412,70 @@ def detect_env_providers() -> dict[str, dict[str, Any]]:
     return detected
 
 
-def _build_provider_config(
-    provider_name: str,
-) -> ProviderConfigCreate | None:
+def _build_provider_configs(provider_name: str) -> list[ProviderConfigCreate]:
     """
-    Build a ProviderConfigCreate from environment variables.
+    Build operation-specific provider configs from environment variables.
 
-    Args:
-        provider_name: Name of the provider (lowercase)
-
-    Returns:
-        ProviderConfigCreate if API key is available, None otherwise
+    Each returned row owns exactly one operation role. LLM, embedding, and
+    rerank models are no longer stored together in one provider config.
     """
     provider_type = PROVIDER_TYPE_MAP[provider_name]
 
     env_fn = _PROVIDER_ENV_REGISTRY.get(provider_name)
     if env_fn is None:
-        return None
+        return []
 
     env = env_fn()
     api_key = env.get("api_key")
 
     # Check if API key is available (except local providers with optional key)
     if should_require_api_key(provider_type) and not api_key:
-        return None
+        return []
 
-    # Create provider config
-    return ProviderConfigCreate(
-        name=f"Default {provider_name.title()}",
-        provider_type=provider_type,
-        api_key=api_key,
-        base_url=env.get("base_url"),
-        llm_model=env.get("llm_model") or f"{provider_name}-default",
-        llm_small_model=env.get("llm_small_model"),
-        embedding_model=env.get("embedding_model"),
-        embedding_config=None,
-        reranker_model=env.get("reranker_model"),
-        is_active=True,
-        is_default=True,
-        tenant_id="default",
-        is_enabled=True,
-        config={},  # Additional provider-specific config can be added here
-    )
+    common: dict[str, Any] = {
+        "provider_type": provider_type,
+        "api_key": api_key,
+        "base_url": env.get("base_url"),
+        "is_active": True,
+        "is_default": True,
+        "tenant_id": "default",
+        "is_enabled": True,
+        "config": {},  # Additional provider-specific config can be added here
+    }
+
+    configs: list[ProviderConfigCreate] = [
+        ProviderConfigCreate(
+            **common,
+            name=f"Default {provider_name.title()} LLM",
+            operation_type=OperationType.LLM,
+            llm_model=env.get("llm_model") or f"{provider_name}-default",
+            llm_small_model=env.get("llm_small_model"),
+            pool_enabled=True,
+        )
+    ]
+
+    embedding_model = env.get("embedding_model")
+    if embedding_model:
+        configs.append(
+            ProviderConfigCreate(
+                **common,
+                name=f"Default {provider_name.title()} Embedding",
+                operation_type=OperationType.EMBEDDING,
+                embedding_model=embedding_model,
+                pool_enabled=False,
+            )
+        )
+
+    reranker_model = env.get("reranker_model")
+    if reranker_model:
+        configs.append(
+            ProviderConfigCreate(
+                **common,
+                name=f"Default {provider_name.title()} Rerank",
+                operation_type=OperationType.RERANK,
+                reranker_model=reranker_model,
+                pool_enabled=False,
+            )
+        )
+
+    return configs

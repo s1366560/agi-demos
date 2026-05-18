@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 _SNAPSHOT_PATH = Path(__file__).parent / "models_snapshot.json"
 _STALENESS_THRESHOLD_DAYS = 30
 
+
 class ModelCatalogService(ModelCatalogPort):
     """In-memory model catalog backed by an embedded JSON snapshot.
 
@@ -92,6 +93,23 @@ class ModelCatalogService(ModelCatalogPort):
             results.append(meta)
         return results
 
+    def list_models_by_capability(
+        self,
+        capability: str,
+        provider: str | None = None,
+        include_deprecated: bool = False,
+    ) -> list[ModelMetadata]:
+        """List models filtered by a catalog capability."""
+        capability_lower = capability.lower()
+        return [
+            meta
+            for meta in self.list_models(
+                provider=provider,
+                include_deprecated=include_deprecated,
+            )
+            if any(str(cap).lower() == capability_lower for cap in meta.capabilities)
+        ]
+
     @override
     def get_variants(self, base_model: str) -> list[ModelMetadata]:
         """Get all variants of a base model.
@@ -127,6 +145,29 @@ class ModelCatalogService(ModelCatalogPort):
         self._loaded = False
         self._models.clear()
         self._ensure_loaded()
+
+    def refresh_from_remote(self) -> dict[str, Any]:
+        """Fetch models.dev, regenerate the snapshot, reload, and return snapshot info."""
+        self._refresh_from_remote()
+        self._loaded = False
+        self._models.clear()
+        self._ensure_loaded()
+        return self.get_snapshot_info()
+
+    def get_snapshot_info(self) -> dict[str, Any]:
+        """Return snapshot metadata plus current in-memory model count."""
+        self._ensure_loaded()
+        info: dict[str, Any] = {"model_count": len(self._models)}
+        if self._snapshot_path.exists():
+            try:
+                raw = json.loads(self._snapshot_path.read_text("utf-8"))
+                meta = raw.get("_meta", {})
+                if isinstance(meta, dict):
+                    info.update(meta)
+            except Exception:
+                logger.debug("Could not read model snapshot metadata", exc_info=True)
+        info["model_count"] = len(self._models)
+        return info
 
     @property
     def model_count(self) -> int:
@@ -219,10 +260,9 @@ class ModelCatalogService(ModelCatalogPort):
             supports_json_mode=FALLBACK_MODEL_METADATA.supports_json_mode,
             provider=FALLBACK_MODEL_METADATA.provider,
             modalities=list(FALLBACK_MODEL_METADATA.modalities),
-            description=(
-                f"Unknown model '{model_name}' with conservative defaults"
-            ),
+            description=(f"Unknown model '{model_name}' with conservative defaults"),
         )
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -279,12 +319,8 @@ class ModelCatalogService(ModelCatalogPort):
         if not generated_at_str:
             return
         try:
-            generated_at = datetime.fromisoformat(
-                generated_at_str.replace("Z", "+00:00")
-            )
-            age_days = (
-                datetime.now(UTC) - generated_at
-            ).days
+            generated_at = datetime.fromisoformat(generated_at_str.replace("Z", "+00:00"))
+            age_days = (datetime.now(UTC) - generated_at).days
             if age_days > _STALENESS_THRESHOLD_DAYS:
                 logger.warning(
                     "Model snapshot is %d days old (generated %s). "
@@ -327,9 +363,7 @@ class ModelCatalogService(ModelCatalogPort):
                 len(models),
             )
         except Exception:
-            logger.exception(
-                "Failed to refresh from models.dev; keeping existing snapshot"
-            )
+            logger.exception("Failed to refresh from models.dev; keeping existing snapshot")
 
 
 # ------------------------------------------------------------------

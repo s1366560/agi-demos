@@ -306,6 +306,7 @@ export type ProviderType =
   | 'volcengine_embedding'
   | 'volcengine_reranker';
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
+export type ProviderOperationType = 'llm' | 'embedding' | 'rerank';
 
 export interface EmbeddingConfig {
   model?: string | undefined;
@@ -341,6 +342,7 @@ export interface ProviderConfig {
   id: string;
   name: string;
   provider_type: ProviderType;
+  operation_type: ProviderOperationType;
   base_url?: string | undefined;
   llm_model?: string | undefined;
   llm_small_model?: string | undefined;
@@ -380,6 +382,7 @@ export interface ProviderHealth {
 export interface ProviderCreate {
   name: string;
   provider_type: ProviderType;
+  operation_type?: ProviderOperationType | undefined;
   api_key: string;
   base_url?: string | undefined;
   llm_model?: string | undefined;
@@ -402,6 +405,7 @@ export interface ProviderCreate {
 export interface ProviderUpdate {
   name?: string | undefined;
   provider_type?: ProviderType | undefined;
+  operation_type?: ProviderOperationType | undefined;
   api_key?: string | undefined;
   base_url?: string | undefined;
   llm_model?: string | undefined;

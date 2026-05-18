@@ -745,8 +745,9 @@ class TestLLMProvidersRouterTypes:
         data = response.json()
         assert data["provider_type"] == "openai"
         assert "models" in data
-        assert "gpt-4o" in data["models"]["chat"]
-        assert "gpt-4o-mini" in data["models"]["chat"]
+        assert data["source"] == "models.dev"
+        assert data["models"]["chat"]
+        assert "text-embedding-3-small" in data["models"]["embedding"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_openrouter(self, llm_client):
@@ -756,8 +757,8 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "openrouter"
-        assert "openai/gpt-4o" in data["models"]["chat"]
-        assert "openai/text-embedding-3-small" in data["models"]["embedding"]
+        assert data["source"] == "models.dev"
+        assert data["models"]["chat"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_dashscope(self, llm_client):
@@ -786,8 +787,8 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "minimax"
-        assert "abab6.5-chat" in data["models"]["chat"]
-        assert "embo-01" in data["models"]["embedding"]
+        assert data["source"] == "models.dev"
+        assert data["models"]["chat"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_kimi(self, llm_client):
@@ -797,7 +798,8 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "kimi"
-        assert "kimi-embedding-1" in data["models"]["embedding"]
+        assert data["source"] == "models.dev"
+        assert "models" in data
 
     @pytest.mark.asyncio
     async def test_list_models_for_zai(self, llm_client):
@@ -807,7 +809,8 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "zai"
-        assert "embedding-3" in data["models"]["embedding"]
+        assert data["source"] == "models.dev"
+        assert "models" in data
 
     @pytest.mark.asyncio
     async def test_list_models_for_ollama(self, llm_client):

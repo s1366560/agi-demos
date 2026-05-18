@@ -177,7 +177,7 @@ class ProviderResolutionService:
         if not provider:
             # 2. Try default provider
             logger.debug("Looking for default provider")
-            candidate = await self.repository.find_default_provider()
+            candidate = await self.repository.find_default_provider(operation_type)
             if candidate and self._is_provider_eligible(
                 candidate,
                 model_id,
@@ -237,14 +237,12 @@ class ProviderResolutionService:
             return False
 
         raw_provider_type = str(getattr(provider.provider_type, "value", provider.provider_type))
-        provider_type = raw_provider_type.strip().lower()
-        if not ProviderResolutionService._is_operation_type_compatible(
-            provider_type, operation_type
-        ):
+        provider_operation_type = ProviderResolutionService._operation_type_for_provider(provider)
+        if provider_operation_type != operation_type:
             logger.debug(
-                "Provider '%s' skipped: incompatible provider_type '%s' for %s operation",
+                "Provider '%s' skipped: operation_type '%s' incompatible with %s operation",
                 provider.name,
-                provider_type,
+                provider_operation_type.value,
                 operation_type.value,
             )
             return False
@@ -266,16 +264,24 @@ class ProviderResolutionService:
         return True
 
     @staticmethod
-    def _is_operation_type_compatible(provider_type: str, operation_type: OperationType) -> bool:
-        """Check provider type compatibility with requested operation type."""
-        operation_value = operation_type.value
-        if operation_value == OperationType.LLM.value:
-            return not (provider_type.endswith("_embedding") or provider_type.endswith("_reranker"))
-        if operation_value == OperationType.EMBEDDING.value:
-            return not provider_type.endswith("_reranker")
-        if operation_value == OperationType.RERANK.value:
-            return not provider_type.endswith("_embedding")
-        return True
+    def _operation_type_for_provider(provider: ProviderConfig) -> OperationType:
+        """Return explicit operation type, falling back to legacy provider variants."""
+        raw_operation = getattr(provider, "operation_type", None)
+        if isinstance(raw_operation, OperationType):
+            return raw_operation
+        if isinstance(raw_operation, str):
+            try:
+                return OperationType(raw_operation)
+            except ValueError:
+                pass
+
+        raw_provider_type = str(getattr(provider.provider_type, "value", provider.provider_type))
+        provider_type = raw_provider_type.strip().lower()
+        if provider_type.endswith("_embedding"):
+            return OperationType.EMBEDDING
+        if provider_type.endswith("_reranker"):
+            return OperationType.RERANK
+        return OperationType.LLM
 
     @staticmethod
     def _is_model_allowed_for_provider(provider: ProviderConfig, model_id: str | None) -> bool:
@@ -340,7 +346,12 @@ class ProviderResolutionService:
             if provider_key is None:
                 continue
 
-            for configured_model in (provider.llm_model, provider.llm_small_model):
+            for configured_model in (
+                provider.llm_model,
+                provider.llm_small_model,
+                provider.embedding_model,
+                provider.reranker_model,
+            ):
                 configured = ProviderResolutionService._normalize_model_name_for_match(
                     configured_model
                 )
