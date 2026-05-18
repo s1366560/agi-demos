@@ -86,7 +86,7 @@ describe('projectSandboxService', () => {
     );
     expect(result.url).toBe('/api/v1/projects/project-1/sandbox/desktop/proxy/');
     expect(result.wsUrl).toBe(
-      'ws://localhost:3000/api/v1/projects/project-1/sandbox/desktop/proxy/websockify'
+      'ws://localhost:8000/api/v1/projects/project-1/sandbox/desktop/proxy/websockify'
     );
   });
 });

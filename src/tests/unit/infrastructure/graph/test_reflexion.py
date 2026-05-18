@@ -34,3 +34,16 @@ class TestReflexionCheckerLLMResponseHandling:
         response = await checker._call_llm("Check missed entities", "Grace Hopper")
 
         assert response == '{"missed_entities": [{"name": "Grace", "entity_type": "Person"}]}'
+
+    def test_resolve_localized_person_type_to_canonical_schema_type(self):
+        checker = ReflexionChecker(
+            llm_client=GenerateOnlyLLMClient(),
+            embedding_service=MockEmbeddingService(),
+        )
+
+        result = checker._resolve_entity_type(
+            {"name": "李明", "entity_type": "人物"},
+            {0: "Entity", 1: "Person"},
+        )
+
+        assert result == "Person"

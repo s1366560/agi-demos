@@ -206,8 +206,9 @@ async def verify_api_key_from_header_or_query(
     )
 
     try:
-        # Verify using application service
-        domain_api_key = await auth_service.verify_api_key(api_key)
+        # Verify without updating last_used_at. Long-lived streams and
+        # WebSocket dependencies can otherwise hold the API key row lock.
+        domain_api_key = await auth_service.verify_api_key_read_only(api_key)
         if domain_api_key is None:
             raise ValueError("Invalid API key")
 
@@ -236,7 +237,7 @@ async def verify_api_key_from_header_query_or_cookie(
         api_key_repository=SqlAPIKeyRepository(db),
     )
     try:
-        domain_api_key = await auth_service.verify_api_key(api_key)
+        domain_api_key = await auth_service.verify_api_key_read_only(api_key)
         if domain_api_key is None:
             raise ValueError("Invalid API key")
         result = await db.execute(
@@ -334,8 +335,10 @@ async def verify_api_key_dependency(
     )
 
     try:
-        # Verify using application service
-        domain_api_key = await auth_service.verify_api_key(api_key)
+        # Verify using application service without updating last_used_at.
+        # The request dependency only needs authentication; writing here can
+        # block concurrent WebSocket/proxy handshakes on the same API key.
+        domain_api_key = await auth_service.verify_api_key_read_only(api_key)
         if domain_api_key is None:
             raise ValueError("Invalid API key")
 

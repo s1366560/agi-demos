@@ -6,6 +6,7 @@ import pytest
 
 from src.infrastructure.adapters.secondary.schema.dynamic_schema import (
     DEFAULT_ENTITY_TYPES_CONTEXT,
+    _ensure_default_types_initialized,
     _get_cached_schema_context,
     _initialized_projects,
     _set_cached_schema_context,
@@ -13,6 +14,8 @@ from src.infrastructure.adapters.secondary.schema.dynamic_schema import (
     format_entity_types_for_prompt,
     get_default_schema_context,
     get_project_schema_context,
+    initialize_default_types_for_project,
+    save_discovered_types_batch,
 )
 
 
@@ -405,3 +408,125 @@ class TestGetProjectSchemaContext:
             assert "Person" in type_names
         finally:
             _initialized_projects.discard("test-project-789")
+
+
+@pytest.mark.unit
+class TestSchemaPersistence:
+    """Tests for concurrency-safe schema persistence helpers."""
+
+    @pytest.mark.asyncio
+    async def test_default_type_initialization_counts_conflicts_as_existing(self):
+        """Lazy default initialization should tolerate concurrent inserts."""
+        project_id = "test-project-concurrent-defaults"
+        _initialized_projects.discard(project_id)
+
+        empty_result = MagicMock()
+        empty_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = empty_result
+
+        try:
+            with (
+                patch(
+                    "src.infrastructure.adapters.secondary.schema.dynamic_schema.async_session_factory"
+                ) as mock_factory,
+                patch(
+                    "src.infrastructure.adapters.secondary.schema.dynamic_schema._insert_on_conflict_do_nothing",
+                    new_callable=AsyncMock,
+                ) as mock_insert,
+            ):
+                mock_context_manager = AsyncMock()
+                mock_context_manager.__aenter__.return_value = mock_session
+                mock_context_manager.__aexit__.return_value = None
+                mock_factory.return_value = mock_context_manager
+                mock_insert.side_effect = [1, 0, 1, 0, 1, 0, 1]
+
+                await _ensure_default_types_initialized(project_id)
+
+            assert mock_insert.await_count == len(DEFAULT_ENTITY_TYPES_CONTEXT)
+            mock_session.commit.assert_awaited_once()
+            assert project_id in _initialized_projects
+        finally:
+            _initialized_projects.discard(project_id)
+
+    @pytest.mark.asyncio
+    async def test_initialize_default_types_for_project_reports_conflicts_as_existing(self):
+        """Explicit default initialization should return actual inserted counts."""
+        project_id = "test-project-explicit-defaults"
+
+        existing_result = MagicMock()
+        existing_result.fetchall.return_value = [("Entity",)]
+
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = existing_result
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.schema.dynamic_schema.async_session_factory"
+            ) as mock_factory,
+            patch(
+                "src.infrastructure.adapters.secondary.schema.dynamic_schema._insert_on_conflict_do_nothing",
+                new_callable=AsyncMock,
+            ) as mock_insert,
+        ):
+            mock_context_manager = AsyncMock()
+            mock_context_manager.__aenter__.return_value = mock_session
+            mock_context_manager.__aexit__.return_value = None
+            mock_factory.return_value = mock_context_manager
+            mock_insert.side_effect = [1, 0, 1, 0, 1, 0]
+
+            result = await initialize_default_types_for_project(project_id)
+
+        assert result == {"created": 3, "existing": 4}
+        mock_session.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_batch_save_counts_only_inserted_rows(self):
+        """Batch discovery should not overcount rows skipped by ON CONFLICT."""
+        project_id = "test-project-batch-conflicts"
+
+        empty_result = MagicMock()
+        empty_result.fetchall.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = [empty_result, empty_result, empty_result]
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.schema.dynamic_schema.async_session_factory"
+            ) as mock_factory,
+            patch(
+                "src.infrastructure.adapters.secondary.schema.dynamic_schema._insert_on_conflict_do_nothing",
+                new_callable=AsyncMock,
+            ) as mock_insert,
+        ):
+            mock_context_manager = AsyncMock()
+            mock_context_manager.__aenter__.return_value = mock_session
+            mock_context_manager.__aexit__.return_value = None
+            mock_factory.return_value = mock_context_manager
+            mock_insert.side_effect = [1, 0, 1]
+
+            result = await save_discovered_types_batch(
+                project_id=project_id,
+                entity_types=[
+                    {"name": "Product", "description": "A product."},
+                    {"name": "Product", "description": "Duplicate in the same batch."},
+                ],
+                edge_types=["WORKS_AT"],
+                edge_type_maps=[
+                    {
+                        "source_type": "Person",
+                        "target_type": "Organization",
+                        "edge_type": "WORKS_AT",
+                    }
+                ],
+            )
+
+        assert result == {
+            "entity_types_created": 1,
+            "edge_types_created": 0,
+            "edge_type_maps_created": 1,
+        }
+        assert mock_insert.await_count == 3
+        mock_session.commit.assert_awaited_once()

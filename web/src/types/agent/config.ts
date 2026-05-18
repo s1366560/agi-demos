@@ -420,6 +420,26 @@ export interface SandboxStateData {
   isHealthy: boolean;
   /** Error message if in error state */
   errorMessage?: string | undefined;
+  /** Service running flag for desktop/terminal status events */
+  running?: boolean | undefined;
+  /** Service URL for desktop/terminal status events */
+  url?: string | undefined;
+  /** Desktop display identifier */
+  display?: string | undefined;
+  /** Desktop resolution */
+  resolution?: string | undefined;
+  /** Desktop/terminal service port */
+  port?: number | undefined;
+  /** Terminal session identifier */
+  sessionId?: string | undefined;
+  /** Terminal process identifier */
+  pid?: number | undefined;
+  /** Whether desktop audio is enabled */
+  audioEnabled?: boolean | undefined;
+  /** Whether desktop dynamic resize is enabled */
+  dynamicResize?: boolean | undefined;
+  /** Desktop image encoding */
+  encoding?: string | undefined;
   /** HTTP service identifier for sandbox web previews */
   serviceId?: string | undefined;
   /** Human-readable service name */

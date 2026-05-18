@@ -126,7 +126,15 @@ class TestEntityNode:
         labels = node.get_labels()
 
         assert "Entity" in labels
+        assert "Concept" in labels
         assert "Node" in labels
+
+    def test_entity_node_omits_non_identifier_type_label(self):
+        """Non-ASCII localized types stay as properties, not Neo4j labels."""
+        node = EntityNode(name="李明", entity_type="人物")
+        labels = node.get_labels()
+
+        assert labels == ["Entity", "Node"]
 
     def test_entity_node_to_neo4j_properties(self):
         """Test converting to Neo4j properties."""

@@ -110,6 +110,46 @@ class TestEnhancedSearchRouter:
         assert result["metadata"]["created_at"] == "2026-05-17T12:34:56+00:00"
 
     @pytest.mark.asyncio
+    async def test_graph_traversal_uses_entity_type_property_for_historical_nodes(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(
+            side_effect=[
+                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
+                _neo4j_result(
+                    [
+                        {
+                            "props": {
+                                "uuid": "person-1",
+                                "name": "Ada",
+                                "entity_type": "Person",
+                            },
+                            "labels": ["Entity", "Node"],
+                        }
+                    ]
+                ),
+            ]
+        )
+
+        response = await search_by_graph_traversal(
+            start_entity_uuid="entity-1",
+            max_depth=2,
+            relationship_types=None,
+            limit=50,
+            tenant_id=None,
+            project_id=None,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response["results"][0]["type"] == "Person"
+
+    @pytest.mark.asyncio
     async def test_graph_traversal_rejects_unjoined_start_project(
         self,
         test_db: AsyncSession,

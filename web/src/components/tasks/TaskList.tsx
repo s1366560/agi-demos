@@ -337,7 +337,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       });
       const tasks: Task[] = data.map((item) => ({
         id: item.id,
-        task_type: item.task_type,
+        task_type: item.task_type ?? item.name,
         name: item.name ?? item.task_type ?? item.id,
         status: item.status,
         created_at: item.created_at,
@@ -442,7 +442,9 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
         statusDot: getStatusDot(task.status),
         formattedDate: formatDateTimeFull(task.created_at),
         shortId: task.id.substring(0, 8),
-        canRetry: normalizedStatus === 'failed',
+        canRetry:
+          normalizedStatus === 'failed' ||
+          (normalizedStatus === 'pending' && task.task_type === 'add_episode'),
         canStop: normalizedStatus === 'pending' || normalizedStatus === 'processing',
       };
     });

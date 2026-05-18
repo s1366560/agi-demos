@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
+import websockets
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
@@ -66,6 +67,7 @@ class _FakeWebSocket:
         query_items: list[tuple[str, str]] | None = None,
     ) -> None:
         self.accepted = False
+        self.accepted_subprotocol: str | None = None
         self.sent_json: list[object] = []
         self.sent_text: list[str] = []
         self.closed = False
@@ -82,6 +84,7 @@ class _FakeWebSocket:
 
     async def accept(self, *args, **kwargs) -> None:
         self.accepted = True
+        self.accepted_subprotocol = kwargs.get("subprotocol")
 
     async def send_json(self, data: object) -> None:
         self.sent_json.append(data)
@@ -305,6 +308,88 @@ async def test_desktop_websocket_proxy_sanitizes_internal_errors(
 
 
 @pytest.mark.unit
+async def test_desktop_websocket_proxy_upgrades_stale_http_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(desktop_url="http://desktop.local:16080")
+    upstream = SimpleNamespace(close=AsyncMock())
+    captured: dict[str, str] = {}
+
+    async def fake_connect(ws_target: str, desktop_url: str) -> object:
+        captured["ws_target"] = ws_target
+        captured["desktop_url"] = desktop_url
+        return upstream
+
+    async def fake_relay_pair(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(router_mod, "_connect_desktop_upstream", fake_connect)
+    monkeypatch.setattr(router_mod, "_run_ws_relay_pair", fake_relay_pair)
+
+    await router_mod.proxy_project_desktop_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.accepted_subprotocol == "binary"
+    assert captured == {
+        "ws_target": "wss://desktop.local:16080/websockify",
+        "desktop_url": "http://desktop.local:16080",
+    }
+    upstream.close.assert_awaited_once()
+    assert websocket.closed is True
+
+
+@pytest.mark.unit
+async def test_connect_desktop_upstream_uses_plain_ws_without_ssl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_connect(uri: str, **kwargs: object) -> object:
+        captured["uri"] = uri
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+
+    await router_mod._connect_desktop_upstream(
+        "ws://desktop.local/",
+        "http://desktop.local",
+    )
+
+    assert captured["uri"] == "ws://desktop.local/"
+    assert captured["ssl"] is None
+    assert captured["additional_headers"] == {"Origin": "http://desktop.local"}
+
+
+@pytest.mark.unit
+async def test_connect_desktop_upstream_uses_ssl_for_wss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_connect(uri: str, **kwargs: object) -> object:
+        captured["uri"] = uri
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+
+    await router_mod._connect_desktop_upstream(
+        "wss://desktop.local/",
+        "http://desktop.local",
+    )
+
+    assert captured["uri"] == "wss://desktop.local/"
+    assert captured["ssl"] is not None
+    assert captured["additional_headers"] == {"Origin": "https://desktop.local"}
+
+
+@pytest.mark.unit
 async def test_desktop_websocket_missing_sandbox_reason_is_sanitized() -> None:
     websocket = _FakeWebSocket()
     service = SimpleNamespace(get_project_sandbox=AsyncMock(return_value=None))
@@ -338,6 +423,30 @@ async def test_desktop_websocket_missing_desktop_reason_is_sanitized() -> None:
     assert websocket.close_code == 1008
     assert websocket.close_reason == "Desktop service is not running"
     assert "proj-1" not in str(websocket.close_reason)
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_accepts_auth_subprotocol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infrastructure.adapters.secondary.sandbox import terminal_proxy
+
+    websocket = _FakeWebSocket(headers={"sec-websocket-protocol": "memstack.auth, ms_sk_test"})
+    service = _SandboxService(terminal_url="ws://terminal.local")
+    proxy = SimpleNamespace(get_session=Mock(return_value=None))
+    monkeypatch.setattr(terminal_proxy, "get_terminal_proxy", lambda: proxy)
+
+    await router_mod.proxy_project_terminal_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        session_id="missing-session",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.accepted_subprotocol == "memstack.auth"
+    assert websocket.sent_json == [{"type": "error", "message": "Session not found"}]
+    assert websocket.closed is True
 
 
 @pytest.mark.unit

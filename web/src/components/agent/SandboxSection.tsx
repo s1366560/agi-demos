@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Terminal, Monitor, Play, Square, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import {
   LazyTabs,
@@ -259,16 +260,49 @@ const DesktopTab: React.FC<{
 export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, className = '' }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
+  const ensureAttemptedProjectRef = useRef<string | null>(null);
   const {
     activeProjectId,
+    connectionStatus,
     desktopStatus,
     terminalStatus,
+    ensureSandbox,
     startDesktop,
     stopDesktop,
     startTerminal,
     isDesktopLoading,
     isTerminalLoading,
-  } = useSandboxStore();
+  } = useSandboxStore(
+    useShallow((state) => ({
+      activeProjectId: state.activeProjectId,
+      connectionStatus: state.connectionStatus,
+      desktopStatus: state.desktopStatus,
+      terminalStatus: state.terminalStatus,
+      ensureSandbox: state.ensureSandbox,
+      startDesktop: state.startDesktop,
+      stopDesktop: state.stopDesktop,
+      startTerminal: state.startTerminal,
+      isDesktopLoading: state.isDesktopLoading,
+      isTerminalLoading: state.isTerminalLoading,
+    }))
+  );
+
+  useEffect(() => {
+    if (!activeProjectId || sandboxId || connectionStatus === 'connecting') {
+      return;
+    }
+    if (ensureAttemptedProjectRef.current === activeProjectId) {
+      return;
+    }
+
+    ensureAttemptedProjectRef.current = activeProjectId;
+    void ensureSandbox(activeProjectId);
+  }, [activeProjectId, connectionStatus, ensureSandbox, sandboxId]);
+
+  const sandboxEmptyDescription =
+    connectionStatus === 'connecting'
+      ? t('components.sandboxSection.connecting')
+      : t('components.sandboxSection.noSandboxConnected');
 
   const tabItems = [
     {
@@ -290,7 +324,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <LazyEmpty description={t('components.sandboxSection.noSandboxConnected')} />
+          <LazyEmpty description={sandboxEmptyDescription} />
         </div>
       ),
     },
@@ -314,7 +348,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, class
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <LazyEmpty description={t('components.sandboxSection.noSandboxConnected')} />
+          <LazyEmpty description={sandboxEmptyDescription} />
         </div>
       ),
     },

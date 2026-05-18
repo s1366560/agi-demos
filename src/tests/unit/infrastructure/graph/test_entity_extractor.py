@@ -234,6 +234,15 @@ class TestEntityTypeResolution:
 
         assert result == "Person"
 
+    def test_resolve_localized_person_type_to_canonical_schema_type(self, extractor):
+        """Localized people labels from multilingual LLMs should become Person."""
+        entity_data = {"name": "李明", "entity_type": "人物"}
+        id_to_name = {0: "Entity", 1: "Person", 2: "Organization"}
+
+        result = extractor._resolve_entity_type(entity_data, id_to_name)
+
+        assert result == "Person"
+
     def test_resolve_falls_back_to_type_field(self, extractor):
         """Should fall back to 'type' field (legacy format)."""
         entity_data = {"name": "Acme", "type": "Organization"}

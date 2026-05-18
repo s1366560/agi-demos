@@ -3,8 +3,10 @@ from typing import Any
 
 from src.infrastructure.adapters.primary.web.routers.graph import (
     SubgraphRequest,
+    get_entity_types,
     get_graph,
     get_subgraph,
+    list_entities,
 )
 
 
@@ -23,10 +25,22 @@ class FakeNeo4jClient:
         return SimpleNamespace(records=self.records)
 
 
+class SequentialNeo4jClient:
+    def __init__(self, results: list[list[dict[str, Any]]]) -> None:
+        self.results = results
+        self.calls: list[dict[str, Any]] = []
+
+    async def execute_query(self, query: str, **params: Any) -> SimpleNamespace:
+        self.calls.append({"query": query, "params": params})
+        records = self.results.pop(0)
+        return SimpleNamespace(records=records)
+
+
 async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
     source_props = {
         "uuid": "source-1",
         "name": "Source",
+        "entity_type": "Person",
         "created_at": FakeNeo4jDateTime(),
         "metadata": {"seen_at": FakeNeo4jDateTime()},
         "name_embedding": [0.1, 0.2],
@@ -58,6 +72,7 @@ async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
     )
 
     node = response["elements"]["nodes"][0]["data"]
+    assert node["label"] == "Person"
     assert node["created_at"] == "2026-05-16T04:58:00+00:00"
     assert node["metadata"]["seen_at"] == "2026-05-16T04:58:00+00:00"
     assert "name_embedding" not in node
@@ -109,3 +124,47 @@ async def test_get_subgraph_serializes_node_and_edge_neo4j_datetime_properties()
     assert edge["created_at"] == "2026-05-16T04:58:00+00:00"
     assert "name_embedding" not in nodes[0]["data"]
     assert "fact_embedding" not in edge
+
+
+async def test_list_entities_filters_by_entity_type_property_for_historical_nodes() -> None:
+    client = SequentialNeo4jClient(
+        [
+            [{"total": 1}],
+            [
+                {
+                    "props": {
+                        "uuid": "person-1",
+                        "name": "Ada",
+                        "entity_type": "Person",
+                    },
+                    "labels": ["Entity", "Node"],
+                }
+            ],
+        ]
+    )
+
+    response = await list_entities(
+        project_id="project-1",
+        entity_type="Person",
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response["total"] == 1
+    assert response["entities"][0]["entity_type"] == "Person"
+    assert "e.entity_type = $entity_type" in client.calls[0]["query"]
+    assert client.calls[0]["params"]["entity_type"] == "Person"
+
+
+async def test_get_entity_types_counts_entity_type_property_for_historical_nodes() -> None:
+    client = FakeNeo4jClient([{"entity_type": "Person", "entity_count": 2}])
+
+    response = await get_entity_types(
+        project_id="project-1",
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response == {"entity_types": [{"entity_type": "Person", "count": 2}], "total": 1}
+    assert "coalesce(" in client.calls[0]["query"]
+    assert "head([label IN labels(e)" in client.calls[0]["query"]

@@ -82,6 +82,20 @@ async def test_verify_api_key_updates_last_used_at_on_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_verify_api_key_read_only_does_not_update_last_used_at() -> None:
+    plain_key = "ms_sk_valid"
+    api_key = _make_api_key(plain_key)
+    api_key_repo = _APIKeyRepository(api_key)
+    service = AuthService(user_repository=_UserRepository(), api_key_repository=api_key_repo)
+
+    result = await service.verify_api_key_read_only(plain_key)
+
+    assert result is api_key
+    assert api_key_repo.last_used_updates == []
+    assert result.last_used_at is None
+
+
+@pytest.mark.asyncio
 async def test_verify_api_key_does_not_update_inactive_key() -> None:
     plain_key = "ms_sk_inactive"
     api_key_repo = _APIKeyRepository(_make_api_key(plain_key, is_active=False))

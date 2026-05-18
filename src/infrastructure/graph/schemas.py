@@ -8,12 +8,15 @@ This module defines the data structures used throughout the native graph system:
 """
 
 import json
+import re
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
+
+_NEO4J_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 class EpisodeType(str, Enum):
@@ -122,7 +125,15 @@ class EntityNode(BaseNode):
 
     def get_labels(self) -> list[str]:
         """Get Neo4j labels for this node including custom labels."""
-        base_labels = ["Entity", "Node"]
+        base_labels = ["Entity"]
+        entity_type = self.entity_type.strip() if self.entity_type else ""
+        if (
+            entity_type
+            and entity_type not in {"Entity", "Node", "BaseEntity"}
+            and _NEO4J_IDENTIFIER_RE.match(entity_type)
+        ):
+            base_labels.append(entity_type)
+        base_labels.append("Node")
         # Add custom labels (ensure uniqueness)
         all_labels = base_labels + [lbl for lbl in self.labels if lbl not in base_labels]
         return all_labels

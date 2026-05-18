@@ -208,6 +208,31 @@ describe('TaskList (Compound Components)', () => {
       alertSpy.mockRestore();
     });
 
+    it('allows stale pending add_episode tasks to be restarted', async () => {
+      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce([
+        {
+          id: 'task-pending-add-episode',
+          name: 'add_episode',
+          status: 'pending',
+          created_at: '2024-01-01T12:00:00Z',
+          entity_id: 'memory-1',
+          entity_type: 'episode',
+        },
+      ]);
+
+      const { TaskList } = await import('../../../components/tasks/TaskList');
+      render(<TaskList />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Retry')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText('Retry'));
+
+      await waitFor(() => {
+        expect(taskAPI.retryTask).toHaveBeenCalledWith('task-pending-add-episode');
+      });
+    });
+
     it('shows in-app error feedback when stop fails', async () => {
       vi.spyOn(taskAPI, 'stopTask').mockRejectedValueOnce(new Error('stop failed'));
       const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);

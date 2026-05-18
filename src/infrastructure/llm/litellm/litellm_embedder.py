@@ -130,6 +130,11 @@ class LiteLLMEmbedder(BaseEmbedder):
         vector = await embedder.create("Hello world")
     """
 
+    _DIMENSIONS_CAPABLE_PROVIDERS: ClassVar[set[ProviderType]] = {
+        ProviderType.OPENAI,
+        ProviderType.AZURE_OPENAI,
+    }
+
     def __init__(
         self,
         config: ProviderConfig | LiteLLMEmbedderConfig,
@@ -305,11 +310,7 @@ class LiteLLMEmbedder(BaseEmbedder):
 
     def _apply_embedding_options(self, request_kwargs: dict[str, Any]) -> None:
         """Apply structured embedding options to LiteLLM request kwargs."""
-        # Volcengine embedding API does not support the 'dimensions' parameter.
-        if (
-            self._dimensions_override is not None
-            and self._provider_type != ProviderType.VOLCENGINE
-        ):
+        if self._dimensions_override is not None and self._supports_dimensions_parameter():
             request_kwargs["dimensions"] = self._dimensions_override
 
         if self._encoding_format:
@@ -329,6 +330,12 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         # Safety net: tell LiteLLM to silently drop unrecognised params
         request_kwargs["drop_params"] = True
+
+    def _supports_dimensions_parameter(self) -> bool:
+        if self._provider_type is None:
+            return True
+        return self._provider_type in self._DIMENSIONS_CAPABLE_PROVIDERS
+
     # Provider type -> LiteLLM model prefix mapping for embeddings
     _EMBEDDER_PROVIDER_PREFIXES: ClassVar[dict[str, str]] = {
         "gemini": "gemini/",

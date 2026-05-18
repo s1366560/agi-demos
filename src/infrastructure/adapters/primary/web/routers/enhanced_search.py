@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.primary.web.routers.graph import (
     _ensure_graph_project_access,
+    _entity_type_from_props_or_labels,
     _graph_project_scope,
     _sanitize_graph_value,
 )
@@ -289,12 +290,7 @@ async def search_by_graph_traversal(
             props = {key: _sanitize_graph_value(value) for key, value in r["props"].items()}
             labels = r["labels"]
 
-            # Extract specific entity type from labels (exclude base labels)
-            ignored_labels = {"Entity", "Node", "BaseEntity"}
-            specific_labels = [label for label in labels if label and label not in ignored_labels]
-            entity_type = (
-                specific_labels[0] if specific_labels else (labels[0] if labels else "Entity")
-            )
+            entity_type = _entity_type_from_props_or_labels(props, labels)
 
             logger.debug(
                 f"Graph traversal - Node {props.get('uuid')} with labels: {labels} -> entity_type: {entity_type}"
@@ -581,10 +577,7 @@ async def search_with_facets(
             props = r["props"]
             labels = r["labels"]
 
-            # Extract specific entity type from labels (exclude base labels)
-            ignored_labels = {"Entity", "Node", "BaseEntity"}
-            specific_labels = [label for label in labels if label and label not in ignored_labels]
-            entity_type = specific_labels[0] if specific_labels else "Entity"
+            entity_type = _entity_type_from_props_or_labels(props, labels)
 
             logger.debug(
                 f"Faceted search - Node {props.get('uuid')} with labels: {labels} -> entity_type: {entity_type}"

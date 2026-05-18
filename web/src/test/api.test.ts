@@ -387,5 +387,21 @@ describe('API Services', () => {
 
       expect(result).toEqual(mockTasks);
     });
+
+    it('retryPendingTasks should submit a bounded resume request', async () => {
+      const response = { submitted: 2, skipped: 0, limit: 25, task_ids: ['t1', 't2'] };
+      mockApiInstance.post.mockResolvedValue({ data: response });
+
+      const result = await taskAPI.retryPendingTasks({
+        limit: 25,
+        task_type: 'add_episode',
+        include_failed: true,
+      });
+
+      expect(mockApiInstance.post).toHaveBeenCalledWith('/tasks/retry-pending', undefined, {
+        params: { limit: 25, task_type: 'add_episode', include_failed: true },
+      });
+      expect(result).toEqual(response);
+    });
   });
 });

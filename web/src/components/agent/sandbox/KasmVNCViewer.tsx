@@ -23,6 +23,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+import { buildDesktopWebSocketProtocols } from '@/services/sandboxWebSocketUtils';
+
 // vendored KasmVNC noVNC fork
 import MouseButtonMapper, { XVNC_BUTTONS } from '@/vendor/kasmvnc/core/mousebuttonmapper.js';
 // vendored KasmVNC noVNC fork (ES modules, no TS declarations)
@@ -160,7 +162,7 @@ export function KasmVNCViewer({
       target.appendChild(touchInput);
 
       const rfb = new RFB(target, touchInput, wsUrl, {
-        wsProtocols: ['binary'],
+        wsProtocols: buildDesktopWebSocketProtocols(),
         shared: true,
       });
 

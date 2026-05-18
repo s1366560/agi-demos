@@ -83,8 +83,10 @@ async def authenticate_websocket(token: str, db: AsyncSession) -> tuple[str, str
             api_key_repository=SqlAPIKeyRepository(db),
         )
 
-        # Verify API key
-        api_key = await auth_service.verify_api_key(token)
+        # Verify API key without updating last_used_at. This dependency runs
+        # before accepting long-lived WebSocket connections, so a write here
+        # can hold the API key row lock for the lifetime of the socket.
+        api_key = await auth_service.verify_api_key_read_only(token)
         if not api_key:
             return None
 

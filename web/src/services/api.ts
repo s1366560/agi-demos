@@ -365,6 +365,17 @@ export const taskAPI = {
   retryTask: async (taskId: string): Promise<unknown> => {
     return await api.post(`/tasks/${taskId}/retry`);
   },
+  retryPendingTasks: async (
+    params: {
+      limit?: number | undefined;
+      task_type?: string | undefined;
+      include_failed?: boolean | undefined;
+      include_stale_processing?: boolean | undefined;
+      stale_after_minutes?: number | undefined;
+    } = {}
+  ): Promise<{ submitted: number; skipped: number; limit: number; task_ids: string[] }> => {
+    return await api.post('/tasks/retry-pending', undefined, { params });
+  },
   stopTask: async (taskId: string): Promise<unknown> => {
     return await api.post(`/tasks/${taskId}/stop`);
   },

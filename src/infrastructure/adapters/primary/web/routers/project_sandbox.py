@@ -59,6 +59,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     get_api_key_from_header,
     get_current_user_from_desktop_proxy,
 )
+from src.infrastructure.adapters.primary.web.websocket.auth import select_websocket_auth_subprotocol
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
@@ -2308,21 +2309,38 @@ def _create_desktop_ssl_context() -> Any:
     return ctx
 
 
+def _normalize_desktop_upstream_base(desktop_url: str) -> str:
+    """Normalize persisted KasmVNC URLs to the TLS endpoint used by the container."""
+    if urlparse(desktop_url).scheme == "http":
+        return desktop_url.replace("http://", "https://", 1)
+    return desktop_url
+
+
+def _build_desktop_websocket_target(desktop_url: str) -> str:
+    """Build the upstream KasmVNC WebSocket URL from a persisted desktop URL."""
+    desktop_base = _normalize_desktop_upstream_base(desktop_url).rstrip("/")
+    return (
+        desktop_base.replace("http://", "ws://", 1).replace("https://", "wss://", 1) + "/websockify"
+    )
+
+
 async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
-    """Connect to KasmVNC upstream WebSocket with TLS and binary subprotocol.
+    """Connect to KasmVNC upstream WebSocket with binary subprotocol.
 
     Pings are disabled because KasmVNC (websockify) does not reliably respond to
     WebSocket-level ping frames, causing spurious ``1011 keepalive ping timeout``
-    disconnects.  The VNC protocol itself generates constant bidirectional traffic,
+    disconnects. The VNC protocol itself generates constant bidirectional traffic,
     so dead connections are detected naturally via TCP/TLS errors.
     """
     import websockets
 
-    ssl_context = _create_desktop_ssl_context()
+    is_tls_upstream = urlparse(ws_target).scheme == "wss"
+    ssl_context = _create_desktop_ssl_context() if is_tls_upstream else None
+    origin = _normalize_desktop_upstream_base(desktop_url) if is_tls_upstream else desktop_url
     return await websockets.connect(
         ws_target,
         subprotocols=["binary"],  # type: ignore[list-item]  # websockets expects Subprotocol
-        additional_headers={"Origin": desktop_url},
+        additional_headers={"Origin": origin},
         max_size=2**23,  # 8MB max frame for desktop data
         open_timeout=10,
         ping_interval=None,  # KasmVNC does not respond to WS pings
@@ -2651,7 +2669,7 @@ async def proxy_project_http_service_websocket(
     query_pairs = [(k, v) for k, v in websocket.query_params.multi_items() if k != "token"]
     ws_target = _build_upstream_ws_url(service_info.service_url, path, query_pairs)
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=select_websocket_auth_subprotocol(websocket))
 
     upstream_ws = None
     websocket_closed = False
@@ -2948,7 +2966,7 @@ async def proxy_project_desktop(
 
     import httpx
 
-    target_base = info.desktop_url.rstrip("/")
+    target_base = _normalize_desktop_upstream_base(info.desktop_url).rstrip("/")
     target_path = path if path else ""
     target_url = f"{target_base}/{target_path}"
 
@@ -3034,9 +3052,7 @@ async def proxy_project_desktop_websocket(
         )
         return
 
-    # Build WebSocket URL — KasmVNC websocket is at root path
-    desktop_base = info.desktop_url.rstrip("/")
-    ws_target = desktop_base.replace("http://", "ws://").replace("https://", "wss://") + "/"
+    ws_target = _build_desktop_websocket_target(info.desktop_url)
 
     logger.info(
         f"Desktop WS proxy: project={project_id} "
@@ -3093,13 +3109,11 @@ async def proxy_project_terminal_websocket(
         return
 
     if not info.terminal_url:
-        await websocket.close(
-            code=1008, reason=_TERMINAL_SERVICE_NOT_RUNNING_DETAIL
-        )
+        await websocket.close(code=1008, reason=_TERMINAL_SERVICE_NOT_RUNNING_DETAIL)
         return
 
     # Accept the WebSocket connection
-    await websocket.accept()
+    await websocket.accept(subprotocol=select_websocket_auth_subprotocol(websocket))
 
     proxy = get_terminal_proxy()
     session: TerminalSession | None = None
@@ -3118,7 +3132,9 @@ async def proxy_project_terminal_websocket(
             try:
                 session = await proxy.create_session(container_id=info.sandbox_id)
             except ValueError as e:
-                logger.warning("Failed to create terminal session for project %s: %s", project_id, e)
+                logger.warning(
+                    "Failed to create terminal session for project %s: %s", project_id, e
+                )
                 await websocket.send_json(
                     {"type": "error", "message": "Failed to create terminal session"}
                 )
@@ -3145,7 +3161,9 @@ async def proxy_project_terminal_websocket(
     except Exception as e:
         logger.error(f"Terminal WebSocket proxy error: {e}")
         with contextlib.suppress(Exception):
-            await websocket.send_json({"type": "error", "message": "Terminal WebSocket proxy failed"})
+            await websocket.send_json(
+                {"type": "error", "message": "Terminal WebSocket proxy failed"}
+            )
 
     finally:
         # Cleanup

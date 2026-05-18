@@ -46,6 +46,14 @@ const MODE_DEFAULTS: Record<
   collab: { splitRatio: 0.55, rightPanelTab: 'plan' },
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isLayoutMode(value: unknown): value is LayoutMode {
+  return typeof value === 'string' && value in MODE_DEFAULTS;
+}
+
 export const useLayoutModeStore = create<LayoutModeState>()(
   devtools(
     persist(
@@ -77,6 +85,16 @@ export const useLayoutModeStore = create<LayoutModeState>()(
           chatPanelVisible: state.chatPanelVisible,
           rightPanelTab: state.rightPanelTab,
         }),
+        merge: (persistedState, currentState) => {
+          const persisted = isRecord(persistedState) ? persistedState : {};
+          const mode = isLayoutMode(persisted.mode) ? persisted.mode : currentState.mode;
+          return {
+            ...currentState,
+            ...persisted,
+            mode,
+            splitRatio: MODE_DEFAULTS[mode].splitRatio,
+          };
+        },
       }
     ),
     { name: 'layout-mode' }

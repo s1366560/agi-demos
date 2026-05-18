@@ -32,6 +32,7 @@ from src.infrastructure.i18n import gettext as _
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/graph", tags=["graph"])
+_BASE_ENTITY_LABELS = {"Entity", "Node", "BaseEntity"}
 
 
 async def _graph_project_scope(
@@ -119,6 +120,19 @@ def _sanitize_graph_properties(
         for key, value in props.items()
         if key not in excluded_keys
     }
+
+
+def _entity_type_from_props_or_labels(props: dict[str, Any], labels: list[str]) -> str:
+    entity_type = props.get("entity_type")
+    if isinstance(entity_type, str) and entity_type:
+        return entity_type
+    return next((label for label in labels if label not in _BASE_ENTITY_LABELS), "Entity")
+
+
+def _graph_node_label(props: dict[str, Any], labels: list[str]) -> str:
+    if "Entity" in labels:
+        return _entity_type_from_props_or_labels(props, labels)
+    return next((label for label in labels if label != "Node"), labels[0] if labels else "Entity")
 
 
 # --- Schemas ---
@@ -296,8 +310,7 @@ async def list_entities(
             params["project_ids"] = allowed_project_ids
 
         if entity_type:
-            # Filter by entity type using label filtering
-            conditions.append("$entity_type IN labels(e)")
+            conditions.append("(e.entity_type = $entity_type OR $entity_type IN labels(e))")
             params["entity_type"] = entity_type
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
@@ -383,10 +396,12 @@ async def get_entity_types(
         query = f"""
         MATCH (e:Entity)
         {where_clause}
-        UNWIND labels(e) as label
-        WITH label, count(e) as entity_count
-        WHERE label <> 'Entity' AND label <> 'Node' AND label <> 'BaseEntity'
-        RETURN label as entity_type, entity_count
+        WITH coalesce(
+            e.entity_type,
+            head([label IN labels(e) WHERE NOT label IN ['Entity', 'Node', 'BaseEntity']]),
+            'Entity'
+        ) as entity_type, count(e) as entity_count
+        RETURN entity_type, entity_count
         ORDER BY entity_count DESC
         """
 
@@ -552,8 +567,7 @@ async def get_entity_relationships(
             related_props = r["related_props"]
             related_labels = r["related_labels"]
 
-            # Get related entity type
-            related_type = next((label for label in related_labels if label != "Entity"), "Unknown")
+            related_type = _entity_type_from_props_or_labels(related_props, related_labels)
 
             # Clean up edge properties (remove embeddings)
             if "fact_embedding" in edge_props:
@@ -645,7 +659,7 @@ async def get_graph(
                 nodes_map[s_id] = {
                     "data": {
                         "id": s_id,
-                        "label": r["source_labels"][0] if r["source_labels"] else "Entity",
+                        "label": _graph_node_label(s_props, r["source_labels"]),
                         "name": s_props.get("name", "Unknown"),
                         **s_props,
                     }
@@ -661,7 +675,7 @@ async def get_graph(
                     nodes_map[t_id] = {
                         "data": {
                             "id": t_id,
-                            "label": r["target_labels"][0] if r["target_labels"] else "Entity",
+                            "label": _graph_node_label(t_props, r["target_labels"]),
                             "name": t_props.get("name", "Unknown"),
                             **t_props,
                         }
@@ -766,7 +780,7 @@ async def get_subgraph(
                     nodes_map[s_id] = {
                         "data": {
                             "id": s_id,
-                            "label": r["source_labels"][0] if r["source_labels"] else "Entity",
+                            "label": _graph_node_label(s_props, r["source_labels"]),
                             "name": s_props.get("name", "Unknown"),
                             **s_props,
                         }
@@ -783,7 +797,7 @@ async def get_subgraph(
                     nodes_map[t_id] = {
                         "data": {
                             "id": t_id,
-                            "label": r["target_labels"][0] if r["target_labels"] else "Entity",
+                            "label": _graph_node_label(t_props, r["target_labels"]),
                             "name": t_props.get("name", "Unknown"),
                             **t_props,
                         }
@@ -1087,6 +1101,4 @@ async def rebuild_communities(
             }
         except Exception as e:
             logger.exception("Failed to rebuild communities")
-            raise HTTPException(
-                status_code=500, detail=_("Failed to rebuild communities")
-            ) from e
+            raise HTTPException(status_code=500, detail=_("Failed to rebuild communities")) from e

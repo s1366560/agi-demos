@@ -24,6 +24,9 @@ class _FailingAuthService:
     async def verify_api_key(self, _api_key: str) -> None:
         raise ValueError("secret api key backend reason")
 
+    async def verify_api_key_read_only(self, _api_key: str) -> None:
+        raise ValueError("secret api key backend reason")
+
     async def get_user_by_id(self, _user_id: str) -> None:
         raise ValueError("secret user lookup reason")
 

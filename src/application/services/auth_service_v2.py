@@ -70,7 +70,12 @@ class AuthService:
 
     # === API Key Operations ===
 
-    async def verify_api_key(self, api_key: str) -> APIKey | None:
+    async def _verify_api_key(
+        self,
+        api_key: str,
+        *,
+        update_last_used: bool,
+    ) -> APIKey | None:
         """
         Verify an API key and return the API key object if valid.
 
@@ -98,11 +103,20 @@ class AuthService:
         if stored_key.expires_at and stored_key.expires_at < datetime.now(UTC):
             raise ValueError("API key has expired")
 
-        last_used_at = datetime.now(UTC)
-        await self._api_key_repo.update_last_used(stored_key.id, last_used_at)
-        stored_key.last_used_at = last_used_at
+        if update_last_used:
+            last_used_at = datetime.now(UTC)
+            await self._api_key_repo.update_last_used(stored_key.id, last_used_at)
+            stored_key.last_used_at = last_used_at
 
         return stored_key
+
+    async def verify_api_key(self, api_key: str) -> APIKey | None:
+        """Verify an API key and update its last-used timestamp."""
+        return await self._verify_api_key(api_key, update_last_used=True)
+
+    async def verify_api_key_read_only(self, api_key: str) -> APIKey | None:
+        """Verify an API key without taking a write lock on the key row."""
+        return await self._verify_api_key(api_key, update_last_used=False)
 
     async def create_api_key(
         self,

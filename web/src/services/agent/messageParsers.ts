@@ -1,6 +1,30 @@
 import type { ServerMessage } from './types';
 import type { LifecycleState, LifecycleStateData, SandboxStateData } from '../../types/agent';
 
+function getStringField(data: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === 'string') return value;
+  }
+  return undefined;
+}
+
+function getNumberField(data: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === 'number') return value;
+  }
+  return undefined;
+}
+
+function getBooleanField(data: Record<string, unknown>, ...keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === 'boolean') return value;
+  }
+  return undefined;
+}
+
 /**
  * Parse lifecycle state data from WebSocket message
  */
@@ -54,28 +78,44 @@ export function parseSandboxStateData(message: ServerMessage): SandboxStateData 
 
   return {
     eventType,
-    sandboxId: typeof data.sandbox_id === 'string' ? data.sandbox_id : null,
+    sandboxId: getStringField(data, 'sandbox_id', 'sandboxId') ?? null,
     status: (data.status as SandboxStateData['status']) || null,
-    endpoint: typeof data.endpoint === 'string' ? data.endpoint : undefined,
-    websocketUrl: typeof data.websocket_url === 'string' ? data.websocket_url : undefined,
-    mcpPort: typeof data.mcp_port === 'number' ? data.mcp_port : undefined,
-    desktopPort: typeof data.desktop_port === 'number' ? data.desktop_port : undefined,
-    terminalPort: typeof data.terminal_port === 'number' ? data.terminal_port : undefined,
-    desktopUrl: typeof data.desktop_url === 'string' ? data.desktop_url : undefined,
-    terminalUrl: typeof data.terminal_url === 'string' ? data.terminal_url : undefined,
-    isHealthy: Boolean(data.is_healthy),
-    errorMessage: typeof data.error_message === 'string' ? data.error_message : undefined,
-    serviceId: typeof data.service_id === 'string' ? data.service_id : undefined,
-    serviceName: typeof data.service_name === 'string' ? data.service_name : undefined,
+    endpoint: getStringField(data, 'endpoint'),
+    websocketUrl: getStringField(data, 'websocket_url', 'websocketUrl'),
+    mcpPort: getNumberField(data, 'mcp_port', 'mcpPort'),
+    desktopPort: getNumberField(data, 'desktop_port', 'desktopPort'),
+    terminalPort: getNumberField(data, 'terminal_port', 'terminalPort'),
+    desktopUrl: getStringField(data, 'desktop_url', 'desktopUrl'),
+    terminalUrl: getStringField(data, 'terminal_url', 'terminalUrl'),
+    isHealthy: getBooleanField(data, 'is_healthy', 'isHealthy') ?? false,
+    errorMessage: getStringField(data, 'error_message', 'errorMessage'),
+    running: getBooleanField(data, 'running'),
+    url: getStringField(data, 'url'),
+    display: getStringField(data, 'display'),
+    resolution: getStringField(data, 'resolution'),
+    port: getNumberField(data, 'port'),
+    sessionId: getStringField(data, 'session_id', 'sessionId'),
+    pid: getNumberField(data, 'pid'),
+    audioEnabled: getBooleanField(data, 'audio_enabled', 'audioEnabled'),
+    dynamicResize: getBooleanField(data, 'dynamic_resize', 'dynamicResize'),
+    encoding: getStringField(data, 'encoding'),
+    serviceId: getStringField(data, 'service_id', 'serviceId'),
+    serviceName: getStringField(data, 'service_name', 'serviceName'),
     sourceType:
       data.source_type === 'sandbox_internal' || data.source_type === 'external_url'
         ? data.source_type
         : undefined,
-    serviceUrl: typeof data.service_url === 'string' ? data.service_url : undefined,
-    previewUrl: typeof data.preview_url === 'string' ? data.preview_url : undefined,
-    wsPreviewUrl: typeof data.ws_preview_url === 'string' ? data.ws_preview_url : undefined,
-    autoOpen: typeof data.auto_open === 'boolean' ? data.auto_open : undefined,
-    restartToken: typeof data.restart_token === 'string' ? data.restart_token : undefined,
-    updatedAt: typeof data.updated_at === 'string' ? data.updated_at : undefined,
+    serviceUrl: getStringField(data, 'service_url', 'serviceUrl'),
+    previewUrl: getStringField(data, 'preview_url', 'previewUrl', 'proxy_url', 'proxyUrl'),
+    wsPreviewUrl: getStringField(
+      data,
+      'ws_preview_url',
+      'wsPreviewUrl',
+      'ws_proxy_url',
+      'wsProxyUrl'
+    ),
+    autoOpen: getBooleanField(data, 'auto_open', 'autoOpen'),
+    restartToken: getStringField(data, 'restart_token', 'restartToken'),
+    updatedAt: getStringField(data, 'updated_at', 'updatedAt'),
   };
 }

@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from src.infrastructure.graph.dedup import HashDeduplicator
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+from src.infrastructure.graph.extraction.entity_type_normalization import normalize_entity_type
 from src.infrastructure.graph.extraction.prompts import (
     ENTITY_EXTRACTION_SYSTEM_PROMPT,
     build_entity_extraction_prompt,
@@ -604,7 +605,10 @@ class EntityExtractor:
 
         # Return "Entity" as default (matching Graphiti's ID 0 semantics)
         # instead of "Unknown" to maintain consistency
-        return entity_type if entity_type else "Entity"
+        return normalize_entity_type(
+            entity_type,
+            allowed_types=set(entity_type_id_to_name.values()) if entity_type_id_to_name else None,
+        )
 
     async def _deduplicate_entities(
         self,

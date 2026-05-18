@@ -6,10 +6,11 @@ import logging
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -20,12 +21,18 @@ from src.application.use_cases.task import (
 )
 from src.configuration.di_container import DIContainer
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
+from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+from src.infrastructure.adapters.primary.web.dependencies import get_workflow_engine
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_api_key_from_header,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
-from src.infrastructure.adapters.secondary.persistence.models import TaskLog as DBTaskLog
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Memory,
+    Project,
+    TaskLog as DBTaskLog,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
     SqlAPIKeyRepository,
 )
@@ -35,6 +42,13 @@ from src.infrastructure.i18n import gettext as _
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
+
+_RETRYABLE_WORKFLOWS = {
+    "add_episode": "episode_processing",
+    "incremental_refresh": "incremental_refresh",
+    "rebuild_communities": "rebuild_communities",
+}
+_UNRETRYABLE_RETRY_MESSAGE = "Retry skipped: unrecoverable task"
 
 
 # --- Schemas ---
@@ -71,6 +85,13 @@ class TaskLogResponse(BaseModel):
 class QueueDepthPoint(BaseModel):
     timestamp: str
     depth: int
+
+
+class RetryPendingResponse(BaseModel):
+    submitted: int
+    skipped: int
+    limit: int
+    task_ids: list[str]
 
 
 # --- FastAPI Dependencies ---
@@ -146,43 +167,17 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsRespons
     one_day_ago = now - timedelta(days=1)
     one_hour_ago = now - timedelta(hours=1)
 
-    # Total tasks (24h)
-    total_24h = (
-        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.created_at >= one_day_ago))
+    total = await db.scalar(select(func.count(DBTaskLog.id))) or 0
+
+    completed = (
+        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "COMPLETED"))
         or 0
     )
 
-    # Completed (24h)
-    completed_24h = (
-        await db.scalar(
-            select(func.count(DBTaskLog.id)).where(
-                DBTaskLog.status == "COMPLETED", DBTaskLog.created_at >= one_day_ago
-            )
-        )
-        or 0
+    failed = (
+        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "FAILED")) or 0
     )
 
-    # Failed (24h) - for error rate
-    failed_24h = (
-        await db.scalar(
-            select(func.count(DBTaskLog.id)).where(
-                DBTaskLog.status == "FAILED", DBTaskLog.created_at >= one_day_ago
-            )
-        )
-        or 0
-    )
-
-    # Failed (1h) - for dashboard card
-    failed_1h = (
-        await db.scalar(
-            select(func.count(DBTaskLog.id)).where(
-                DBTaskLog.status == "FAILED", DBTaskLog.completed_at >= one_hour_ago
-            )
-        )
-        or 0
-    )
-
-    # Pending & Processing (Active)
     pending = (
         await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PENDING")) or 0
     )
@@ -202,15 +197,26 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsRespons
     )
     throughput = completed_1h / 60
 
-    # Error Rate
+    total_24h = (
+        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.created_at >= one_day_ago))
+        or 0
+    )
+    failed_24h = (
+        await db.scalar(
+            select(func.count(DBTaskLog.id)).where(
+                DBTaskLog.status == "FAILED", DBTaskLog.created_at >= one_day_ago
+            )
+        )
+        or 0
+    )
     error_rate = (failed_24h / total_24h * 100) if total_24h > 0 else 0.0
 
     return TaskStatsResponse(
-        total=total_24h,
+        total=total,
         pending=pending,
         processing=processing,
-        completed=completed_24h,
-        failed=failed_1h,
+        completed=completed,
+        failed=failed,
         throughput_per_minute=throughput,
         error_rate=error_rate,
     )
@@ -320,14 +326,7 @@ async def get_recent_tasks(
 @router.get("/status-breakdown")
 async def get_status_breakdown(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Get task status breakdown."""
-    now = datetime.now(UTC)
-    one_day_ago = now - timedelta(days=1)
-
-    query = (
-        select(DBTaskLog.status, func.count(DBTaskLog.id))
-        .where(DBTaskLog.created_at >= one_day_ago)
-        .group_by(DBTaskLog.status)
-    )
+    query = select(DBTaskLog.status, func.count(DBTaskLog.id)).group_by(DBTaskLog.status)
 
     result = await db.execute(refresh_select_statement(query))
     breakdown = {row[0]: row[1] for row in result.all()}
@@ -340,43 +339,321 @@ async def get_status_breakdown(db: AsyncSession = Depends(get_db)) -> dict[str, 
     }
 
 
+def _retry_payload_for_task(task: DBTaskLog) -> tuple[str, dict[str, Any]]:
+    workflow_name = _RETRYABLE_WORKFLOWS.get(task.task_type)
+    if workflow_name is None:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Task type cannot be retried from the task dashboard"),
+        )
+
+    payload = dict(task.payload or {})
+    if task.task_type == "add_episode":
+        if not isinstance(payload.get("uuid"), str) or not isinstance(payload.get("content"), str):
+            raise HTTPException(
+                status_code=400,
+                detail=_("Task payload is missing episode processing data"),
+            )
+    elif task.task_type == "incremental_refresh":
+        payload.setdefault("group_id", task.group_id)
+    elif task.task_type == "rebuild_communities":
+        payload.setdefault("task_group_id", task.group_id)
+        payload.setdefault("project_id", payload.get("task_group_id") or task.group_id)
+
+    payload["task_id"] = task.id
+    return workflow_name, payload
+
+
+def _reset_task_for_retry(task: DBTaskLog, payload: dict[str, Any]) -> None:
+    task.payload = payload
+    task.status = "PENDING"
+    task.error_message = None
+    task.started_at = None
+    task.completed_at = None
+    task.stopped_at = None
+    task.progress = 0
+    task.message = "Queued for retry"
+    task.retry_count += 1
+
+
+async def _project_exists(db: AsyncSession, project_id: str) -> bool:
+    result = await db.execute(
+        refresh_select_statement(select(Project.id).where(Project.id == project_id).limit(1))
+    )
+    return result.scalar_one_or_none() is not None
+
+
+def _payload_project_id(task: DBTaskLog, payload: dict[str, Any]) -> str | None:
+    value = payload.get("project_id") or payload.get("group_id") or task.group_id
+    return value if isinstance(value, str) and value else None
+
+
+async def _retry_blocker_for_task(
+    db: AsyncSession,
+    task: DBTaskLog,
+    payload: dict[str, Any],
+) -> str | None:
+    project_id = _payload_project_id(task, payload)
+    if project_id and not await _project_exists(db, project_id):
+        return f"Project {project_id} no longer exists; task cannot be retried"
+    return None
+
+
+def _mark_task_unretryable(task: DBTaskLog, reason: str) -> None:
+    task.status = "FAILED"
+    task.error_message = reason
+    task.completed_at = datetime.now(UTC)
+    task.progress = 100
+    task.message = _UNRETRYABLE_RETRY_MESSAGE
+
+
+def _task_payload_for_memory(memory: Memory, project: Project, task_id: str) -> dict[str, Any]:
+    """Build the episode-processing payload for an orphaned pending memory."""
+    return {
+        "group_id": memory.project_id,
+        "name": memory.title or str(memory.id),
+        "content": memory.content,
+        "source_description": "Historical memory retry",
+        "episode_type": memory.content_type or "text",
+        "entity_types": None,
+        "uuid": memory.id,
+        "tenant_id": project.tenant_id,
+        "project_id": memory.project_id,
+        "user_id": str(memory.author_id),
+        "memory_id": memory.id,
+        "task_id": task_id,
+    }
+
+
+def _create_task_for_memory_retry(
+    memory: Memory,
+    project: Project,
+    now: datetime,
+) -> tuple[DBTaskLog, dict[str, Any]]:
+    task_id = str(uuid4())
+    payload = _task_payload_for_memory(memory, project, task_id)
+    task = DBTaskLog(
+        id=task_id,
+        group_id=memory.project_id,
+        task_type="add_episode",
+        status="PENDING",
+        payload=payload,
+        entity_id=memory.id,
+        entity_type="episode",
+        progress=0,
+        message="Queued historical memory for graph processing",
+        created_at=now,
+    )
+    memory.task_id = task_id
+    memory.processing_status = "PENDING"
+    memory.updated_at = now
+    return task, payload
+
+
+async def _prepare_orphan_memory_retries(
+    db: AsyncSession,
+    limit: int,
+) -> list[tuple[DBTaskLog, str, dict[str, Any]]]:
+    if limit <= 0:
+        return []
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(Memory, Project)
+            .join(Project, Project.id == Memory.project_id)
+            .where(
+                Memory.processing_status == "PENDING",
+                Memory.task_id.is_(None),
+            )
+            .order_by(desc(Memory.created_at))
+            .limit(limit)
+        )
+    )
+
+    now = datetime.now(UTC)
+    prepared: list[tuple[DBTaskLog, str, dict[str, Any]]] = []
+    for memory, project in result.all():
+        task, payload = _create_task_for_memory_retry(memory, project, now)
+        db.add(task)
+        prepared.append((task, "episode_processing", payload))
+    return prepared
+
+
+async def _start_retry_workflow(
+    *,
+    task: DBTaskLog,
+    workflow_name: str,
+    payload: dict[str, Any],
+    workflow_engine: WorkflowEnginePort,
+) -> None:
+    workflow_id = f"{workflow_name.replace('_', '-')}-retry-{task.id}"
+    await workflow_engine.start_workflow(
+        workflow_name=workflow_name,
+        workflow_id=workflow_id,
+        input_data=payload,
+        task_queue="default",
+    )
+
+
+async def _mark_retry_start_failed(db: AsyncSession, task: DBTaskLog, exc: Exception) -> None:
+    task.status = "FAILED"
+    task.error_message = str(exc)
+    task.completed_at = datetime.now(UTC)
+    task.progress = 100
+    task.message = "Retry failed to start"
+    await db.commit()
+
+
+@router.post("/retry-pending", response_model=RetryPendingResponse)
+async def retry_pending_tasks_endpoint(
+    limit: int = Query(10, ge=1, le=10),
+    task_type: str | None = Query(None),
+    include_failed: bool = Query(False),
+    include_stale_processing: bool = Query(False),
+    stale_after_minutes: int = Query(15, ge=1, le=1440),
+    db: AsyncSession = Depends(get_db),
+    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+) -> RetryPendingResponse:
+    """Resume a bounded batch of stale pending tasks from the dashboard."""
+    include_failed = include_failed is True
+    include_stale_processing = include_stale_processing is True
+    raw_stale_after_minutes: Any = stale_after_minutes
+    if not isinstance(raw_stale_after_minutes, int):
+        raw_stale_after_minutes = 15
+    stale_after_minutes = raw_stale_after_minutes
+
+    retryable_types = set(_RETRYABLE_WORKFLOWS)
+    if task_type:
+        if task_type not in retryable_types:
+            raise HTTPException(
+                status_code=400,
+                detail=_("Task type cannot be retried from the task dashboard"),
+            )
+        retryable_types = {task_type}
+    status_filter = DBTaskLog.status == "PENDING"
+    if include_failed:
+        status_filter = or_(
+            DBTaskLog.status == "PENDING",
+            and_(
+                DBTaskLog.status == "FAILED",
+                or_(
+                    DBTaskLog.message.is_(None),
+                    DBTaskLog.message != _UNRETRYABLE_RETRY_MESSAGE,
+                ),
+            ),
+        )
+    if include_stale_processing:
+        stale_before = datetime.now(UTC) - timedelta(minutes=stale_after_minutes)
+        stale_processing_filter = and_(
+            DBTaskLog.status == "PROCESSING",
+            DBTaskLog.started_at.is_not(None),
+            DBTaskLog.started_at < stale_before,
+        )
+        status_filter = or_(status_filter, stale_processing_filter)
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(DBTaskLog)
+            .where(
+                status_filter,
+                DBTaskLog.task_type.in_(retryable_types),
+            )
+            .order_by(desc(DBTaskLog.created_at))
+            .limit(limit)
+        )
+    )
+    tasks = list(result.scalars().all())
+
+    prepared: list[tuple[DBTaskLog, str, dict[str, Any]]] = []
+    skipped = 0
+    for task in tasks:
+        try:
+            workflow_name, payload = _retry_payload_for_task(task)
+        except HTTPException:
+            skipped += 1
+            continue
+        blocker = await _retry_blocker_for_task(db, task, payload)
+        if blocker:
+            _mark_task_unretryable(task, blocker)
+            skipped += 1
+            continue
+        _reset_task_for_retry(task, payload)
+        prepared.append((task, workflow_name, payload))
+
+    remaining_limit = limit - len(prepared)
+    if (task_type is None or task_type == "add_episode") and remaining_limit > 0:
+        prepared.extend(await _prepare_orphan_memory_retries(db, remaining_limit))
+
+    await db.commit()
+
+    submitted_ids: list[str] = []
+    for task, workflow_name, payload in prepared:
+        try:
+            await _start_retry_workflow(
+                task=task,
+                workflow_name=workflow_name,
+                payload=payload,
+                workflow_engine=workflow_engine,
+            )
+            submitted_ids.append(task.id)
+        except Exception as exc:
+            await _mark_retry_start_failed(db, task, exc)
+            skipped += 1
+
+    return RetryPendingResponse(
+        submitted=len(submitted_ids),
+        skipped=skipped,
+        limit=limit,
+        task_ids=submitted_ids,
+    )
+
+
 @router.post("/{task_id}/retry")
 async def retry_task_endpoint(
     task_id: str,
-    container: DIContainer = Depends(get_di_container),
+    db: AsyncSession = Depends(get_db),
+    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> dict[str, Any]:
-    """Retry a failed task."""
-    use_case = container.update_task_use_case()
-
-    # Get the task first to check status
-    task = await use_case.execute(
-        refresh_select_statement(
-            UpdateTaskCommand(
-                task_id=task_id,
-                status="PENDING",
-                error_message=None,
-            )
-        )
+    """Retry or resume a restartable background task."""
+    result = await db.execute(
+        refresh_select_statement(select(DBTaskLog).where(DBTaskLog.id == task_id))
     )
+    task = result.scalar_one_or_none()
 
     if not task:
         raise HTTPException(status_code=404, detail=_("Task not found"))
 
-    if task.status != TaskLogStatus.FAILED:
-        raise HTTPException(status_code=400, detail=_("Task can only be retried if failed"))
-
-    # Update task to pending
-    task = await use_case.execute(
-        refresh_select_statement(
-            UpdateTaskCommand(
-                task_id=task_id,
-                status="PENDING",
-                error_message=None,
-            )
+    if task.status not in {"FAILED", "PENDING", "STOPPED"}:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Task can only be retried if failed, stopped, or pending"),
         )
-    )
 
-    return {"message": "Task retried successfully"}
+    workflow_name, payload = _retry_payload_for_task(task)
+    blocker = await _retry_blocker_for_task(db, task, payload)
+    if blocker:
+        _mark_task_unretryable(task, blocker)
+        await db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=_("Task project no longer exists; task cannot be retried"),
+        )
+
+    _reset_task_for_retry(task, payload)
+    await db.commit()
+
+    try:
+        await _start_retry_workflow(
+            task=task,
+            workflow_name=workflow_name,
+            payload=payload,
+            workflow_engine=workflow_engine,
+        )
+    except Exception as exc:
+        await _mark_retry_start_failed(db, task, exc)
+        raise HTTPException(status_code=500, detail=_("Failed to restart task")) from exc
+
+    return {"message": "Task retry submitted", "task_id": task.id}
 
 
 @router.post("/{task_id}/stop")

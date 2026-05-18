@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+from src.infrastructure.graph.extraction.entity_type_normalization import normalize_entity_type
 from src.infrastructure.graph.extraction.prompts import (
     REFLEXION_SYSTEM_PROMPT,
     build_reflexion_prompt,
@@ -325,6 +326,7 @@ class ReflexionChecker:
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse reflexion response as JSON: {e}")
             return self._extract_json_from_text(response)
+
     @staticmethod
     def _extract_missed_entities(data: Any) -> list[dict[str, Any]]:
         """Extract missed entities from parsed JSON data."""
@@ -406,7 +408,9 @@ class ReflexionChecker:
         # Generate embeddings in batch
         embeddings: list[list[float] | None]
         try:
-            embeddings = cast(list[list[float] | None], await self._embedding_service.embed_batch(names))
+            embeddings = cast(
+                list[list[float] | None], await self._embedding_service.embed_batch(names)
+            )
         except Exception as e:
             logger.error(f"Failed to generate embeddings: {e}")
             embeddings = [None] * len(names)
@@ -469,4 +473,7 @@ class ReflexionChecker:
         entity_type = entity_data.get("entity_type", entity_data.get("type", ""))
 
         # Return "Entity" as default (matching Graphiti's ID 0 semantics)
-        return entity_type if entity_type else "Entity"
+        return normalize_entity_type(
+            entity_type,
+            allowed_types=set(entity_type_id_to_name.values()) if entity_type_id_to_name else None,
+        )

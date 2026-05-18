@@ -258,6 +258,40 @@ function appendRestartToken(url: string, restartToken?: string | null): string {
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
+function connectionStatusFromSandboxStatus(status?: string): ConnectionStatus | null {
+  switch (status) {
+    case 'pending':
+    case 'creating':
+    case 'connecting':
+      return 'connecting';
+    case 'running':
+      return 'connected';
+    case 'unhealthy':
+    case 'disconnected':
+    case 'error':
+      return 'error';
+    case 'stopped':
+    case 'terminated':
+      return 'idle';
+    default:
+      return null;
+  }
+}
+
+function getServiceRunning(data: Record<string, unknown>, eventType: string): boolean {
+  const explicitRunning = getBooleanField(data, 'running');
+  if (explicitRunning !== undefined) {
+    return explicitRunning;
+  }
+
+  const status = getStringField(data, 'status');
+  if (status) {
+    return status === 'running';
+  }
+
+  return eventType.endsWith('_started');
+}
+
 export const useSandboxStore = create<SandboxState>()(
   devtools(
     (set, get) => ({
@@ -448,13 +482,18 @@ export const useSandboxStore = create<SandboxState>()(
       // SSE subscription methods
       subscribeSSE: (projectId) => {
         // Unsubscribe from previous subscription if exists
-        const { sseUnsubscribe } = get();
+        const { activeProjectId, sseUnsubscribe } = get();
+        if (activeProjectId === projectId && sseUnsubscribe) {
+          return;
+        }
         if (sseUnsubscribe) {
           sseUnsubscribe();
         }
 
         // Subscribe to new project events
         const unsubscribe = sandboxSSEService.subscribe(projectId, {
+          onSandboxCreated: get().handleSSEEvent,
+          onSandboxTerminated: get().handleSSEEvent,
           onDesktopStarted: get().handleSSEEvent,
           onDesktopStopped: get().handleSSEEvent,
           onTerminalStarted: get().handleSSEEvent,
@@ -598,14 +637,49 @@ export const useSandboxStore = create<SandboxState>()(
         };
 
         switch (type) {
+          case 'sandbox_created':
+          case 'sandbox_status': {
+            const sandboxId = getStringField(data, 'sandbox_id', 'sandboxId');
+            const status = getStringField(data, 'status');
+            const nextConnectionStatus = connectionStatusFromSandboxStatus(status);
+            const current = get();
+            const nextActiveSandboxId = sandboxId ?? current.activeSandboxId;
+            const nextStatus = nextConnectionStatus ?? current.connectionStatus;
+
+            if (
+              nextActiveSandboxId !== current.activeSandboxId ||
+              nextStatus !== current.connectionStatus
+            ) {
+              set({
+                activeSandboxId: nextActiveSandboxId,
+                connectionStatus: nextStatus,
+              });
+            }
+            break;
+          }
+
+          case 'sandbox_terminated': {
+            set({
+              activeSandboxId: null,
+              connectionStatus: 'idle',
+              terminalSessionId: null,
+              desktopStatus: null,
+              terminalStatus: null,
+            });
+            break;
+          }
+
           case 'desktop_started': {
             const status: DesktopStatus = {
               running: true,
-              url: getStringField(data, 'url') ?? null,
+              url: getStringField(data, 'url', 'desktopUrl', 'desktop_url') ?? null,
               wsUrl: buildWsUrl(),
               display: getStringField(data, 'display') ?? ':0',
               resolution: getStringField(data, 'resolution') ?? '1280x720',
-              port: getNumberField(data, 'port') ?? 6080,
+              port: getNumberField(data, 'port', 'desktopPort', 'desktop_port') ?? 6080,
+              audioEnabled: getBooleanField(data, 'audioEnabled', 'audio_enabled'),
+              dynamicResize: getBooleanField(data, 'dynamicResize', 'dynamic_resize'),
+              encoding: getStringField(data, 'encoding'),
             };
             set({ desktopStatus: status });
             break;
@@ -626,14 +700,19 @@ export const useSandboxStore = create<SandboxState>()(
           }
 
           case 'desktop_status': {
-            const running = getBooleanField(data, 'running') ?? false;
+            const running = getServiceRunning(data, type);
             const status: DesktopStatus = {
               running,
-              url: getStringField(data, 'url') ?? null,
+              url: running
+                ? (getStringField(data, 'url', 'desktopUrl', 'desktop_url') ?? null)
+                : null,
               wsUrl: running ? buildWsUrl() : null,
               display: getStringField(data, 'display') ?? '',
               resolution: getStringField(data, 'resolution') ?? '',
-              port: getNumberField(data, 'port') ?? 0,
+              port: getNumberField(data, 'port', 'desktopPort', 'desktop_port') ?? 0,
+              audioEnabled: getBooleanField(data, 'audioEnabled', 'audio_enabled'),
+              dynamicResize: getBooleanField(data, 'dynamicResize', 'dynamic_resize'),
+              encoding: getStringField(data, 'encoding'),
             };
             set({ desktopStatus: status });
             break;
@@ -642,9 +721,9 @@ export const useSandboxStore = create<SandboxState>()(
           case 'terminal_started': {
             const status: TerminalStatus = {
               running: true,
-              url: getStringField(data, 'url') ?? null,
-              port: getNumberField(data, 'port') ?? 7681,
-              sessionId: getStringField(data, 'session_id') ?? null,
+              url: getStringField(data, 'url', 'terminalUrl', 'terminal_url') ?? null,
+              port: getNumberField(data, 'port', 'terminalPort', 'terminal_port') ?? 7681,
+              sessionId: getStringField(data, 'session_id', 'sessionId') ?? null,
               pid: getNumberField(data, 'pid') ?? null,
             };
             set({ terminalStatus: status });
@@ -665,11 +744,14 @@ export const useSandboxStore = create<SandboxState>()(
           }
 
           case 'terminal_status': {
+            const running = getServiceRunning(data, type);
             const status: TerminalStatus = {
-              running: getBooleanField(data, 'running') ?? false,
-              url: getStringField(data, 'url') ?? null,
-              port: getNumberField(data, 'port') ?? 0,
-              sessionId: getStringField(data, 'session_id') ?? null,
+              running,
+              url: running
+                ? (getStringField(data, 'url', 'terminalUrl', 'terminal_url') ?? null)
+                : null,
+              port: getNumberField(data, 'port', 'terminalPort', 'terminal_port') ?? 0,
+              sessionId: getStringField(data, 'session_id', 'sessionId') ?? null,
               pid: getNumberField(data, 'pid') ?? null,
             };
             set({ terminalStatus: status });

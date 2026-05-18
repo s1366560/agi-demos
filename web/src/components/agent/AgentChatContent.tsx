@@ -244,7 +244,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       subscribeSSE,
       unsubscribeSSE,
       setSandboxId,
-    } = useSandboxStore();
+    } = useSandboxStore(
+      useShallow((state) => ({
+        activeSandboxId: state.activeSandboxId,
+        setProjectId: state.setProjectId,
+        setConnectionStatus: state.setConnectionStatus,
+        subscribeSSE: state.subscribeSSE,
+        unsubscribeSSE: state.unsubscribeSSE,
+        setSandboxId: state.setSandboxId,
+      }))
+    );
     const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
     const [activeAgentId, setActiveAgentId] = useState<string | undefined>(undefined);

@@ -330,6 +330,79 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
       expect(result.current.terminalStatus?.running).toBe(false);
       expect(result.current.terminalStatus?.url).toBeNull();
     });
+
+    it('should attach sandbox id from sandbox_created events', () => {
+      const { result } = renderHook(() => useSandboxStore());
+
+      act(() => {
+        result.current.handleSSEEvent({
+          type: 'sandbox_created',
+          data: {
+            sandboxId: 'test-sandbox',
+            status: 'running',
+          },
+        } as any);
+      });
+
+      expect(result.current.activeSandboxId).toBe('test-sandbox');
+      expect(result.current.connectionStatus).toBe('connected');
+    });
+
+    it('should update desktop status from normalized websocket event data', () => {
+      const { result } = renderHook(() => useSandboxStore());
+
+      act(() => {
+        result.current.setProjectId('project-1');
+        result.current.handleSSEEvent({
+          type: 'desktop_status',
+          data: {
+            sandboxId: 'test-sandbox',
+            running: true,
+            url: 'http://localhost:6080/vnc.html',
+            display: ':1',
+            resolution: '1920x1080',
+            port: 6080,
+          },
+        } as any);
+      });
+
+      expect(result.current.desktopStatus).toMatchObject({
+        running: true,
+        url: 'http://localhost:6080/vnc.html',
+        display: ':1',
+        resolution: '1920x1080',
+        port: 6080,
+      });
+      expect(result.current.desktopStatus?.wsUrl).toContain(
+        '/api/v1/projects/project-1/sandbox/desktop/proxy/websockify'
+      );
+    });
+
+    it('should update terminal status from normalized websocket event data', () => {
+      const { result } = renderHook(() => useSandboxStore());
+
+      act(() => {
+        result.current.handleSSEEvent({
+          type: 'terminal_status',
+          data: {
+            sandboxId: 'test-sandbox',
+            running: true,
+            url: 'ws://localhost:7681',
+            port: 7681,
+            sessionId: 'session-123',
+            pid: 42,
+          },
+        } as any);
+      });
+
+      expect(result.current.terminalStatus).toMatchObject({
+        running: true,
+        url: 'ws://localhost:7681',
+        port: 7681,
+        sessionId: 'session-123',
+        pid: 42,
+      });
+    });
   });
 
   describe('Selectors', () => {

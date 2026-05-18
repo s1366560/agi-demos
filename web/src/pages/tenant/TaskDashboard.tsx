@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, RefreshCw } from 'lucide-react';
+import { message } from 'antd';
+import { AlertCircle, Gauge, Hourglass, ListTodo, Loader2, Play, RefreshCw } from 'lucide-react';
 
 import { formatTimeOnly } from '@/utils/date';
 
@@ -87,6 +88,7 @@ const TaskDashboardInner: React.FC<{
   setQueueHistory,
 }) => {
   const { t } = useTranslation();
+  const [resuming, setResuming] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -135,6 +137,29 @@ const TaskDashboardInner: React.FC<{
   const handleRefresh = () => {
     setRefreshing(true);
     void fetchData();
+  };
+
+  const handleResumePending = async () => {
+    setResuming(true);
+    try {
+      const result = await taskAPI.retryPendingTasks({ limit: 5 });
+      void message.success(
+        t('tenant.tasks.resumeSubmitted', {
+          count: result.submitted,
+          defaultValue: 'Submitted {{count}} pending tasks',
+        })
+      );
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to resume pending tasks:', error);
+      void message.error(
+        t('tenant.tasks.resumeFailed', {
+          defaultValue: 'Failed to resume pending tasks',
+        })
+      );
+    } finally {
+      setResuming(false);
+    }
   };
 
   // Chart Configurations
@@ -241,9 +266,22 @@ const TaskDashboardInner: React.FC<{
         <div className="flex gap-2">
           <button
             type="button"
+            onClick={() => {
+              void handleResumePending();
+            }}
+            disabled={resuming || refreshing || !stats?.pending}
+            className="bg-slate-900 dark:bg-white border border-slate-900 dark:border-white text-white dark:text-slate-950 px-4 py-2 rounded text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-200 flex items-center gap-2 transition-colors disabled:opacity-50"
+          >
+            <Play
+              className={`size-4 ${resuming ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+            />
+            {t('tenant.tasks.resumePending', { defaultValue: 'Resume pending' })}
+          </button>
+          <button
+            type="button"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded text-sm font-medium shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 transition-colors disabled:opacity-50"
           >
             <RefreshCw
               className={`size-5 ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
@@ -301,8 +339,7 @@ const TaskDashboardInner: React.FC<{
         </div>
 
         {/* Failed */}
-        <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
-          <div className="absolute right-0 top-0 h-full w-1 bg-red-500"></div>
+        <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/60 shadow-sm">
           <div className="flex justify-between items-start">
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
               {t('tenant.tasks.stats.failed')}

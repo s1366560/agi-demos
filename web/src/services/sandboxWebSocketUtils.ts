@@ -6,6 +6,9 @@
  */
 
 import { logger } from '../utils/logger';
+import { getAuthToken } from '../utils/tokenResolver';
+
+import { createWebSocketAuthProtocols } from './client/urlUtils';
 
 /**
  * WebSocket service types
@@ -25,7 +28,18 @@ export function getWebSocketProtocol(): string {
 export function getApiHost(): string {
   // In production, use the same host as the page
   // In development, this can be overridden via env variable
-  return import.meta.env.VITE_API_HOST || window.location.host;
+  const configuredHost = import.meta.env.VITE_API_HOST;
+  if (configuredHost) {
+    return configuredHost;
+  }
+
+  // Vite's dev server proxies HTTP well, but sandbox WebSocket clients are
+  // more reliable when they connect directly to the FastAPI dev server.
+  if (window.location.host.includes(':3000')) {
+    return 'localhost:8000';
+  }
+
+  return window.location.host;
 }
 
 /**
@@ -120,6 +134,10 @@ export function buildDesktopWebSocketUrl(projectId: string): string {
 
   const path = `${basePath}/projects/${projectId}/sandbox/desktop/proxy/websockify`;
   return new URL(path, `${protocol}//${host}`).toString();
+}
+
+export function buildDesktopWebSocketProtocols(token = getAuthToken()): string[] {
+  return token ? ['binary', ...createWebSocketAuthProtocols(token)] : ['binary'];
 }
 
 /**

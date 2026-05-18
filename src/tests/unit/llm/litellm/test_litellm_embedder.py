@@ -172,6 +172,41 @@ class TestLiteLLMEmbedder:
         assert call_kwargs["timeout"] == 12.5
         assert call_kwargs["custom_option"] == "enabled"
 
+    def test_openai_compatible_zai_embedding_does_not_send_dimensions(self):
+        """ZAI uses an OpenAI-compatible route, but does not support dimensions."""
+        provider = ProviderConfig(
+            id=uuid4(),
+            name="zai-embedding-provider",
+            provider_type=ProviderType.ZAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="glm-4.5",
+            llm_small_model="glm-4.5-air",
+            embedding_model="embedding-3",
+            embedding_config=EmbeddingConfig(dimensions=1536),
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_embedder.get_encryption_service"
+        ) as mock_get:
+            mock_encryption = MagicMock()
+            mock_encryption.decrypt.return_value = "sk-test-api-key"
+            mock_get.return_value = mock_encryption
+            embedder = LiteLLMEmbedder(config=provider)
+
+        call_kwargs = embedder._build_embedding_kwargs(
+            embedder._get_litellm_model_name(),
+            ["hello"],
+        )
+
+        assert call_kwargs["model"] == "openai/embedding-3"
+        assert "dimensions" not in call_kwargs
+        assert call_kwargs["drop_params"] is True
+
     @pytest.mark.asyncio
     async def test_create_validates_input(self, embedder):
         """Test that create validates input."""

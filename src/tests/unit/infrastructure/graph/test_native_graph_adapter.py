@@ -234,6 +234,60 @@ class TestNativeGraphAdapterProcessEpisode:
         assert [entity.uuid for entity in rel_entities] == ["existing-ada"]
 
     @pytest.mark.asyncio
+    async def test_process_episode_saves_person_entities_with_person_label(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        """Graph writes should preserve canonical person type as a Neo4j label."""
+        extracted = EntityNode(uuid="new-ada", name="Ada", entity_type="Person")
+
+        entity_extractor = MagicMock()
+        entity_extractor.extract = AsyncMock(return_value=[extracted])
+        entity_extractor.deduplicate_entity_nodes = AsyncMock(return_value=([extracted], {}))
+
+        relationship_extractor = MagicMock()
+        relationship_extractor.extract_from_entity_nodes = AsyncMock(return_value=[])
+        mock_neo4j_client.find_node_by_uuid.return_value = {"name": "Episode"}
+
+        with (
+            patch.object(
+                adapter,
+                "_load_schema_context",
+                AsyncMock(
+                    return_value={
+                        "entity_types_context": [],
+                        "entity_type_id_to_name": {},
+                        "edge_type_map": {},
+                    }
+                ),
+            ),
+            patch.object(adapter, "_get_entity_extractor", return_value=entity_extractor),
+            patch.object(adapter, "_get_existing_entities", AsyncMock(return_value=[])),
+            patch.object(
+                adapter,
+                "_get_relationship_extractor",
+                return_value=relationship_extractor,
+            ),
+            patch.object(adapter, "_save_discovered_types", AsyncMock()),
+            patch.object(adapter, "_update_episode_status", AsyncMock()),
+        ):
+            await adapter.process_episode(
+                episode_uuid="episode-1",
+                content="Ada founded a lab.",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+            )
+
+        mock_neo4j_client.save_node.assert_awaited_once()
+        assert mock_neo4j_client.save_node.await_args.kwargs["labels"] == [
+            "Entity",
+            "Person",
+            "Node",
+        ]
+
+    @pytest.mark.asyncio
     async def test_save_entity_relationship_merges_supporting_episodes(
         self,
         adapter,

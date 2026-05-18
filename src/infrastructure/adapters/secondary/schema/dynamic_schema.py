@@ -11,6 +11,7 @@ from typing import Any, TypedDict
 
 from pydantic import BaseModel, Field, create_model
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -98,6 +99,25 @@ _TYPE_MAP: dict[str, type] = {
 }
 
 
+def _created_row_count(result: Any) -> int:
+    """Return the number of rows actually inserted by an ON CONFLICT statement."""
+    rowcount = getattr(result, "rowcount", 0)
+    if isinstance(rowcount, int) and rowcount > 0:
+        return rowcount
+    return 0
+
+
+async def _insert_on_conflict_do_nothing(
+    session: Any,
+    model: Any,
+    values: dict[str, Any],
+    constraint: str,
+) -> int:
+    statement = pg_insert(model).values(values).on_conflict_do_nothing(constraint=constraint)
+    result = await session.execute(statement)
+    return _created_row_count(result)
+
+
 def _resolve_python_type(type_str: str) -> type:
     """Resolve a schema type string to a Python type."""
     return _TYPE_MAP.get(type_str, str)
@@ -121,7 +141,9 @@ def _build_typed_fields(schema: dict[str, Any]) -> dict[str, Any]:
 async def _fetch_entity_types(session: Any, project_id: str) -> dict[str, Any]:
     """Fetch and build entity type models from the database."""
     entity_types: dict[str, Any] = {}
-    result = await session.execute(refresh_select_statement(select(EntityType).where(EntityType.project_id == project_id)))
+    result = await session.execute(
+        refresh_select_statement(select(EntityType).where(EntityType.project_id == project_id))
+    )
     for et in result.scalars().all():
         fields = _build_typed_fields(et.schema)
         model = create_model(et.name, **fields, __base__=BaseModel)
@@ -134,7 +156,9 @@ async def _fetch_entity_types(session: Any, project_id: str) -> dict[str, Any]:
 async def _fetch_edge_types(session: Any, project_id: str) -> dict[str, Any]:
     """Fetch and build edge type models from the database."""
     edge_types: dict[str, Any] = {}
-    result = await session.execute(refresh_select_statement(select(EdgeType).where(EdgeType.project_id == project_id)))
+    result = await session.execute(
+        refresh_select_statement(select(EdgeType).where(EdgeType.project_id == project_id))
+    )
     for et in result.scalars().all():
         fields = _build_typed_fields(et.schema)
         edge_types[et.name] = create_model(et.name, **fields, __base__=BaseModel)
@@ -144,7 +168,9 @@ async def _fetch_edge_types(session: Any, project_id: str) -> dict[str, Any]:
 async def _fetch_edge_maps(session: Any, project_id: str) -> dict[tuple[str, str], list[str]]:
     """Fetch edge type maps from the database."""
     edge_type_map: dict[tuple[str, str], list[str]] = {}
-    result = await session.execute(refresh_select_statement(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id)))
+    result = await session.execute(
+        refresh_select_statement(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
+    )
     for em in result.scalars().all():
         key = (em.source_type, em.target_type)
         if key not in edge_type_map:
@@ -153,7 +179,9 @@ async def _fetch_edge_maps(session: Any, project_id: str) -> dict[tuple[str, str
     return edge_type_map
 
 
-async def get_project_schema(project_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[tuple[str, str], list[str]]]:
+async def get_project_schema(
+    project_id: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[tuple[str, str], list[str]]]:
     """
     Get dynamic schema for a project.
     Returns: (entity_types, edge_types, edge_type_map)
@@ -273,9 +301,11 @@ async def _ensure_default_types_initialized(project_id: str) -> None:
     async with async_session_factory() as session:
         # Check if any default types exist for this project
         result = await session.execute(
-            refresh_select_statement(select(EntityType.name).where(
-                EntityType.project_id == project_id, EntityType.source == "system"
-            ))
+            refresh_select_statement(
+                select(EntityType.name).where(
+                    EntityType.project_id == project_id, EntityType.source == "system"
+                )
+            )
         )
         existing_system_types = {row[0] for row in result.fetchall()}
 
@@ -285,28 +315,36 @@ async def _ensure_default_types_initialized(project_id: str) -> None:
             _initialized_projects.add(project_id)
             return
 
-        # Insert missing default types
+        # Insert missing default types. Parallel episode workers may initialize the same
+        # project concurrently, so rely on the database uniqueness constraint for safety.
         created_count = 0
+        attempted_count = 0
         for type_ctx in DEFAULT_ENTITY_TYPES_CONTEXT:
             type_name = type_ctx["entity_type_name"]
 
             if type_name in existing_system_types:
                 continue
 
-            entity_type = EntityType(
-                id=str(uuid_module.uuid4()),
-                project_id=project_id,
-                name=type_name,
-                description=type_ctx["entity_type_description"],
-                schema={},
-                status="ENABLED",
-                source="system",
+            attempted_count += 1
+            created_count += await _insert_on_conflict_do_nothing(
+                session=session,
+                model=EntityType,
+                values={
+                    "id": str(uuid_module.uuid4()),
+                    "project_id": project_id,
+                    "name": type_name,
+                    "description": type_ctx["entity_type_description"],
+                    "schema": {},
+                    "status": "ENABLED",
+                    "source": "system",
+                },
+                constraint="uq_entity_type_project_name",
             )
-            session.add(entity_type)
-            created_count += 1
+
+        if attempted_count > 0:
+            await session.commit()
 
         if created_count > 0:
-            await session.commit()
             logger.info(
                 f"Auto-initialized {created_count} default entity types for project {project_id}"
             )
@@ -372,9 +410,11 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
     async with async_session_factory() as session:
         # Fetch ALL Entity Types from database (including defaults)
         result = await session.execute(
-            refresh_select_statement(select(EntityType)
-            .where(EntityType.project_id == project_id)
-            .order_by(EntityType.created_at))
+            refresh_select_statement(
+                select(EntityType)
+                .where(EntityType.project_id == project_id)
+                .order_by(EntityType.created_at)
+            )
         )
         db_entity_types = list(result.scalars().all())
 
@@ -394,7 +434,9 @@ async def get_project_schema_context(project_id: str | None = None) -> SchemaCon
 
         # Fetch Edge Type Maps
         result = await session.execute(
-            refresh_select_statement(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
+            refresh_select_statement(
+                select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id)
+            )
         )
         for em in result.scalars().all():
             key = (em.source_type, em.target_type)
@@ -484,11 +526,15 @@ async def initialize_default_types_for_project(project_id: str) -> dict[str, int
     async with async_session_factory() as session:
         # Check existing types for this project
         result = await session.execute(
-            refresh_select_statement(select(EntityType.name).where(EntityType.project_id == project_id))
+            refresh_select_statement(
+                select(EntityType.name).where(EntityType.project_id == project_id)
+            )
         )
         existing_names = {row[0] for row in result.fetchall()}
 
-        # Insert default types that don't exist
+        # Insert default types that don't exist. Use conflict-safe inserts because this
+        # function may run at the same time as lazy schema initialization.
+        attempted_count = 0
         for type_ctx in DEFAULT_ENTITY_TYPES_CONTEXT:
             type_name = type_ctx["entity_type_name"]
 
@@ -496,20 +542,29 @@ async def initialize_default_types_for_project(project_id: str) -> dict[str, int
                 existing_count += 1
                 continue
 
-            entity_type = EntityType(
-                id=str(uuid.uuid4()),
-                project_id=project_id,
-                name=type_name,
-                description=type_ctx["entity_type_description"],
-                schema={},
-                status="ENABLED",
-                source="system",  # Mark as system-provided default
+            attempted_count += 1
+            inserted = await _insert_on_conflict_do_nothing(
+                session=session,
+                model=EntityType,
+                values={
+                    "id": str(uuid.uuid4()),
+                    "project_id": project_id,
+                    "name": type_name,
+                    "description": type_ctx["entity_type_description"],
+                    "schema": {},
+                    "status": "ENABLED",
+                    "source": "system",
+                },
+                constraint="uq_entity_type_project_name",
             )
-            session.add(entity_type)
-            created_count += 1
-            logger.debug(f"Created default entity type: {type_name} for project {project_id}")
+            created_count += inserted
+            if inserted:
+                logger.debug(f"Created default entity type: {type_name} for project {project_id}")
+            else:
+                existing_count += 1
 
-        await session.commit()
+        if attempted_count > 0:
+            await session.commit()
 
     if created_count > 0:
         # Clear cache to reflect new types
@@ -546,9 +601,11 @@ async def save_discovered_entity_type(
     async with async_session_factory() as session:
         # Check if type already exists
         result = await session.execute(
-            refresh_select_statement(select(EntityType.id).where(
-                EntityType.project_id == project_id, EntityType.name == name
-            ))
+            refresh_select_statement(
+                select(EntityType.id).where(
+                    EntityType.project_id == project_id, EntityType.name == name
+                )
+            )
         )
         existing = result.scalar_one_or_none()
 
@@ -556,17 +613,24 @@ async def save_discovered_entity_type(
             return None
 
         type_id = str(uuid.uuid4())
-        entity_type = EntityType(
-            id=type_id,
-            project_id=project_id,
-            name=name,
-            description=description or f"Auto-discovered {name} entity type.",
-            schema={},
-            status="ENABLED",
-            source="llm_discovered",
+        inserted = await _insert_on_conflict_do_nothing(
+            session=session,
+            model=EntityType,
+            values={
+                "id": type_id,
+                "project_id": project_id,
+                "name": name,
+                "description": description or f"Auto-discovered {name} entity type.",
+                "schema": {},
+                "status": "ENABLED",
+                "source": "llm_discovered",
+            },
+            constraint="uq_entity_type_project_name",
         )
-        session.add(entity_type)
         await session.commit()
+
+        if not inserted:
+            return None
 
         # Clear cache
         clear_schema_context_cache(project_id)
@@ -599,7 +663,9 @@ async def save_discovered_edge_type(
     async with async_session_factory() as session:
         # Check if type already exists
         result = await session.execute(
-            refresh_select_statement(select(EdgeType.id).where(EdgeType.project_id == project_id, EdgeType.name == name))
+            refresh_select_statement(
+                select(EdgeType.id).where(EdgeType.project_id == project_id, EdgeType.name == name)
+            )
         )
         existing = result.scalar_one_or_none()
 
@@ -607,17 +673,24 @@ async def save_discovered_edge_type(
             return None
 
         type_id = str(uuid.uuid4())
-        edge_type = EdgeType(
-            id=type_id,
-            project_id=project_id,
-            name=name,
-            description=description or f"Auto-discovered {name} relationship type.",
-            schema={},
-            status="ENABLED",
-            source="llm_discovered",
+        inserted = await _insert_on_conflict_do_nothing(
+            session=session,
+            model=EdgeType,
+            values={
+                "id": type_id,
+                "project_id": project_id,
+                "name": name,
+                "description": description or f"Auto-discovered {name} relationship type.",
+                "schema": {},
+                "status": "ENABLED",
+                "source": "llm_discovered",
+            },
+            constraint="uq_edge_type_project_name",
         )
-        session.add(edge_type)
         await session.commit()
+
+        if not inserted:
+            return None
 
         # Clear cache
         clear_schema_context_cache(project_id)
@@ -652,12 +725,14 @@ async def save_discovered_edge_type_map(
     async with async_session_factory() as session:
         # Check if mapping already exists
         result = await session.execute(
-            refresh_select_statement(select(EdgeTypeMap.id).where(
-                EdgeTypeMap.project_id == project_id,
-                EdgeTypeMap.source_type == source_type,
-                EdgeTypeMap.target_type == target_type,
-                EdgeTypeMap.edge_type == edge_type,
-            ))
+            refresh_select_statement(
+                select(EdgeTypeMap.id).where(
+                    EdgeTypeMap.project_id == project_id,
+                    EdgeTypeMap.source_type == source_type,
+                    EdgeTypeMap.target_type == target_type,
+                    EdgeTypeMap.edge_type == edge_type,
+                )
+            )
         )
         existing = result.scalar_one_or_none()
 
@@ -665,17 +740,24 @@ async def save_discovered_edge_type_map(
             return None
 
         map_id = str(uuid.uuid4())
-        edge_map = EdgeTypeMap(
-            id=map_id,
-            project_id=project_id,
-            source_type=source_type,
-            target_type=target_type,
-            edge_type=edge_type,
-            status="ENABLED",
-            source="llm_discovered",
+        inserted = await _insert_on_conflict_do_nothing(
+            session=session,
+            model=EdgeTypeMap,
+            values={
+                "id": map_id,
+                "project_id": project_id,
+                "source_type": source_type,
+                "target_type": target_type,
+                "edge_type": edge_type,
+                "status": "ENABLED",
+                "source": "llm_discovered",
+            },
+            constraint="uq_edge_map_unique",
         )
-        session.add(edge_map)
         await session.commit()
+
+        if not inserted:
+            return None
 
         # Clear cache
         clear_schema_context_cache(project_id)
@@ -720,7 +802,9 @@ async def save_discovered_types_batch(
     async with async_session_factory() as session:
         # Get existing entity types
         result = await session.execute(
-            refresh_select_statement(select(EntityType.name).where(EntityType.project_id == project_id))
+            refresh_select_statement(
+                select(EntityType.name).where(EntityType.project_id == project_id)
+            )
         )
         existing_entity_types = {row[0] for row in result.fetchall()}
 
@@ -732,9 +816,11 @@ async def save_discovered_types_batch(
 
         # Get existing edge type maps
         result = await session.execute(
-            refresh_select_statement(select(EdgeTypeMap.source_type, EdgeTypeMap.target_type, EdgeTypeMap.edge_type).where(
-                EdgeTypeMap.project_id == project_id
-            ))
+            refresh_select_statement(
+                select(
+                    EdgeTypeMap.source_type, EdgeTypeMap.target_type, EdgeTypeMap.edge_type
+                ).where(EdgeTypeMap.project_id == project_id)
+            )
         )
         existing_maps = {(r[0], r[1], r[2]) for r in result.fetchall()}
 
@@ -744,38 +830,42 @@ async def save_discovered_types_batch(
             if not name or name in existing_entity_types:
                 continue
 
-            session.add(
-                EntityType(
-                    id=str(uuid.uuid4()),
-                    project_id=project_id,
-                    name=name,
-                    description=et.get("description", f"Auto-discovered {name} entity type."),
-                    schema={},
-                    status="ENABLED",
-                    source="llm_discovered",
-                )
+            entity_types_created += await _insert_on_conflict_do_nothing(
+                session=session,
+                model=EntityType,
+                values={
+                    "id": str(uuid.uuid4()),
+                    "project_id": project_id,
+                    "name": name,
+                    "description": et.get("description", f"Auto-discovered {name} entity type."),
+                    "schema": {},
+                    "status": "ENABLED",
+                    "source": "llm_discovered",
+                },
+                constraint="uq_entity_type_project_name",
             )
             existing_entity_types.add(name)
-            entity_types_created += 1
 
         # Save new edge types
         for edge_name in edge_types:
             if not edge_name or edge_name in existing_edge_types:
                 continue
 
-            session.add(
-                EdgeType(
-                    id=str(uuid.uuid4()),
-                    project_id=project_id,
-                    name=edge_name,
-                    description=f"Auto-discovered {edge_name} relationship type.",
-                    schema={},
-                    status="ENABLED",
-                    source="llm_discovered",
-                )
+            edge_types_created += await _insert_on_conflict_do_nothing(
+                session=session,
+                model=EdgeType,
+                values={
+                    "id": str(uuid.uuid4()),
+                    "project_id": project_id,
+                    "name": edge_name,
+                    "description": f"Auto-discovered {edge_name} relationship type.",
+                    "schema": {},
+                    "status": "ENABLED",
+                    "source": "llm_discovered",
+                },
+                constraint="uq_edge_type_project_name",
             )
             existing_edge_types.add(edge_name)
-            edge_types_created += 1
 
         # Save new edge type maps
         for em in edge_type_maps:
@@ -790,19 +880,21 @@ async def save_discovered_types_batch(
             if map_key in existing_maps:
                 continue
 
-            session.add(
-                EdgeTypeMap(
-                    id=str(uuid.uuid4()),
-                    project_id=project_id,
-                    source_type=source,
-                    target_type=target,
-                    edge_type=edge,
-                    status="ENABLED",
-                    source="llm_discovered",
-                )
+            edge_type_maps_created += await _insert_on_conflict_do_nothing(
+                session=session,
+                model=EdgeTypeMap,
+                values={
+                    "id": str(uuid.uuid4()),
+                    "project_id": project_id,
+                    "source_type": source,
+                    "target_type": target,
+                    "edge_type": edge,
+                    "status": "ENABLED",
+                    "source": "llm_discovered",
+                },
+                constraint="uq_edge_map_unique",
             )
             existing_maps.add(map_key)
-            edge_type_maps_created += 1
 
         await session.commit()
 
