@@ -190,6 +190,7 @@ async def voice_chat_endpoint(
                     project_id,
                     user_id,
                     tenant_id,
+                    api_key,
                     shutdown_event,
                 ),
                 name="agent_bridge",
@@ -441,6 +442,7 @@ async def _agent_bridge(
     project_id: str,
     user_id: str,
     tenant_id: str,
+    api_key: str,
     shutdown: asyncio.Event,
 ) -> None:
     """Process ASR final transcripts through the agent pipeline.
@@ -492,6 +494,7 @@ async def _agent_bridge(
                         user_id=user_id,
                         tenant_id=tenant_id,
                         image_attachments=None,
+                        api_auth_token=api_key,
                     ):
                         event_type = event.get("type")
                         event_count += 1

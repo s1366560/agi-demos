@@ -52,6 +52,7 @@ class ToolContext:
     project_id: str = ""
     tenant_id: str = ""
     user_id: str = ""
+    api_auth_token: str | None = field(default=None, repr=False)
     runtime_context: dict[str, Any] = field(default_factory=dict)
 
     # Internal event collection (pipeline reads these)

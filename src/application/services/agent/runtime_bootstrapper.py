@@ -188,6 +188,7 @@ class AgentRuntimeBootstrapper:
         model_override: str | None = None,
         parent_session_id: str | None = None,
         preferred_language: str | None = None,
+        api_auth_token: str | None = None,
     ) -> str:
         """Start agent execution using configured runtime mode."""
         from src.configuration.config import get_settings
@@ -259,6 +260,7 @@ class AgentRuntimeBootstrapper:
             preferred_language=preferred_language
             if preferred_language in {"en-US", "zh-CN"}
             else None,
+            api_auth_token=api_auth_token,
         )
 
         if runtime_mode == "local":

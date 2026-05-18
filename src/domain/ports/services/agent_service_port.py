@@ -20,7 +20,7 @@ class AgentServicePort(ABC):
     """
 
     @abstractmethod
-    def stream_chat_v2(
+    def stream_chat_v2(  # noqa: PLR0913
         self,
         conversation_id: str,
         user_message: str,
@@ -34,6 +34,7 @@ class AgentServicePort(ABC):
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
+        api_auth_token: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using self-developed ReAct core.

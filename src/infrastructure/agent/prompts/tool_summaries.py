@@ -58,6 +58,10 @@ TOOL_SUMMARIES: dict[str, str] = {
     "web_scrape": (
         "Fetch and extract content from a specific URL, returning cleaned text or HTML."
     ),
+    # --- System API ---
+    "system_api": (
+        "List, inspect, or call MemStack API operations with current-user authorization."
+    ),
     # --- Human Interaction ---
     "clarification": (
         "Ask the user a clarifying question when the request is ambiguous or "
@@ -137,6 +141,8 @@ TOOL_ORDER: list[str] = [
     # Web
     "web_search",
     "web_scrape",
+    # System API
+    "system_api",
     # Human interaction
     "clarification",
     "decision",

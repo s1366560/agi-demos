@@ -50,6 +50,7 @@ class FakeMessageContext:
     session_id = "session-1"
     user_id = "user-1"
     tenant_id = "tenant-1"
+    api_key = "ms_sk_" + ("a" * 64)
 
     def __init__(self) -> None:
         self.connection_manager = FakeConnectionManager()
@@ -70,4 +71,5 @@ async def test_stream_agent_to_websocket_passes_preferred_language() -> None:
 
     assert agent_service.stream_kwargs is not None
     assert agent_service.stream_kwargs["preferred_language"] == "zh-CN"
+    assert agent_service.stream_kwargs["api_auth_token"] == context.api_key
     assert context.connection_manager.broadcasts[0][0] == "conv-1"

@@ -246,6 +246,7 @@ class AgentService(AgentServicePort):
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
+        api_auth_token: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
@@ -378,6 +379,7 @@ class AgentService(AgentServicePort):
                 image_attachments=image_attachments,
                 agent_id=agent_id,
                 preferred_language=preferred_language,
+                api_auth_token=api_auth_token,
             )
             logger.info(
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
@@ -416,6 +418,7 @@ class AgentService(AgentServicePort):
         agent_id: str | None = None,
         model_override: str | None = None,
         preferred_language: str | None = None,
+        api_auth_token: str | None = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -433,6 +436,7 @@ class AgentService(AgentServicePort):
             agent_id=agent_id,
             model_override=model_override,
             preferred_language=preferred_language,
+            api_auth_token=api_auth_token,
         )
 
     async def _get_stream_events(

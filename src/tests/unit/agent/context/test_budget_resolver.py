@@ -15,9 +15,9 @@ class TestContextBudgetResolver:
         )
 
         # qwen-max output is clamped to 8192 from model registry.
-        assert profile.context_window_tokens == 32768
+        assert profile.context_window_tokens == 131072
         assert profile.output_tokens == 8192
-        assert profile.input_budget_tokens == 24576
+        assert profile.input_budget_tokens == 122880
         assert profile.source == "model_registry"
 
     def test_resolve_applies_context_cap(self) -> None:

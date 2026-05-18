@@ -139,6 +139,7 @@ class ProcessorConfig:
     # Model configuration
     model: str
     api_key: str | None = None
+    api_auth_token: str | None = field(default=None, repr=False)
     base_url: str | None = None
     temperature: float = 0.0
     max_tokens: int = 32768  # Larger budget prevents write/tool JSON truncation.
@@ -952,6 +953,7 @@ class SessionProcessor:
             project_id=_lctx.get("project_id", ""),
             tenant_id=_lctx.get("tenant_id", ""),
             user_id=_lctx.get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
             runtime_context=dict(self.config.runtime_context),
         )
 
@@ -3058,6 +3060,7 @@ class SessionProcessor:
                 project_id=_lctx.get("project_id", ""),
                 tenant_id=_lctx.get("tenant_id", ""),
                 user_id=_lctx.get("user_id", ""),
+                api_auth_token=self.config.api_auth_token,
                 runtime_context=dict(self.config.runtime_context),
             )
 
@@ -3629,6 +3632,7 @@ class SessionProcessor:
             project_id=(self._langfuse_context or {}).get("project_id", ""),
             tenant_id=(self._langfuse_context or {}).get("tenant_id", ""),
             user_id=(self._langfuse_context or {}).get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
             runtime_context=dict(self.config.runtime_context),
         )
 

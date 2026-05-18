@@ -430,6 +430,9 @@ async def get_or_create_tools(
     # 6. Add Environment Variable Tools
     _add_env_var_tools(tools, tenant_id, project_id)
 
+    # 6b. Add policy-aware bridge to MemStack HTTP APIs
+    _add_system_api_tool(tools, tenant_id, project_id)
+
     # 7. Add Human-in-the-Loop Tools
     _add_hitl_tools(tools, project_id)
 
@@ -662,6 +665,25 @@ def _add_env_var_tools(
         )
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create environment variable tools: {e}")
+
+
+def _add_system_api_tool(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Register the system_api tool for current-user API calls."""
+    try:
+        from src.infrastructure.agent.tools.system_api import system_api_tool
+
+        tools["system_api"] = system_api_tool
+        logger.info(
+            "Agent Worker: system_api tool configured for tenant %s, project %s",
+            tenant_id,
+            project_id,
+        )
+    except Exception as e:
+        logger.warning("Agent Worker: Failed to configure system_api tool: %s", e)
 
 
 def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:

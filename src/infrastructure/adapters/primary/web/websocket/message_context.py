@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -46,6 +46,7 @@ class MessageContext:
     db: AsyncSession
     container: DIContainer
     session_factory: async_sessionmaker[AsyncSession] | None = None
+    api_key: str | None = field(default=None, repr=False)
 
     # Lazy-loaded connection manager (to avoid circular imports)
     _connection_manager: ConnectionManager | None = None
@@ -116,6 +117,7 @@ class MessageContext:
             db=db,
             container=self.container,
             session_factory=self.session_factory,
+            api_key=self.api_key,
             _connection_manager=self._connection_manager,
         )
 

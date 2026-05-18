@@ -43,6 +43,7 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Family | Representative tools | Purpose |
 |---|---|---|
 | Search and web | `web_search`, `web_scrape` | External search and rendered page extraction. |
+| System API | `system_api` | Discover and call MemStack HTTP API operations with current-user API authorization. |
 | Memory | `memory_search`, `memory_get`, `memory_create`, `memory_update`, `memory_delete` | Project memory lookup and mutation through application services. |
 | HITL | `ask_clarification`, `request_decision`, `request_env_var`, `check_env_vars`, `get_env_var` | Pause for human clarification, decision, environment variables, or secret lookup. |
 | Todo/task | `todoread`, `todowrite` | Session task list updates that emit task events. |
@@ -97,6 +98,9 @@ Tool execution policy is layered:
 
 - Static tool metadata declares names, descriptions, input schemas, and safety metadata.
 - Runtime policy checks can allow, deny, or ask before execution.
+- The `system_api` bridge uses the live OpenAPI contract and forwards the authenticated
+  current-user API key when available; route dependencies still enforce tenant/user/project
+  authorization.
 - Sandbox wrapper policy classifies sensitive filesystem/shell/network actions.
 - HITL tools and WebSocket/REST HITL routes carry user decisions back into the run.
 

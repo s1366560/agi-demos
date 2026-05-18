@@ -196,6 +196,7 @@ async def agent_websocket_endpoint(
                         db=message_db,
                         container=container,
                         session_factory=async_session_factory,
+                        api_key=api_key,
                     )
                     await message_router.route(context, data)
             except InboundMessageTooLarge as e:

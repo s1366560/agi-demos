@@ -353,6 +353,7 @@ async def stream_agent_to_websocket(
             app_model_context=app_model_context,
             image_attachments=image_attachments,
             agent_id=agent_id,
+            api_auth_token=context.api_key,
         ):
             event_count += 1
             event_type = event.get("type", "unknown")

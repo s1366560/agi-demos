@@ -716,6 +716,7 @@ class StreamMixin:
         new_config = _ProcessorConfig(
             model=config.model,
             api_key=config.api_key,
+            api_auth_token=config.api_auth_token,
             base_url=config.base_url,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
@@ -1274,6 +1275,7 @@ class StreamMixin:
         agent_id: str | None = None,
         tenant_agent_config_data: dict[str, Any] | None = None,
         preferred_language: str | None = None,
+        api_auth_token: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -1658,6 +1660,7 @@ class StreamMixin:
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(self.config, selection_context)
+        config.api_auth_token = api_auth_token
         config.model = runtime_profile.effective_model
         config.temperature = runtime_profile.effective_temperature
         config.max_tokens = runtime_profile.effective_max_tokens

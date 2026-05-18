@@ -54,6 +54,8 @@ class ProjectChatRequest:
     parent_session_id: str | None = None
     # User-selected UI language for this turn.
     preferred_language: str | None = None
+    # Authenticated MemStack API key for current-user internal API calls.
+    api_auth_token: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
