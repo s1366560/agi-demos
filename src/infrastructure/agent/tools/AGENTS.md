@@ -33,14 +33,14 @@ async def my_tool(ctx: ToolContext, **kwargs) -> ToolResult: ...
 |----------|-------|-------|
 | Task management | `todo_tools.py` | Both legacy + new patterns as reference |
 | Sandbox | `terminal_tool.py`, `desktop_tool.py` | Shell/UI execution |
-| Interaction | `clarification_tool.py`, `decision_tool.py` | HITL triggers |
+| Interaction | `clarification.py`, `decision.py`, `env_var_tools.py` | HITL triggers |
 | Memory | `memory_tools.py` | Recall/store memories |
 | Environment | `env_var_tools.py` | Get/request env vars |
 | Plugin | `plugin_manager.py`, `plugin_tools.py` | Plugin CRUD |
 | MCP | `register_mcp_server.py`, `debug_mcp_server.py` | MCP server management |
 | Skill | `skill_tool.py`, `skill_loader.py`, `skill_installer.py` | Skill CRUD |
-| Plan | `plan_tools.py` | Plan enter/update/exit |
-| Self-modifying | `mutation_ledger.py`, `mutation_transaction.py` | Agent self-modification |
+| Workspace planning | `workspace_plan_contract_tools.py`, `workspace_planning_contract.py` | Planning contracts and workspace plan state |
+| Self-modifying | `tool_mutation_guard.py`, custom tool loaders | Guardrails around runtime tool changes |
 
 ## ToolContext (context.py)
 - Dataclass carrying: session_id, message_id, call_id, agent_name, conversation_id, abort_signal, project_id, user_id
@@ -57,7 +57,7 @@ async def my_tool(ctx: ToolContext, **kwargs) -> ToolResult: ...
 2. Use `@tool_define` decorator with name, description, parameters schema
 3. Accept `ToolContext` as first parameter
 4. Return `ToolResult` (not raw string)
-5. Use `ctx.emit()` for SSE events (if needed)
+5. Use `ctx.emit()` for frontend event dicts (if needed)
 6. Add `configure_*()` function if DI required
 7. Register in tool pipeline (react_agent.py init phase)
 

@@ -23,7 +23,7 @@ Self-developed ReAct agent system. 30+ subdirectories implementing L1 Tool -> L2
 Ray Actor execution runtime. `execution.py` runs the main event loop: creates ProjectReActAgent, streams events, publishes to Redis Stream (`agent:events:{conversation_id}`). `actor_manager.py` manages actor lifecycle. `project_agent_actor.py` is the Ray Actor class. `state/` subdirectory handles running-state TTL and HITL snapshot persistence.
 
 ### events/
-Domain event -> SSE dict conversion. `converter.py` has `EventConverter` class that transforms `AgentDomainEvent` subclasses to frontend-compatible dicts. `event_mapper.py` maps event types for routing.
+Domain event -> frontend event dict conversion. `converter.py` has `EventConverter` class that transforms `AgentDomainEvent` subclasses to frontend-compatible dicts. `event_mapper.py` maps event types for routing.
 
 ### plugins/
 Plugin runtime system. `manager.py` orchestrates plugin lifecycle. `discovery.py` finds entrypoint/filesystem plugins. `loader.py` loads plugin code. `registry.py` stores active plugins. `control_plane.py` handles enable/disable. `runtime_api.py` is the API surface exposed to plugins. `selection_pipeline.py` filters plugins by context. `state_store.py` persists enable/disable state to JSON.
@@ -73,5 +73,5 @@ Human-in-the-loop coordination. `coordinator.py` orchestrates HITL requests. `hi
 ## Forbidden
 
 - Do NOT import from `actor/` in non-actor code -- actor code runs in Ray containers
-- Do NOT bypass `EventConverter` for SSE events -- frontend depends on its output format
+- Do NOT bypass `EventConverter` for frontend event dicts -- WebSocket delivery depends on its output format
 - Do NOT access `ToolDefinition` fields as if it were the original tool class (use `._tool_instance`)

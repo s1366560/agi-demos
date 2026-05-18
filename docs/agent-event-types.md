@@ -1,243 +1,87 @@
-# Agent 事件类型完整列表
+# Agent Event Types
 
-本文档记录 MemStack Agent 系统中所有的事件类型定义。
+`src/domain/events/types.py` is the single source of truth for agent event names.
 
-**最后更新**: 2026-03-09  
-**事件总数**: 56 种
+Last checked against code: 2026-05-18.
 
-## 事件类型概览
+## Summary
 
-| 类别 | 事件数量 | 前端已处理 |
-|------|---------|-----------|
-| 状态事件 | 4 | 2 |
-| 思考事件 | 2 | 2 |
-| 工作计划 | 4 | 3 |
-| 工具事件 | 2 | 2 |
-| 文本流 | 3 | 3 |
-| 消息事件 | 3 | 3 |
-| 权限事件 | 2 | 0 |
-| Doom Loop | 2 | 0 |
-| 人机交互 (HITL) | 4 | 4 |
-| 环境变量 | 2 | 2 |
-| 成本追踪 | 1 | 0 |
-| 重试 | 1 | 0 |
-| 上下文 | 2 | 1 |
-| 模式匹配 | 1 | 1 |
-| 技能执行 | 4 | 4 |
-| Plan Mode | 14 | 7 |
-| 标题生成 | 1 | 1 |
-| 沙箱 | 13 | 4 |
-| **总计** | **56** | **37** |
+- Current `AgentEventType` values: **163**.
+- Internal events: `compact_needed`, `retry`.
+- Delta events not persisted by default: `thought_delta`, `text_delta`, `text_start`,
+  `text_end`, `act_delta`.
+- Terminal events: `complete`, `error`, `cancelled`.
+- HITL request events: `clarification_asked`, `decision_asked`, `env_var_requested`,
+  `permission_asked`, `elicitation_asked`, `a2ui_action_asked`.
 
----
+## Event Pipeline
 
-## 详细事件列表
-
-### 状态事件 (Status Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `STATUS` | `status` | ❌ | 内部状态跟踪 |
-| `START` | `start` | ❌ | Agent 执行开始 |
-| `COMPLETE` | `complete` | ✅ | Agent 执行完成 |
-| `ERROR` | `error` | ✅ | 执行错误 |
-
-### 思考事件 (Thinking Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `THOUGHT` | `thought` | ✅ | 完整思考内容 |
-| `THOUGHT_DELTA` | `thought_delta` | ✅ | 思考内容增量流 |
-
-### 工作计划事件 (Work Plan Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `WORK_PLAN` | `work_plan` | ✅ | 工作计划创建/更新 |
-| `STEP_START` | `step_start` | ✅ | 步骤开始执行 |
-| `STEP_END` | `step_end` | ✅ | 步骤执行结束 |
-| `STEP_FINISH` | `step_finish` | ❌ | 步骤完成（含 token/cost） |
-
-### 工具事件 (Tool Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `ACT` | `act` | ✅ | Agent 调用工具 |
-| `OBSERVE` | `observe` | ✅ | 工具执行结果 |
-
-### 文本流事件 (Text Streaming Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `TEXT_START` | `text_start` | ✅ | 文本流开始 |
-| `TEXT_DELTA` | `text_delta` | ✅ | 文本增量内容 |
-| `TEXT_END` | `text_end` | ✅ | 文本流结束 |
-
-### 消息事件 (Message Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `MESSAGE` | `message` | ✅ | 通用消息 |
-| `USER_MESSAGE` | `user_message` | ✅ | 用户消息（DB 存储，历史加载时渲染） |
-| `ASSISTANT_MESSAGE` | `assistant_message` | ✅ | 助手消息（DB 存储，历史加载时渲染） |
-
-### 权限事件 (Permission Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `PERMISSION_ASKED` | `permission_asked` | ❌ | 请求权限 |
-| `PERMISSION_REPLIED` | `permission_replied` | ❌ | 权限回复 |
-
-### Doom Loop 事件
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `DOOM_LOOP_DETECTED` | `doom_loop_detected` | ❌ | 检测到死循环 |
-| `DOOM_LOOP_INTERVENED` | `doom_loop_intervened` | ❌ | 死循环干预 |
-
-### 人机交互事件 (HITL Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `CLARIFICATION_ASKED` | `clarification_asked` | ✅ | 请求澄清 |
-| `CLARIFICATION_ANSWERED` | `clarification_answered` | ✅ | 澄清回复 |
-| `DECISION_ASKED` | `decision_asked` | ✅ | 请求决策 |
-| `DECISION_ANSWERED` | `decision_answered` | ✅ | 决策回复 |
-
-### 环境变量事件 (Environment Variable Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `ENV_VAR_REQUESTED` | `env_var_requested` | ✅ | 请求环境变量 |
-| `ENV_VAR_PROVIDED` | `env_var_provided` | ✅ | 环境变量已提供 |
-
-### 成本追踪事件 (Cost Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `COST_UPDATE` | `cost_update` | ❌ | 成本更新 |
-
-### 重试事件 (Retry Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `RETRY` | `retry` | ❌ | 重试操作 |
-
-### 上下文事件 (Context Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `COMPACT_NEEDED` | `compact_needed` | ❌ | 需要压缩（内部信号） |
-| `CONTEXT_COMPRESSED` | `context_compressed` | ✅ | 上下文已压缩 |
-
-### 模式匹配事件 (Pattern Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `PATTERN_MATCH` | `pattern_match` | ✅ | 模式匹配成功 |
-
-### 技能执行事件 (Skill Execution Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `SKILL_MATCHED` | `skill_matched` | ✅ | 技能匹配成功 |
-| `SKILL_EXECUTION_START` | `skill_execution_start` | ✅ | 技能执行开始 |
-| `SKILL_EXECUTION_COMPLETE` | `skill_execution_complete` | ✅ | 技能执行完成 |
-| `SKILL_FALLBACK` | `skill_fallback` | ✅ | 技能降级回退 |
-
-### Plan Mode 事件
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `PLAN_MODE_ENTER` | `plan_mode_enter` | ✅ | 进入计划模式 |
-| `PLAN_MODE_EXIT` | `plan_mode_exit` | ✅ | 退出计划模式 |
-| `PLAN_CREATED` | `plan_created` | ✅ | 计划创建 |
-| `PLAN_UPDATED` | `plan_updated` | ✅ | 计划更新 |
-| `PLAN_STATUS_CHANGED` | `plan_status_changed` | ❌ | 计划状态变更 |
-| `PLAN_EXECUTION_START` | `plan_execution_start` | ✅ | 计划执行开始 |
-| `PLAN_EXECUTION_COMPLETE` | `plan_execution_complete` | ✅ | 计划执行完成 |
-| `PLAN_STEP_READY` | `plan_step_ready` | ❌ | 计划步骤就绪 |
-| `PLAN_STEP_COMPLETE` | `plan_step_complete` | ❌ | 计划步骤完成 |
-| `PLAN_STEP_SKIPPED` | `plan_step_skipped` | ❌ | 计划步骤跳过 |
-| `PLAN_SNAPSHOT_CREATED` | `plan_snapshot_created` | ❌ | 计划快照创建 |
-| `PLAN_ROLLBACK` | `plan_rollback` | ❌ | 计划回滚 |
-| `REFLECTION_COMPLETE` | `reflection_complete` | ✅ | 反思完成 |
-| `ADJUSTMENT_APPLIED` | `adjustment_applied` | ❌ | 调整已应用 |
-
-### 标题生成事件 (Title Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `TITLE_GENERATED` | `title_generated` | ✅ | 标题生成完成 |
-
-### 沙箱事件 (Sandbox Events)
-
-| 枚举值 | 事件值 | 前端处理 | 说明 |
-|--------|--------|---------|------|
-| `SANDBOX_CREATED` | `sandbox_created` | ❌ | 沙箱创建 |
-| `SANDBOX_TERMINATED` | `sandbox_terminated` | ❌ | 沙箱终止 |
-| `SANDBOX_STATUS` | `sandbox_status` | ❌ | 沙箱状态 |
-| `DESKTOP_STARTED` | `desktop_started` | ❌ | 桌面启动 |
-| `DESKTOP_STOPPED` | `desktop_stopped` | ❌ | 桌面停止 |
-| `DESKTOP_STATUS` | `desktop_status` | ❌ | 桌面状态 |
-| `TERMINAL_STARTED` | `terminal_started` | ❌ | 终端启动 |
-| `TERMINAL_STOPPED` | `terminal_stopped` | ❌ | 终端停止 |
-| `TERMINAL_STATUS` | `terminal_status` | ❌ | 终端状态 |
-| `HTTP_SERVICE_STARTED` | `http_service_started` | ✅ | HTTP 预览服务启动 |
-| `HTTP_SERVICE_UPDATED` | `http_service_updated` | ✅ | HTTP 预览服务配置更新/重启 |
-| `HTTP_SERVICE_STOPPED` | `http_service_stopped` | ✅ | HTTP 预览服务停止 |
-| `HTTP_SERVICE_ERROR` | `http_service_error` | ✅ | HTTP 预览服务错误 |
-
----
-
-## 统计摘要
-
-- **总计**: 56 种事件类型
-- **前端已处理**: 37 种 (66%)
-- **前端未处理**: 19 种 (34%)
-  - 内部事件: 3 种 (`status`, `start`, `compact_needed`)
-  - 预留功能: 9 种 (沙箱相关)
-  - 待实现: 7 种 (`step_finish`, `permission_*`, `doom_loop_*`, `cost_update`, Plan 相关)
-
----
-
-## 事件流架构
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    EVENT FLOW ARCHITECTURE                       │
-│                                                                  │
-│   ReActAgent (agent_session.py)                                  │
-│       │                                                          │
-│       ▼                                                          │
-│   stream_add(Redis Stream)                                       │
-│   "agent:events:{conversation_id}"                               │
-│       │                                                          │
-│       ├──► PostgreSQL (重要事件持久化)                            │
-│       │                                                          │
-│       ▼                                                          │
-│   connect_chat_stream() → XREAD                                  │
-│       │                                                          │
-│       ▼                                                          │
-│   stream_agent_to_websocket()                                    │
-│       │                                                          │
-│       ▼                                                          │
-│   EventDispatcher → WebSocket                                    │
-│       │                                                          │
-│       ▼                                                          │
-│   Frontend: agentService.handleMessage()                         │
-│       │                                                          │
-│       ▼                                                          │
-│   routeToHandler() → AgentStreamHandler callbacks                │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```text
+Agent runtime / tools
+  -> AgentDomainEvent subclasses
+  -> to_event_dict() / event converter
+  -> Redis stream and PostgreSQL event persistence
+  -> WebSocket delivery
+  -> web/src/services/agentService.ts
+  -> web/src/services/agent/messageRouter.ts
+  -> web/src/utils/sseEventAdapter.ts
+  -> Zustand stores and timeline UI
 ```
 
----
+## Core Categories
 
-## 相关文件
+| Category | Event values |
+|---|---|
+| Status | `status`, `start`, `complete`, `error`, `cancelled` |
+| Thinking/text | `thought`, `thought_delta`, `text_start`, `text_delta`, `text_end` |
+| Tool execution | `act`, `act_delta`, `observe`, `tool_policy_denied`, `tools_updated` |
+| Messages | `message`, `user_message`, `assistant_message` |
+| HITL | `clarification_asked`, `clarification_answered`, `decision_asked`, `decision_answered`, `env_var_requested`, `env_var_provided`, `permission_asked`, `permission_replied`, `elicitation_asked`, `elicitation_answered`, `a2ui_action_asked`, `a2ui_action_answered` |
+| Context/memory | `compact_needed`, `context_compressed`, `context_status`, `context_summary_generated`, `context_compacted`, `memory_recalled`, `memory_captured` |
+| Skills/patterns | `pattern_match`, `skill_matched`, `skill_execution_start`, `skill_execution_complete`, `skill_fallback` |
+| Sandbox | `sandbox_created`, `sandbox_terminated`, `sandbox_status`, `desktop_started`, `desktop_stopped`, `desktop_status`, `terminal_started`, `terminal_stopped`, `terminal_status`, `http_service_started`, `http_service_updated`, `http_service_stopped`, `http_service_error` |
+| Artifacts/canvas/MCP apps | `artifact_created`, `artifact_ready`, `artifact_error`, `artifacts_batch`, `artifact_open`, `artifact_update`, `artifact_close`, `canvas_updated`, `mcp_app_result`, `mcp_app_registered` |
+| Subagents | `subagent_routed`, `subagent_started`, `subagent_completed`, `subagent_failed`, `subagent_spawning`, `subagent_doom_loop`, `subagent_retry`, `subagent_queued`, `subagent_killed`, `subagent_steered`, `subagent_depth_limited`, `subagent_session_update`, `subagent_spawn_rejected`, `subagent_announce_retry`, `subagent_orphan_detected`, `subagent_announce_sent`, `subagent_announce_received`, `subagent_announce_expired`, `subagent_delegation` |
+| Agent orchestration | `plan_suggested`, `selection_trace`, `policy_filtered`, `parallel_started`, `parallel_completed`, `background_launched`, `agent_spawned`, `agent_completed`, `agent_message_sent`, `agent_message_received`, `agent_stopped` |
+| Graph orchestration | `graph_run_started`, `graph_run_completed`, `graph_run_failed`, `graph_run_cancelled`, `graph_node_started`, `graph_node_completed`, `graph_node_failed`, `graph_node_skipped`, `graph_handoff` |
+| Workspace | `workspace_member_joined`, `workspace_member_left`, `workspace_updated`, `workspace_deleted`, `workspace_agent_bound`, `workspace_agent_unbound`, `workspace_message_created`, `topology_updated` |
+| Blackboard | `blackboard_post_created`, `blackboard_post_updated`, `blackboard_post_deleted`, `blackboard_reply_created`, `blackboard_reply_updated`, `blackboard_reply_deleted`, `blackboard_file_created`, `blackboard_file_updated`, `blackboard_file_deleted`, `blackboard_directory_deleted` |
+| Workspace tasks/plans | `workspace_task_assigned`, `workspace_task_created`, `workspace_task_updated`, `workspace_task_deleted`, `workspace_task_status_changed`, `workspace_plan_updated`, `workspace_goal_materialized`, `workspace_decomposition_complete`, `workspace_worker_dispatched`, `workspace_worker_report_submitted`, `workspace_adjudication_complete`, `workspace_goal_completed` |
+| Task execution/recovery | `task_list_updated`, `task_updated`, `task_start`, `task_complete`, `task_execution_session_updated`, `task_execution_incident_opened`, `task_recovery_action_started`, `task_recovery_action_completed` |
+| Structured agent actions | `agent_task_assigned`, `agent_task_refused`, `agent_human_input_requested`, `agent_escalated`, `agent_conflict_marked`, `agent_progress_declared`, `agent_goal_completed`, `agent_supervisor_verdict`, `agent_decision_logged`, `agent_conversation_finished` |
+| Miscellaneous | `cost_update`, `doom_loop_detected`, `doom_loop_intervened`, `suggestions`, `title_generated`, `progress`, `session_forked`, `session_merged`, `conversation_participant_joined`, `conversation_participant_left` |
 
-- 后端事件定义: `src/domain/events/agent_events.py`
-- 前端事件类型: `web/src/types/agent.ts`
-- 前端事件路由: `web/src/services/agentService.ts` (`routeToHandler`)
-- 前端事件处理: `web/src/stores/agentV3.ts`
+## Frontend Handling
+
+Frontend event handling is intentionally split:
+
+- `web/src/services/agent/messageRouter.ts` routes WebSocket messages to callbacks.
+- `web/src/utils/sseEventAdapter.ts` normalizes historical and current event envelopes.
+- `web/src/stores/sandbox.ts` handles sandbox and artifact events.
+- `web/src/stores/agent/*` updates conversation, timeline, streaming, HITL, and canvas state.
+- Timeline presentation is under `web/src/components/agent/`.
+
+Because event handlers are spread across these files, do not rely on a static
+"frontend handled count" in this document. Verify handling with source search when adding or
+changing an event.
+
+## Update Checklist
+
+When adding or changing an event:
+
+1. Add the value to `AgentEventType` in `src/domain/events/types.py`.
+2. Add or update the `AgentDomainEvent` subclass in `src/domain/events/agent_events.py`.
+3. Update conversion/persistence behavior if payload shape changes.
+4. Update frontend routing/adaptation if the event is user-visible.
+5. Add tests for payload shape and frontend behavior where practical.
+6. Update this document if the event creates a new category or changes a public contract.
+
+## Quick Checks
+
+```bash
+# Count AgentEventType values
+awk 'BEGIN{in_enum=0} /^class AgentEventType/{in_enum=1; next} /^# =/{if(in_enum) exit} in_enum && /^[[:space:]]+[A-Z0-9_]+ = "/{count++} END{print count}' src/domain/events/types.py
+
+# Find frontend handlers for one event
+rg -n "workspace_plan_updated|subagent_started|artifact_ready" web/src
+```

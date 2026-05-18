@@ -383,7 +383,7 @@ require the desktop container stack.
 - `DEPLOYMENT.md` - Deployment guide for operations
 - `TROUBLESHOOTING.md` - Common issues and solutions
 - `PERFORMANCE.md` - Performance tuning guide
-- `docs/phase4-xfce-testing.md` - Testing methodology and results
+- `docs/README.md` - Index for historical XFCE/TigerVNC phase records
 
 ## Contributing
 

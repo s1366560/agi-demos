@@ -1,75 +1,63 @@
 # web/src/services/
 
-API service layer. 37 service files + `client/` (HTTP infra) + `mcp/` (MCP protocol).
+Frontend service layer. Current top-level service files: 60, plus `client/`, `agent/`, and
+`mcp/` subdirectories.
 
-## HTTP Client (client/)
+Last checked against code: 2026-05-18.
+
+## HTTP Client
 
 | File | Purpose |
-|------|---------|
-| `httpClient.ts` | Axios instance. **baseURL = `/api/v1`**. Auth token injected via interceptor |
-| `ApiError.ts` | Error parsing from Axios responses |
-| `urlUtils.ts` | `createWebSocketUrl()` -- converts HTTP URL to WS URL |
-| `requestCache.ts` | Request caching (deprecated, currently unused) |
-| `requestDeduplicator.ts` | Request deduplication (deprecated) |
-| `retry.ts` | Retry logic (deprecated) |
+|---|---|
+| `client/httpClient.ts` | Axios instance, `baseURL = "/api/v1"`, auth and locale interceptors. |
+| `client/ApiError.ts` | Typed API error parsing. |
+| `client/urlUtils.ts` | HTTP/WS URL helpers. |
+| `client/queryClient.ts` | TanStack Query client setup. |
+| `client/requestCache.ts`, `requestDeduplicator.ts`, `retry.ts` | Legacy helpers; HTTP-layer dedupe/retry is not active in `httpClient.ts`. |
 
-## CRITICAL: Path Convention
+## Path Convention
 
-- `httpClient` baseURL is `/api/v1` -- all service paths are RELATIVE to that
-- `'/mcp/apps'` resolves to `/api/v1/mcp/apps` (correct)
-- `'/api/v1/mcp/apps'` resolves to `/api/v1/api/v1/mcp/apps` (WRONG -- doubled prefix)
+`httpClient` already prefixes `/api/v1`.
+
+```ts
+httpClient.get('/mcp/apps');        // correct
+httpClient.get('/api/v1/mcp/apps'); // wrong
+```
+
+Preserve trailing slashes for collection endpoints that FastAPI defines with trailing slashes.
 
 ## Key Services
 
 | Service | Purpose | Transport |
-|---------|---------|-----------|
-| `agentService.ts` | Agent chat, conversations, streaming (2600+ lines) | WebSocket + REST |
-| `projectService.ts` | Project CRUD | REST |
-| `memoryService.ts` | Memory CRUD + search | REST |
-| `skillService.ts` | Skill management | REST |
-| `subagentService.ts` | SubAgent management | REST |
-| `sandboxService.ts` | Sandbox lifecycle | REST |
-| `sandboxSSEService.ts` | Sandbox terminal/desktop streaming | SSE |
-| `mcpService.ts` / `mcpAppService.ts` | MCP server/tool management | REST |
-| `graphService.ts` | Knowledge graph queries | REST |
-| `hitlService.unified.ts` | HITL request/response | REST |
-| `artifactService.ts` | Artifact upload/download | REST |
-| `channelService.ts` | Channel plugin management | REST |
-| `billingService.ts` | Billing/usage data | REST |
+|---|---|---|
+| `agentService.ts` | Agent WebSocket connection, conversation metadata, event routing. | WebSocket + REST |
+| `projectService.ts`, `tenantService` equivalents | Project/tenant CRUD and stats. | REST |
+| `memoryService.ts`, `clusterService.ts`, `graphService.ts` | Memory, communities, graph/search APIs. | REST |
+| `sandboxService.ts`, `projectSandboxService.ts`, `sandboxSSEService.ts` | Sandbox lifecycle, project sandbox, service events. | REST + SSE/WS |
+| `mcpService.ts`, `mcpAppService.ts` | MCP servers, tools, apps. | REST |
+| `hitlService.unified.ts` | HITL pending/respond/cancel REST paths. | REST |
+| `artifactService.ts`, `instanceFileService.ts` | Artifacts and files. | REST |
+| `workspaceService.ts`, `workspaceTaskProjection.ts` utilities | Workspace/workspace-task data flows. | REST/events |
+| `eventBusClient.ts`, `unifiedEventService.ts`, `eventQueue.ts` | Project/domain event subscriptions and ordered handling. | WebSocket/REST |
 
-## agentService.ts (2600+ lines)
+## Agent Event Flow
 
-- Implements `AgentService` interface with full type-safe event handling
-- `chat()` -- sends message, returns WebSocket-based streaming handler
-- `createConversation()`, `getConversation()`, `listConversations()` -- REST calls
-- `connectWebSocket()` -- establishes WS connection to `/ws/agent/{conversationId}`
-- 40+ event data types imported from `types/agent.ts`
-- `routeToHandler()` dispatches SSE events to typed handler callbacks
-
-## SSE/WebSocket Event Flow
-
-```
-Backend SSE -> WebSocket -> agentService.routeToHandler() -> AgentStreamHandler callbacks
-  -> stores/agent/streamEventHandlers.ts -> Zustand state update -> UI re-render
+```text
+WS /api/v1/agent/ws
+  -> agentService.ts
+  -> services/agent/messageRouter.ts
+  -> utils/sseEventAdapter.ts (normalization)
+  -> stores/agent/* and stores/agentV3.ts
+  -> components/agent/*
 ```
 
-## Service Pattern
+The `sseEventAdapter` name is historical; the live transport is WebSocket.
 
-```typescript
-const BASE_URL = '/some-resource';  // relative to /api/v1
-export const someService = {
-  list: (params) => httpClient.get(BASE_URL, { params }),
-  getById: (id) => httpClient.get(`${BASE_URL}/${id}`),
-  create: (data) => httpClient.post(BASE_URL, data),
-};
-```
+## Rules
 
-## mcp/ Subdirectory
-
-- MCP-specific service helpers for MCP server management
-
-## Forbidden
-
-- Never use absolute paths like `/api/v1/...` in service URLs
-- Never create new Axios instances -- use `httpClient` from `client/httpClient.ts`
-- Never handle auth tokens manually -- interceptor does it
+- Do not create a separate Axios client unless there is a clear transport boundary.
+- Do not manually attach auth tokens outside `httpClient` unless using WebSocket
+  subprotocol/query auth.
+- Keep service methods thin; put UI state in stores/hooks.
+- For new WebSocket message types, update both backend handlers and frontend
+  `services/agent/messageRouter.ts`.

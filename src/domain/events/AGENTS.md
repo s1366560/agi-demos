@@ -3,16 +3,16 @@
 ## Event Flow
 
 ```
-Tool._pending_events → Processor.consume → AgentDomainEvent → EventConverter → SSE dict → Redis → WebSocket → Frontend
+Tool._pending_events → Processor.consume → AgentDomainEvent → EventConverter → event dict → Redis → WebSocket → Frontend
 ```
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `types.py` | **SINGLE SOURCE OF TRUTH** for all event types. `AgentEventType` enum (70+ values), `EventCategory` enum |
-| `agent_events.py` | All `AgentDomainEvent` subclasses (Pydantic models). Each has `to_event_dict()` for SSE serialization |
-| `event_dicts.py` | TypedDict definitions for SSE event dict shape (`SSEEventDict`) |
+| `types.py` | **SINGLE SOURCE OF TRUTH** for all event types. `AgentEventType` enum (160+ values), `EventCategory` enum |
+| `agent_events.py` | All `AgentDomainEvent` subclasses (Pydantic models). Each has `to_event_dict()` for event serialization |
+| `event_dicts.py` | TypedDict definitions for frontend event dict shape (`SSEEventDict` remains the historical type name) |
 | `envelope.py` | Event envelope for wrapping events with metadata |
 | `serialization.py` | Event serialization/deserialization helpers |
 | `event_serializer.py` | Serializer implementation |
@@ -40,4 +40,4 @@ Tool._pending_events → Processor.consume → AgentDomainEvent → EventConvert
 - `AgentDomainEvent` uses Pydantic `BaseModel` (not dataclass) with `frozen = True`
 - `to_event_dict()` excludes `event_type` and `timestamp` from data payload, adds them at top level
 - The `scripts/generate_event_types.py` script auto-generates TypeScript types — do NOT edit `eventTypes.ts` manually
-- 70+ event types exist — check `types.py` before adding duplicates
+- 160+ event types exist — check `types.py` before adding duplicates

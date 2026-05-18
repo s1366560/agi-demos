@@ -1,5 +1,9 @@
 # Agent Workspace UI Audit Report
 
+> Historical audit. Current canonical agent workspace route is
+> `/tenant/:tenantId/agent-workspace/:conversation?`; older references to
+> `/tenant/:tenantId/agent` are retained below as original audit context.
+
 **Project:** MemStack — Enterprise AI Memory Cloud Platform
 **Scope:** Agent Workspace (`/tenant/:tenantId/agent`) and supporting layout shell
 **Date:** 2026-03-28

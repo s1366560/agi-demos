@@ -1,6 +1,8 @@
 # MemStack Python SDK
 
-Official Python client library for MemStack - Enterprise-grade AI Memory Cloud Platform based on Graphiti.
+Python client library for MemStack's memory, episode, API key, and health endpoints.
+
+Last checked against code: 2026-05-18.
 
 ## Installation
 
@@ -141,6 +143,14 @@ Check API health status.
 health = client.health_check() -> dict
 ```
 
+Additional synchronous methods in `memstack/client.py`:
+
+- `create_api_key`, `list_api_keys`, `revoke_api_key`
+- `create_memo`, `list_memos`, `get_memo`, `update_memo`, `delete_memo`
+
+The memo helpers target legacy `/api/v1/memos` endpoints. Verify backend route support
+before depending on them in new integrations.
+
 ## Error Handling
 
 The SDK provides a comprehensive exception hierarchy:
@@ -240,6 +250,6 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-- Documentation: https://docs.memstack.ai
-- Issues: https://github.com/s1366560/memstack/issues
-- Email: support@memstack.ai
+- Project docs: `../../docs/README.md`
+- API overview: `../../docs/api-reference.md`
+- Runtime OpenAPI: `http://localhost:8000/openapi.json`

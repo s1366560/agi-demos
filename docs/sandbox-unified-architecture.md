@@ -23,8 +23,8 @@
 │    └── Sandbox Panel (Desktop/Terminal Viewers)                               │
 │                                                                                      │
 │  API Gateway Layer                                                               │
-│    ├── /api/v1/agent/chat (SSE)                                                 │
-│    └── /api/v1/sandbox/* (REST + SSE)                                            │
+│    ├── /api/v1/agent/ws (WebSocket)                                             │
+│    └── /api/v1/sandbox/* (REST + SSE/WebSocket helpers)                         │
 │                                                                                      │
 │  Service Orchestration Layer                                                      │
 │    └── SandboxOrchestrator (统一入口)                                           │

@@ -91,10 +91,10 @@ The Cyber Workspace is a human-AI collaborative space where humans and AI agents
 
 ### 3.1 Page Integration
 
-The Cyber Workspace lives at `/tenant/:tenantId/workspaces/:workspaceId` as a **separate page** alongside the existing AgentWorkspace at `/tenant/:tenantId/agent`. They share the agent runtime but have different UIs and interaction models.
+The Cyber Workspace lives at `/tenant/:tenantId/workspaces/:workspaceId` as a **separate page** alongside the existing AgentWorkspace at `/tenant/:tenantId/agent-workspace/:conversation?`. They share the agent runtime but have different UIs and interaction models.
 
 ```
-Existing:  /tenant/:tenantId/agent              → AgentWorkspace (1:1 human-agent chat)
+Existing:  /tenant/:tenantId/agent-workspace/:conversation? → AgentWorkspace (1:1 human-agent chat)
 New:       /tenant/:tenantId/workspaces          → WorkspaceList (browse/create)
 Exists:    /tenant/:tenantId/workspaces/:id      → WorkspaceDetail (cyber workspace)
 ```

@@ -1,5 +1,9 @@
 # Agent Component Audit Report
 
+> Historical audit. The current active component tree is `web/src/components/agent/`.
+> Earlier `components/agentV3` and `AgentChatV3.tsx` references are retained below as
+> original context and should not be treated as current architecture.
+
 ## Date: 2026-01-27
 ## Phase: 1.3 - Consolidate Duplicate Agent Components
 

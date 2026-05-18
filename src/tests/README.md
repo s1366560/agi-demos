@@ -124,8 +124,8 @@ src/tests/
 │   │   ├── test_repository_integration.py
 │   │   └── test_migration_integration.py
 │   │
-│   ├── graphiti/              # Graphiti integration
-│   │   └── test_graphiti_adapter_integration.py
+│   ├── graph/                 # Native graph / Neo4j integration
+│   │   └── test_graph_integration.py
 │   │
 │   └── security/              # Security integration
 │       ├── test_authentication.py
@@ -419,7 +419,8 @@ import { projectService } from '../services/projectService';
 **Examples**:
 - `test_db` - Function-scoped database session
 - `test_user` - Sample user entity
-- `mock_graphiti_client` - Mocked Graphiti client
+- `mock_graph_service` - Mocked native graph service
+- `mock_graphiti_client` - Compatibility alias for older tests that have not been renamed yet
 
 ### Fixture Documentation
 

@@ -1,62 +1,92 @@
 # routers/ -- API Endpoint Definitions
 
-## Purpose
-31+ router modules plus `agent/`, `mcp/`, `sandbox/` subdirectories. All FastAPI endpoint definitions.
+FastAPI router layer for the primary web adapter.
 
-## Structure
-- Top-level: `projects.py`, `memories.py`, `episodes.py`, `entities.py`, `tenants.py`, `users.py`, etc.
-- `agent/` subdir: 14 files -- chat, conversations, plans, skills, sub_agents, tools, work_plans, hitl, artifacts
-- `mcp/` subdir: MCP server/tool management endpoints
-- `sandbox/` subdir: sandbox lifecycle endpoints
+Last checked against code: 2026-05-18.
+
+## Current Shape
+
+- 90+ router files under this directory and subdirectories.
+- Major subdirectories: `agent/`, `mcp/`, `sandbox/`.
+- Routers are registered in `src/infrastructure/adapters/primary/web/main.py`.
+- Current live agent chat is WebSocket-based through `/api/v1/agent/ws`; there is no
+  registered `/api/v1/agent/chat` route in the current router set.
+
+## Major Areas
+
+| Area | Representative files |
+|---|---|
+| Auth/tenant/project | `auth.py`, `tenants.py`, `projects.py`, `invitations.py` |
+| Agent | `agent/__init__.py`, `agent/conversations.py`, `agent/messages.py`, `agent/events.py`, `agent/hitl.py`, `agent/tools.py`, `agent/trace_router.py` |
+| WebSocket | `../websocket/router.py`, `../websocket/handlers/*` |
+| Memory/graph/search | `memories.py`, `episodes.py`, `graph.py`, `schema.py`, `enhanced_search.py`, `recall.py`, `reflection.py` |
+| Workspace | `workspaces.py`, `workspace_plans.py`, `workspace_tasks.py`, `workspace_autonomy.py`, `workspace_chat.py`, `blackboard.py`, `topology.py` |
+| Sandbox/MCP/terminal | `sandbox/*`, `project_sandbox.py`, `mcp/*`, `terminal.py`, `tunnel.py` |
+| Product/admin | `skills.py`, `skills_curated.py`, `subagents.py`, `channels.py`, `instances.py`, `deploy.py`, `genes.py`, `audit.py`, `trust.py`, `observability.py`, `admin_dlq.py` |
 
 ## Standard Endpoint Pattern
+
 ```python
 @router.get("/items")
 async def list_items(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Build services with per-request session
     container = get_container_with_db(request, db)
     service = container.some_service()
     result = await service.list()
-    await db.commit()  # Caller commits
+    await db.commit()
     return result
 ```
 
-## Auth Patterns
-- `current_user: User = Depends(get_current_user)` -- JWT token validation
-- Role checks: manual SQLAlchemy queries against `UserProject` / `UserTenant` join tables
-- No decorator-based RBAC -- inline permission checks in each endpoint
-- Tenant isolation: most queries scoped by `current_user.tenant_id`
+Use the pattern in the neighboring router first; this layer still mixes direct repository
+construction, scoped DI containers, and focused SQLAlchemy queries.
 
-## Known Inconsistencies
-- `projects.py` (884 lines) and `memories.py` (974 lines) use **raw SQLAlchemy queries** instead of repository pattern
-- Agent routers use `get_container_with_db(request, db)` from `agent/utils.py`
-- Some routers build repositories directly: `SqlXxxRepository(db)`
-- No uniform pattern enforced -- check existing file in same subdir before adding
+## Auth And DB Rules
 
-## Agent Router Specifics (agent/ subdir)
-- `utils.py`: `get_container_with_db(request, db)` -- clones global container with real DB session
-- `chat_handler.py`: SSE streaming via Redis Stream bridge to WebSocket
-- `conversations.py`: conversation CRUD + message history
-- `plans.py`, `work_plans.py`: plan lifecycle endpoints
+- Use `Depends(get_current_user)` and/or tenant helpers for authenticated endpoints.
+- Scope reads and writes by tenant/project/conversation where applicable.
+- `Depends(get_db)` sessions are not auto-committed; endpoints that mutate must commit.
+- The global app container has singleton services only. Use `get_container_with_db` or direct
+  repository construction for DB-backed services.
 
-## Memory Router Specifics
-- `POST /memories` triggers Temporal workflow for graph processing (async)
-- `PUT /memories/{id}` uses optimistic locking via `version` field
-- `POST /memories/{id}/share` copies memory across projects
-- `POST /memories/reprocess` re-extracts entities from existing memories
+## Agent Router Specifics
 
-## Adding a New Router
-1. Create `new_feature.py` in this directory
-2. Define `router = APIRouter(prefix="/api/v1/new-feature", tags=["new-feature"])`
-3. Register in `main.py` via `app.include_router(router)`
-4. Use `Depends(get_db)` for DB access, `Depends(get_current_user)` for auth
-5. Caller (endpoint) is responsible for `await db.commit()`
+`agent/__init__.py` aggregates:
+
+- commands,
+- conversations,
+- participants,
+- messages,
+- tools,
+- patterns,
+- config,
+- HITL,
+- events,
+- templates,
+- plan mode,
+- subagent cancellation,
+- bindings,
+- definitions,
+- trace,
+- agent graph routes.
+
+HITL response delivery persists to PostgreSQL and publishes to Redis streams for Ray actor
+resume. Workflow execution is handled by the current asyncio/Ray runtime, not Temporal.
+
+## Adding A Router
+
+1. Create a focused router file with `router = APIRouter(prefix="/api/v1/...", tags=[...])`.
+2. Register it in `main.py`.
+3. Keep schemas local only if they are route-specific; shared schemas belong in application
+   schema modules.
+4. Add tests for auth, tenant/project scoping, validation, and commit behavior.
+5. Update `docs/api-reference.md` when the route family is public.
 
 ## Gotchas
-- Oversized routers (projects.py, memories.py) -- do NOT add more raw SQL; use repositories
-- `get_container_with_db` preserves graph_service and redis_client from global container
-- No request validation middleware -- validation is per-endpoint via Pydantic schemas
-- Pagination: most list endpoints accept `skip`/`limit` params, not cursor-based
+
+- Avoid expanding already-large routers such as `projects.py`, `memories.py`,
+  `workspace_plans.py`, and `skills.py` unless the surrounding pattern makes it necessary.
+- Register more-specific routes before generic path-parameter routes.
+- Keep frontend path conventions in mind: web services are relative to `/api/v1`.

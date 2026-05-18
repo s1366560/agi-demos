@@ -1,17 +1,19 @@
 # MemStack CLI
 
-`memstack` is the command-line interface for the MemStack platform. It
-covers the end-user developer flow: authenticate, list projects, send
-prompts, fetch artifacts.
+`memstack` is the command-line client in `sdk/memstack_cli`. It currently covers
+authentication, project/conversation listing, persisted event inspection, and artifact
+download.
+
+Last checked against code: 2026-05-18.
 
 ## Install
 
 ```bash
+# From this repository
+uv pip install -e sdk/memstack_cli
+
 # Once published
 uv tool install memstack-cli
-
-# From this repo (development)
-uv pip install -e sdk/memstack_cli
 ```
 
 Verify:
@@ -23,120 +25,103 @@ memstack --help
 
 ## Authentication
 
-Three ways to supply an API key, in order of precedence (first hit wins):
+API key lookup order:
 
-1. `--api-key ms_sk_...` flag on any subcommand
-2. `MEMSTACK_API_KEY` environment variable
-3. `~/.memstack/credentials` (written by `memstack login`)
+1. `--api-key ms_sk_...`
+2. `MEMSTACK_API_KEY`
+3. `~/.memstack/credentials`
 
-### Interactive login (device-code)
+Interactive login uses the device-code API:
 
 ```bash
 memstack login
-```
-
-The CLI prints a `user_code` (e.g. `AB23CDEF`) and a verification URL,
-then opens your browser to the `/device` page on the MemStack web UI.
-The code is pre-filled via `?user_code=...`, so you just click
-**Approve** (sign in first if needed). The CLI receives a 30-day API
-key and stores it at `~/.memstack/credentials` (0600).
-
-Scripted hosts can pass `--api-key` or set `MEMSTACK_API_KEY` instead.
-
-### Logout
-
-```bash
 memstack logout
 ```
 
-Removes the credentials file.
+`memstack login` calls `/auth/device/code`, opens the web UI `/device` approval page, polls
+`/auth/device/token`, then stores the issued API key in `~/.memstack/credentials`.
 
 ## Commands
 
-All commands accept a global `--json` flag that emits machine-readable
-JSON to stdout instead of human-formatted text.
+All commands accept global `--json` for machine-readable output.
 
 ```bash
-memstack whoami                     # current user + tenant
-memstack projects                   # list projects in your tenant
-memstack conversations --project <id>
-memstack chat <project_id> "hello" [--conversation <id>] [--stream]
-memstack artifacts list --project <id> [--category image]
-memstack artifacts pull <artifact_id> [--output ./file.zip]
+memstack whoami
+memstack projects
+memstack conversations --project <project_id> --limit 20
 memstack logs <conversation_id> [--limit N] [--from-sequence N] [--type event_type]
+memstack artifacts list --project <project_id> [--category image]
+memstack artifacts pull <artifact_id> [--output ./file.zip]
 ```
 
-### Logs (operator triage)
+## Current Chat Status
+
+The CLI still contains a legacy `memstack chat` command that targets `POST /agent/chat` and
+optional SSE streaming. The current backend route set does **not** register
+`/api/v1/agent/chat`; live chat is WebSocket-based at:
+
+```text
+WS /api/v1/agent/ws
+```
+
+Use the web console or a WebSocket client for live agent chat until the CLI chat command is
+migrated. Do not use the legacy CLI chat examples as the current integration contract.
+
+## Logs
 
 ```bash
-memstack logs <conversation_id>                    # last 200 events, human-readable
-memstack logs <conversation_id> --limit 1000       # wider window
-memstack logs <conversation_id> --type tool_call   # filter by event_type
-memstack --json logs <conversation_id>             # machine-readable for jq
+memstack logs <conversation_id>
+memstack logs <conversation_id> --limit 1000
+memstack logs <conversation_id> --type tool_call
+memstack --json logs <conversation_id>
 ```
 
-Dumps persisted execution events from `/agent/conversations/{id}/events`
-— useful for triaging a stuck or failed run without opening the web UI.
+The logs command reads persisted execution events from:
 
-### Streaming chat
-
-```bash
-memstack chat <project_id> "summarize last meeting" --stream
+```text
+GET /api/v1/agent/conversations/{conversation_id}/events
 ```
 
-`--stream` consumes the server-sent events from `/agent/chat`, printing
-`[event_type] text` lines. Combine with `--json` to emit `{event, data}`
-JSON per line — suitable for `jq` pipelines.
+This is useful for triaging a stuck or failed run without opening the web UI.
 
-## Environment variables
+## Environment Variables
 
-| Var | Default | Purpose |
+| Variable | Default | Purpose |
 |---|---|---|
-| `MEMSTACK_API_URL` | `http://localhost:8000` | Base URL of the API |
-| `MEMSTACK_API_KEY` | (unset) | Fallback API key |
+| `MEMSTACK_API_URL` | `http://localhost:8000` | Backend API base URL |
+| `MEMSTACK_API_KEY` | unset | API key fallback |
 
-## Scripting examples
+## Scripting Examples
 
 ```bash
 # All project IDs
 memstack --json projects | jq -r '.[].id'
 
-# Tail a conversation's events
-memstack chat "$P" "status?" --stream --json \
-  | jq -r 'select(.event=="message") | .data'
+# Conversation event dump
+memstack --json logs "$CONVERSATION_ID" --limit 500 \
+  | jq -r '.events[] | [.type, .timestamp] | @tsv'
 
 # Pull every image artifact to ./out/
-memstack --json artifacts list --project "$P" --category image \
+memstack --json artifacts list --project "$PROJECT_ID" --category image \
   | jq -r '.[].id' \
   | while read id; do
       memstack artifacts pull "$id" --output "./out/$id"
     done
 ```
 
-## Troubleshooting
-
-- `error: no API key` — run `memstack login` or set `MEMSTACK_API_KEY`.
-- Login times out — the approval window is 10 minutes. Re-run `memstack login`.
-- `HTTP 401` on every call — the stored key expired; `memstack login` again.
-- Need to hit a different server: `MEMSTACK_API_URL=https://... memstack whoami`.
-
-## Exit codes
+## Exit Codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Runtime / network / HTTP error |
-| 2 | Bad input (missing auth, missing arg) |
+| 1 | Runtime, network, or HTTP error |
+| 2 | Bad input or missing authentication |
 
-## Design
+## Implementation Notes
 
-- **No daemon** — every command is a one-shot HTTP call. Lower ops
-  surface; the CLI can run anywhere Python 3.12 runs.
-- **Device-code flow** — lets CI and headless machines log in without
-  storing a browser session. Scripts can still use `--api-key`.
-- **Flag > env > file precedence** — matches mainstream CLI conventions
-  (`kubectl`, `gh`, `aws`).
-
-See `sdk/memstack_cli/` for the implementation. Each subcommand lives in
-`memstack_cli/commands/*.py` and shares the same `client.request()` /
-`auth.resolve_api_key()` helpers.
+- No daemon: each command is a one-shot HTTP call.
+- Shared HTTP helper: `sdk/memstack_cli/memstack_cli/client.py`.
+- Auth resolution: `sdk/memstack_cli/memstack_cli/auth.py`.
+- Commands: `sdk/memstack_cli/memstack_cli/commands/*.py`.
+- Chat migration target: replace legacy REST/SSE with the WebSocket protocol described in
+  [api-reference.md](api-reference.md).

@@ -437,7 +437,8 @@ Week 2:
 - [XFCE Documentation](https://docs.xfce.org/)
 - [TigerVNC Manual](https://tigervnc.org/doc/)
 - [Docker Best Practices](https://docs.docker.com/develop/dev-best-practices/)
-- [TDD Guidelines](~/.claude/rules/testing.md)
+- TDD workflow guidance was originally tracked in a local Claude rules file. For portable
+  verification, use the test commands documented in `../README.md`.
 
 ## Approval History
 

@@ -7,7 +7,7 @@ Services own business workflows; repositories own persistence.
 
 | Service | Ports Injected | Purpose |
 |---------|---------------|---------|
-| `agent_service.py` | ConversationRepo, ExecutionRepo, GraphService, LLM, SkillRepo, SubAgentRepo, Redis | Conversation lifecycle, SSE streaming, agent execution coordination. Largest service (~1200 lines). |
+| `agent_service.py` | ConversationRepo, ExecutionRepo, GraphService, LLM, SkillRepo, SubAgentRepo, Redis | Conversation lifecycle, agent execution coordination, and stream handoff to Redis/WebSocket paths. Largest service (~1200 lines). |
 | `memory_service.py` | MemoryRepo, GraphServicePort | Memory CRUD + graph episode creation. Creates Memory entity then queues background entity extraction. |
 | `project_service.py` | ProjectRepo, UserRepo | Project CRUD + member management. Validates owner exists before creation. |
 | `skill_service.py` | SkillRepo, TenantSkillConfigRepo, FileSystemSkillLoader | Three-level skill scoping: system < tenant < project. Progressive loading tiers (metadata/triggers/full content). |
@@ -49,7 +49,7 @@ Multi-channel message routing (Feishu, webhook, etc.):
 - `channel_service.py` -- channel instance CRUD per project
 - `channel_service_factory.py` -- creates channel-specific service instances
 - `channel_message_router.py` -- routes inbound messages to correct conversation
-- `event_bridge.py` -- bridges agent SSE events to channel-specific outbound format
+- `event_bridge.py` -- bridges agent runtime events to channel-specific outbound format
 - `hitl_responder.py` -- routes HITL responses back from channel to agent
 - `media_import_service.py` -- imports media attachments from channel messages
 

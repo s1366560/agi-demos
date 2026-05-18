@@ -1,5 +1,9 @@
 # OpenCode 工具对比报告
 
+> 历史审计。当前工具契约请以 `docs/TOOLS.md` 和
+> `src/infrastructure/agent/tools/` 为准；下文中的 `plan_enter` / `plan_update` /
+> `plan_exit` 反映旧审计上下文，当前代码树未提供这些工具文件。
+
 > 生成日期: 2025-01-28
 > 对比基准: vendor/opencode 内置工具规范
 

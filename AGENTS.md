@@ -272,7 +272,7 @@ Patterns for new domain/application/infrastructure layers follow standard DDD; e
 | Events | `src/domain/events/{agent_events,types}.py`, `src/infrastructure/agent/events/converter.py` |
 | Actor exec | `src/infrastructure/agent/actor/execution.py` |
 | Graph | `src/infrastructure/graph/native_graph_adapter.py`, `extraction/entity_extractor.py`, `search/hybrid_search.py` |
-| Frontend | `web/src/App.tsx`, `pages/tenant/AgentWorkspace.tsx`, `stores/agentV3.ts`, `services/agentService.ts` |
+| Frontend | `web/src/App.tsx`, `pages/tenant/AgentWorkspace.tsx`, `stores/agent/`, `services/agentService.ts` |
 
 ## API Testing
 
@@ -285,10 +285,10 @@ curl -X POST http://localhost:8000/api/v1/auth/token \
 export API_KEY="ms_sk_..."
 curl -H "Authorization: Bearer $API_KEY" http://localhost:8000/api/v1/projects
 
-# Agent chat (SSE)
-curl -N http://localhost:8000/api/v1/agent/chat \
-  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{"conversation_id":"...","message":"Hello","project_id":"1"}'
+# Agent chat (WebSocket)
+websocat "ws://localhost:8000/api/v1/agent/ws?token=$API_KEY"
+# Then send:
+# {"type":"send_message","conversation_id":"...","message":"Hello","project_id":"1"}
 ```
 
 The WS endpoint `/api/v1/agent/ws` authenticates via `?token=<api_key>` query param.
@@ -308,7 +308,7 @@ Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_EN
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **agi-demos** (67162 symbols, 186448 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **agi-demos** (67196 symbols, 186448 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

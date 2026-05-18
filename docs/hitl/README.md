@@ -1,89 +1,97 @@
-# HITL (Human-in-the-Loop) 系统
+# HITL (Human-in-the-Loop)
 
-HITL 允许 AI Agent 在关键步骤暂停并请求人类输入。当前实现基于 Ray Actors + Redis Streams + Postgres 快照，不再依赖 Temporal。
+HITL lets an agent pause and request human input before it continues. The current
+implementation is Ray Actor + Redis Streams + PostgreSQL persistence. It does not use
+Temporal.
 
-## 请求类型
+Last checked against code: 2026-05-18.
 
-| 类型 | 用途 | 典型场景 |
-|------|------|----------|
-| Clarification | 澄清用户意图 | "删除还是移动文件？" |
-| Decision | 关键决策点 | "部署到 staging 还是 production？" |
-| EnvVar | 收集环境变量 | "请提供 OPENAI_API_KEY" |
-| Permission | 授权敏感操作 | "允许执行 rm -rf ?" |
+## Request Types
 
-## 核心流程
+| Type | Purpose | Example response payload |
+|---|---|---|
+| `clarification` | Clarify user intent or missing parameters | `{ "answer": "Use staging" }` |
+| `decision` | Choose one branch or option | `{ "decision": "proceed" }` |
+| `env_var` | Provide required environment variables | `{ "values": { "OPENAI_API_KEY": "..." }, "save": true }` |
+| `permission` | Allow or deny a sensitive action | `{ "action": "allow", "remember": false }` |
+| `a2ui_action` | Respond to an interactive A2UI component action | component-specific payload |
+
+## Current Flow
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Frontend as 前端
-    participant API as REST API
+    participant User as User
+    participant Web as Web Console
+    participant WS as /api/v1/agent/ws
     participant Actor as ProjectAgentActor
-    participant Redis as Redis Streams
+    participant DB as PostgreSQL
+    participant Redis as Redis Stream
     participant Router as HITLStreamRouterActor
 
-    User->>Frontend: 发送消息
-    Frontend->>API: POST /agent/chat
-    API->>Actor: chat(request)
-    Actor->>Redis: 事件流输出
-
-    Note over Actor: 需要人类输入
-
-    Actor->>API: HITLPendingException
-    API->>Frontend: SSE hitl_requested
-
-    User->>Frontend: 提交响应
-    Frontend->>API: POST /agent/hitl/respond
-    API->>Redis: hitl:response stream
+    User->>Web: Send agent message
+    Web->>WS: send_message
+    WS->>Actor: start/continue chat
+    Actor->>DB: persist HITL request
+    Actor->>WS: emit clarification_asked / decision_asked / env_var_requested / permission_asked
+    User->>Web: Submit response
+    Web->>WS: *_respond message
+    Web->>DB: POST /api/v1/agent/hitl/respond fallback/recovery path
+    DB->>Redis: hitl:response:{tenant_id}:{project_id}
+    Redis->>Router: response consumed
     Router->>Actor: continue_chat(request_id, response)
-    Actor->>Redis: 事件流输出
-    Actor->>API: complete
-    API->>Frontend: SSE complete
+    Actor->>WS: continue events and completion
 ```
 
-## 快速开始 (Backend)
+The REST endpoints are still important for refresh/recovery and explicit response/cancel
+paths. Live chat itself is WebSocket-based.
 
-```python
-from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
+## Backend Components
 
-handler = RayHITLHandler(...)
+| Component | Path | Responsibility |
+|---|---|---|
+| HITL domain types | `src/domain/model/agent/hitl/hitl_types.py` | HITL type/status/request primitives and pending exception. |
+| Request entity | `src/domain/model/agent/hitl_request.py` | Persistable HITL request model. |
+| Handler | `src/infrastructure/agent/hitl/ray_hitl_handler.py` | Persists requests and raises the pause signal. |
+| State helpers | `src/infrastructure/agent/hitl/state_store.py`, `coordinator.py` | Redis/Postgres state support and local coordination. |
+| Router actor | `src/infrastructure/agent/actor/hitl_router_actor.py` | Consumes response stream and resumes project actors. |
+| Project actor | `src/infrastructure/agent/actor/project_agent_actor.py` | Owns execution and resume paths. |
+| REST router | `src/infrastructure/adapters/primary/web/routers/agent/hitl.py` | Pending/response/cancel endpoints. |
+| WebSocket handlers | `src/infrastructure/adapters/primary/web/websocket/handlers/hitl_handler.py` | Live HITL response messages. |
 
-decision = await handler.request_decision(
-    question="选择部署环境",
-    options=[
-        {"id": "staging", "label": "Staging", "recommended": True},
-        {"id": "production", "label": "Production"},
-    ],
-    decision_type="branch",
-    timeout_seconds=300,
-)
+## REST Endpoints
+
+Base path:
+
+```text
+/api/v1/agent/hitl
 ```
 
-## 文档目录
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/conversations/{conversation_id}/pending` | List pending requests for a conversation. |
+| `GET` | `/projects/{project_id}/pending?limit=50` | List pending requests for a project. |
+| `POST` | `/respond` | Submit any HITL response. |
+| `POST` | `/cancel` | Cancel a pending request. |
 
-| 文档 | 说明 |
-|------|------|
-| [架构设计](./architecture.md) | 组件职责和数据流 |
-| [请求类型](./request-types.md) | 请求参数和字段说明 |
-| [Ray 集成](./ray-integration.md) | 恢复流程与快照机制 |
-| [前端指南](./frontend-guide.md) | 组件与状态管理 |
-| [API 参考](./api-reference.md) | REST API 端点 |
-| [故障排除](./troubleshooting.md) | 常见问题与诊断 |
+See [api-reference.md](api-reference.md) for schemas and examples.
 
-## 核心组件 (Backend)
+## Design Rules
 
-| 组件 | 文件 | 职责 |
-|------|------|------|
-| HITLType | `hitl_types.py` | 类型定义 |
-| HITLRequest | `hitl_request.py` | 请求实体 |
-| RayHITLHandler | `ray_hitl_handler.py` | 统一处理 4 类 HITL 请求 |
-| HITLStateStore | `state_store.py` | Redis 状态存储 |
-| HITLStreamRouterActor | `hitl_router_actor.py` | 读取响应并恢复执行 |
-| ProjectAgentActor | `project_agent_actor.py` | Agent 运行时 |
+- Authorize by tenant/project/conversation before showing or accepting a response.
+- Persist the answer before publishing to Redis; failed publish returns success with a
+  delivery-pending message.
+- `env_var` supports exactly one of `values`, `cancelled`, or `timeout`.
+- Secrets must be redacted in logs and must use encrypted response fields where required by
+  the tool/runtime path.
+- Keep HITL events in sync with `src/domain/events/types.py`.
 
-## 设计原则
+## Related Docs
 
-1. 统一入口: 所有 HITL 请求通过 RayHITLHandler
-2. 实时事件: Redis Streams 推送事件
-3. 可恢复: Postgres 快照兜底
-4. 多租户隔离: tenant_id/project_id 全链路隔离
+| Doc | Purpose |
+|---|---|
+| [api-reference.md](api-reference.md) | REST endpoint contract. |
+| [request-types.md](request-types.md) | Type-specific request/response fields. |
+| [frontend-guide.md](frontend-guide.md) | Frontend state and UI handling. |
+| [ray-integration.md](ray-integration.md) | Ray actor resume and recovery details. |
+| [architecture.md](architecture.md) | Component architecture and state flow. |
+| [troubleshooting.md](troubleshooting.md) | Operational checks. |

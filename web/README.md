@@ -1,219 +1,147 @@
 # MemStack Web Console
 
-Modern React-based web console for MemStack - Enterprise AI Memory Cloud Platform.
+The web console is a React 19 + TypeScript application for operating MemStack tenants,
+projects, agents, workspaces, memory graphs, MCP integrations, sandboxes, and admin views.
 
-## Features
+Last checked against code: 2026-05-18.
 
-- 📊 Dashboard with system overview
-- 📝 Episode creation and management
-- 🔍 Natural language memory search
-- 🕸️ Knowledge graph visualization (Cytoscape.js)
-- ⚙️ API key configuration
-- 🎨 Modern UI with Ant Design
+Additional web docs start at [web/docs/README.md](docs/README.md).
 
-## Tech Stack
+## Stack
 
-- **React 18** with TypeScript
-- **Vite** for fast development and building
-- **Ant Design** for UI components
-- **React Router** for navigation
-- **Axios** for API calls
-- **Cytoscape.js** for graph visualization
+| Area | Current implementation |
+|---|---|
+| Framework | React 19.2, React Router 7 |
+| Build | Vite 7.3, TypeScript 5.9 |
+| UI | Ant Design 6.1, lucide-react, custom shared UI components |
+| State/data | Zustand 5, TanStack Query 5, SWR |
+| Realtime | Agent WebSocket service, sandbox SSE/WebSocket adapters, event bus client |
+| Visualization | Cytoscape, Chart.js, Mermaid, KaTeX, Three.js/react-three-fiber |
+| Tests | Vitest, Testing Library, Playwright |
 
-## Development
+Vite 7 requires Node `^20.19.0 || >=22.12.0`. Dependencies are managed with pnpm; the
+package declares `pnpm@10.24.0`.
 
-### Prerequisites
-
-- Node.js 18+ and npm/yarn
-- Running MemStack API server (default: http://localhost:8000)
-
-### Install Dependencies
+## Commands
 
 ```bash
-npm install
+cd web
+pnpm install
+pnpm run dev
+pnpm run type-check
+pnpm run test
+pnpm run build
+pnpm run test:e2e
 ```
 
-### Start Development Server
+From the repository root:
 
 ```bash
-npm run dev
+make dev-web       # foreground web server on :3000
+make dev           # full stack, including web in background
 ```
 
-The web console will be available at http://localhost:3000
+## Development Server
 
-### Build for Production
+The Vite dev server runs on `http://localhost:3000` with `strictPort: true`.
+
+`web/vite.config.ts` proxies `/api` to `http://localhost:8000`, so browser requests can use
+relative `/api/v1/...` paths during local development.
+
+## API Client Rules
+
+`web/src/services/client/httpClient.ts` sets:
+
+```ts
+export const API_BASE_URL = '/api/v1';
+```
+
+Service modules should pass paths relative to `/api/v1`:
+
+```ts
+httpClient.get('/mcp/apps');      // correct
+httpClient.get('/api/v1/mcp/apps'); // wrong: doubles the prefix
+```
+
+For collection endpoints defined with a trailing slash in FastAPI, keep the trailing slash in
+frontend calls to avoid 307 redirects that can strip `Authorization` in Vite development.
+
+## Current App Structure
+
+```text
+web/src/
+  App.tsx                         Route tree and lazy-loaded pages
+  layouts/                        Tenant, project, schema, agent layouts
+  pages/
+    tenant/                       Tenant-level product pages
+    project/                      Project memory/graph/schema/support pages
+    admin/                        Admin dashboards
+  components/
+    agent/                        Agent workspace, chat, timeline, HITL, sandbox, canvas
+    workspace/                    Workspace UI and collaboration components
+    graph/                        Graph visualization
+    mcp, mcp-app, skill, provider  Integration and configuration surfaces
+    shared, ui, common            Shared primitives
+  services/                       HTTP clients, WebSocket clients, event routing
+  stores/                         Zustand stores
+  hooks/                          Shared React hooks
+  utils/                          Event adapters, projections, sanitizers, exports
+  theme/                          AntD theme and app theme provider
+  i18n, locales/                  i18next configuration and translations
+  test/                           Unit/component test support
+```
+
+## Major Routes
+
+Routes are defined in `web/src/App.tsx` and are lazy-loaded. Key areas:
+
+| Area | Examples |
+|---|---|
+| Auth | `/login`, `/login/callback/:provider`, `/invite/:token`, `/device`, `/force-change-password` |
+| Tenant | `/tenant/:tenantId/overview`, `/projects`, `/users`, `/providers`, `/settings` |
+| Agent | `/tenant/:tenantId/agent-workspace/:conversation?`, `/agents`, `/subagents`, `/agent-definitions`, `/agent-bindings` |
+| Skills/plugins | `/skills`, `/curated-skills`, `/templates`, `/plugins`, `/mcp-servers`, `/runtimes` |
+| Workspace | `/workspaces`, `/workspaces/new`, project-scoped workspace routes |
+| Instances/genes | `/instances`, `/instances/:instanceId`, `/deploy`, `/genes`, `/instance-templates` |
+| Project | `/tenant/:tenantId/project/:projectId/memories`, `/graph`, `/entities`, `/communities`, `/schema/*`, `/blackboard`, `/playbooks` |
+| Admin/ops | `/pool`, `/audit-logs`, `/trust-policies`, `/decision-records`, `/org-settings/*` |
+
+## Realtime Agent Flow
+
+The current live agent transport is WebSocket-based:
+
+- Backend endpoint: `WS /api/v1/agent/ws`
+- Frontend service: `web/src/services/agentService.ts`
+- Message routing: `web/src/services/agent/messageRouter.ts`
+- Event adaptation: `web/src/utils/sseEventAdapter.ts`
+- Agent state stores: `web/src/stores/agent*`, `web/src/stores/agent/*`
+
+The frontend still has adapters named after SSE because they normalize historical event
+shapes, but live chat is handled by the WebSocket service.
+
+## Testing
 
 ```bash
-npm run build
+pnpm run type-check
+pnpm run test
+pnpm run test:e2e
+pnpm run build
 ```
 
-The production build will be in the `dist/` directory.
-
-### Preview Production Build
+Use focused tests during iteration:
 
 ```bash
-npm run preview
-```
-
-## Configuration
-
-### API Endpoint
-
-The web console connects to the MemStack API. During development, the API is proxied through Vite:
-
-```typescript
-// vite.config.ts
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://localhost:8000',
-      changeOrigin: true,
-    },
-  },
-}
-```
-
-For production, configure your reverse proxy (nginx) to route `/api` requests to the backend.
-
-### API Key
-
-On first use, navigate to Settings and enter your API key. The key is stored in localStorage and automatically included in all API requests.
-
-## Project Structure
-
-```
-web/
-├── src/
-│   ├── components/      # Reusable React components
-│   │   └── Layout.tsx
-│   ├── pages/          # Page components
-│   │   ├── Dashboard.tsx
-│   │   ├── Episodes.tsx
-│   │   ├── Search.tsx
-│   │   ├── GraphView.tsx
-│   │   └── Settings.tsx
-│   ├── services/       # API client and services
-│   │   └── api.ts
-│   ├── App.tsx         # Main app component
-│   ├── main.tsx        # Entry point
-│   └── index.css       # Global styles
-├── index.html
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
-
-## Docker Deployment
-
-### Build Docker Image
-
-```bash
-docker build -t memstack-web .
-```
-
-### Run Container
-
-```bash
-docker run -p 80:80 memstack-web
-```
-
-### Docker Compose
-
-```yaml
-version: '3.8'
-services:
-  web:
-    build: ./web
-    ports:
-      - "80:80"
-    environment:
-      - API_BASE_URL=http://api:8000
-```
-
-## Usage Guide
-
-### 1. Configure API Key
-
-1. Navigate to Settings
-2. Enter your MemStack API key (starts with `ms_sk_`)
-3. Click "Save Settings"
-
-### 2. Create Episodes
-
-1. Go to Episodes page
-2. Fill in episode details:
-   - Name: Descriptive name
-   - Content: Text or JSON data
-   - Source Type: text or json
-   - Group ID (optional): For organizing episodes
-3. Click "Create Episode"
-
-### 3. Search Memories
-
-1. Go to Search page
-2. Enter natural language query
-3. View results with relevance scores
-
-### 4. Visualize Knowledge Graph
-
-1. Go to Knowledge Graph page
-2. Explore nodes and relationships
-3. Interact with the graph (zoom, pan, click)
-
-## Development Tips
-
-### Hot Module Replacement
-
-Vite provides instant HMR. Changes to React components will reflect immediately without losing state.
-
-### Type Safety
-
-The project uses TypeScript with strict mode enabled. All API interfaces are typed for safety.
-
-### Linting
-
-```bash
-npm run lint
-```
-
-### Testing
-
-```bash
-npm run test
+pnpm run test -- src/test/services/agentService.subagent-events.test.ts
+pnpm run test -- src/test/components/agent/MessageArea.test.tsx
+pnpm run test:e2e -- e2e/agent.spec.ts
 ```
 
 ## Troubleshooting
 
-### CORS Issues
-
-If you encounter CORS errors, ensure your API server has CORS properly configured:
-
-```python
-# server/main.py
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Add your web origin
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-### API Connection Failed
-
-1. Check that the API server is running
-2. Verify the API URL in Settings
-3. Check browser console for error messages
-4. Ensure your API key is valid
-
-### Build Errors
-
-```bash
-# Clear node_modules and reinstall
-rm -rf node_modules package-lock.json
-npm install
-```
-
-## License
-
-MIT
+| Symptom | Check |
+|---|---|
+| 401 after a collection request | Confirm the frontend service path keeps the trailing slash expected by FastAPI. |
+| Request path is `/api/v1/api/v1/...` | Remove the duplicate `/api/v1` from the service module. |
+| Infinite rerender with Zustand | Use `useShallow` for object selectors. |
+| WebSocket connects but no events arrive | Check `agentService.ts` subscription state and backend `/api/v1/agent/ws` logs. |
+| Port 3000 in use | Run `make dev-web-stop` or stop the process using the port. |

@@ -1,56 +1,63 @@
 # web/src/
 
-Frontend root. React 19.2 + TypeScript 5.9 + Vite 7.3 + Ant Design 6.1 + Zustand 5.0.
+Frontend source root. Current stack: React 19.2 + TypeScript 5.9 + Vite 7.3 +
+Ant Design 6.1 + Zustand 5 + TanStack Query 5.
+
+Last checked against code: 2026-05-18.
 
 ## Entry Points
 
 | File | Purpose |
-|------|---------|
-| `main.tsx` | ReactDOM.createRoot, BrowserRouter, AppInitializer wrapper |
-| `App.tsx` | Route definitions (~700 lines). All routes lazy-loaded via `React.lazy()` |
-| `App.css` / `index.css` | Global styles |
+|---|---|
+| `main.tsx` | React root, `QueryClientProvider`, `BrowserRouter`, app bootstrap. |
+| `App.tsx` | Lazy-loaded route tree and auth/tenant guards. |
+| `App.css`, `index.css` | Global styles and Tailwind entry. |
 
 ## Directory Map
 
-| Dir | Purpose | Child AGENTS.md |
-|-----|---------|-----------------|
-| `components/` | Reusable UI components. `agent/` is the largest (57 entries) | `components/agent/AGENTS.md` |
-| `pages/` | Route-level page components (25+ pages, mostly under `tenant/`) | -- |
-| `stores/` | Zustand state stores (22 files + `agent/` subdir) | `stores/AGENTS.md` |
-| `services/` | API service clients (37 files + `client/`, `mcp/` subdirs) | `services/AGENTS.md` |
-| `hooks/` | Custom React hooks (sandbox detection, debounce, etc.) | -- |
-| `types/` | TypeScript type definitions (agent, memory, common, etc.) | -- |
-| `i18n/` | i18n config (i18next). `locales/` has en/zh JSON files | -- |
-| `layouts/` | Layout shells: `TenantLayout`, `ProjectLayout`, `SchemaLayout` | -- |
-| `theme/` | ThemeProvider (Ant Design 6 token customization) | -- |
-| `config/` | `navigation.ts` -- sidebar nav item definitions | -- |
-| `utils/` | Utility functions (export, logger, tabSync, tokenResolver) | -- |
-| `styles/` | Shared CSS/style modules | -- |
-| `vendor/` | Vendored third-party code | -- |
-| `constants/` | App-wide constants | -- |
-| `test/` | Frontend test setup (Vitest) | -- |
+| Directory | Purpose | Local guidance |
+|---|---|---|
+| `components/` | Product UI components. `agent/` is the largest subtree. | `components/agent/AGENTS.md` |
+| `pages/` | Route-level pages, mostly tenant and project views. | - |
+| `layouts/` | `TenantLayout`, deprecated `ProjectLayout`, `SchemaLayout`, `AgentLayout`. | - |
+| `services/` | REST, WebSocket, event, sandbox, MCP, and artifact clients. | `services/AGENTS.md` |
+| `stores/` | Zustand stores and agent submodules. | `stores/AGENTS.md` |
+| `hooks/` | Shared React hooks. | - |
+| `utils/` | Event adapters, projections, token/date/sanitize helpers. | - |
+| `theme/` | Ant Design/theme provider setup. | - |
+| `i18n`, `locales/` | i18next configuration and translation files. | - |
+| `types/` | Shared TypeScript types. | - |
+| `test/` | Vitest test helpers and test files. | - |
 
-## Routing (App.tsx)
+## Routing Facts
 
-- All route components are `lazy(() => import(...))` with `<Suspense>` fallback
-- Layout hierarchy: `TenantLayout` > `ProjectLayout` > page component
-- Key routes: `/login`, `/tenant/:tenantId/*`, `/tenant/:tenantId/project/:projectId/*`
-- Agent workspace: `/tenant/:tenantId/agent` (most complex page)
+- All major route components are lazy-loaded in `App.tsx`.
+- Current app shell is tenant-first. `TenantLayout` owns the main sidebar/header/chat shell.
+- `ProjectLayout` is deprecated and kept for compatibility; project pages are routed through
+  tenant-scoped routes.
+- Canonical agent workspace path:
+  `/tenant/:tenantId/agent-workspace/:conversation?`
+- Project pages:
+  `/tenant/:tenantId/project/:projectId/*`
+- Top-level `/project/:projectId/*` is a legacy redirect.
 
-## App Bootstrap (main.tsx)
+## App Bootstrap
 
+```text
+ReactDOM.createRoot
+  -> StrictMode
+  -> QueryClientProvider
+  -> BrowserRouter
+  -> AppInitializer
+  -> App
 ```
-ReactDOM.createRoot -> StrictMode -> BrowserRouter -> AppInitializer -> App
-```
 
-- `AppInitializer` handles auth check, tenant loading on mount
-- `ThemeProvider` wraps inside App.tsx (Ant Design ConfigProvider + theme tokens)
-- i18n initialized via `import './i18n/config'` side effect in App.tsx
+`App` wraps routes with `ErrorBoundary`, `ThemeProvider`, and `Suspense`. i18n is initialized
+by importing `./i18n/config`.
 
-## Key Patterns
+## Key Rules
 
-- Lazy loading for ALL route components (code splitting)
-- `ErrorBoundary` wraps routes for crash resilience
-- Auth guard: checks `useAuthStore` for `isAuthenticated`, redirects to `/login`
-- Multi-tenant: `tenantId` from URL params, stored in `useTenantStore`
-- Project scoping: `projectId` from URL params, stored in `useProjectStore`
+- Use `useShallow` for Zustand object selectors.
+- Service paths are relative to `httpClient` base URL `/api/v1`.
+- Agent live chat uses `agentService.ts` and `WS /api/v1/agent/ws`.
+- Keep tenant/project IDs in URL/store state aligned when adding pages.

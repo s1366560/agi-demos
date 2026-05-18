@@ -276,7 +276,7 @@ const { currentRequest, submitResponse } = useHITLStore((state) => ({
 }));
 ```
 
-## SSE 事件订阅
+## WebSocket 事件订阅
 
 ### 事件类型
 
@@ -284,65 +284,41 @@ const { currentRequest, submitResponse } = useHITLStore((state) => ({
 // web/src/types/agent.ts
 
 type HITLEventType =
-  | 'hitl_request'      // 新的 HITL 请求
-  | 'hitl_timeout'      // 请求超时
-  | 'hitl_cancelled'    // 请求取消
-  | 'hitl_completed';   // 请求完成
+  | 'clarification_asked'
+  | 'decision_asked'
+  | 'env_var_requested'
+  | 'permission_asked'
+  | 'clarification_answered'
+  | 'decision_answered'
+  | 'env_var_provided'
+  | 'permission_replied';
 
 interface HITLEvent {
   type: HITLEventType;
+  conversation_id: string;
   data: {
     request_id: string;
-    hitl_type: 'clarification' | 'decision' | 'env_var' | 'permission';
-    request_data?: any;
-    status?: string;
+    [key: string]: unknown;
   };
 }
 ```
 
-### SSE 订阅
+### WebSocket 订阅
 
-```typescript
-// web/src/hooks/useAgentSSE.ts
+当前前端不直接创建 `EventSource`。Agent 事件通过
+`agentService` 共享 WebSocket 连接进入 `messageRouter`，再分发到
+`web/src/stores/agent/streamEventHandlers.ts` 和 `useAgentHITLStore`。
 
-export const useAgentSSE = (conversationId: string) => {
-  const { setCurrentRequest, addToHistory } = useHITLStore();
+Key files:
 
-  useEffect(() => {
-    const eventSource = new EventSource(
-      `/api/v1/agent/conversations/${conversationId}/stream`
-    );
-
-    eventSource.addEventListener('hitl_request', (event) => {
-      const data = JSON.parse(event.data);
-      const request: HITLRequest = {
-        id: data.request_id,
-        type: data.hitl_type,
-        data: data.request_data,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      setCurrentRequest(request);
-      addToHistory(request);
-    });
-
-    eventSource.addEventListener('hitl_timeout', (event) => {
-      const data = JSON.parse(event.data);
-      // 清除当前请求
-      setCurrentRequest(null);
-      // 显示超时提示
-      message.warning('HITL 请求已超时');
-    });
-
-    eventSource.addEventListener('hitl_completed', (event) => {
-      const data = JSON.parse(event.data);
-      setCurrentRequest(null);
-    });
-
-    return () => eventSource.close();
-  }, [conversationId]);
-};
-```
+- `web/src/services/agentService.ts` - opens `/api/v1/agent/ws`, sends HITL responses,
+  and falls back to HTTP when the socket is unavailable.
+- `web/src/services/agent/messageRouter.ts` - routes `clarification_asked`,
+  `decision_asked`, `env_var_requested`, and `permission_asked` events.
+- `web/src/stores/agent/hitlStore.ts` - stores pending HITL state for the active
+  conversation.
+- `web/src/stores/agent/hitlActions.ts` - submits clarification, decision, env-var,
+  and permission responses.
 
 ## API 服务
 
@@ -642,51 +618,11 @@ const handleSubmit = async (response: any) => {
 };
 ```
 
-### SSE 断连重试
+### WebSocket 断连重试
 
-```typescript
-const useAgentSSE = (conversationId: string) => {
-  const [retryCount, setRetryCount] = useState(0);
-  const maxRetries = 3;
-
-  useEffect(() => {
-    let eventSource: EventSource;
-    let reconnectTimer: NodeJS.Timeout;
-
-    const connect = () => {
-      eventSource = new EventSource(
-        `/api/v1/agent/conversations/${conversationId}/stream`
-      );
-
-      eventSource.onopen = () => {
-        setRetryCount(0); // 重置重试计数
-      };
-
-      eventSource.onerror = () => {
-        eventSource.close();
-        
-        if (retryCount < maxRetries) {
-          // 指数退避重连
-          const delay = Math.pow(2, retryCount) * 1000;
-          reconnectTimer = setTimeout(() => {
-            setRetryCount((c) => c + 1);
-            connect();
-          }, delay);
-        }
-      };
-
-      // ... 事件处理
-    };
-
-    connect();
-
-    return () => {
-      eventSource?.close();
-      clearTimeout(reconnectTimer);
-    };
-  }, [conversationId, retryCount]);
-};
-```
+不要在 HITL 组件中实现独立重连循环。复用 `agentService` 的共享连接；组件只需要
+监听 store 状态，并在响应失败时让 `agentService` 的 HTTP fallback 路径提交到
+`/api/v1/agent/hitl/respond`。
 
 ## 最佳实践
 

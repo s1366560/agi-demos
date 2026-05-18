@@ -6,7 +6,7 @@
 |-----------|---------|
 | `model/` | Domain entities by bounded context (8 contexts) |
 | `ports/` | Repository (25) and service (20) interfaces for dependency inversion |
-| `events/` | Domain event system — types, serialization, SSE conversion |
+| `events/` | Domain event system — types, serialization, frontend event conversion |
 | `exceptions/` | Domain-specific exception hierarchy |
 | `llm_providers/` | LLM provider enum/value objects |
 | `shared_kernel.py` | Base classes: `Entity` (identity-based equality), `ValueObject` (frozen), `DomainEvent` (immutable) |

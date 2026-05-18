@@ -1,5 +1,8 @@
 # Agent 组件审计报告
 
+> 历史审计。当前活跃组件目录是 `web/src/components/agent/`。下文中的
+> `components/agentV3` 与 `AgentChatV3.tsx` 只保留为原始审计上下文，不代表当前架构。
+
 ## 概述
 
 **审计日期:** 2026-01-27

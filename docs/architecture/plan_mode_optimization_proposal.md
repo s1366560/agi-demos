@@ -1,5 +1,9 @@
 # Plan Mode 架构优化方案
 
+> 历史设计提案。当前 Agent 工具清单请以
+> [`docs/TOOLS.md`](../TOOLS.md) 和 `src/infrastructure/agent/tools/` 为准；下文中的
+> `plan_update tool` 反映旧方案上下文，当前代码树未提供该工具文件。
+
 ## 一、当前架构分析
 
 ### 1.1 现有组件概览

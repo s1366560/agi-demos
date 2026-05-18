@@ -53,10 +53,11 @@ redis-cli GET hitl:agent_state:request:{request_id}
 - Redis key TTL
 - Postgres 快照是否存在
 
-### 5) SSE 事件未接收
+### 5) WebSocket 事件未接收
 
-原因: SSE 连接断开或 sequence 过滤。
+原因: 共享 Agent WebSocket 未连接、未订阅对应 conversation，或事件桥任务已停止。
 
 检查:
-- UI 是否更新 last_sequence_number
+- 浏览器网络面板中 `/api/v1/agent/ws` 是否保持连接
+- 前端是否已发送 `subscribe` 或 `send_message` 并带有正确的 `conversation_id`
 - `agent:events:{conversation_id}` 是否有新事件

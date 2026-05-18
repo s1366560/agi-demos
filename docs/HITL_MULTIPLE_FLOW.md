@@ -1,5 +1,11 @@
 # 多次 HITL 完整数据流
 
+> 历史数据流记录。当前 HITL 路径以 Ray Actors、Redis Streams、Postgres 快照和
+> Agent WebSocket 为准；请优先阅读 [`docs/hitl/README.md`](hitl/README.md)、
+> [`docs/hitl/api-reference.md`](hitl/api-reference.md) 和
+> [`docs/hitl/frontend-guide.md`](hitl/frontend-guide.md)。下文保留旧
+> SSE/`continue_project_chat` 语境作为排障历史。
+
 ## 架构概览
 
 ```
