@@ -231,6 +231,46 @@ class EntityExtractor:
 
         return unique_entities, duplicate_map
 
+    async def deduplicate_entity_nodes(
+        self,
+        new_entities: list[EntityNode],
+        existing_entities: list[EntityNode],
+        similarity_threshold: float = DEDUPE_SIMILARITY_THRESHOLD,
+    ) -> tuple[list[EntityNode], dict[str, str]]:
+        """
+        Deduplicate already-extracted entity nodes against existing graph entities.
+
+        This is used by graph ingestion after reflexion has amended the initial
+        extraction, so ingestion does not call the LLM a second time just to
+        perform deduplication.
+        """
+        if not new_entities:
+            return [], {}
+
+        duplicate_map: dict[str, str] = {}
+        entities_after_hash = new_entities
+
+        if self._hash_deduplicator:
+            if existing_entities:
+                entities_after_hash, hash_duplicate_map = self._hash_deduplicator.dedupe_against(
+                    new_entities=new_entities,
+                    existing_entities=existing_entities,
+                )
+                duplicate_map.update(hash_duplicate_map)
+            else:
+                entities_after_hash = self._hash_deduplicator.dedupe(new_entities)
+
+        if not existing_entities or not entities_after_hash:
+            return entities_after_hash, duplicate_map
+
+        unique_entities, vector_duplicate_map = await self._deduplicate_entities(
+            new_entities=entities_after_hash,
+            existing_entities=existing_entities,
+            similarity_threshold=similarity_threshold,
+        )
+        duplicate_map.update(vector_duplicate_map)
+        return unique_entities, duplicate_map
+
     async def _call_llm(
         self,
         system_prompt: str,
@@ -344,6 +384,7 @@ class EntityExtractor:
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse entity extraction response as JSON: {e}")
             return self._extract_json_from_text(response)
+
     @staticmethod
     def _extract_entities_from_parsed(data: Any) -> list[dict[str, Any]]:
         """Extract entity list from already-parsed JSON data."""
@@ -358,6 +399,7 @@ class EntityExtractor:
         if isinstance(data, list):
             return data
         return []
+
     def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """
         Try to extract JSON from text that may contain non-JSON content.
@@ -380,6 +422,7 @@ class EntityExtractor:
     def _try_code_block_json(self, text: str) -> list[dict[str, Any]] | None:
         """Strategy 1: Try markdown code blocks."""
         import re
+
         code_block_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
         if not code_block_match:
             return None
@@ -442,6 +485,7 @@ class EntityExtractor:
     def _try_regex_json(text: str) -> list[dict[str, Any]] | None:
         """Strategy 3: Fallback to regex patterns."""
         import re
+
         json_patterns = [
             r'\{[^{}]*"entities"\s*:\s*\[',
         ]
@@ -491,7 +535,9 @@ class EntityExtractor:
         # Generate embeddings in batch
         embeddings: list[list[float] | None]
         try:
-            embeddings = cast(list[list[float] | None], await self._embedding_service.embed_batch(names))
+            embeddings = cast(
+                list[list[float] | None], await self._embedding_service.embed_batch(names)
+            )
         except Exception as e:
             logger.error(f"Failed to generate embeddings for entities: {e}")
             embeddings = [None] * len(names)
@@ -583,10 +629,13 @@ class EntityExtractor:
         unique_entities = []
         duplicate_map = {}  # new_entity_name -> existing_entity_uuid
 
-        # Get existing embeddings
-        existing_embeddings = [e.name_embedding for e in existing_entities if e.name_embedding]
-        existing_names = [e.name for e in existing_entities if e.name_embedding]
-        existing_uuids = [e.uuid for e in existing_entities if e.name_embedding]
+        # Get existing embeddings while preserving the same index space.
+        existing_with_embeddings = [e for e in existing_entities if e.name_embedding]
+        existing_embeddings = [
+            cast(list[float], e.name_embedding) for e in existing_with_embeddings
+        ]
+        existing_names = [e.name for e in existing_with_embeddings]
+        existing_uuids = [e.uuid for e in existing_with_embeddings]
 
         if not existing_embeddings:
             return new_entities, {}
@@ -610,7 +659,7 @@ class EntityExtractor:
                 existing_uuid = existing_uuids[idx]
 
                 # Additional check: entity types should be compatible
-                existing_type = existing_entities[idx].entity_type
+                existing_type = existing_with_embeddings[idx].entity_type
                 if self._types_compatible(new_entity.entity_type, existing_type):
                     logger.debug(
                         f"Entity '{new_entity.name}' matches '{existing_name}' "

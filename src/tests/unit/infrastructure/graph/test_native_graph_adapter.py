@@ -8,7 +8,12 @@ import pytest
 
 from src.domain.model.memory.episode import Episode, SourceType
 from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
-from src.infrastructure.graph.schemas import HybridSearchResult, SearchResultItem
+from src.infrastructure.graph.schemas import (
+    EntityEdge,
+    EntityNode,
+    HybridSearchResult,
+    SearchResultItem,
+)
 
 
 @pytest.fixture
@@ -165,6 +170,93 @@ class TestNativeGraphAdapterAddEpisode:
 
 
 @pytest.mark.unit
+class TestNativeGraphAdapterProcessEpisode:
+    """Tests for episode entity extraction and graph construction."""
+
+    @pytest.mark.asyncio
+    async def test_process_episode_links_existing_duplicate_entity(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        """Duplicate extracted entities should mention existing graph nodes, not create copies."""
+        extracted = EntityNode(uuid="new-ada", name="Ada", entity_type="Person")
+        existing = EntityNode(uuid="existing-ada", name="Ada", entity_type="Person")
+
+        entity_extractor = MagicMock()
+        entity_extractor.extract = AsyncMock(return_value=[extracted])
+        entity_extractor.deduplicate_entity_nodes = AsyncMock(
+            return_value=([], {"Ada": "existing-ada"})
+        )
+
+        relationship_extractor = MagicMock()
+        relationship_extractor.extract_from_entity_nodes = AsyncMock(return_value=[])
+        mock_neo4j_client.find_node_by_uuid.return_value = {"name": "Episode"}
+
+        with (
+            patch.object(
+                adapter,
+                "_load_schema_context",
+                AsyncMock(
+                    return_value={
+                        "entity_types_context": [],
+                        "entity_type_id_to_name": {},
+                        "edge_type_map": {},
+                    }
+                ),
+            ),
+            patch.object(adapter, "_get_entity_extractor", return_value=entity_extractor),
+            patch.object(adapter, "_get_existing_entities", AsyncMock(return_value=[existing])),
+            patch.object(
+                adapter,
+                "_get_relationship_extractor",
+                return_value=relationship_extractor,
+            ),
+            patch.object(adapter, "_save_discovered_types", AsyncMock()),
+            patch.object(adapter, "_update_episode_status", AsyncMock()),
+        ):
+            result = await adapter.process_episode(
+                episode_uuid="episode-1",
+                content="Ada founded a lab.",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+            )
+
+        assert [node.uuid for node in result.nodes] == ["existing-ada"]
+        mock_neo4j_client.save_node.assert_not_awaited()
+        mock_neo4j_client.save_edge.assert_awaited_once()
+        assert mock_neo4j_client.save_edge.await_args.kwargs["to_uuid"] == "existing-ada"
+        relationship_extractor.extract_from_entity_nodes.assert_awaited_once()
+        rel_entities = relationship_extractor.extract_from_entity_nodes.await_args.kwargs[
+            "entity_nodes"
+        ]
+        assert [entity.uuid for entity in rel_entities] == ["existing-ada"]
+
+    @pytest.mark.asyncio
+    async def test_save_entity_relationship_merges_supporting_episodes(
+        self,
+        adapter,
+        mock_neo4j_client,
+    ):
+        """Entity relationships should union episode support instead of overwriting it."""
+        relationship = EntityEdge(
+            uuid="rel-1",
+            source_uuid="entity-a",
+            target_uuid="entity-b",
+            relationship_type="WORKS_AT",
+            fact="Ada works at Lab",
+            episodes=["episode-1"],
+        )
+
+        await adapter._save_entity_relationship(relationship)
+
+        query = mock_neo4j_client.execute_query.await_args.args[0]
+        assert "MERGE (from)-[r:WORKS_AT]->(to)" in query
+        assert "r.episodes = reduce" in query
+
+
+@pytest.mark.unit
 class TestNativeGraphAdapterSearch:
     """Tests for search method."""
 
@@ -224,6 +316,9 @@ class TestNativeGraphAdapterDeleteEpisode:
         result = await adapter.delete_episode_by_memory_id("memory-123")
 
         assert result is True
+        queries = [call.args[0] for call in mock_neo4j_client.execute_query.await_args_list]
+        assert any("MATCH (:Entity)-[r]->(:Entity)" in query for query in queries)
+        assert not any("[r:RELATES_TO" in query for query in queries)
 
 
 @pytest.mark.unit

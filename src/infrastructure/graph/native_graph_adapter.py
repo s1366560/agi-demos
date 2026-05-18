@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast, override
+from uuid import uuid4
 
 from src.domain.model.memory.episode import Episode
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -24,9 +25,10 @@ from .embedding.embedding_service import EmbeddingService, NullEmbeddingService
 from .extraction.entity_extractor import EntityExtractor
 from .extraction.reflexion import ReflexionChecker
 from .extraction.relationship_extractor import RelationshipExtractor
-from .neo4j_client import Neo4jClient
+from .neo4j_client import Neo4jClient, _validate_identifier
 from .schemas import (
     AddEpisodeResult,
+    EntityEdge,
     EntityNode,
     EpisodeStatus,
     EpisodeType,
@@ -519,11 +521,7 @@ class NativeGraphAdapter(GraphServicePort):
             await self._check_embedding_dimension()
 
             # 0. Load project schema context (Graphiti-compatible)
-            from src.infrastructure.adapters.secondary.schema.dynamic_schema import (
-                get_project_schema_context,
-            )
-
-            schema_context = await get_project_schema_context(project_id)
+            schema_context = await self._load_schema_context(project_id)
             entity_types_context = schema_context["entity_types_context"]
             entity_type_id_to_name = schema_context["entity_type_id_to_name"]
             edge_type_map = schema_context["edge_type_map"]
@@ -537,7 +535,7 @@ class NativeGraphAdapter(GraphServicePort):
             extractor = self._get_entity_extractor()
             entities = await extractor.extract(
                 content=content,
-                entity_types_context=entity_types_context,  # type: ignore[arg-type]
+                entity_types_context=entity_types_context,
                 entity_type_id_to_name=entity_type_id_to_name,
                 project_id=project_id,
                 tenant_id=tenant_id,
@@ -550,7 +548,7 @@ class NativeGraphAdapter(GraphServicePort):
                 missed_entities = await reflexion_checker.check_missed_entities(
                     content=content,
                     extracted_entities=[e.model_dump() for e in entities],
-                    entity_types_context=entity_types_context,  # type: ignore[arg-type]
+                    entity_types_context=entity_types_context,
                     entity_type_id_to_name=entity_type_id_to_name,
                     project_id=project_id,
                     tenant_id=tenant_id,
@@ -572,23 +570,21 @@ class NativeGraphAdapter(GraphServicePort):
                         f"{excluded_entity_types}"
                     )
 
-            # 4. Deduplicate against existing entities
-            unique_entities, _dedup_map = await extractor.extract_with_dedup(
-                content=content,
-                existing_entities=await self._get_existing_entities(project_id),
-                entity_types_context=entity_types_context,  # type: ignore[arg-type]
-                entity_type_id_to_name=entity_type_id_to_name,
-                project_id=project_id,
-                tenant_id=tenant_id,
-                user_id=user_id,
+            # 4. Deduplicate against existing entities without re-extracting.
+            existing_entities = await self._get_existing_entities(project_id)
+            unique_entities, dedup_map = await extractor.deduplicate_entity_nodes(
+                new_entities=entities,
+                existing_entities=existing_entities,
             )
-            # Use unique_entities, but also track which entities were duplicates
-            # Note: Check for None explicitly, as empty list [] is a valid result (all entities duplicated)
-            final_entities = unique_entities if unique_entities else entities
+            final_entities = self._resolve_mentioned_entities(
+                unique_entities=unique_entities,
+                duplicate_map=dedup_map,
+                existing_entities=existing_entities,
+            )
 
             # 5. Save entities to Neo4j
             entity_edges: list[EpisodicEdge] = []
-            for entity in final_entities:
+            for entity in unique_entities:
                 # Save entity node
                 await self._neo4j_client.save_node(
                     labels=entity.get_labels(),
@@ -596,6 +592,7 @@ class NativeGraphAdapter(GraphServicePort):
                     properties=entity.to_neo4j_properties(),
                 )
 
+            for entity in final_entities:
                 # Create MENTIONS edge from episode to entity
                 edge = EpisodicEdge(
                     source_uuid=episode_uuid,
@@ -622,19 +619,14 @@ class NativeGraphAdapter(GraphServicePort):
 
             # 7. Save relationships to Neo4j
             for rel in relationships:
-                await self._neo4j_client.save_edge(
-                    from_uuid=rel.source_uuid,
-                    to_uuid=rel.target_uuid,
-                    relationship_type=rel.relationship_type,
-                    properties=rel.to_neo4j_properties(),
-                )
+                await self._save_entity_relationship(rel)
 
             # 7.5 Save discovered types to PostgreSQL
             if project_id:
                 await self._save_discovered_types(
                     project_id=project_id,
                     entities=final_entities,
-                    relationships=relationships,  # type: ignore[arg-type]
+                    relationships=relationships,
                     existing_entity_types={ctx["entity_type_name"] for ctx in entity_types_context},
                 )
 
@@ -673,11 +665,206 @@ class NativeGraphAdapter(GraphServicePort):
             await self._update_episode_status(episode_uuid, EpisodeStatus.FAILED)
             raise
 
+    async def _load_schema_context(self, project_id: str | None) -> dict[str, Any]:
+        """Load project-specific graph schema context for extraction."""
+        from src.infrastructure.adapters.secondary.schema.dynamic_schema import (
+            get_project_schema_context,
+        )
+
+        return cast(dict[str, Any], await get_project_schema_context(project_id))
+
+    @staticmethod
+    def _resolve_mentioned_entities(
+        *,
+        unique_entities: list[EntityNode],
+        duplicate_map: dict[str, str],
+        existing_entities: list[EntityNode],
+    ) -> list[EntityNode]:
+        """Return unique entities plus existing graph nodes matched during dedupe."""
+        mentioned_by_uuid = {entity.uuid: entity for entity in unique_entities}
+        existing_by_uuid = {entity.uuid: entity for entity in existing_entities}
+
+        for existing_uuid in duplicate_map.values():
+            existing_entity = existing_by_uuid.get(existing_uuid)
+            if existing_entity is not None:
+                mentioned_by_uuid[existing_uuid] = existing_entity
+
+        return list(mentioned_by_uuid.values())
+
+    async def _save_entity_relationship(self, relationship: EntityEdge) -> None:
+        """Save an entity relationship while preserving all supporting episodes."""
+        _validate_identifier(relationship.relationship_type, "relationship type")
+        properties = relationship.to_neo4j_properties()
+        for key in properties:
+            _validate_identifier(key, "property key")
+
+        query = f"""
+            MATCH (from {{uuid: $from_uuid}})
+            MATCH (to {{uuid: $to_uuid}})
+            MERGE (from)-[r:{relationship.relationship_type}]->(to)
+            SET r.uuid = coalesce(r.uuid, $uuid),
+                r.relationship_type = $relationship_type,
+                r.fact = $fact,
+                r.summary = $summary,
+                r.weight = $weight,
+                r.created_at = coalesce(r.created_at, $created_at),
+                r.updated_at = datetime($updated_at),
+                r.attributes = $attributes,
+                r.episodes = reduce(
+                    existing = coalesce(r.episodes, []),
+                    episode_id IN $episodes |
+                    CASE
+                        WHEN episode_id IN existing THEN existing
+                        ELSE existing + [episode_id]
+                    END
+                )
+        """
+        optional_datetime_fields = ("valid_at", "invalid_at", "expired_at")
+        for field in optional_datetime_fields:
+            if field in properties:
+                query += f", r.{field} = ${field}"
+        if "relationship_embedding" in properties:
+            query += ", r.relationship_embedding = $relationship_embedding"
+
+        params: dict[str, Any] = {
+            "from_uuid": relationship.source_uuid,
+            "to_uuid": relationship.target_uuid,
+            "updated_at": datetime.now(UTC).isoformat(),
+            **properties,
+        }
+        await self._neo4j_client.execute_query(query, **params)
+
+    async def extract_entities(
+        self,
+        content: str,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        excluded_entity_types: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Extract entities from arbitrary memory content without writing the graph."""
+        schema_context = await self._load_schema_context(project_id)
+        entities = await self._get_entity_extractor().extract(
+            content=content,
+            entity_types_context=schema_context["entity_types_context"],
+            entity_type_id_to_name=schema_context["entity_type_id_to_name"],
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
+        if excluded_entity_types:
+            excluded_set = set(excluded_entity_types)
+            entities = [entity for entity in entities if entity.entity_type not in excluded_set]
+
+        return [self._entity_to_api_dict(entity) for entity in entities]
+
+    async def extract_relationships(
+        self,
+        content: str,
+        entities: list[dict[str, Any]] | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Extract relationships from memory content without writing the graph."""
+        schema_context = await self._load_schema_context(project_id)
+        entity_nodes = self._coerce_entity_nodes(
+            entities or [],
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        if not entity_nodes:
+            extracted_entities = await self._get_entity_extractor().extract(
+                content=content,
+                entity_types_context=schema_context["entity_types_context"],
+                entity_type_id_to_name=schema_context["entity_type_id_to_name"],
+                project_id=project_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+            )
+            entity_nodes = extracted_entities
+
+        relationships = await self._get_relationship_extractor().extract_from_entity_nodes(
+            content=content,
+            entity_nodes=entity_nodes,
+            edge_type_map=schema_context["edge_type_map"] or None,
+        )
+        name_by_uuid = {entity.uuid: entity.name for entity in entity_nodes}
+        return [
+            self._relationship_to_api_dict(relationship, name_by_uuid)
+            for relationship in relationships
+        ]
+
+    @staticmethod
+    def _entity_to_api_dict(entity: EntityNode) -> dict[str, Any]:
+        return {
+            "uuid": entity.uuid,
+            "name": entity.name,
+            "type": entity.entity_type,
+            "entity_type": entity.entity_type,
+            "summary": entity.summary,
+            "description": entity.summary,
+            "attributes": entity.attributes,
+        }
+
+    @staticmethod
+    def _relationship_to_api_dict(
+        relationship: EntityEdge,
+        name_by_uuid: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        name_by_uuid = name_by_uuid or {}
+        return {
+            "uuid": relationship.uuid,
+            "source_uuid": relationship.source_uuid,
+            "target_uuid": relationship.target_uuid,
+            "source": name_by_uuid.get(relationship.source_uuid, relationship.source_uuid),
+            "target": name_by_uuid.get(relationship.target_uuid, relationship.target_uuid),
+            "type": relationship.relationship_type,
+            "relationship_type": relationship.relationship_type,
+            "fact": relationship.fact,
+            "summary": relationship.summary,
+            "weight": relationship.weight,
+            "episodes": relationship.episodes,
+        }
+
+    @staticmethod
+    def _coerce_entity_nodes(
+        entities: list[dict[str, Any]],
+        *,
+        project_id: str | None,
+        tenant_id: str | None,
+        user_id: str | None,
+    ) -> list[EntityNode]:
+        """Convert API entity dictionaries into EntityNode inputs for extraction."""
+        entity_nodes: list[EntityNode] = []
+        for entity in entities:
+            name = entity.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            entity_type = entity.get("entity_type") or entity.get("type") or "Entity"
+            summary = entity.get("summary") or entity.get("description") or ""
+            attributes = entity.get("attributes") or {}
+            entity_nodes.append(
+                EntityNode(
+                    uuid=str(entity.get("uuid") or entity.get("id") or uuid4()),
+                    name=name,
+                    entity_type=str(entity_type),
+                    summary=str(summary),
+                    attributes=attributes if isinstance(attributes, dict) else {},
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                )
+            )
+        return entity_nodes
+
     async def _save_discovered_types(
         self,
         project_id: str,
         entities: list[EntityNode],
-        relationships: list[EpisodicEdge],
+        relationships: list[EntityEdge],
         existing_entity_types: set[str],
     ) -> None:
         """
@@ -969,7 +1156,7 @@ class NativeGraphAdapter(GraphServicePort):
 
             # Also get entity-to-entity relationships
             entity_query = """
-                MATCH (e1:Entity {project_id: $project_id})-[r:RELATES_TO]->(e2:Entity)
+                MATCH (e1:Entity {project_id: $project_id})-[r]->(e2:Entity {project_id: $project_id})
                 RETURN e1, r, e2
                 LIMIT $limit
             """
@@ -1055,6 +1242,36 @@ class NativeGraphAdapter(GraphServicePort):
         """
         return await self.remove_episode_by_memory_id(memory_id)
 
+    async def _cleanup_entity_relationships_for_episodes(
+        self,
+        episode_match_clause: str,
+        params: dict[str, Any],
+    ) -> None:
+        """Remove or update entity relationships supported by deleted episodes."""
+        delete_relationships_query = f"""
+            {episode_match_clause}
+            MATCH (:Entity)-[r]->(:Entity)
+            WHERE r.episodes IS NOT NULL
+              AND any(episode_id IN episode_uuids WHERE episode_id IN r.episodes)
+            WITH r, episode_uuids,
+                 [episode_id IN r.episodes WHERE NOT episode_id IN episode_uuids] AS remaining
+            WHERE size(remaining) = 0
+            DELETE r
+        """
+        await self._neo4j_client.execute_query(delete_relationships_query, **params)
+
+        trim_relationships_query = f"""
+            {episode_match_clause}
+            MATCH (:Entity)-[r]->(:Entity)
+            WHERE r.episodes IS NOT NULL
+              AND any(episode_id IN episode_uuids WHERE episode_id IN r.episodes)
+            WITH r, episode_uuids,
+                 [episode_id IN r.episodes WHERE NOT episode_id IN episode_uuids] AS remaining
+            WHERE size(remaining) > 0 AND size(remaining) < size(r.episodes)
+            SET r.episodes = remaining
+        """
+        await self._neo4j_client.execute_query(trim_relationships_query, **params)
+
     @override
     async def remove_episode(self, episode_uuid: str) -> bool:
         """
@@ -1073,21 +1290,11 @@ class NativeGraphAdapter(GraphServicePort):
             True if removal was successful
         """
         try:
-            # Step 1: Delete orphaned entity edges
-            delete_orphan_edges_query = """
-                MATCH (ep:Episodic {uuid: $uuid})
-                WHERE ep.entity_edges IS NOT NULL
-                WITH ep, ep.entity_edges AS edge_uuids
-                UNWIND edge_uuids AS edge_uuid
-                MATCH (e1:Entity)-[r:RELATES_TO {uuid: edge_uuid}]->(e2:Entity)
-                WHERE r.episodes IS NOT NULL AND size(r.episodes) = 1 AND r.episodes[0] = $uuid
-                DELETE r
-            """
-            result = await self._neo4j_client.execute_query(
-                delete_orphan_edges_query, uuid=episode_uuid
+            # Step 1: Delete or trim entity relationships supported by this episode.
+            await self._cleanup_entity_relationships_for_episodes(
+                "MATCH (ep:Episodic {uuid: $uuid}) WITH collect(ep.uuid) AS episode_uuids",
+                params={"uuid": episode_uuid},
             )
-            edges_deleted = result.summary.counters.relationships_deleted
-            logger.debug(f"Deleted {edges_deleted} orphan edges for episode {episode_uuid}")
 
             # Step 2: Delete orphaned entity nodes
             delete_orphan_entities_query = """
@@ -1137,17 +1344,14 @@ class NativeGraphAdapter(GraphServicePort):
             cleared_count = result.records[0]["cleared_count"] if result.records else 0
             logger.info(f"Cleared embeddings from {cleared_count} entities for memory {memory_id}")
 
-            # Step 2: Delete orphan edges
-            delete_orphan_edges_query = """
+            # Step 2: Delete or trim entity relationships supported by this memory's episodes.
+            await self._cleanup_entity_relationships_for_episodes(
+                """
                 MATCH (ep:Episodic {memory_id: $memory_id})
-                WHERE ep.entity_edges IS NOT NULL
-                WITH ep, ep.entity_edges AS edge_uuids
-                UNWIND edge_uuids AS edge_uuid
-                MATCH (e1:Entity)-[r:RELATES_TO {uuid: edge_uuid}]->(e2:Entity)
-                WHERE r.episodes IS NOT NULL AND size(r.episodes) = 1 AND r.episodes[0] = ep.uuid
-                DELETE r
-            """
-            await self._neo4j_client.execute_query(delete_orphan_edges_query, memory_id=memory_id)
+                WITH collect(ep.uuid) AS episode_uuids
+                """,
+                params={"memory_id": memory_id},
+            )
 
             # Step 3: Delete orphan entities
             delete_orphan_entities_query = """

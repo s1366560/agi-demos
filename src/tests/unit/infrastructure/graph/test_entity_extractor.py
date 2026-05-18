@@ -3,6 +3,7 @@
 import pytest
 
 from src.infrastructure.graph.extraction.entity_extractor import EntityExtractor
+from src.infrastructure.graph.schemas import EntityNode
 
 
 class MockEmbeddingService:
@@ -15,6 +16,9 @@ class MockEmbeddingService:
 
     async def embed_batch(self, texts: list):
         return [[0.1] * 768 for _ in texts]
+
+    async def find_most_similar(self, query_embedding, candidates, top_k=1):
+        return [(0, 0.99)]
 
 
 class MockLLMClient:
@@ -162,6 +166,33 @@ These are the main entities mentioned."""
         assert len(result) == 1
         assert result[0]["name"] == "李明"
         assert result[0]["entity_type"] == "人物"
+
+
+@pytest.mark.unit
+class TestEntityDeduplication:
+    """Tests for deduplicating already-extracted entities."""
+
+    async def test_deduplicate_entity_nodes_maps_existing_hash_duplicate(self, extractor):
+        existing = EntityNode(
+            uuid="existing-ada",
+            name="Ada",
+            entity_type="Person",
+            summary="Researcher",
+        )
+        extracted = EntityNode(
+            uuid="new-ada",
+            name="Ada",
+            entity_type="Person",
+            summary="Researcher",
+        )
+
+        unique, duplicate_map = await extractor.deduplicate_entity_nodes(
+            new_entities=[extracted],
+            existing_entities=[existing],
+        )
+
+        assert unique == []
+        assert duplicate_map == {"Ada": "existing-ada"}
 
 
 @pytest.mark.unit
