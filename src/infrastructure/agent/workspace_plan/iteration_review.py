@@ -250,6 +250,7 @@ def _user_payload(context: IterationReviewContext) -> str:
         "feedback_items": list(context.feedback_items),
         "max_next_tasks": context.max_next_tasks,
         "iteration_loop": context.iteration_loop,
+        "runtime_constraints": _runtime_constraints_payload(context),
         "review_policy": {
             "mode": "auto",
             "complete_goal_requires": [
@@ -263,6 +264,7 @@ def _user_payload(context: IterationReviewContext) -> str:
                 "API contract verification and integration tests",
                 "code, test, and sandbox-native release-readiness implementation",
                 "sandbox preview proxy deployment and health-check verification",
+                "Drone docker CI/CD evidence through Drone pipeline logs and registry manifest checks",
             ],
             "continue_next_iteration_for": [
                 "missing acceptance evidence",
@@ -277,6 +279,11 @@ def _user_payload(context: IterationReviewContext) -> str:
                 "Acceptance evidence (test reports, parity reports, release reports, INDEX.md, BUILD-REPORT.md, SANDBOX-PREVIEW-EVIDENCE.md, GOAL-COMPLETION.md) is the verifier's output; never make it its own next_task.",
                 "If documentation updates are required, embed them in the implementation/verification next_task that owns the changed code, not as a standalone task.",
             ],
+            "runtime_rules": [
+                "If runtime_constraints.sandbox_docker_runtime.available is false, do not create next_tasks requiring docker/podman/containerd CLI, Docker daemon/socket access, docker pull/run, or a deployed container stack inside the sandbox worker.",
+                "For Drone docker deployment evidence under that constraint, use Drone pipeline success, registry manifest/tag checks, and sandbox-native preview/service health or browser evidence.",
+                "If a live container run is mandatory and no Docker-enabled runtime exists, choose needs_human_review instead of retrying a sandbox worker.",
+            ],
             "needs_human_review_only_for": [
                 "missing credentials or private access",
                 "irreversible external deployment, spending, or data transmission",
@@ -287,6 +294,62 @@ def _user_payload(context: IterationReviewContext) -> str:
         },
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _runtime_constraints_payload(context: IterationReviewContext) -> dict[str, object]:
+    if not _context_has_sandbox_docker_runtime_gap(context):
+        return {}
+    return {
+        "sandbox_docker_runtime": {
+            "available": False,
+            "source": "completed_iteration_feedback",
+            "policy": (
+                "Workers in this sandbox must not be asked to run docker/podman/containerd "
+                "commands or to start a deployed container stack. Treat Drone docker pipeline "
+                "success plus registry manifest/tag checks as the Docker deployment evidence, "
+                "and use sandbox-native preview/service health or browser checks for worker-side "
+                "verification."
+            ),
+        }
+    }
+
+
+def _context_has_sandbox_docker_runtime_gap(context: IterationReviewContext) -> bool:
+    markers: list[str] = [str(item) for item in context.feedback_items if item]
+    for task in context.completed_tasks:
+        for key in ("verification_summary", "description", "title"):
+            value = task.get(key)
+            if isinstance(value, str) and value:
+                markers.append(value)
+        for key in ("evidence_refs", "artifacts"):
+            value = task.get(key)
+            if isinstance(value, list | tuple):
+                markers.extend(str(item) for item in value if item)
+    normalized = "\n".join(marker.lower() for marker in markers if marker)
+    return _has_sandbox_docker_runtime_gap(normalized)
+
+
+def _has_sandbox_docker_runtime_gap(normalized: str) -> bool:
+    if "sandbox-no-docker-runtime" in normalized:
+        return True
+    if "docker-runtime-unavailable-sandbox" in normalized:
+        return True
+    if "docker-runtime-permanently-unavailable-sandbox" in normalized:
+        return True
+    docker_runtime_missing = "docker runtime" in normalized and any(
+        token in normalized
+        for token in (
+            "not available",
+            "unavailable",
+            "permanent",
+            "absent",
+            "without docker",
+            "lacks docker",
+            "no docker",
+            "no socket",
+        )
+    )
+    return docker_runtime_missing and "sandbox" in normalized
 
 
 def _iteration_review_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:

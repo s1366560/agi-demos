@@ -153,6 +153,12 @@ Review rules:
 - Do NOT propose "Repair verification blockers for ..." next_tasks; the planner already inserts repair nodes when needed. Instead, attach actionable feedback_items so the same node can fix-and-retry within its contract.
 - Missing evidence is normally next-sprint work (covered by the relevant verification task), not human review.
 - Use sandbox-native delivery, preview proxy, health check, and preview evidence for deploy/release gaps unless the user explicitly approved external production deployment.
+- If the review payload says sandbox Docker runtime is unavailable, do NOT emit next_tasks that
+  require docker/podman/containerd CLI, Docker daemon/socket access, docker pull/run, or a
+  "deployed container stack" inside the sandbox worker. For Drone docker deployment, use Drone
+  pipeline success, registry manifest/tag checks, and sandbox-native preview/service health or
+  browser evidence. If a live container run is mandatory, choose needs_human_review instead of
+  retrying a sandbox worker.
 - Treat attempt worktree isolation as an intentional execution contract. Do not propose main-checkout
   execution, symlinks, or artifact copying to bypass it; if hardcoded artifact paths block verification,
   create bounded follow-up work to make the scripts worktree-relative or environment-configurable.

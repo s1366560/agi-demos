@@ -20,14 +20,14 @@ def test_task_decomposer_prompt_has_implementation_first_clause() -> None:
     )
 
     # The canonical phase list must no longer include a standalone documentation phase.
-    assert (
-        "documentation, and verification" not in _DECOMPOSITION_SYSTEM_PROMPT
-    ), "decomposer system prompt regressed: documentation must not be a canonical phase"
+    assert "documentation, and verification" not in _DECOMPOSITION_SYSTEM_PROMPT, (
+        "decomposer system prompt regressed: documentation must not be a canonical phase"
+    )
     assert "IMPLEMENTATION FIRST" in _DECOMPOSITION_SYSTEM_PROMPT
     # The repair prompt must mirror the same rule.
-    assert (
-        "documentation, and verification" not in _DECOMPOSITION_REPAIR_PROMPT
-    ), "decomposer repair prompt regressed: documentation must not be a canonical phase"
+    assert "documentation, and verification" not in _DECOMPOSITION_REPAIR_PROMPT, (
+        "decomposer repair prompt regressed: documentation must not be a canonical phase"
+    )
     assert "Embed required documentation" in _DECOMPOSITION_REPAIR_PROMPT
 
 
@@ -47,6 +47,8 @@ def test_builtin_workspace_iteration_reviewer_prompt_has_anti_doc_clause() -> No
     assert "IMPLEMENTATION FIRST" in prompt
     assert "Repair verification blockers for" in prompt  # anti-loop clause
     assert "Acceptance/evidence artifacts" in prompt
+    assert "sandbox Docker runtime is unavailable" in prompt
+    assert "deployed container stack" in prompt
 
 
 def test_iteration_review_payload_omits_documentation_capability() -> None:
@@ -65,10 +67,42 @@ def test_iteration_review_payload_omits_documentation_capability() -> None:
         max_next_tasks=5,
     )
     payload = _user_payload(ctx)
-    assert (
-        "code, test, documentation, and sandbox-native release-readiness" not in payload
-    ), "iteration_review payload regressed: documentation capability must be removed"
+    assert "code, test, documentation, and sandbox-native release-readiness" not in payload, (
+        "iteration_review payload regressed: documentation capability must be removed"
+    )
     assert "implementation_first_rules" in payload
+
+
+def test_iteration_review_payload_exposes_sandbox_docker_runtime_constraint() -> None:
+    from src.domain.ports.services.iteration_review_port import IterationReviewContext
+    from src.infrastructure.agent.workspace_plan.iteration_review import _user_payload
+
+    ctx = IterationReviewContext(
+        workspace_id="ws-1",
+        plan_id="plan-1",
+        iteration_index=1,
+        goal_title="ship a webapp",
+        goal_description="build code, tests, infra",
+        completed_tasks=(
+            {
+                "id": "deploy",
+                "title": "verify Drone docker deployment",
+                "verification_summary": (
+                    "Docker runtime is unavailable in the sandbox, but Drone pipeline "
+                    "and registry manifest checks passed."
+                ),
+            },
+        ),
+        deliverables=(),
+        feedback_items=(),
+        max_next_tasks=5,
+    )
+    payload = _user_payload(ctx)
+
+    assert '"runtime_constraints"' in payload
+    assert '"sandbox_docker_runtime"' in payload
+    assert '"available": false' in payload
+    assert "Drone docker pipeline success plus registry manifest/tag checks" in payload
 
 
 def test_workspace_software_decomposition_context_forbids_doc_only_tasks() -> None:
@@ -92,9 +126,7 @@ def test_workspace_non_software_decomposition_context_returns_none() -> None:
     )
 
     assert (
-        _workspace_iteration_decomposition_context(
-            workspace_type="research", max_subtasks=8
-        )
+        _workspace_iteration_decomposition_context(workspace_type="research", max_subtasks=8)
         is None
     )
 
@@ -103,9 +135,9 @@ def test_architect_role_no_longer_advertises_documentation_capability() -> None:
     from src.infrastructure.agent.workspace_plan.outbox_handlers import _AUTO_TEAM_ROLES
 
     architect = next(role for role in _AUTO_TEAM_ROLES if role["key"] == "architect")
-    assert (
-        "documentation" not in architect["capabilities"]
-    ), "architect role regressed: 'documentation' capability biases routing toward doc tasks"
+    assert "documentation" not in architect["capabilities"], (
+        "architect role regressed: 'documentation' capability biases routing toward doc tasks"
+    )
 
 
 def test_repair_title_does_not_nest_when_failing_node_is_already_repair() -> None:

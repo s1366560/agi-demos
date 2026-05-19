@@ -249,3 +249,73 @@ async def test_planner_contract_preserves_existing_drone_provider_config(
         "server_url_env": "DRONE_SERVER_URL",
         "token_env": "DRONE_TOKEN",
     }
+
+
+async def test_planner_contract_cannot_downgrade_existing_drone_docker_deploy_to_cli(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace(db_session)
+    workspace = await db_session.get(WorkspaceModel, "ws-planner-1")
+    assert workspace is not None
+    workspace.metadata_json = {
+        "delivery_cicd": {
+            "provider": "drone",
+            "code_root": "/workspace/my-evo",
+            "auto_deploy": True,
+            "drone": {
+                "repo": "s1366560/my-evo",
+                "branch": "main",
+                "deploy": {
+                    "enabled": True,
+                    "mode": "docker",
+                    "stage": "deploy",
+                    "docker": {
+                        "image": "localhost:5001/my-evo",
+                        "registry": "localhost:5001",
+                        "tags": ["drone-docker-e2e"],
+                    },
+                },
+            },
+        }
+    }
+    await db_session.flush()
+    monkeypatch.setattr(planning_contract, "_publish_workspace_updated_event", AsyncMock())
+
+    with _patch_session_factory(db_session):
+        result = await planning_contract.workspace_submit_planning_contract_tool.execute(
+            _ctx(),
+            task_graph=_task_graph(),
+            delivery_cicd={
+                "provider": "sandbox_native",
+                "auto_deploy": True,
+                "services": _delivery_cicd()["services"],
+                "drone": {
+                    "poll_interval_seconds": 10,
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "cli",
+                        "stage": "deploy",
+                        "cli": {
+                            "image": "alpine:3.20",
+                            "commands": ["echo smoke"],
+                        },
+                    },
+                },
+            },
+            reasoning="Read package.json and inferred a generic CLI smoke deploy.",
+            evidence_refs=["read:package.json", "workspace_metadata.delivery_cicd:drone"],
+            confidence=0.84,
+        )
+
+    assert result.is_error is False
+    workspace = await db_session.get(WorkspaceModel, "ws-planner-1")
+    assert workspace is not None
+    delivery = dict((workspace.metadata_json or {}).get("delivery_cicd") or {})
+    assert delivery["provider"] == "drone"
+    assert delivery["services"][0]["service_id"] == "frontend"
+    drone = delivery["drone"]
+    assert drone["poll_interval_seconds"] == 10
+    assert drone["deploy"]["mode"] == "docker"
+    assert drone["deploy"]["docker"]["image"] == "localhost:5001/my-evo"
+    assert drone["deploy"]["cli"]["commands"] == ["echo smoke"]

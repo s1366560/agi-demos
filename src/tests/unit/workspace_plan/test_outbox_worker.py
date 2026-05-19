@@ -1051,10 +1051,131 @@ def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
     assert 'dirty="$(git status --porcelain)"' in command
     assert 'echo "status=blocked_dirty_main"' in command
     assert "dirty_signature=%s" in command
+    assert "dirty_generated_only=%s" in command
+    assert "frontend/tests/screenshots/*" in command
+    assert 'echo "generated_dirty_cleaned=true"' in command
     assert "git hash-object --stdin" in command
     assert "git merge --no-edit abc1234" in command
     assert 'echo "reason=merge_failed_aborted"' in command
     assert "git merge --abort" in command
+
+
+def test_worktree_integration_command_cleans_generated_artifacts_before_merge(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    worktree_path = tmp_path / "attempt"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / "frontend/tests/screenshots").mkdir(parents=True)
+    (repo / "frontend/tests/e2e-results.json").write_text('{"status":"base"}\n', encoding="utf-8")
+    (repo / "frontend/tests/screenshots/01-homepage.png").write_text("base\n", encoding="utf-8")
+    (repo / "src/bounty").mkdir(parents=True)
+    (repo / "src/bounty/routes.ts").write_text("stub\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "base")
+
+    git(repo, "worktree", "add", str(worktree_path), "HEAD")
+    git(worktree_path, "config", "user.email", "worker@example.com")
+    git(worktree_path, "config", "user.name", "Worker")
+    (worktree_path / "src/bounty/routes.ts").write_text("implemented\n", encoding="utf-8")
+    git(worktree_path, "commit", "-am", "implement bounty")
+    commit_ref = git(worktree_path, "rev-parse", "HEAD")
+
+    (repo / "frontend/tests/e2e-results.json").write_text('{"status":"dirty"}\n', encoding="utf-8")
+    (repo / "frontend/tests/screenshots/01-homepage.png").write_text("dirty\n", encoding="utf-8")
+
+    command = _worktree_integration_command(
+        sandbox_code_root=str(repo),
+        worktree_path=str(worktree_path),
+        commit_ref=commit_ref,
+    )
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "generated_dirty_cleaned=true" in result.stdout
+    assert "status=merged" in result.stdout
+    assert (repo / "src/bounty/routes.ts").read_text(encoding="utf-8") == "implemented\n"
+    assert (repo / "frontend/tests/e2e-results.json").read_text(
+        encoding="utf-8"
+    ) == '{"status":"base"}\n'
+    assert (repo / "frontend/tests/screenshots/01-homepage.png").read_text(
+        encoding="utf-8"
+    ) == "base\n"
+    assert git(repo, "status", "--short") == ""
+
+
+def test_worktree_integration_command_keeps_source_dirty_blocking(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    worktree_path = tmp_path / "attempt"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    (repo / "src").mkdir()
+    (repo / "src/app.ts").write_text("base\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "base")
+    git(repo, "worktree", "add", str(worktree_path), "HEAD")
+    git(worktree_path, "config", "user.email", "worker@example.com")
+    git(worktree_path, "config", "user.name", "Worker")
+    (worktree_path / "src/app.ts").write_text("candidate\n", encoding="utf-8")
+    git(worktree_path, "commit", "-am", "candidate")
+    commit_ref = git(worktree_path, "rev-parse", "HEAD")
+
+    (repo / "README.md").write_text("local user note\n", encoding="utf-8")
+
+    command = _worktree_integration_command(
+        sandbox_code_root=str(repo),
+        worktree_path=str(worktree_path),
+        commit_ref=commit_ref,
+    )
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 66
+    assert "status=blocked_dirty_main" in result.stdout
+    assert "dirty_generated_only=false" in result.stdout
+    assert (repo / "README.md").read_text(encoding="utf-8") == "local user note\n"
+    assert (repo / "src/app.ts").read_text(encoding="utf-8") == "base\n"
 
 
 def test_drone_contract_suppresses_deploy_before_deploy_phase() -> None:
@@ -1504,6 +1625,20 @@ async def test_blocked_dirty_main_projection_waits_until_dirty_signature_changes
     assert runner_init_args == [("worker-project-1", "worker-tenant-1")]
     assert "git status --porcelain" in commands[0]
 
+    runner_result["stdout"] = (
+        "status=dirty\n"
+        "dirty_signature=sig-current\n"
+        "dirty_generated_only=true\n"
+        " M frontend/tests/screenshots/01-homepage.png\n"
+    )
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+    )
+
+    runner_result["stdout"] = "status=dirty\ndirty_signature=sig-current\n M scratch.js\n"
     changed_signature_node = replace(
         node,
         metadata={

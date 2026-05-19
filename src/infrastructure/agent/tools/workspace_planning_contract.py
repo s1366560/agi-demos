@@ -230,8 +230,43 @@ async def _write_workspace_metadata(
 def _merge_delivery_cicd(existing: object, incoming: Mapping[str, Any]) -> dict[str, Any]:
     """Merge planner-discovered services without dropping workspace-owned provider config."""
 
-    merged = dict(existing) if isinstance(existing, Mapping) else {}
-    merged.update(dict(incoming))
+    existing_delivery = dict(existing) if isinstance(existing, Mapping) else {}
+    incoming_delivery = dict(incoming)
+    merged = dict(existing_delivery)
+    merged.update(incoming_delivery)
+
+    existing_provider = _optional_string(existing_delivery.get("provider"))
+    if existing_provider == "drone":
+        merged["provider"] = "drone"
+
+    existing_drone = existing_delivery.get("drone")
+    if isinstance(existing_drone, Mapping):
+        incoming_drone = incoming_delivery.get("drone")
+        if isinstance(incoming_drone, Mapping):
+            merged["drone"] = _merge_existing_preferred_mapping(
+                existing=existing_drone,
+                incoming=incoming_drone,
+            )
+        else:
+            merged["drone"] = dict(existing_drone)
+    return merged
+
+
+def _merge_existing_preferred_mapping(
+    *,
+    existing: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+) -> dict[str, Any]:
+    merged = dict(incoming)
+    for key, value in existing.items():
+        incoming_value = merged.get(key)
+        if isinstance(value, Mapping) and isinstance(incoming_value, Mapping):
+            merged[key] = _merge_existing_preferred_mapping(
+                existing=value,
+                incoming=incoming_value,
+            )
+        else:
+            merged[key] = value
     return merged
 
 
@@ -432,7 +467,9 @@ def _positive_port(value: object) -> int | None:
 
 def _confidence(value: object) -> float:
     if not isinstance(value, int | float):
-        raise WorkspacePlanningContractValidationError("confidence must be a number between 0 and 1")
+        raise WorkspacePlanningContractValidationError(
+            "confidence must be a number between 0 and 1"
+        )
     parsed = float(value)
     if parsed < 0 or parsed > 1:
         raise WorkspacePlanningContractValidationError("confidence must be between 0 and 1")

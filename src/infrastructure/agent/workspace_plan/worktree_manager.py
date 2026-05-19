@@ -33,6 +33,17 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 )
 from src.infrastructure.agent.workspace_plan.run_contract import WorkspaceRunContract
 
+_GENERATED_DIRTY_PATH_PATTERNS = (
+    "frontend/tests/e2e-results.json",
+    "frontend/tests/screenshots/*",
+    "frontend/test-results/*",
+    "frontend/playwright-report/*",
+    "frontend/coverage/*",
+    "test-results/*",
+    "playwright-report/*",
+    "coverage/*",
+)
+
 
 class WorkspaceCommandRunner(Protocol):
     async def run_command(self, command: str, *, timeout: int) -> dict[str, object]: ...
@@ -455,6 +466,7 @@ def worktree_integration_command(
         [
             "set -e",
             f"cd {code_root}",
+            *_generated_dirty_path_shell_helpers(),
             f"if ! git -C {worktree} cat-file -e {commit}^{{commit}}; then",
             '  echo "status=failed"',
             '  echo "reason=commit_ref not found in attempt worktree"',
@@ -466,10 +478,20 @@ def worktree_integration_command(
             "  exit 0",
             "fi",
             'dirty="$(git status --porcelain)"',
+            'dirty_paths="$(printf "%s\\n" "$dirty" | sed "s/^...//")"',
+            'classify_dirty_paths "$dirty_paths"',
+            'if [ -n "$dirty" ] && [ "$dirty_generated_only" = "true" ]; then',
+            '  clean_generated_dirty_paths "$dirty_paths"',
+            '  echo "generated_dirty_cleaned=true"',
+            '  dirty="$(git status --porcelain)"',
+            '  dirty_paths="$(printf "%s\\n" "$dirty" | sed "s/^...//")"',
+            '  classify_dirty_paths "$dirty_paths"',
+            "fi",
             'if [ -n "$dirty" ]; then',
             '  echo "status=blocked_dirty_main"',
             '  echo "reason=sandbox_code_root has uncommitted changes"',
             '  printf "dirty_signature=%s\\n" "$(printf "%s" "$dirty" | git hash-object --stdin)"',
+            '  printf "dirty_generated_only=%s\\n" "$dirty_generated_only"',
             "  git status --short",
             "  exit 66",
             "fi",
@@ -496,16 +518,64 @@ def worktree_dirty_signature_command(*, sandbox_code_root: str) -> str:
         [
             "set -e",
             f"cd {code_root}",
+            *_generated_dirty_path_shell_helpers(include_cleaner=False),
             'dirty="$(git status --porcelain)"',
             'if [ -n "$dirty" ]; then',
+            '  dirty_paths="$(printf "%s\\n" "$dirty" | sed "s/^...//")"',
+            '  classify_dirty_paths "$dirty_paths"',
             '  echo "status=dirty"',
             '  printf "dirty_signature=%s\\n" "$(printf "%s" "$dirty" | git hash-object --stdin)"',
+            '  printf "dirty_generated_only=%s\\n" "$dirty_generated_only"',
             "  git status --short",
             "  exit 0",
             "fi",
             'echo "status=clean"',
         ]
     )
+
+
+def _generated_dirty_path_shell_helpers(*, include_cleaner: bool = True) -> list[str]:
+    path_case = "|".join(_GENERATED_DIRTY_PATH_PATTERNS)
+    lines = [
+        "is_generated_dirty_path() {",
+        '  case "$1" in',
+        f"    {path_case}) return 0 ;;",
+        "    *) return 1 ;;",
+        "  esac",
+        "}",
+        "classify_dirty_paths() {",
+        '  dirty_paths="$1"',
+        "  dirty_generated_only=false",
+        '  if [ -n "$dirty_paths" ]; then',
+        "    dirty_generated_only=true",
+        "    while IFS= read -r dirty_path; do",
+        '      [ -n "$dirty_path" ] || continue',
+        '      if ! is_generated_dirty_path "$dirty_path"; then',
+        "        dirty_generated_only=false",
+        "        break",
+        "      fi",
+        "    done <<EOF_GENERATED_DIRTY_PATHS",
+        "$dirty_paths",
+        "EOF_GENERATED_DIRTY_PATHS",
+        "  fi",
+        "}",
+    ]
+    if include_cleaner:
+        lines.extend(
+            [
+                "clean_generated_dirty_paths() {",
+                '  dirty_paths="$1"',
+                "  while IFS= read -r dirty_path; do",
+                '    [ -n "$dirty_path" ] || continue',
+                '    git checkout -- "$dirty_path" 2>/dev/null || true',
+                '    git clean -fd -- "$dirty_path" 2>/dev/null || true',
+                "  done <<EOF_GENERATED_DIRTY_CLEAN",
+                "$dirty_paths",
+                "EOF_GENERATED_DIRTY_CLEAN",
+                "}",
+            ]
+        )
+    return lines
 
 
 def worktree_setup_note(

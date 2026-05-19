@@ -737,9 +737,9 @@ async def _project_accepted_terminal_attempt_to_task(
     if task is None or task.workspace_id != workspace_id:
         return {}
     evidence_refs = _accepted_attempt_evidence_refs(attempt)
-    commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:") or _feature_checkpoint_commit_ref(
-        node
-    )
+    commit_ref = _first_prefixed_ref(
+        evidence_refs, "commit_ref:"
+    ) or _feature_checkpoint_commit_ref(node)
     git_diff_summary = _first_prefixed_ref(evidence_refs, "git_diff_summary:")
     test_commands = [
         ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
@@ -908,8 +908,10 @@ async def _blocked_dirty_main_projection_still_current(
     )
     if signature_status is None:
         return False
-    status, current_signature = signature_status
-    return bool(status == "dirty" and current_signature == stored_signature)
+    status, current_signature, dirty_generated_only = signature_status
+    return bool(
+        not dirty_generated_only and status == "dirty" and current_signature == stored_signature
+    )
 
 
 async def _run_worktree_dirty_signature_command(
@@ -917,7 +919,7 @@ async def _run_worktree_dirty_signature_command(
     project_id: str,
     tenant_id: str,
     command: str,
-) -> tuple[str, str] | None:
+) -> tuple[str, str, bool] | None:
     try:
         result = await _WorkspaceSandboxCommandRunner(
             project_id=project_id,
@@ -930,7 +932,10 @@ async def _run_worktree_dirty_signature_command(
     stderr = str(result.get("stderr") or "")
     status = _integration_output_field("status", stdout, stderr)
     dirty_signature = _integration_output_field("dirty_signature", stdout, stderr)
-    return status, dirty_signature
+    dirty_generated_only = (
+        _integration_output_field("dirty_generated_only", stdout, stderr).lower() == "true"
+    )
+    return status, dirty_signature, dirty_generated_only
 
 
 def _integration_commit_ref_from_metadata(metadata: Mapping[str, object]) -> str | None:
@@ -2894,14 +2899,16 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
         source_publish_result: PipelineRunResult | None = None
         source_publish_metadata: dict[str, Any] = {}
         if contract.provider == DRONE_PROVIDER:
-            contract, source_publish_metadata, source_publish_result = (
-                await _prepare_drone_source_ref(
-                    workspace=workspace,
-                    workspace_metadata=workspace_metadata,
-                    root_metadata=root_metadata,
-                    node=node,
-                    contract=contract,
-                )
+            (
+                contract,
+                source_publish_metadata,
+                source_publish_result,
+            ) = await _prepare_drone_source_ref(
+                workspace=workspace,
+                workspace_metadata=workspace_metadata,
+                root_metadata=root_metadata,
+                node=node,
+                contract=contract,
             )
 
         pipeline_repo = SqlWorkspacePipelineRepository(session)
@@ -3353,7 +3360,7 @@ async def _publish_git_ref_to_source_control(  # noqa: PLR0911
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(
                 "#!/bin/sh\n"
-                "case \"$1\" in\n"
+                'case "$1" in\n'
                 "*Username*) printf '%s\\n' \"${GIT_USERNAME:-x-access-token}\" ;;\n"
                 "*) printf '%s\\n' \"$GIT_TOKEN\" ;;\n"
                 "esac\n"
@@ -3984,9 +3991,7 @@ async def _project_pipeline_success_to_workspace_task(
         return
     run = await session.get(WorkspacePipelineRunModel, run_id)
     commit_ref = (
-        _metadata_string(getattr(run, "commit_ref", None))
-        if run is not None
-        else None
+        _metadata_string(getattr(run, "commit_ref", None)) if run is not None else None
     ) or _pipeline_commit_ref(node)
     projected_refs = list(evidence_refs)
     if commit_ref:

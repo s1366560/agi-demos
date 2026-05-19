@@ -1123,9 +1123,7 @@ class TestVerifier:
             }
         ]
         evidenced = _node_with_verification_evidence(node, rep)
-        assert (
-            evidenced.metadata["last_verification_feedback_items"][0]["target_layer"] == "worker"
-        )
+        assert evidenced.metadata["last_verification_feedback_items"][0]["target_layer"] == "worker"
 
     @pytest.mark.parametrize(
         "summary",
@@ -2874,6 +2872,11 @@ class _BlockedHumanDockerRuntimeVerifier:
         )
 
 
+class _VerifierShouldNotRun:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        raise AssertionError(f"verifier should not run for {ctx.node.id}")
+
+
 class _VerificationJudgeRepairVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -2994,9 +2997,7 @@ class _PipelineOnlyJudgeFailureVerifier:
                                     "severity": "warning",
                                     "recommended_action": "revise_plan_node",
                                     "summary": "CI/CD pipeline ownership is missing",
-                                    "failure_signature": (
-                                        "ci_ownership_missing"
-                                    ),
+                                    "failure_signature": ("ci_ownership_missing"),
                                 }
                             ],
                         },
@@ -3519,6 +3520,103 @@ class TestSupervisorTick:
                 },
             )
         ]
+
+    async def test_tick_preserves_repair_dependency_when_phase_barriers_repaired(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        blocked = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                blocked,
+                depends_on=frozenset(),
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-a",
+                    sequence=1,
+                    title="task a",
+                ),
+                metadata={
+                    "iteration_index": 2,
+                    "iteration_phase": "test",
+                    "blocked_by_repair_node_id": "repair-a",
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Repair task a",
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.RUNNING,
+                current_attempt_id="attempt-repair-a",
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-repair-a",
+                    sequence=7,
+                    title="Repair task a",
+                ),
+                metadata={
+                    "iteration_index": 2,
+                    "iteration_phase": "test",
+                    "repair_for_node_id": "a",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 0
+        assert dispatched == []
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        repaired_blocked = reloaded.nodes[PlanNodeId("a")]
+        assert repaired_blocked.depends_on == frozenset({PlanNodeId("repair-a")})
+        assert any(
+            event_type == "iteration_phase_barriers_repaired" and node_id == "goal-1"
+            for event_type, node_id, _payload in events
+        )
 
     async def test_tick_dispatches_after_dependency_pipeline_published_commit(self) -> None:
         repo = InMemoryPlanRepository()
@@ -4207,6 +4305,401 @@ class TestSupervisorTick:
         assert repair_node.metadata["repair_failure_signature"] == (
             "docker-runtime-unavailable-sandbox"
         )
+
+    async def test_followup_sandbox_docker_runtime_human_required_is_disposed(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    **dict(a.metadata or {}),
+                    "iteration_index": 2,
+                    "iteration_phase": "test",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("sandbox Docker runtime limit must not redispatch")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_BlockedHumanDockerRuntimeVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        disposed = reloaded.nodes[PlanNodeId("a")]
+        assert disposed.intent is TaskIntent.DONE
+        assert disposed.execution is TaskExecution.IDLE
+        assert disposed.metadata["verification_feedback_disposition"] == (
+            "sandbox_docker_runtime_unavailable"
+        )
+        assert disposed.metadata["obsolete_by_verifier_feedback"] is False
+        repair_nodes = [
+            node
+            for node in reloaded.nodes.values()
+            if node.metadata.get("repair_for_node_id") == "a"
+        ]
+        assert repair_nodes == []
+        disposition_events = [
+            event for event in events if event[0] == "verification_feedback_disposition"
+        ]
+        assert disposition_events[0][2]["disposition"] == ("sandbox_docker_runtime_unavailable")
+
+    async def test_completed_docker_repair_alternative_accepts_original_node(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted docker runtime repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "last_verification_passed": True,
+                    "last_verification_summary": "verified alternative Docker evidence",
+                    "verification_evidence_refs": [
+                        "contract_disposition:repair_node",
+                        "docker_registry_reachability:http://host.docker.internal:5001/v2/my-evo/tags/list",
+                        "server:node dist/index.js health endpoint HTTP 200",
+                    ],
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("accepted repair alternative must not create another worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_BlockedHumanDockerRuntimeVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        accepted = reloaded.nodes[PlanNodeId("a")]
+        assert accepted.intent is TaskIntent.DONE
+        assert accepted.execution is TaskExecution.IDLE
+        assert accepted.metadata["last_verification_passed"] is True
+        assert accepted.metadata["verification_feedback_disposition"] == (
+            "accepted_via_repair_alternative"
+        )
+        assert accepted.metadata["accepted_repair_node_id"] == "repair-a"
+        repair_nodes = [
+            node
+            for node in reloaded.nodes.values()
+            if node.metadata.get("repair_for_node_id") == "a"
+        ]
+        assert [node.id for node in repair_nodes] == ["repair-a"]
+        disposition_events = [
+            event for event in events if event[0] == "verification_feedback_disposition"
+        ]
+        assert disposition_events[0][2]["disposition"] == "accepted_via_repair_alternative"
+
+    async def test_duplicate_docker_runtime_repair_is_superseded_by_completed_alternative(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        duplicate_repair_id = PlanNodeId("repair-duplicate")
+        plan.replace_node(
+            replace(
+                a,
+                depends_on=frozenset({duplicate_repair_id}),
+                metadata={"blocked_by_repair_node_id": duplicate_repair_id.value},
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted docker runtime repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "last_verification_passed": True,
+                    "verification_evidence_refs": [
+                        "contract_disposition:infrastructure_limitation",
+                        "registry_verify:host.docker.internal:5001/my-evo:drone-docker-e2e",
+                        "health_check:http://127.0.0.1:3001/health HTTP 200",
+                    ],
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id=duplicate_repair_id.value,
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="duplicate docker runtime repair",
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-duplicate",
+                metadata={"repair_for_node_id": "a"},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("duplicate repair must be closed without worker redispatch")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerifierShouldNotRun(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 0
+        assert report.nodes_completed == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        duplicate = reloaded.nodes[duplicate_repair_id]
+        assert duplicate.intent is TaskIntent.DONE
+        assert duplicate.execution is TaskExecution.IDLE
+        assert duplicate.metadata["verification_feedback_disposition"] == (
+            "superseded_by_completed_repair_alternative"
+        )
+        assert duplicate.metadata["accepted_repair_node_id"] == "repair-a"
+        nested_repairs = [
+            node
+            for node in reloaded.nodes.values()
+            if node.metadata.get("repair_for_node_id") == duplicate_repair_id.value
+        ]
+        assert nested_repairs == []
+        disposition_events = [
+            event for event in events if event[0] == "verification_feedback_disposition"
+        ]
+        assert disposition_events[0][1] == duplicate_repair_id.value
+        assert disposition_events[0][2]["disposition"] == (
+            "superseded_by_completed_repair_alternative"
+        )
+
+    async def test_ready_docker_runtime_node_accepts_completed_repair_before_dispatch(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "last_verification_feedback_items": [
+                        {
+                            "failure_signature": "docker-runtime-unavailable-sandbox",
+                            "summary": "Docker runtime is unavailable in the sandbox.",
+                            "recommended_action": "retry_infra",
+                        }
+                    ],
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted docker runtime repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "last_verification_passed": True,
+                    "verification_evidence_refs": [
+                        "contract_disposition:repair_node",
+                        "docker_registry_reachability:http://host.docker.internal:5001/v2/my-evo/tags/list",
+                        "server:node dist/index.js health endpoint HTTP 200",
+                    ],
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [WorkspaceAgent(id="agent-1", capabilities=(Capability(name="codegen"),))]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("ready node must be accepted before worker dispatch")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerifierShouldNotRun(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 0
+        assert report.allocations_made == 0
+        assert report.nodes_completed == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        accepted = reloaded.nodes[PlanNodeId("a")]
+        assert accepted.intent is TaskIntent.DONE
+        assert accepted.execution is TaskExecution.IDLE
+        assert accepted.metadata["verification_feedback_disposition"] == (
+            "accepted_via_repair_alternative"
+        )
+        assert accepted.metadata["accepted_repair_node_id"] == "repair-a"
+        disposition_events = [
+            event for event in events if event[0] == "verification_feedback_disposition"
+        ]
+        assert disposition_events[0][1] == "a"
+        assert disposition_events[0][2]["disposition"] == "accepted_via_repair_alternative"
 
     async def test_planner_feedback_obsoletes_stale_node_without_worker_retry(self) -> None:
         repo = InMemoryPlanRepository()

@@ -257,6 +257,40 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         reported = [n for n in plan.nodes.values() if n.execution is TaskExecution.REPORTED]
         for node in reported:
             try:
+                if (
+                    repair_alternative := _completed_repair_alternative_superseding_reported_repair(
+                        plan, node
+                    )
+                ) is not None:
+                    superseded_node = _node_with_repair_alternative_disposition_from_metadata(
+                        node,
+                        repair_node=repair_alternative,
+                        disposition="superseded_by_completed_repair_alternative",
+                    )
+                    plan.replace_node(
+                        _force_intent(
+                            _force_execution(superseded_node, TaskExecution.IDLE),
+                            TaskIntent.DONE,
+                            summary=str(
+                                superseded_node.metadata.get("last_verification_summary") or ""
+                            ),
+                        )
+                    )
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        superseded_node,
+                        "verification_feedback_disposition",
+                        {
+                            "attempt_id": node.current_attempt_id,
+                            "disposition": "superseded_by_completed_repair_alternative",
+                            "repair_node_id": repair_alternative.id,
+                            "feedback_items": [],
+                            "summary": superseded_node.metadata.get("last_verification_summary"),
+                        },
+                    )
+                    nodes_done += 1
+                    continue
                 if _node_retry_not_before(node) > datetime.now(UTC):
                     continue
                 plan.replace_node(_force_execution(node, TaskExecution.VERIFYING))
@@ -376,6 +410,103 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                             "reason": "pipeline_criterion_missing",
                         },
                     )
+                elif (
+                    repair_alternative := _completed_repair_alternative_for_original_report(
+                        plan, node, report
+                    )
+                ) is not None:
+                    accepted_node = _node_with_repair_alternative_disposition(
+                        node,
+                        report,
+                        repair_node=repair_alternative,
+                        artifacts=ctx.artifacts,
+                        disposition="accepted_via_repair_alternative",
+                    )
+                    plan.replace_node(
+                        _force_intent(
+                            _force_execution(accepted_node, TaskExecution.IDLE),
+                            TaskIntent.DONE,
+                            summary=str(
+                                accepted_node.metadata.get("last_verification_summary") or ""
+                            ),
+                        )
+                    )
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        accepted_node,
+                        "verification_feedback_disposition",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "disposition": "accepted_via_repair_alternative",
+                            "repair_node_id": repair_alternative.id,
+                            "feedback_items": feedback_items,
+                            "summary": accepted_node.metadata.get("last_verification_summary"),
+                        },
+                    )
+                    nodes_done += 1
+                elif (
+                    repair_alternative := _completed_repair_alternative_superseding_repair_node(
+                        plan, node, report
+                    )
+                ) is not None:
+                    superseded_node = _node_with_repair_alternative_disposition(
+                        node,
+                        report,
+                        repair_node=repair_alternative,
+                        artifacts=ctx.artifacts,
+                        disposition="superseded_by_completed_repair_alternative",
+                    )
+                    plan.replace_node(
+                        _force_intent(
+                            _force_execution(superseded_node, TaskExecution.IDLE),
+                            TaskIntent.DONE,
+                            summary=str(
+                                superseded_node.metadata.get("last_verification_summary") or ""
+                            ),
+                        )
+                    )
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        superseded_node,
+                        "verification_feedback_disposition",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "disposition": "superseded_by_completed_repair_alternative",
+                            "repair_node_id": repair_alternative.id,
+                            "feedback_items": feedback_items,
+                            "summary": superseded_node.metadata.get("last_verification_summary"),
+                        },
+                    )
+                    nodes_done += 1
+                elif _verification_feedback_disposes_sandbox_docker_runtime_node(node, report):
+                    disposed_node = _node_with_verification_feedback_disposition(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                        disposition="sandbox_docker_runtime_unavailable",
+                    )
+                    plan.replace_node(
+                        _force_intent(
+                            _force_execution(disposed_node, TaskExecution.IDLE),
+                            TaskIntent.DONE,
+                            summary=report.summary(),
+                        )
+                    )
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        disposed_node,
+                        "verification_feedback_disposition",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "disposition": "sandbox_docker_runtime_unavailable",
+                            "feedback_items": feedback_items,
+                            "summary": report.summary(),
+                        },
+                    )
+                    nodes_done += 1
                 elif _hard_fail_report_requests_infrastructure_repair(report):
                     evidenced_node = _node_with_retry_infrastructure_repair_request(
                         node,
@@ -508,6 +639,22 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "node_count": repaired_phase_barriers,
                 },
             )
+        accepted_via_repair = _accept_ready_nodes_with_completed_repair_alternatives(plan)
+        for accepted_node, repair_alternative in accepted_via_repair:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                accepted_node,
+                "verification_feedback_disposition",
+                {
+                    "attempt_id": accepted_node.current_attempt_id,
+                    "disposition": "accepted_via_repair_alternative",
+                    "repair_node_id": repair_alternative.id,
+                    "feedback_items": [],
+                    "summary": accepted_node.metadata.get("last_verification_summary"),
+                },
+            )
+        nodes_done += len(accepted_via_repair)
         ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
         ready_candidates, deferred_by_dependency_projection = (
             _select_ready_nodes_with_integrated_dependencies(ready_candidates, plan)
@@ -1150,6 +1297,19 @@ def _node_evidence_refs(node: PlanNode) -> list[str]:
     return []
 
 
+def _node_protocol_evidence_refs(node: PlanNode) -> list[str]:
+    metadata = dict(node.metadata or {})
+    refs: list[str] = []
+    for key in (
+        "verification_evidence_refs",
+        "candidate_verifications",
+        "last_worker_report_verifications",
+        "execution_verifications",
+    ):
+        refs.extend(_string_list(metadata.get(key)))
+    return list(dict.fromkeys(refs))
+
+
 def _node_artifacts(node: PlanNode) -> list[str]:
     metadata = dict(node.metadata or {})
     values: list[str] = []
@@ -1457,6 +1617,9 @@ def _repair_pending_iteration_phase_barriers(plan: Plan) -> int:
                 if dep not in iteration_node_ids
                 or sequence_by_node.get(dep, node_sequence + 1) < node_sequence
             }
+            repair_dependency = _repair_blocking_dependency_id(node)
+            if repair_dependency is not None and repair_dependency != node.node_id:
+                desired_dependencies.add(repair_dependency)
             desired_dependencies.update(
                 dep
                 for dep in _phase_barrier_dependencies(phase, phase_nodes)
@@ -1575,14 +1738,16 @@ def _reopen_done_nodes_with_failed_pipeline(plan: Plan) -> list[PlanNode]:
     return reopened
 
 
-_SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES = frozenset(
-    {"merged", "already_merged", "skipped"}
-)
+_SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES = frozenset({"merged", "already_merged", "skipped"})
 
 
 def _dependency_blocking_ids(plan: Plan, node: PlanNode) -> list[str]:
     blocking: list[str] = []
-    for dep_id in sorted(node.depends_on, key=lambda item: item.value):
+    dependency_ids = set(node.depends_on)
+    repair_dependency = _repair_blocking_dependency_id(node)
+    if repair_dependency is not None:
+        dependency_ids.add(repair_dependency)
+    for dep_id in sorted(dependency_ids, key=lambda item: item.value):
         dependency = plan.nodes.get(dep_id)
         if dependency is None or dependency.intent is not TaskIntent.DONE:
             blocking.append(dep_id.value)
@@ -1590,6 +1755,13 @@ def _dependency_blocking_ids(plan: Plan, node: PlanNode) -> list[str]:
         if _dependency_commit_needs_integration(dependency):
             blocking.append(dep_id.value)
     return blocking
+
+
+def _repair_blocking_dependency_id(node: PlanNode) -> PlanNodeId | None:
+    repair_id = dict(node.metadata or {}).get("blocked_by_repair_node_id")
+    if isinstance(repair_id, str) and repair_id.strip():
+        return PlanNodeId(repair_id.strip())
+    return None
 
 
 def _dependency_commit_needs_integration(node: PlanNode) -> bool:
@@ -1797,6 +1969,10 @@ def _retryable_infrastructure_report_requests_repair(report: VerificationReport)
 def _hard_fail_report_requests_infrastructure_repair(report: VerificationReport) -> bool:
     if not report.hard_fail:
         return False
+    return _report_has_nontransient_sandbox_docker_runtime_failure(report)
+
+
+def _report_has_nontransient_sandbox_docker_runtime_failure(report: VerificationReport) -> bool:
     return any(
         result.criterion.required
         and not result.passed
@@ -1845,6 +2021,172 @@ def _is_nontransient_sandbox_docker_runtime_failure(result: CriterionResult) -> 
     return docker_runtime_missing and "sandbox" in normalized
 
 
+def _completed_repair_alternative_for_original_report(
+    plan: Plan,
+    node: PlanNode,
+    report: VerificationReport,
+) -> PlanNode | None:
+    if not _report_has_nontransient_sandbox_docker_runtime_failure(report):
+        return None
+    return _completed_repair_alternative_for_node(plan, node, exclude_node_id=node.id)
+
+
+def _completed_repair_alternative_superseding_repair_node(
+    plan: Plan,
+    node: PlanNode,
+    report: VerificationReport,
+) -> PlanNode | None:
+    if not _report_has_nontransient_sandbox_docker_runtime_failure(report):
+        return None
+    original_node_id = dict(node.metadata or {}).get("repair_for_node_id")
+    if not isinstance(original_node_id, str) or not original_node_id.strip():
+        return None
+    original = plan.nodes.get(PlanNodeId(original_node_id.strip()))
+    if original is None:
+        return None
+    return _completed_repair_alternative_for_node(plan, original, exclude_node_id=node.id)
+
+
+def _completed_repair_alternative_superseding_reported_repair(
+    plan: Plan,
+    node: PlanNode,
+) -> PlanNode | None:
+    if node.intent is not TaskIntent.IN_PROGRESS or node.execution is not TaskExecution.REPORTED:
+        return None
+    original_node_id = dict(node.metadata or {}).get("repair_for_node_id")
+    if not isinstance(original_node_id, str) or not original_node_id.strip():
+        return None
+    original = plan.nodes.get(PlanNodeId(original_node_id.strip()))
+    if original is None:
+        return None
+    return _completed_repair_alternative_for_node(plan, original, exclude_node_id=node.id)
+
+
+def _accept_ready_nodes_with_completed_repair_alternatives(
+    plan: Plan,
+) -> list[tuple[PlanNode, PlanNode]]:
+    accepted: list[tuple[PlanNode, PlanNode]] = []
+    for node in list(plan.nodes.values()):
+        if node.kind not in {PlanNodeKind.TASK, PlanNodeKind.VERIFY}:
+            continue
+        if node.intent is not TaskIntent.TODO or node.execution is not TaskExecution.IDLE:
+            continue
+        if node.current_attempt_id:
+            continue
+        if _dependency_blocking_ids(plan, node):
+            continue
+        if not _node_metadata_has_nontransient_sandbox_docker_runtime_failure(node):
+            continue
+        repair_alternative = _completed_repair_alternative_for_node(
+            plan,
+            node,
+            exclude_node_id=node.id,
+        )
+        if repair_alternative is None:
+            continue
+        accepted_node = _node_with_repair_alternative_disposition_from_metadata(
+            node,
+            repair_node=repair_alternative,
+            disposition="accepted_via_repair_alternative",
+        )
+        plan.replace_node(
+            _force_intent(
+                _force_execution(accepted_node, TaskExecution.IDLE),
+                TaskIntent.DONE,
+                summary=str(accepted_node.metadata.get("last_verification_summary") or ""),
+            )
+        )
+        accepted.append((accepted_node, repair_alternative))
+    return accepted
+
+
+def _completed_repair_alternative_for_node(
+    plan: Plan,
+    node: PlanNode,
+    *,
+    exclude_node_id: str,
+) -> PlanNode | None:
+    for candidate in sorted(plan.nodes.values(), key=lambda item: item.id):
+        if candidate.id == exclude_node_id:
+            continue
+        if candidate.metadata.get("repair_for_node_id") != node.id:
+            continue
+        if candidate.intent is not TaskIntent.DONE:
+            continue
+        if candidate.metadata.get("last_verification_passed") is not True:
+            continue
+        if _repair_alternative_evidence_is_sufficient(candidate):
+            return candidate
+    return None
+
+
+def _node_metadata_has_nontransient_sandbox_docker_runtime_failure(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    raw_items = metadata.get("last_verification_feedback_items")
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            if not isinstance(item, Mapping):
+                continue
+            markers = [
+                item.get("failure_signature"),
+                item.get("summary"),
+                item.get("recommended_action"),
+            ]
+            normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+            if _is_sandbox_docker_runtime_failure_marker(normalized):
+                return True
+    markers = [
+        metadata.get("last_verification_summary"),
+        metadata.get("last_verification_judge_required_next_action"),
+        metadata.get("last_verification_judge_rationale"),
+    ]
+    markers.extend(_string_list(metadata.get("last_verification_judge_failed_criteria")))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    return _is_sandbox_docker_runtime_failure_marker(normalized)
+
+
+def _is_sandbox_docker_runtime_failure_marker(normalized: str) -> bool:
+    if "sandbox-no-docker-runtime" in normalized:
+        return True
+    if "docker-runtime-unavailable-sandbox" in normalized:
+        return True
+    docker_runtime_missing = "docker runtime" in normalized and any(
+        token in normalized
+        for token in (
+            "not available",
+            "unavailable",
+            "absent",
+            "without docker",
+            "lacks docker",
+            "no docker",
+            "no socket",
+        )
+    )
+    return docker_runtime_missing and "sandbox" in normalized
+
+
+def _repair_alternative_evidence_is_sufficient(node: PlanNode) -> bool:
+    refs = _node_protocol_evidence_refs(node)
+    has_disposition = any(
+        ref.startswith("contract_disposition:repair_node")
+        or ref.startswith("contract_disposition:infrastructure_limitation")
+        for ref in refs
+    )
+    has_registry = any(
+        ref.startswith("docker_registry_reachability:")
+        or ref.startswith("registry_verify:")
+        or ref.startswith("pipeline_run:success:")
+        for ref in refs
+    )
+    has_service_substitute = any(
+        ref.startswith("health_check:")
+        or ref.startswith("server:")
+        or ref.startswith("pipeline_run:success:")
+        for ref in refs
+    )
+    return has_disposition and has_registry and has_service_substitute
+
+
 def _should_request_pipeline_after_verification(
     node: PlanNode,
     artifacts: Mapping[str, Any],
@@ -1868,7 +2210,9 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
     if not pipeline_failures:
         return False
     non_pipeline_failures = [
-        result for result in failed_required if result.criterion.kind not in _PIPELINE_CRITERION_KINDS
+        result
+        for result in failed_required
+        if result.criterion.kind not in _PIPELINE_CRITERION_KINDS
     ]
     return all(
         _is_pipeline_only_judge_failure(result)
@@ -2161,13 +2505,34 @@ def _verification_feedback_obsoletes_node(report: VerificationReport) -> bool:
     return False
 
 
+def _verification_feedback_disposes_sandbox_docker_runtime_node(
+    node: PlanNode,
+    report: VerificationReport,
+) -> bool:
+    if _node_iteration_index(node) <= 1:
+        return False
+    if not _report_has_nontransient_sandbox_docker_runtime_failure(report):
+        return False
+    for result in report.results:
+        if result.criterion.spec.get("judge_verdict") == "blocked_human_required":
+            return True
+        if result.criterion.spec.get("next_action_kind") == "human_required":
+            return True
+    return any(
+        item.get("recommended_action") in {"escalate_human", "accept_with_disposition"}
+        for item in _verification_feedback_items(report)
+    )
+
+
 def _node_with_verification_evidence(
     node: PlanNode,
     report: VerificationReport,
     *,
     artifacts: Mapping[str, Any] | None = None,
 ) -> PlanNode:
-    refs = list(dict.fromkeys([*_report_evidence_refs(report), *_artifact_evidence_refs(artifacts)]))
+    refs = list(
+        dict.fromkeys([*_report_evidence_refs(report), *_artifact_evidence_refs(artifacts)])
+    )
     commit_ref = _first_prefixed_value(refs, "commit_ref:")
     git_diff_summary = _first_prefixed_value(refs, "git_diff_summary:")
     test_commands = tuple(
@@ -2252,6 +2617,71 @@ def _node_with_verification_feedback_disposition(
     metadata["obsolete_by_verifier_feedback"] = disposition == "obsolete_node"
     metadata["obsolete_feedback_items"] = _verification_feedback_items(report)
     return replace(evidenced, metadata=metadata, updated_at=datetime.now(UTC))
+
+
+def _node_with_repair_alternative_disposition(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    repair_node: PlanNode,
+    artifacts: Mapping[str, Any] | None = None,
+    disposition: str,
+) -> PlanNode:
+    evidenced = _node_with_verification_evidence(node, report, artifacts=artifacts)
+    repair_summary = _node_verification_summary(repair_node) or "completed repair alternative"
+    summary = (
+        f"{disposition}: {repair_node.id} supplied accepted Docker-runtime substitute "
+        f"evidence. {repair_summary}"
+    )
+    metadata = dict(evidenced.metadata)
+    metadata.update(
+        {
+            "last_verification_passed": True,
+            "last_verification_hard_fail": False,
+            "last_verification_summary": summary,
+            "last_verification_judge_next_action_kind": "none",
+            "verification_feedback_disposition": disposition,
+            "accepted_repair_node_id": repair_node.id,
+            "accepted_repair_evidence_refs": _node_protocol_evidence_refs(repair_node)[:24],
+        }
+    )
+    metadata.pop("retry_not_before", None)
+    metadata.pop("retry_last_reason", None)
+    return replace(evidenced, metadata=metadata, updated_at=datetime.now(UTC))
+
+
+def _node_with_repair_alternative_disposition_from_metadata(
+    node: PlanNode,
+    *,
+    repair_node: PlanNode,
+    disposition: str,
+) -> PlanNode:
+    repair_summary = _node_verification_summary(repair_node) or "completed repair alternative"
+    summary = (
+        f"{disposition}: {repair_node.id} supplied accepted Docker-runtime substitute "
+        f"evidence. {repair_summary}"
+    )
+    metadata = dict(node.metadata)
+    metadata.update(
+        {
+            "last_verification_passed": True,
+            "last_verification_hard_fail": False,
+            "last_verification_summary": summary,
+            "last_verification_judge_next_action_kind": "none",
+            "verification_feedback_disposition": disposition,
+            "accepted_repair_node_id": repair_node.id,
+            "accepted_repair_evidence_refs": _node_protocol_evidence_refs(repair_node)[:24],
+        }
+    )
+    metadata.pop("retry_not_before", None)
+    metadata.pop("retry_last_reason", None)
+    return replace(
+        node,
+        assignee_agent_id=None,
+        current_attempt_id=None,
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
 
 
 def _report_evidence_refs(report: VerificationReport) -> list[str]:
