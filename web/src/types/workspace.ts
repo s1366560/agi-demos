@@ -14,6 +14,7 @@ export type WorkspaceUseCase =
   | 'research'
   | 'operations';
 export type WorkspaceVerificationGrade = 'pass' | 'warn' | 'fail';
+export type WorkspaceSourceControlProvider = 'github' | 'gitlab';
 export type WorkspaceCollaborationMode =
   | 'single_agent'
   | 'multi_agent_shared'
@@ -40,6 +41,15 @@ export interface WorkspaceCodeContext {
   agents_excerpt?: string | undefined;
 }
 
+export interface WorkspaceSourceControlConfig {
+  provider?: WorkspaceSourceControlProvider | undefined;
+  repo?: string | undefined;
+  default_branch?: string | undefined;
+  server_url?: string | undefined;
+  clone_url?: string | undefined;
+  auth_token_env?: string | undefined;
+}
+
 export interface WorkspaceDeliveryCicdStageConfig {
   stage: string;
   command: string;
@@ -61,11 +71,65 @@ export interface WorkspaceDeliveryServiceConfig {
   auto_open?: boolean | undefined;
 }
 
+export interface WorkspaceDeliveryDroneApiEnvironmentConfig {
+  server_url_env?: string | undefined;
+  token_env?: string | undefined;
+}
+
+export interface WorkspaceDeliveryDroneServerEnvironmentConfig {
+  server_port?: number | undefined;
+  server_host?: string | undefined;
+  server_proto?: string | undefined;
+  rpc_secret_env?: string | undefined;
+  user_create?: string | undefined;
+  source_provider?: WorkspaceSourceControlProvider | undefined;
+  github_server?: string | undefined;
+  github_client_id_env?: string | undefined;
+  github_client_secret_env?: string | undefined;
+  gitlab_server?: string | undefined;
+  gitlab_client_id_env?: string | undefined;
+  gitlab_client_secret_env?: string | undefined;
+  git_always_auth?: boolean | undefined;
+}
+
+export interface WorkspaceDeliveryDroneRunnerEnvironmentConfig {
+  runner_port?: number | undefined;
+  runner_capacity?: number | undefined;
+  runner_name?: string | undefined;
+  rpc_proto?: string | undefined;
+  rpc_host?: string | undefined;
+  rpc_secret_env?: string | undefined;
+}
+
+export interface WorkspaceDeliveryDroneEnvironmentConfig {
+  api?: WorkspaceDeliveryDroneApiEnvironmentConfig | undefined;
+  server?: WorkspaceDeliveryDroneServerEnvironmentConfig | undefined;
+  runner?: WorkspaceDeliveryDroneRunnerEnvironmentConfig | undefined;
+}
+
+export interface WorkspaceDeliveryDroneConfig {
+  repo?: string | undefined;
+  repository?: string | undefined;
+  branch?: string | undefined;
+  commit?: string | undefined;
+  target?: string | undefined;
+  server_url?: string | undefined;
+  server_url_env?: string | undefined;
+  token_env?: string | undefined;
+  poll_interval_seconds?: number | undefined;
+  source_control?: WorkspaceSourceControlConfig | undefined;
+  environment?: WorkspaceDeliveryDroneEnvironmentConfig | undefined;
+  params?: Record<string, string> | undefined;
+  build_params?: Record<string, string> | undefined;
+}
+
 export interface WorkspaceDeliveryCicdConfig {
   provider?: string | undefined;
   code_root?: string | undefined;
   stages?: WorkspaceDeliveryCicdStageConfig[] | undefined;
   services?: WorkspaceDeliveryServiceConfig[] | undefined;
+  drone?: WorkspaceDeliveryDroneConfig | undefined;
+  provider_config?: Record<string, unknown> | undefined;
   agent_managed?: boolean | undefined;
   contract_source?: string | undefined;
   contract_confidence?: number | undefined;
@@ -91,6 +155,7 @@ export type WorkspaceMetadata = Record<string, unknown> & {
   autonomy_profile?: WorkspaceAutonomyProfile | undefined;
   sandbox_code_root?: string | undefined;
   code_context?: WorkspaceCodeContext | undefined;
+  source_control?: WorkspaceSourceControlConfig | undefined;
   delivery_cicd?: WorkspaceDeliveryCicdConfig | undefined;
 };
 
@@ -770,6 +835,7 @@ export interface WorkspaceCreateRequest {
   collaboration_mode?: WorkspaceCollaborationMode | undefined;
   autonomy_profile?: WorkspaceAutonomyProfile | undefined;
   sandbox_code_root?: string | undefined;
+  source_control?: WorkspaceSourceControlConfig | undefined;
 }
 
 export interface WorkspaceUpdateRequest {

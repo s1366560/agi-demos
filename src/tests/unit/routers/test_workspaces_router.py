@@ -155,6 +155,128 @@ class TestWorkspacesRouter:
         assert metadata["autonomy_profile"] == {"workspace_type": "software_development"}
         assert metadata["sandbox_code_root"] == "/workspace/my-evo"
         assert metadata["code_context"]["sandbox_code_root"] == "/workspace/my-evo"
+        assert metadata["source_control"] == {
+            "provider": "github",
+            "repo": "memstack/delivery-room",
+            "default_branch": "main",
+            "server_url": "https://github.com",
+            "auth_token_env": "GITHUB_TOKEN",
+            "clone_url": "https://github.com/memstack/delivery-room.git",
+        }
+        delivery = metadata["delivery_cicd"]
+        assert delivery["provider"] == "drone"
+        assert delivery["code_root"] == "/workspace/my-evo"
+        assert delivery["agent_managed"] is False
+        assert delivery["contract_source"] == "workspace_defaults"
+        assert delivery["contract_confidence"] == 1.0
+        assert delivery["timeout_seconds"] == 600
+        assert delivery["auto_deploy"] is False
+        assert delivery["drone"] == {
+            "repo": "memstack/delivery-room",
+            "branch": "main",
+            "server_url_env": "DRONE_SERVER_URL",
+            "token_env": "DRONE_TOKEN",
+            "poll_interval_seconds": 5,
+            "source_control": {
+                "provider": "github",
+                "repo": "memstack/delivery-room",
+                "default_branch": "main",
+                "server_url": "https://github.com",
+                "auth_token_env": "GITHUB_TOKEN",
+                "clone_url": "https://github.com/memstack/delivery-room.git",
+            },
+            "environment": {
+                "api": {
+                    "server_url_env": "DRONE_SERVER_URL",
+                    "token_env": "DRONE_TOKEN",
+                },
+                "server": {
+                    "server_port": 8080,
+                    "server_host": "localhost:8080",
+                    "server_proto": "http",
+                    "rpc_secret_env": "DRONE_RPC_SECRET",
+                    "user_create": "username:memstack,admin:true",
+                    "source_provider": "github",
+                    "github_server": "https://github.com",
+                    "github_client_id_env": "DRONE_GITHUB_CLIENT_ID",
+                    "github_client_secret_env": "DRONE_GITHUB_CLIENT_SECRET",
+                    "gitlab_server": "https://gitlab.com",
+                    "gitlab_client_id_env": "DRONE_GITLAB_CLIENT_ID",
+                    "gitlab_client_secret_env": "DRONE_GITLAB_CLIENT_SECRET",
+                    "git_always_auth": False,
+                },
+                "runner": {
+                    "runner_port": 3001,
+                    "runner_capacity": 2,
+                    "runner_name": "memstack-drone-runner",
+                    "rpc_proto": "http",
+                    "rpc_host": "drone-server",
+                    "rpc_secret_env": "DRONE_RPC_SECRET",
+                },
+            },
+        }
+
+    def test_create_workspace_links_gitlab_source_control_to_drone(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={
+                "name": "GitLab Delivery",
+                "use_case": "programming",
+                "sandbox_code_root": "gitlab-delivery",
+                "source_control": {
+                    "provider": "gitlab",
+                    "repo": "platform/gitlab-delivery",
+                    "default_branch": "develop",
+                    "server_url": "https://gitlab.example.com",
+                    "auth_token_env": "GITLAB_TOKEN",
+                },
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
+        assert metadata["source_control"] == {
+            "provider": "gitlab",
+            "repo": "platform/gitlab-delivery",
+            "default_branch": "develop",
+            "server_url": "https://gitlab.example.com",
+            "auth_token_env": "GITLAB_TOKEN",
+            "clone_url": "https://gitlab.example.com/platform/gitlab-delivery.git",
+        }
+        drone = metadata["delivery_cicd"]["drone"]
+        assert drone["repo"] == "platform/gitlab-delivery"
+        assert drone["branch"] == "develop"
+        assert drone["source_control"] == metadata["source_control"]
+        assert drone["environment"]["server"]["source_provider"] == "gitlab"
+        assert drone["environment"]["server"]["gitlab_server"] == "https://gitlab.example.com"
+
+    def test_create_workspace_preserves_explicit_programming_delivery_provider(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={
+                "name": "Sandbox Native Delivery",
+                "use_case": "programming",
+                "sandbox_code_root": "my-evo",
+                "metadata": {
+                    "delivery_cicd": {
+                        "provider": "sandbox_native",
+                        "install_command": "pnpm install",
+                    }
+                },
+            },
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
+        delivery = metadata["delivery_cicd"]
+        assert delivery["provider"] == "sandbox_native"
+        assert delivery["code_root"] == "/workspace/my-evo"
+        assert delivery["install_command"] == "pnpm install"
+        assert "drone" not in delivery
 
     def test_create_workspace_rejects_unscoped_programming_root(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
@@ -299,7 +421,9 @@ class TestWorkspacesRouter:
     def test_update_agent_still_succeeds_when_event_publish_fails(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
-        mock_workspace_service.publish_pending_events.side_effect = RuntimeError("redis unavailable")
+        mock_workspace_service.publish_pending_events.side_effect = RuntimeError(
+            "redis unavailable"
+        )
 
         response = workspaces_client.patch(
             "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",

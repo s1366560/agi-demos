@@ -10,6 +10,7 @@ import {
   Check,
   Code2,
   Database,
+  GitBranch,
   Loader2,
   Plus,
   RotateCcw,
@@ -26,6 +27,7 @@ import { useCurrentWorkspace, useWorkspaceActions, useWorkspaceMembers } from '@
 import { workspaceService } from '@/services/workspaceService';
 
 import {
+  sourceControlDefaultsForProvider,
   isIsolatedSandboxCodeRoot,
   normaliseSandboxCodeRoot,
   workspaceTypeForUseCase,
@@ -37,6 +39,7 @@ import { LazyPopconfirm, useLazyMessage } from '@/components/ui/lazyAntd';
 import {
   COLLABORATION_MODE_OPTIONS,
   ROLE_OPTIONS,
+  SOURCE_CONTROL_PROVIDER_OPTIONS,
   USE_CASE_OPTIONS,
   VERIFICATION_GRADE_OPTIONS,
   buildWorkspaceMetadataDraft,
@@ -58,6 +61,7 @@ import type {
   WorkspaceDeliveryServiceConfig,
   WorkspaceMember,
   WorkspaceMemberRole,
+  WorkspaceSourceControlProvider,
   WorkspaceUseCase,
   WorkspaceVerificationGrade,
 } from '@/types/workspace';
@@ -99,6 +103,49 @@ export const WorkspaceSettingsPanel: React.FC<{
   const updateDraft = useCallback(
     <TKey extends keyof SettingsDraft>(key: TKey, value: SettingsDraft[TKey]) => {
       setDraft((current) => (current ? { ...current, [key]: value } : current));
+      setIsDirty(true);
+    },
+    []
+  );
+
+  const updateSourceControlProvider = useCallback((provider: WorkspaceSourceControlProvider) => {
+    setDraft((current) => {
+      if (!current) return current;
+      const currentDefaults = sourceControlDefaultsForProvider(current.sourceControlProvider);
+      const nextDefaults = sourceControlDefaultsForProvider(provider);
+      return {
+        ...current,
+        sourceControlProvider: provider,
+        sourceControlServerUrl:
+          !current.sourceControlServerUrl ||
+          current.sourceControlServerUrl === currentDefaults.serverUrl
+            ? nextDefaults.serverUrl
+            : current.sourceControlServerUrl,
+        sourceControlAuthTokenEnv:
+          !current.sourceControlAuthTokenEnv ||
+          current.sourceControlAuthTokenEnv === currentDefaults.authTokenEnv
+            ? nextDefaults.authTokenEnv
+            : current.sourceControlAuthTokenEnv,
+        sourceControlCloneUrl: '',
+      };
+    });
+    setIsDirty(true);
+  }, []);
+
+  const updateSourceControlDraft = useCallback(
+    <TKey extends keyof SettingsDraft>(key: TKey, value: SettingsDraft[TKey]) => {
+      setDraft((current) => {
+        if (!current) return current;
+        const next = { ...current, [key]: value };
+        if (
+          key === 'sourceControlRepo' ||
+          key === 'sourceControlDefaultBranch' ||
+          key === 'sourceControlServerUrl'
+        ) {
+          next.sourceControlCloneUrl = '';
+        }
+        return next;
+      });
       setIsDirty(true);
     },
     []
@@ -478,6 +525,94 @@ export const WorkspaceSettingsPanel: React.FC<{
           </SettingsSection>
 
           <SettingsSection
+            icon={<GitBranch size={16} aria-hidden />}
+            title={t('workspaceSettings.sourceControl.title')}
+            description={t('workspaceSettings.sourceControl.description')}
+          >
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Field
+                label={t('workspaceSettings.sourceControl.provider')}
+                htmlFor="workspace-source-control-provider"
+              >
+                <Select
+                  id="workspace-source-control-provider"
+                  value={draft.sourceControlProvider}
+                  onChange={updateSourceControlProvider}
+                  options={SOURCE_CONTROL_PROVIDER_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: t(option.labelKey),
+                  }))}
+                />
+              </Field>
+              <Field
+                label={t('workspaceSettings.sourceControl.repo')}
+                htmlFor="workspace-source-control-repo"
+              >
+                <Input
+                  id="workspace-source-control-repo"
+                  value={draft.sourceControlRepo}
+                  onChange={(event) => {
+                    updateSourceControlDraft('sourceControlRepo', event.target.value);
+                  }}
+                  placeholder="memstack/my-workspace"
+                />
+              </Field>
+              <Field
+                label={t('workspaceSettings.sourceControl.defaultBranch')}
+                htmlFor="workspace-source-control-branch"
+              >
+                <Input
+                  id="workspace-source-control-branch"
+                  value={draft.sourceControlDefaultBranch}
+                  onChange={(event) => {
+                    updateSourceControlDraft('sourceControlDefaultBranch', event.target.value);
+                  }}
+                  placeholder="main"
+                />
+              </Field>
+              <Field
+                label={t('workspaceSettings.sourceControl.serverUrl')}
+                htmlFor="workspace-source-control-server-url"
+              >
+                <Input
+                  id="workspace-source-control-server-url"
+                  value={draft.sourceControlServerUrl}
+                  onChange={(event) => {
+                    updateSourceControlDraft('sourceControlServerUrl', event.target.value);
+                  }}
+                  placeholder="https://github.com"
+                />
+              </Field>
+              <Field
+                label={t('workspaceSettings.sourceControl.authTokenEnv')}
+                htmlFor="workspace-source-control-token-env"
+              >
+                <Input
+                  id="workspace-source-control-token-env"
+                  value={draft.sourceControlAuthTokenEnv}
+                  onChange={(event) => {
+                    updateSourceControlDraft('sourceControlAuthTokenEnv', event.target.value);
+                  }}
+                  placeholder="GITHUB_TOKEN"
+                />
+              </Field>
+              <Field
+                label={t('workspaceSettings.sourceControl.cloneUrl')}
+                htmlFor="workspace-source-control-clone-url"
+              >
+                <Input
+                  id="workspace-source-control-clone-url"
+                  value={draft.sourceControlCloneUrl}
+                  onChange={(event) => {
+                    updateSourceControlDraft('sourceControlCloneUrl', event.target.value);
+                  }}
+                  placeholder="https://github.com/memstack/my-workspace.git"
+                />
+              </Field>
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
             icon={<Rocket size={16} aria-hidden />}
             title={t('workspaceSettings.delivery.title')}
             description={t('workspaceSettings.delivery.description')}
@@ -583,6 +718,312 @@ export const WorkspaceSettingsPanel: React.FC<{
                 />
               </Field>
             </div>
+
+            {draft.deliveryProvider === 'drone' ? (
+              <div className="grid gap-4">
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <Field
+                    label={t('workspaceSettings.delivery.droneRepo')}
+                    htmlFor="workspace-delivery-drone-repo"
+                  >
+                    <Input
+                      id="workspace-delivery-drone-repo"
+                      value={draft.deliveryDroneRepo}
+                      onChange={(event) => {
+                        updateDraft('deliveryDroneRepo', event.target.value);
+                      }}
+                      placeholder="memstack/my-workspace"
+                    />
+                  </Field>
+                  <Field
+                    label={t('workspaceSettings.delivery.droneBranch')}
+                    htmlFor="workspace-delivery-drone-branch"
+                  >
+                    <Input
+                      id="workspace-delivery-drone-branch"
+                      value={draft.deliveryDroneBranch}
+                      onChange={(event) => {
+                        updateDraft('deliveryDroneBranch', event.target.value);
+                      }}
+                      placeholder="main"
+                    />
+                  </Field>
+                  <Field
+                    label={t('workspaceSettings.delivery.dronePollIntervalSeconds')}
+                    htmlFor="workspace-delivery-drone-poll"
+                  >
+                    <Input
+                      id="workspace-delivery-drone-poll"
+                      type="number"
+                      min={1}
+                      value={draft.deliveryDronePollIntervalSeconds}
+                      onChange={(event) => {
+                        updateDraft(
+                          'deliveryDronePollIntervalSeconds',
+                          Number(event.target.value) || 5
+                        );
+                      }}
+                    />
+                  </Field>
+                  <Field
+                    label={t('workspaceSettings.delivery.droneServerUrlEnv')}
+                    htmlFor="workspace-delivery-drone-server-env"
+                  >
+                    <Input
+                      id="workspace-delivery-drone-server-env"
+                      value={draft.deliveryDroneServerUrlEnv}
+                      onChange={(event) => {
+                        updateDraft('deliveryDroneServerUrlEnv', event.target.value);
+                      }}
+                      placeholder="DRONE_SERVER_URL"
+                    />
+                  </Field>
+                  <Field
+                    label={t('workspaceSettings.delivery.droneTokenEnv')}
+                    htmlFor="workspace-delivery-drone-token-env"
+                  >
+                    <Input
+                      id="workspace-delivery-drone-token-env"
+                      value={draft.deliveryDroneTokenEnv}
+                      onChange={(event) => {
+                        updateDraft('deliveryDroneTokenEnv', event.target.value);
+                      }}
+                      placeholder="DRONE_TOKEN"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-3 border-t border-border-light pt-4 dark:border-border-dark">
+                  <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
+                    {t('workspaceSettings.delivery.droneServerEnvironment')}
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <Field
+                      label={t('workspaceSettings.delivery.droneServerPort')}
+                      htmlFor="workspace-delivery-drone-server-port"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-server-port"
+                        type="number"
+                        min={1}
+                        value={draft.deliveryDroneServerPort}
+                        onChange={(event) => {
+                          updateDraft(
+                            'deliveryDroneServerPort',
+                            Number(event.target.value) || 8080
+                          );
+                        }}
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneServerHost')}
+                      htmlFor="workspace-delivery-drone-server-host"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-server-host"
+                        value={draft.deliveryDroneServerHost}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneServerHost', event.target.value);
+                        }}
+                        placeholder="localhost:8080"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneServerProto')}
+                      htmlFor="workspace-delivery-drone-server-proto"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-server-proto"
+                        value={draft.deliveryDroneServerProto}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneServerProto', event.target.value);
+                        }}
+                        placeholder="http"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRpcSecretEnv')}
+                      htmlFor="workspace-delivery-drone-rpc-secret-env"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-rpc-secret-env"
+                        value={draft.deliveryDroneRpcSecretEnv}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneRpcSecretEnv', event.target.value);
+                        }}
+                        placeholder="DRONE_RPC_SECRET"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneUserCreate')}
+                      htmlFor="workspace-delivery-drone-user-create"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-user-create"
+                        value={draft.deliveryDroneUserCreate}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneUserCreate', event.target.value);
+                        }}
+                        placeholder="username:memstack,admin:true"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneGithubClientIdEnv')}
+                      htmlFor="workspace-delivery-drone-github-client-id-env"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-github-client-id-env"
+                        value={draft.deliveryDroneGithubClientIdEnv}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneGithubClientIdEnv', event.target.value);
+                        }}
+                        placeholder="DRONE_GITHUB_CLIENT_ID"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneGithubClientSecretEnv')}
+                      htmlFor="workspace-delivery-drone-github-client-secret-env"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-github-client-secret-env"
+                        value={draft.deliveryDroneGithubClientSecretEnv}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneGithubClientSecretEnv', event.target.value);
+                        }}
+                        placeholder="DRONE_GITHUB_CLIENT_SECRET"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneGitlabClientIdEnv')}
+                      htmlFor="workspace-delivery-drone-gitlab-client-id-env"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-gitlab-client-id-env"
+                        value={draft.deliveryDroneGitlabClientIdEnv}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneGitlabClientIdEnv', event.target.value);
+                        }}
+                        placeholder="DRONE_GITLAB_CLIENT_ID"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneGitlabClientSecretEnv')}
+                      htmlFor="workspace-delivery-drone-gitlab-client-secret-env"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-gitlab-client-secret-env"
+                        value={draft.deliveryDroneGitlabClientSecretEnv}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneGitlabClientSecretEnv', event.target.value);
+                        }}
+                        placeholder="DRONE_GITLAB_CLIENT_SECRET"
+                      />
+                    </Field>
+                    <SwitchField
+                      label={t('workspaceSettings.delivery.droneGitAlwaysAuth')}
+                      checked={draft.deliveryDroneGitAlwaysAuth}
+                      onChange={(checked) => {
+                        updateDraft('deliveryDroneGitAlwaysAuth', checked);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 border-t border-border-light pt-4 dark:border-border-dark">
+                  <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
+                    {t('workspaceSettings.delivery.droneRunnerEnvironment')}
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRunnerPort')}
+                      htmlFor="workspace-delivery-drone-runner-port"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-runner-port"
+                        type="number"
+                        min={1}
+                        value={draft.deliveryDroneRunnerPort}
+                        onChange={(event) => {
+                          updateDraft(
+                            'deliveryDroneRunnerPort',
+                            Number(event.target.value) || 3001
+                          );
+                        }}
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRunnerCapacity')}
+                      htmlFor="workspace-delivery-drone-runner-capacity"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-runner-capacity"
+                        type="number"
+                        min={1}
+                        value={draft.deliveryDroneRunnerCapacity}
+                        onChange={(event) => {
+                          updateDraft(
+                            'deliveryDroneRunnerCapacity',
+                            Number(event.target.value) || 2
+                          );
+                        }}
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRunnerName')}
+                      htmlFor="workspace-delivery-drone-runner-name"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-runner-name"
+                        value={draft.deliveryDroneRunnerName}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneRunnerName', event.target.value);
+                        }}
+                        placeholder="memstack-drone-runner"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRunnerRpcProto')}
+                      htmlFor="workspace-delivery-drone-runner-rpc-proto"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-runner-rpc-proto"
+                        value={draft.deliveryDroneRunnerRpcProto}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneRunnerRpcProto', event.target.value);
+                        }}
+                        placeholder="http"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRunnerRpcHost')}
+                      htmlFor="workspace-delivery-drone-runner-rpc-host"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-runner-rpc-host"
+                        value={draft.deliveryDroneRunnerRpcHost}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneRunnerRpcHost', event.target.value);
+                        }}
+                        placeholder="drone-server"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneRunnerRpcSecretEnv')}
+                      htmlFor="workspace-delivery-drone-runner-rpc-secret-env"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-runner-rpc-secret-env"
+                        value={draft.deliveryDroneRunnerRpcSecretEnv}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneRunnerRpcSecretEnv', event.target.value);
+                        }}
+                        placeholder="DRONE_RPC_SECRET"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Field

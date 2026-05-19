@@ -19,6 +19,7 @@
 
 .PHONY: help install update clean init reset fresh restart
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
+.PHONY: drone-up drone-down drone-logs
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
 .PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
@@ -52,6 +53,7 @@ help: ## Show this help message
 	@echo "  dev-web        - Start web frontend (foreground)"
 	@echo "  infra          - Start infrastructure only"
 	@echo "  logs           - View all service logs"
+	@echo "  drone-up       - Start optional Drone CI services"
 	@echo ""
 	@echo " Ray Actors:"
 	@echo "  ray-up         - Start Ray cluster (production)"
@@ -159,6 +161,11 @@ help-full: ## Show all available commands
 	@echo "  obs-stop         - Stop observability"
 	@echo "  obs-status       - Show observability status"
 	@echo "  obs-ui           - Show UI URLs"
+	@echo ""
+	@echo " Drone CI/CD:"
+	@echo "  drone-up         - Start optional Drone server + Docker runner"
+	@echo "  drone-down       - Stop optional Drone services"
+	@echo "  drone-logs       - Follow Drone service logs"
 	@echo ""
 	@echo " Sandbox:"
 	@echo "  sandbox-build    - Build sandbox image"
@@ -688,6 +695,21 @@ docker-down: ## Stop all Docker services
 	@echo " Stopping Docker services..."
 	@$(COMPOSE_ALL) down
 	@echo " Docker services stopped"
+
+drone-up: ## Start optional Drone server and Docker runner
+	@echo " Starting Drone CI services..."
+	@$(COMPOSE_CMD) --profile drone up -d drone-server drone-runner-docker
+	@echo " Drone services started"
+	@echo "   Drone UI/API: http://localhost:$${DRONE_SERVER_PORT:-8080}"
+	@echo "   Runner dashboard: http://localhost:$${DRONE_RUNNER_PORT:-3001}"
+
+drone-down: ## Stop optional Drone services
+	@echo " Stopping Drone CI services..."
+	@$(COMPOSE_CMD) --profile drone stop drone-runner-docker drone-server
+	@echo " Drone services stopped"
+
+drone-logs: ## Follow Drone service logs
+	@$(COMPOSE_CMD) --profile drone logs -f drone-server drone-runner-docker
 
 ray-up: ## Start Ray cluster (production mode - uses built images)
 	@echo " Starting Ray cluster (production mode)..."

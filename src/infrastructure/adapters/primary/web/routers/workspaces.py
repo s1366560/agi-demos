@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Literal, cast
@@ -68,7 +69,9 @@ def _map_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ValueError):
         message = str(exc)
         if "not found" in message.lower():
-            return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found"))
+            return HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found")
+            )
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Invalid workspace request"),
@@ -87,6 +90,7 @@ def _ensure_workspace_scope(workspace: Workspace, tenant_id: str, project_id: st
 
 WorkspaceUseCase = Literal["general", "programming", "conversation", "research", "operations"]
 WorkspaceType = Literal["general", "software_development", "research", "operations"]
+WorkspaceSourceControlProvider = Literal["github", "gitlab"]
 WorkspaceCollaborationMode = Literal[
     "single_agent",
     "multi_agent_shared",
@@ -110,6 +114,37 @@ _VALID_COLLABORATION_MODES = {
     "multi_agent_isolated",
     "autonomous",
 }
+_DEFAULT_SOURCE_CONTROL_PROVIDER: WorkspaceSourceControlProvider = "github"
+_VALID_SOURCE_CONTROL_PROVIDERS: set[WorkspaceSourceControlProvider] = {"github", "gitlab"}
+_DEFAULT_SOURCE_CONTROL_REPO_OWNER = "memstack"
+_DEFAULT_SOURCE_CONTROL_BRANCH = "main"
+_DEFAULT_GITHUB_SERVER_URL = "https://github.com"
+_DEFAULT_GITLAB_SERVER_URL = "https://gitlab.com"
+_DEFAULT_GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
+_DEFAULT_GITLAB_TOKEN_ENV = "GITLAB_TOKEN"
+_DRONE_PROVIDER = "drone"
+_DEFAULT_DRONE_REPO_OWNER = "memstack"
+_DEFAULT_DRONE_BRANCH = "main"
+_DEFAULT_DRONE_SERVER_URL_ENV = "DRONE_SERVER_URL"
+_DEFAULT_DRONE_TOKEN_ENV = "DRONE_TOKEN"
+_DEFAULT_DRONE_POLL_INTERVAL_SECONDS = 5
+_DEFAULT_DRONE_TIMEOUT_SECONDS = 600
+_DEFAULT_DRONE_SERVER_PORT = 8080
+_DEFAULT_DRONE_SERVER_HOST = "localhost:8080"
+_DEFAULT_DRONE_SERVER_PROTO = "http"
+_DEFAULT_DRONE_RPC_SECRET_ENV = "DRONE_RPC_SECRET"
+_DEFAULT_DRONE_USER_CREATE = "username:memstack,admin:true"
+_DEFAULT_DRONE_GITHUB_SERVER = _DEFAULT_GITHUB_SERVER_URL
+_DEFAULT_DRONE_GITHUB_CLIENT_ID_ENV = "DRONE_GITHUB_CLIENT_ID"
+_DEFAULT_DRONE_GITHUB_CLIENT_SECRET_ENV = "DRONE_GITHUB_CLIENT_SECRET"
+_DEFAULT_DRONE_GITLAB_SERVER = _DEFAULT_GITLAB_SERVER_URL
+_DEFAULT_DRONE_GITLAB_CLIENT_ID_ENV = "DRONE_GITLAB_CLIENT_ID"
+_DEFAULT_DRONE_GITLAB_CLIENT_SECRET_ENV = "DRONE_GITLAB_CLIENT_SECRET"
+_DEFAULT_DRONE_RUNNER_PORT = 3001
+_DEFAULT_DRONE_RUNNER_CAPACITY = 2
+_DEFAULT_DRONE_RUNNER_NAME = "memstack-drone-runner"
+_DEFAULT_DRONE_RUNNER_RPC_PROTO = "http"
+_DEFAULT_DRONE_RUNNER_RPC_HOST = "drone-server"
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:  # noqa: ANN401
@@ -142,6 +177,14 @@ def _coerce_collaboration_mode(value: Any) -> WorkspaceCollaborationMode | None:
     if isinstance(value, str) and value in _VALID_COLLABORATION_MODES:
         return cast(WorkspaceCollaborationMode, value)
     return None
+
+
+def _coerce_source_control_provider(value: Any) -> WorkspaceSourceControlProvider:  # noqa: ANN401
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _VALID_SOURCE_CONTROL_PROVIDERS:
+            return normalized
+    return _DEFAULT_SOURCE_CONTROL_PROVIDER
 
 
 def _resolve_use_case(
@@ -188,8 +231,224 @@ def _workspace_type_for_use_case(use_case: WorkspaceUseCase) -> WorkspaceType:
     return _USE_CASE_TO_WORKSPACE_TYPE[use_case]
 
 
+def _workspace_name_slug(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return slug or "workspace"
+
+
+def _default_drone_repo(workspace_name: str) -> str:
+    return f"{_DEFAULT_DRONE_REPO_OWNER}/{_workspace_name_slug(workspace_name)}"
+
+
+def _default_source_control_repo(workspace_name: str) -> str:
+    return f"{_DEFAULT_SOURCE_CONTROL_REPO_OWNER}/{_workspace_name_slug(workspace_name)}"
+
+
+def _has_text(value: Any) -> bool:  # noqa: ANN401
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _ensure_mapping(parent: dict[str, Any], key: str) -> dict[str, Any]:
+    value = parent.get(key)
+    if isinstance(value, Mapping):
+        output = dict(cast(Mapping[str, Any], value))
+    else:
+        output = {}
+    parent[key] = output
+    return output
+
+
+def _ensure_default_text(mapping: dict[str, Any], key: str, value: str) -> None:
+    if not _has_text(mapping.get(key)):
+        mapping[key] = value
+
+
+def _ensure_default_int(mapping: dict[str, Any], key: str, value: int) -> None:
+    if not isinstance(mapping.get(key), int):
+        mapping[key] = value
+
+
+def _ensure_default_bool(mapping: dict[str, Any], key: str, value: bool) -> None:
+    if not isinstance(mapping.get(key), bool):
+        mapping[key] = value
+
+
+def _source_control_defaults(
+    provider: WorkspaceSourceControlProvider,
+    workspace_name: str,
+) -> dict[str, str]:
+    server_url = _DEFAULT_GITLAB_SERVER_URL if provider == "gitlab" else _DEFAULT_GITHUB_SERVER_URL
+    token_env = _DEFAULT_GITLAB_TOKEN_ENV if provider == "gitlab" else _DEFAULT_GITHUB_TOKEN_ENV
+    return {
+        "provider": provider,
+        "repo": _default_source_control_repo(workspace_name),
+        "default_branch": _DEFAULT_SOURCE_CONTROL_BRANCH,
+        "server_url": server_url,
+        "auth_token_env": token_env,
+    }
+
+
+def _source_control_clone_url(
+    provider: WorkspaceSourceControlProvider,
+    server_url: str,
+    repo: str,
+) -> str:
+    repo_path = repo.strip().strip("/")
+    if not repo_path:
+        repo_path = _default_source_control_repo("workspace")
+    base_url = server_url.strip().rstrip("/")
+    if not base_url:
+        base_url = (
+            _DEFAULT_GITLAB_SERVER_URL if provider == "gitlab" else _DEFAULT_GITHUB_SERVER_URL
+        )
+    suffix = "" if repo_path.endswith(".git") else ".git"
+    return f"{base_url}/{repo_path}{suffix}"
+
+
+def _ensure_workspace_source_control(
+    metadata: dict[str, Any],
+    *,
+    workspace_name: str,
+) -> dict[str, Any]:
+    delivery = _as_mapping(metadata.get("delivery_cicd"))
+    drone = _as_mapping(delivery.get(_DRONE_PROVIDER))
+    source_control = dict(_as_mapping(drone.get("source_control")))
+    source_control.update(_as_mapping(metadata.get("source_control")))
+
+    provider = _coerce_source_control_provider(source_control.get("provider"))
+    defaults = _source_control_defaults(provider, workspace_name)
+    source_control["provider"] = provider
+    _ensure_default_text(source_control, "repo", defaults["repo"])
+    _ensure_default_text(source_control, "default_branch", defaults["default_branch"])
+    _ensure_default_text(source_control, "server_url", defaults["server_url"])
+    _ensure_default_text(source_control, "auth_token_env", defaults["auth_token_env"])
+    _ensure_default_text(
+        source_control,
+        "clone_url",
+        _source_control_clone_url(
+            provider,
+            str(source_control.get("server_url") or defaults["server_url"]),
+            str(source_control.get("repo") or defaults["repo"]),
+        ),
+    )
+    metadata["source_control"] = source_control
+    return source_control
+
+
+def _ensure_drone_environment(
+    drone: dict[str, Any],
+    source_control: Mapping[str, Any] | None,
+) -> None:
+    source_control = source_control or {}
+    source_provider = _coerce_source_control_provider(source_control.get("provider"))
+    source_server_url = (
+        str(source_control.get("server_url")).strip()
+        if source_control.get("server_url") is not None
+        else ""
+    )
+    environment = _ensure_mapping(drone, "environment")
+    api = _ensure_mapping(environment, "api")
+    _ensure_default_text(api, "server_url_env", _DEFAULT_DRONE_SERVER_URL_ENV)
+    _ensure_default_text(api, "token_env", _DEFAULT_DRONE_TOKEN_ENV)
+
+    server = _ensure_mapping(environment, "server")
+    _ensure_default_int(server, "server_port", _DEFAULT_DRONE_SERVER_PORT)
+    _ensure_default_text(server, "server_host", _DEFAULT_DRONE_SERVER_HOST)
+    _ensure_default_text(server, "server_proto", _DEFAULT_DRONE_SERVER_PROTO)
+    _ensure_default_text(server, "rpc_secret_env", _DEFAULT_DRONE_RPC_SECRET_ENV)
+    _ensure_default_text(server, "user_create", _DEFAULT_DRONE_USER_CREATE)
+    server["source_provider"] = source_provider
+    _ensure_default_text(server, "github_server", _DEFAULT_DRONE_GITHUB_SERVER)
+    if source_provider == "github" and source_server_url:
+        server["github_server"] = source_server_url
+    _ensure_default_text(server, "github_client_id_env", _DEFAULT_DRONE_GITHUB_CLIENT_ID_ENV)
+    _ensure_default_text(
+        server,
+        "github_client_secret_env",
+        _DEFAULT_DRONE_GITHUB_CLIENT_SECRET_ENV,
+    )
+    _ensure_default_text(server, "gitlab_server", _DEFAULT_DRONE_GITLAB_SERVER)
+    if source_provider == "gitlab" and source_server_url:
+        server["gitlab_server"] = source_server_url
+    _ensure_default_text(server, "gitlab_client_id_env", _DEFAULT_DRONE_GITLAB_CLIENT_ID_ENV)
+    _ensure_default_text(
+        server,
+        "gitlab_client_secret_env",
+        _DEFAULT_DRONE_GITLAB_CLIENT_SECRET_ENV,
+    )
+    _ensure_default_bool(server, "git_always_auth", False)
+
+    runner = _ensure_mapping(environment, "runner")
+    _ensure_default_int(runner, "runner_port", _DEFAULT_DRONE_RUNNER_PORT)
+    _ensure_default_int(runner, "runner_capacity", _DEFAULT_DRONE_RUNNER_CAPACITY)
+    _ensure_default_text(runner, "runner_name", _DEFAULT_DRONE_RUNNER_NAME)
+    _ensure_default_text(runner, "rpc_proto", _DEFAULT_DRONE_RUNNER_RPC_PROTO)
+    _ensure_default_text(runner, "rpc_host", _DEFAULT_DRONE_RUNNER_RPC_HOST)
+    _ensure_default_text(runner, "rpc_secret_env", _DEFAULT_DRONE_RPC_SECRET_ENV)
+
+
+def _ensure_programming_delivery_cicd(
+    metadata: dict[str, Any],
+    *,
+    workspace_name: str,
+    sandbox_code_root: str | None,
+    source_control: Mapping[str, Any] | None,
+) -> None:
+    if not sandbox_code_root:
+        return
+
+    delivery = dict(_as_mapping(metadata.get("delivery_cicd")))
+    provider = delivery.get("provider")
+    provider_name = provider.strip() if isinstance(provider, str) else ""
+    if not provider_name:
+        provider_name = _DRONE_PROVIDER
+        delivery["provider"] = provider_name
+
+    if not _has_text(delivery.get("code_root")):
+        delivery["code_root"] = sandbox_code_root
+
+    if provider_name != _DRONE_PROVIDER:
+        metadata["delivery_cicd"] = delivery
+        return
+
+    drone = dict(_as_mapping(delivery.get(_DRONE_PROVIDER)))
+    source_control = source_control or {}
+    if not _has_text(drone.get("repo")) and not _has_text(drone.get("repository")):
+        drone["repo"] = (
+            source_control.get("repo")
+            if _has_text(source_control.get("repo"))
+            else _default_drone_repo(workspace_name)
+        )
+    if not _has_text(drone.get("branch")):
+        drone["branch"] = (
+            source_control.get("default_branch")
+            if _has_text(source_control.get("default_branch"))
+            else _DEFAULT_DRONE_BRANCH
+        )
+    if not _has_text(drone.get("server_url_env")) and not _has_text(drone.get("server_url")):
+        drone["server_url_env"] = _DEFAULT_DRONE_SERVER_URL_ENV
+    if not _has_text(drone.get("token_env")):
+        drone["token_env"] = _DEFAULT_DRONE_TOKEN_ENV
+    if not isinstance(drone.get("poll_interval_seconds"), int):
+        drone["poll_interval_seconds"] = _DEFAULT_DRONE_POLL_INTERVAL_SECONDS
+    drone_source_control = dict(_as_mapping(drone.get("source_control")))
+    drone_source_control.update(source_control)
+    drone["source_control"] = drone_source_control
+    _ensure_drone_environment(drone, source_control)
+
+    delivery[_DRONE_PROVIDER] = drone
+    delivery.setdefault("agent_managed", False)
+    delivery.setdefault("contract_source", "workspace_defaults")
+    delivery.setdefault("contract_confidence", 1.0)
+    delivery.setdefault("timeout_seconds", _DEFAULT_DRONE_TIMEOUT_SECONDS)
+    delivery.setdefault("auto_deploy", False)
+    metadata["delivery_cicd"] = delivery
+
+
 def _compose_workspace_metadata(payload: WorkspaceCreateRequest) -> dict[str, Any]:
     metadata = dict(payload.metadata or {})
+    if payload.source_control is not None:
+        metadata["source_control"] = payload.source_control
     use_case = _resolve_use_case(payload.use_case, metadata)
     workspace_type = _workspace_type_for_use_case(use_case)
     collaboration_mode = _resolve_collaboration_mode(payload.collaboration_mode, metadata)
@@ -217,6 +476,17 @@ def _compose_workspace_metadata(payload: WorkspaceCreateRequest) -> dict[str, An
         code_context["sandbox_code_root"] = sandbox_code_root
         metadata["sandbox_code_root"] = sandbox_code_root
         metadata["code_context"] = code_context
+        if use_case == "programming":
+            source_control = _ensure_workspace_source_control(
+                metadata,
+                workspace_name=payload.name,
+            )
+            _ensure_programming_delivery_cicd(
+                metadata,
+                workspace_name=payload.name,
+                sandbox_code_root=sandbox_code_root,
+                source_control=source_control,
+            )
 
     code_context_eval = evaluate_workspace_code_context(
         root_metadata=None,
@@ -236,6 +506,7 @@ class WorkspaceCreateRequest(BaseModel):
     collaboration_mode: WorkspaceCollaborationMode | None = None
     autonomy_profile: AutonomyProfileModel | None = None
     sandbox_code_root: str | None = None
+    source_control: dict[str, Any] | None = None
 
 
 class WorkspaceUpdateRequest(BaseModel):
@@ -714,7 +985,9 @@ async def bind_workspace_agent(
     try:
         await workspace_service.publish_pending_events()
     except Exception:
-        logger.exception("Failed to publish workspace agent bind event", extra={"workspace_id": workspace_id})
+        logger.exception(
+            "Failed to publish workspace agent bind event", extra={"workspace_id": workspace_id}
+        )
     return _to_agent_response(binding)
 
 

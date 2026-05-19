@@ -16,6 +16,8 @@ services:
       - LLM_PROVIDER=gemini
       - CUA_MCP_URL=ws://cua-mcp-server:18766
       - CODEBOX_MCP_URL=ws://codebox-mcp-server:8765
+      - DRONE_SERVER_URL=${DRONE_SERVER_URL:-http://drone-server}
+      - DRONE_TOKEN=${DRONE_TOKEN:-}
     depends_on:
       neo4j:
         condition: service_healthy
@@ -179,9 +181,71 @@ services:
 
   # Observability services moved to docker-compose.observability.yml
 
+  # Drone CI server (optional; enable with: docker compose --profile drone up -d)
+  drone-server:
+    image: drone/drone:2
+    container_name: memstack-drone
+    profiles:
+      - drone
+    ports:
+      - "${DRONE_SERVER_PORT:-8080}:80"
+    environment:
+      - DRONE_GITHUB_SERVER=${DRONE_GITHUB_SERVER:-https://github.com}
+      - DRONE_GITHUB_CLIENT_ID=${DRONE_GITHUB_CLIENT_ID:-}
+      - DRONE_GITHUB_CLIENT_SECRET=${DRONE_GITHUB_CLIENT_SECRET:-}
+      - DRONE_GITLAB_SERVER=${DRONE_GITLAB_SERVER:-https://gitlab.com}
+      - DRONE_GITLAB_CLIENT_ID=${DRONE_GITLAB_CLIENT_ID:-}
+      - DRONE_GITLAB_CLIENT_SECRET=${DRONE_GITLAB_CLIENT_SECRET:-}
+      - DRONE_GIT_ALWAYS_AUTH=${DRONE_GIT_ALWAYS_AUTH:-false}
+      - DRONE_RPC_SECRET=${DRONE_RPC_SECRET:-memstack-drone-rpc-secret}
+      - DRONE_SERVER_HOST=${DRONE_SERVER_HOST:-localhost:8080}
+      - DRONE_SERVER_PROTO=${DRONE_SERVER_PROTO:-http}
+      - DRONE_USER_CREATE=${DRONE_USER_CREATE:-username:memstack,admin:true}
+      - DRONE_DATABASE_DRIVER=sqlite3
+      - DRONE_DATABASE_DATASOURCE=/data/database.sqlite
+    volumes:
+      - drone_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # Drone Docker runner (requires Docker socket access)
+  drone-runner-docker:
+    image: drone/drone-runner-docker:1
+    container_name: memstack-drone-runner
+    profiles:
+      - drone
+    depends_on:
+      drone-server:
+        condition: service_started
+    ports:
+      - "${DRONE_RUNNER_PORT:-3001}:3000"
+    environment:
+      - DRONE_RPC_PROTO=http
+      - DRONE_RPC_HOST=drone-server
+      - DRONE_RPC_SECRET=${DRONE_RPC_SECRET:-memstack-drone-rpc-secret}
+      - DRONE_RUNNER_CAPACITY=${DRONE_RUNNER_CAPACITY:-2}
+      - DRONE_RUNNER_NAME=${DRONE_RUNNER_NAME:-memstack-drone-runner}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
 volumes:
   neo4j_data:
   neo4j_logs:
   postgres_data:
   redis_data:
   minio_data:
+  drone_data:

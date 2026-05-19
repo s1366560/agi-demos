@@ -1,0 +1,4 @@
+interface:
+  display_name: "Drone CI/CD"
+  short_description: "Configure and operate Drone pipelines"
+  default_prompt: "Use $drone to configure and verify this workspace Drone CI/CD pipeline."
