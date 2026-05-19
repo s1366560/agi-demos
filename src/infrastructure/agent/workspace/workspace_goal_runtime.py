@@ -1109,6 +1109,24 @@ async def _ensure_execution_attempt(
     return await attempt_service.mark_running(attempt.id)
 
 
+def _worker_report_matches_task_actor(
+    *,
+    task: WorkspaceTask,
+    resolved_attempt: WorkspaceTaskSessionAttempt,
+    effective_worker_agent_id: str,
+) -> bool:
+    if task.assignee_agent_id == effective_worker_agent_id:
+        return True
+
+    metadata = task.metadata if isinstance(task.metadata, Mapping) else {}
+    attempt_worker_agent_id = getattr(resolved_attempt, "worker_agent_id", None)
+    return (
+        metadata.get(CURRENT_ATTEMPT_ID) == resolved_attempt.id
+        and metadata.get("current_attempt_worker_agent_id") == effective_worker_agent_id
+        and attempt_worker_agent_id == effective_worker_agent_id
+    )
+
+
 async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     workspace_id: str,
@@ -1184,7 +1202,11 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
             effective_worker_agent_id = worker_agent_id or resolved_attempt.worker_agent_id
             if not isinstance(effective_worker_agent_id, str) or not effective_worker_agent_id:
                 raise ValueError("Worker report requires an attempt-bound worker_agent_id")
-            if task.assignee_agent_id != effective_worker_agent_id:
+            if not _worker_report_matches_task_actor(
+                task=task,
+                resolved_attempt=resolved_attempt,
+                effective_worker_agent_id=effective_worker_agent_id,
+            ):
                 raise ValueError("Worker report does not match the task assignee")
             attempt_status_value = getattr(
                 getattr(resolved_attempt, "status", None),

@@ -209,10 +209,22 @@ async def _project_verification_to_workspace_task(
         ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
     ]
     retry_verification_only = _verification_payload_requests_verification_retry(payload)
+    pipeline_pending = (
+        passed
+        and _node_requires_pipeline_gate(node)
+        and not _verification_payload_has_pipeline_success(evidence_refs)
+    )
 
     if attempt_id:
         if retry_verification_only:
             await _project_verification_retry_to_attempt(
+                db=db,
+                attempt_id=attempt_id,
+                summary=summary,
+                now=now,
+            )
+        elif pipeline_pending:
+            await _project_verification_pipeline_pending_to_attempt(
                 db=db,
                 attempt_id=attempt_id,
                 summary=summary,
@@ -238,6 +250,14 @@ async def _project_verification_to_workspace_task(
                     summary=summary,
                     now=now,
                 )
+            elif pipeline_pending:
+                _project_verification_pipeline_pending_to_task(
+                    task=task,
+                    attempt_id=attempt_id,
+                    summary=summary,
+                    commit_ref=commit_ref,
+                    now=now,
+                )
             else:
                 await _project_verification_to_task(
                     db=db,
@@ -252,6 +272,16 @@ async def _project_verification_to_workspace_task(
                     test_commands=test_commands,
                     now=now,
                 )
+
+
+def _node_requires_pipeline_gate(node: PlanNode) -> bool:
+    return dict(node.metadata or {}).get("pipeline_required") is True
+
+
+def _verification_payload_has_pipeline_success(evidence_refs: list[str]) -> bool:
+    return "ci_pipeline:passed" in evidence_refs or any(
+        ref.startswith("pipeline_run:success:") for ref in evidence_refs
+    )
 
 
 def _verification_payload_requests_verification_retry(payload: dict[str, Any]) -> bool:
@@ -321,6 +351,23 @@ async def _project_verification_retry_to_attempt(
     attempt.updated_at = now
 
 
+async def _project_verification_pipeline_pending_to_attempt(
+    *,
+    db: AsyncSession,
+    attempt_id: str,
+    summary: str,
+    now: datetime,
+) -> None:
+    attempt = await db.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+    if attempt is None:
+        return
+    attempt.status = WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
+    attempt.leader_feedback = summary or "durable plan verifier passed; awaiting pipeline gate"
+    attempt.adjudication_reason = "pipeline_gate_pending"
+    attempt.completed_at = None
+    attempt.updated_at = now
+
+
 async def _project_verification_to_task(
     *,
     db: AsyncSession,
@@ -375,6 +422,31 @@ async def _project_verification_to_task(
         task.blocker_reason = summary or "durable plan verification failed"
     task.updated_at = now
     await _reconcile_root_goal_if_present(db, task, metadata)
+
+
+def _project_verification_pipeline_pending_to_task(
+    *,
+    task: WorkspaceTaskModel,
+    attempt_id: str | None,
+    summary: str,
+    commit_ref: str | None,
+    now: datetime,
+) -> None:
+    metadata = dict(task.metadata_json or {})
+    metadata[PENDING_LEADER_ADJUDICATION] = False
+    metadata["durable_plan_verdict"] = "pipeline_pending"
+    metadata["durable_plan_verification_summary"] = summary
+    metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
+    metadata["last_attempt_status"] = "awaiting_pipeline"
+    metadata["pipeline_gate_status"] = "requested"
+    if commit_ref:
+        metadata["pipeline_candidate_commit_ref"] = commit_ref
+    if attempt_id:
+        metadata["last_attempt_id"] = attempt_id
+        metadata[CURRENT_ATTEMPT_ID] = attempt_id
+    task.metadata_json = metadata
+    task.status = "in_progress"
+    task.updated_at = now
 
 
 def _project_verification_retry_to_task(

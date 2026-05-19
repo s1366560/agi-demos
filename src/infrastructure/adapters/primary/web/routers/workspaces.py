@@ -145,6 +145,17 @@ _DEFAULT_DRONE_RUNNER_CAPACITY = 2
 _DEFAULT_DRONE_RUNNER_NAME = "memstack-drone-runner"
 _DEFAULT_DRONE_RUNNER_RPC_PROTO = "http"
 _DEFAULT_DRONE_RUNNER_RPC_HOST = "drone-server"
+_DEFAULT_DRONE_DEPLOY_MODE = "cli"
+_DEFAULT_DRONE_DEPLOY_STAGE = "deploy"
+_DEFAULT_DRONE_DEPLOY_CLI_IMAGE = "alpine:3.20"
+_DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT = "."
+_DEFAULT_DRONE_DEPLOY_DOCKERFILE = "Dockerfile"
+_DEFAULT_DRONE_DEPLOY_DOCKER_TAGS = ["latest"]
+_DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE = "default"
+_DEFAULT_DRONE_DEPLOY_KUBERNETES_MANIFEST_PATHS = ["k8s/*.yaml"]
+_DEFAULT_DRONE_DEPLOY_KUBECONFIG_SECRET = "kubeconfig"
+_DEFAULT_DRONE_DEPLOY_KUBECTL_IMAGE = "bitnami/kubectl:latest"
+_VALID_DRONE_DEPLOY_MODES = {"docker", "kubernetes", "cli"}
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:  # noqa: ANN401
@@ -273,6 +284,11 @@ def _ensure_default_bool(mapping: dict[str, Any], key: str, value: bool) -> None
         mapping[key] = value
 
 
+def _ensure_default_list(mapping: dict[str, Any], key: str, value: list[str]) -> None:
+    if not isinstance(mapping.get(key), list):
+        mapping[key] = list(value)
+
+
 def _source_control_defaults(
     provider: WorkspaceSourceControlProvider,
     workspace_name: str,
@@ -387,6 +403,40 @@ def _ensure_drone_environment(
     _ensure_default_text(runner, "rpc_secret_env", _DEFAULT_DRONE_RPC_SECRET_ENV)
 
 
+def _ensure_drone_deploy(drone: dict[str, Any]) -> None:
+    deploy = _ensure_mapping(drone, "deploy")
+    mode = str(deploy.get("mode") or _DEFAULT_DRONE_DEPLOY_MODE).strip().lower()
+    if mode not in _VALID_DRONE_DEPLOY_MODES:
+        mode = _DEFAULT_DRONE_DEPLOY_MODE
+    deploy["mode"] = mode
+    _ensure_default_bool(deploy, "enabled", False)
+    _ensure_default_text(deploy, "stage", _DEFAULT_DRONE_DEPLOY_STAGE)
+    _ensure_default_bool(deploy, "required", True)
+
+    cli = _ensure_mapping(deploy, "cli")
+    _ensure_default_text(cli, "image", _DEFAULT_DRONE_DEPLOY_CLI_IMAGE)
+    _ensure_default_list(cli, "commands", [])
+
+    docker = _ensure_mapping(deploy, "docker")
+    _ensure_default_text(docker, "context", _DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT)
+    _ensure_default_text(docker, "dockerfile", _DEFAULT_DRONE_DEPLOY_DOCKERFILE)
+    _ensure_default_list(docker, "tags", _DEFAULT_DRONE_DEPLOY_DOCKER_TAGS)
+
+    kubernetes = _ensure_mapping(deploy, "kubernetes")
+    _ensure_default_text(kubernetes, "namespace", _DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE)
+    _ensure_default_list(
+        kubernetes,
+        "manifest_paths",
+        _DEFAULT_DRONE_DEPLOY_KUBERNETES_MANIFEST_PATHS,
+    )
+    _ensure_default_text(
+        kubernetes,
+        "kubeconfig_secret",
+        _DEFAULT_DRONE_DEPLOY_KUBECONFIG_SECRET,
+    )
+    _ensure_default_text(kubernetes, "kubectl_image", _DEFAULT_DRONE_DEPLOY_KUBECTL_IMAGE)
+
+
 def _ensure_programming_delivery_cicd(
     metadata: dict[str, Any],
     *,
@@ -435,6 +485,7 @@ def _ensure_programming_delivery_cicd(
     drone_source_control.update(source_control)
     drone["source_control"] = drone_source_control
     _ensure_drone_environment(drone, source_control)
+    _ensure_drone_deploy(drone)
 
     delivery[_DRONE_PROVIDER] = drone
     delivery.setdefault("agent_managed", False)

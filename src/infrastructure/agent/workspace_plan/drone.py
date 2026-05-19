@@ -15,6 +15,7 @@ import httpx
 from src.infrastructure.agent.workspace_plan.pipeline import (
     DRONE_PROVIDER,
     PipelineContractSpec,
+    PipelineDeploySpec,
     PipelineRunResult,
     PipelineStageResult,
 )
@@ -66,6 +67,7 @@ class DronePipelineConfig:
     commit: str | None = None
     target: str | None = None
     params: dict[str, str] = field(default_factory=dict)
+    deploy: PipelineDeploySpec | None = None
     timeout_seconds: int = 600
     poll_interval_seconds: int = _DEFAULT_POLL_INTERVAL_SECONDS
 
@@ -92,10 +94,12 @@ class DronePipelineConfig:
         if not token:
             raise DroneConfigurationError(f"{token_env} is required for Drone CI/CD")
 
+        deploy = contract.deploy if contract.deploy and contract.deploy.enabled else None
         params = _string_mapping(raw.get("params") or raw.get("build_params"))
-        target = _string(raw.get("target"))
+        target = _string(raw.get("target")) or (deploy.target if deploy is not None else None)
         if target:
             params.setdefault("target", target)
+        _add_deploy_params(params, deploy)
 
         return cls(
             owner=owner,
@@ -106,6 +110,7 @@ class DronePipelineConfig:
             commit=_string(raw.get("commit")),
             target=target,
             params=params,
+            deploy=deploy,
             timeout_seconds=max(1, int(contract.timeout_seconds or 600)),
             poll_interval_seconds=max(
                 1,
@@ -269,7 +274,17 @@ async def _result_from_build(
         build_number=build_number,
         build=build,
         external_url=external_url,
+        deploy=config.deploy,
     )
+    deploy_state = _deploy_state(stage_results, config.deploy)
+    if (
+        config.deploy is not None
+        and deploy_state in {"failed", "missing", "invalid"}
+        and config.deploy.required
+        and run_status == "success"
+    ):
+        run_status = "failed"
+        reason = _deploy_failure_reason(config.deploy, external_id, deploy_state)
     evidence_refs = [
         f"ci_pipeline:{'passed' if run_status == 'success' else 'failed'}",
         f"drone_build:{drone_status}:{external_id}",
@@ -277,6 +292,12 @@ async def _result_from_build(
     ]
     for stage in stage_results:
         evidence_refs.append(f"pipeline_stage:{stage.stage}:{stage.status}")
+    if config.deploy is not None and deploy_state is not None:
+        evidence_refs.append(
+            f"deployment:{'passed' if deploy_state == 'passed' else deploy_state}:{config.deploy.mode}"
+        )
+        if config.deploy.target:
+            evidence_refs.append(f"deployment_target:{config.deploy.target}")
     return PipelineRunResult(
         status=run_status,
         reason=reason,
@@ -284,6 +305,7 @@ async def _result_from_build(
         evidence_refs=tuple(dict.fromkeys(evidence_refs)),
         external_id=external_id,
         external_url=external_url,
+        deployment_status=_deployment_status(deploy_state),
         metadata={
             "external_provider": DRONE_PROVIDER,
             "external_id": external_id,
@@ -292,6 +314,7 @@ async def _result_from_build(
             "drone_repo": config.repo_slug,
             "drone_status": drone_status,
             "drone_link": _string(build.get("link")),
+            **_deploy_metadata(config.deploy, deploy_state),
         },
     )
 
@@ -303,6 +326,7 @@ async def _stage_results(
     build_number: int,
     build: Mapping[str, Any],
     external_url: str,
+    deploy: PipelineDeploySpec | None,
 ) -> list[PipelineStageResult]:
     raw_stages = build.get("stages")
     if not isinstance(raw_stages, list) or not raw_stages:
@@ -315,6 +339,8 @@ async def _stage_results(
                 log_text="",
                 log_ref=f"drone://{config.repo_slug}/{build_number}/build",
                 external_url=external_url,
+                deploy=deploy,
+                step_image=None,
             )
         ]
 
@@ -323,6 +349,7 @@ async def _stage_results(
         if not isinstance(stage, Mapping):
             continue
         stage_name = _string(stage.get("name")) or f"stage-{len(output) + 1}"
+        stage_log_ref = _log_part(stage.get("number")) or stage_name
         raw_steps = stage.get("steps")
         if isinstance(raw_steps, list) and raw_steps:
             for step in raw_steps:
@@ -335,9 +362,11 @@ async def _stage_results(
                         config=config,
                         build_number=build_number,
                         stage_name=stage_name,
+                        stage_log_ref=stage_log_ref,
                         step_name=step_name,
                         step=step,
                         external_url=external_url,
+                        deploy=deploy,
                     )
                 )
         else:
@@ -350,6 +379,8 @@ async def _stage_results(
                     log_text="",
                     log_ref=f"drone://{config.repo_slug}/{build_number}/{stage_name}",
                     external_url=external_url,
+                    deploy=deploy,
+                    step_image=None,
                 )
             )
     return output
@@ -361,18 +392,21 @@ async def _step_result(
     config: DronePipelineConfig,
     build_number: int,
     stage_name: str,
+    stage_log_ref: str,
     step_name: str,
     step: Mapping[str, Any],
     external_url: str,
+    deploy: PipelineDeploySpec | None,
 ) -> PipelineStageResult:
     log_ref = f"drone://{config.repo_slug}/{build_number}/{stage_name}/{step_name}"
     try:
+        step_log_ref = _log_part(step.get("number")) or step_name
         logs = await client.get_logs(
             owner=config.owner,
             repo=config.repo,
             build_number=build_number,
-            stage=stage_name,
-            step=step_name,
+            stage=stage_log_ref,
+            step=step_log_ref,
         )
         log_text = _logs_text(logs)
     except Exception:
@@ -385,6 +419,8 @@ async def _step_result(
         log_text=log_text,
         log_ref=log_ref,
         external_url=external_url,
+        deploy=deploy,
+        step_image=_string(step.get("image")),
     )
 
 
@@ -397,10 +433,28 @@ def _pipeline_stage_result(
     log_text: str,
     log_ref: str,
     external_url: str,
+    deploy: PipelineDeploySpec | None = None,
+    step_image: str | None = None,
 ) -> PipelineStageResult:
     internal_status = _internal_status(status)
     stage_label = _stage_label(stage_name=stage_name, step_name=step_name)
     compact_log = _compact(log_text)
+    metadata = {
+        "external_provider": DRONE_PROVIDER,
+        "external_url": external_url,
+        "drone_stage": stage_name,
+        "drone_step": step_name,
+        "drone_status": status,
+    }
+    if step_image:
+        metadata["drone_image"] = step_image
+    if _is_deploy_stage(stage_name=stage_name, step_name=step_name, deploy=deploy):
+        metadata["drone_step_kind"] = "deploy"
+        if deploy is not None:
+            metadata["deploy_mode"] = deploy.mode
+            metadata["deploy_stage"] = deploy.stage
+            if deploy.target:
+                metadata["deploy_target"] = deploy.target
     return PipelineStageResult(
         stage=stage_label,
         status=internal_status,
@@ -410,13 +464,186 @@ def _pipeline_stage_result(
         stderr_preview=compact_log if internal_status == "failed" else "",
         log_ref=log_ref,
         artifact_refs=(f"drone_build:{external_url}",),
-        metadata={
-            "external_provider": DRONE_PROVIDER,
-            "external_url": external_url,
-            "drone_stage": stage_name,
-            "drone_step": step_name,
-            "drone_status": status,
-        },
+        metadata=metadata,
+    )
+
+
+def _add_deploy_params(params: dict[str, str], deploy: PipelineDeploySpec | None) -> None:
+    if deploy is None:
+        return
+    params.setdefault("MEMSTACK_DEPLOY_ENABLED", "true")
+    params.setdefault("MEMSTACK_DEPLOY_MODE", deploy.mode)
+    params.setdefault("MEMSTACK_DEPLOY_STAGE", deploy.stage)
+    if deploy.target:
+        params.setdefault("MEMSTACK_DEPLOY_TARGET", deploy.target)
+
+    if deploy.mode == "docker":
+        _add_prefixed_params(params, "MEMSTACK_DEPLOY_DOCKER", deploy.docker)
+    elif deploy.mode == "kubernetes":
+        _add_prefixed_params(params, "MEMSTACK_DEPLOY_KUBERNETES", deploy.kubernetes)
+    elif deploy.mode == "cli":
+        _add_prefixed_params(params, "MEMSTACK_DEPLOY_CLI", deploy.cli)
+
+
+def _add_prefixed_params(
+    params: dict[str, str],
+    prefix: str,
+    values: Mapping[str, Any],
+) -> None:
+    for key, value in values.items():
+        param_value = _param_value(value)
+        if param_value is None:
+            continue
+        safe_key = "".join(char if char.isalnum() else "_" for char in key.upper()).strip("_")
+        if safe_key:
+            params.setdefault(f"{prefix}_{safe_key}", param_value)
+
+
+def _param_value(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, list | tuple):
+        items = [str(item).strip() for item in value if str(item).strip()]
+        return ",".join(items) if items else None
+    return None
+
+
+def _deploy_state(
+    stage_results: list[PipelineStageResult],
+    deploy: PipelineDeploySpec | None,
+) -> str | None:
+    if deploy is None:
+        return None
+    deploy_results = [
+        result
+        for result in stage_results
+        if result.metadata.get("drone_step_kind") == "deploy"
+        or _is_deploy_label(result.stage, deploy=deploy)
+    ]
+    if deploy.mode in {"docker", "kubernetes"}:
+        semantic_results = [
+            result
+            for result in stage_results
+            if _deploy_result_matches_mode(result, deploy=deploy)
+        ]
+        for result in semantic_results:
+            if all(existing is not result for existing in deploy_results):
+                deploy_results.append(result)
+    if not deploy_results:
+        return "missing"
+    if not all(result.passed for result in deploy_results):
+        return "failed"
+    if not any(_deploy_result_matches_mode(result, deploy=deploy) for result in deploy_results):
+        return "invalid"
+    return "passed"
+
+
+def _deploy_failure_reason(
+    deploy: PipelineDeploySpec,
+    external_id: str,
+    deploy_state: str,
+) -> str:
+    if deploy_state == "missing":
+        return f"Drone build {external_id} did not report deploy stage {deploy.stage}"
+    if deploy_state == "invalid":
+        return (
+            f"Drone build {external_id} deploy stage {deploy.stage} did not implement "
+            f"{deploy.mode} deployment semantics"
+        )
+    return f"Drone build {external_id} deploy stage {deploy.stage} failed"
+
+
+def _deployment_status(deploy_state: str | None) -> str | None:
+    if deploy_state == "passed":
+        return "deployed"
+    if deploy_state in {"failed", "missing", "invalid"}:
+        return deploy_state
+    return None
+
+
+def _deploy_metadata(
+    deploy: PipelineDeploySpec | None,
+    deploy_state: str | None,
+) -> dict[str, Any]:
+    if deploy is None:
+        return {}
+    metadata: dict[str, Any] = {
+        "deploy_enabled": True,
+        "deploy_mode": deploy.mode,
+        "deploy_stage": deploy.stage,
+        "deployment_status": _deployment_status(deploy_state),
+    }
+    if deploy.target:
+        metadata["deploy_target"] = deploy.target
+    return metadata
+
+
+def _is_deploy_stage(
+    *,
+    stage_name: str,
+    step_name: str,
+    deploy: PipelineDeploySpec | None,
+) -> bool:
+    if deploy is None:
+        return False
+    return _is_deploy_label(stage_name, deploy=deploy) or _is_deploy_label(
+        step_name,
+        deploy=deploy,
+    )
+
+
+def _is_deploy_label(value: str, *, deploy: PipelineDeploySpec) -> bool:
+    normalized = value.strip().lower()
+    configured = deploy.stage.strip().lower()
+    return (
+        normalized == configured
+        or normalized.endswith(f"/{configured}")
+        or normalized.startswith("deploy-")
+        or normalized.endswith("-deploy")
+        or normalized == "deployment"
+    )
+
+
+def _deploy_result_matches_mode(
+    result: PipelineStageResult,
+    *,
+    deploy: PipelineDeploySpec,
+) -> bool:
+    if deploy.mode == "docker":
+        return _docker_deploy_evidence(result)
+    if deploy.mode == "kubernetes":
+        return _kubernetes_deploy_evidence(result)
+    return deploy.mode == "cli"
+
+
+def _docker_deploy_evidence(result: PipelineStageResult) -> bool:
+    image = str(result.metadata.get("drone_image") or "").lower()
+    if "plugins/docker" in image or image.endswith("/drone-docker"):
+        return True
+
+    output = _result_output(result).lower()
+    has_build = "docker build" in output or "docker buildx build" in output
+    has_push = "docker push" in output or ("docker buildx build" in output and "--push" in output)
+    return has_build and has_push
+
+
+def _kubernetes_deploy_evidence(result: PipelineStageResult) -> bool:
+    image = str(result.metadata.get("drone_image") or "").lower()
+    output = _result_output(result).lower()
+    return "kubectl" in image or "kubectl apply" in output or "helm upgrade" in output
+
+
+def _result_output(result: PipelineStageResult) -> str:
+    return "\n".join(
+        value
+        for value in (result.stdout_preview, result.stderr_preview)
+        if value
     )
 
 
@@ -493,6 +720,14 @@ def _stage_label(*, stage_name: str, step_name: str) -> str:
 
 def _string(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _log_part(value: object) -> str | None:
+    if isinstance(value, int):
+        return str(value) if value > 0 else None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _string_mapping(value: object) -> dict[str, str]:

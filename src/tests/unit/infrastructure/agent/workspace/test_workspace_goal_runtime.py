@@ -622,6 +622,108 @@ class TestWorkspaceGoalRuntime:
                 == "conv-attempt-1"
             )
 
+    async def test_apply_worker_report_accepts_current_attempt_worker_after_assignee_drift(
+        self,
+    ) -> None:
+        task = MagicMock()
+        task.id = "child-drift-1"
+        task.workspace_id = "ws-1"
+        task.assignee_agent_id = "verifier-agent"
+        task.status = MagicMock(value="in_progress")
+        task.metadata = {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "derived_from_internal_plan_step": "drift-step",
+            "current_attempt_id": "attempt-1",
+            "current_attempt_worker_agent_id": "worker-a",
+            "execution_state": {
+                "phase": "in_progress",
+                "last_agent_reason": "workspace_plan.dispatch_execution_task",
+                "last_agent_action": "start",
+                "updated_by_actor_type": "agent",
+                "updated_by_actor_id": "verifier-agent",
+                "updated_at": "2026-04-16T03:00:00Z",
+            },
+            "evidence_refs": [],
+        }
+
+        session = AsyncMock()
+
+        @asynccontextmanager
+        async def fake_session_factory():
+            yield session
+
+        with (
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
+                fake_session_factory,
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"),
+            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"),
+            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"),
+            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
+            ) as task_service_cls,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime._build_attempt_service"
+            ) as attempt_service_builder,
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskEventPublisher"
+            ) as publisher_cls,
+        ):
+            task_service = task_service_cls.return_value
+            task_service.get_task = AsyncMock(return_value=task)
+            attempt_service = MagicMock()
+            running_attempt = _attempt(status="running")
+            running_attempt.workspace_task_id = "child-drift-1"
+            running_attempt.worker_agent_id = "worker-a"
+            attempt_service.get_attempt = AsyncMock(return_value=running_attempt)
+            attempt_service.record_candidate_output = AsyncMock(
+                return_value=_attempt(status="awaiting_leader_adjudication")
+            )
+            attempt_service_builder.return_value = attempt_service
+            publisher = publisher_cls.return_value
+            publisher.publish_pending_events = AsyncMock(return_value=None)
+
+            with (
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.update_task",
+                    new=AsyncMock(return_value=task),
+                ) as update_mock,
+                patch(
+                    "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskCommandService.complete_task",
+                    new=AsyncMock(return_value=task),
+                ),
+            ):
+                result = await apply_workspace_worker_report(
+                    workspace_id="ws-1",
+                    root_goal_task_id="root-1",
+                    task_id="child-drift-1",
+                    attempt_id="attempt-1",
+                    conversation_id="conv-attempt-1",
+                    actor_user_id="u-1",
+                    worker_agent_id="worker-a",
+                    report_type="completed",
+                    summary="current attempt completed",
+                    artifacts=["artifact:trace-1"],
+                    verifications=["test_run:npm test"],
+                    leader_agent_id="leader-agent",
+                )
+
+        assert result is task
+        metadata = update_mock.await_args.kwargs["metadata"]
+        assert metadata["last_worker_report_attempt_id"] == "attempt-1"
+        assert metadata["execution_state"]["updated_by_actor_id"] == "worker-a"
+        attempt_service.record_candidate_output.assert_awaited_once()
+        session.commit.assert_awaited_once()
+
     async def test_apply_worker_report_is_idempotent_for_duplicate_terminal_reports(self) -> None:
         task = MagicMock()
         task.id = "child-dup-1"

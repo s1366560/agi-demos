@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Protocol, cast
 
@@ -443,6 +444,8 @@ def _ensure_repair_node_for_verification_failure(
 
 def _feedback_requests_upstream_plan_correction(node: PlanNode) -> bool:
     for item in _verification_feedback_items(node):
+        if _feedback_item_is_sandbox_docker_runtime_gap(item):
+            continue
         if item.get("target_layer") not in {"planner", "reviewer", "verifier_policy"}:
             continue
         if item.get("recommended_action") in {
@@ -452,6 +455,31 @@ def _feedback_requests_upstream_plan_correction(node: PlanNode) -> bool:
         }:
             return True
     return False
+
+
+def _feedback_item_is_sandbox_docker_runtime_gap(item: Mapping[str, object]) -> bool:
+    markers = [
+        item.get("failure_signature"),
+        item.get("summary"),
+        item.get("recommended_action"),
+    ]
+    raw_refs = item.get("evidence_refs")
+    if isinstance(raw_refs, list):
+        markers.extend(ref for ref in raw_refs if isinstance(ref, str))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if "docker-runtime-unavailable-sandbox" in normalized:
+        return True
+    return "docker runtime" in normalized and "sandbox" in normalized and any(
+        token in normalized
+        for token in (
+            "not available",
+            "unavailable",
+            "absent",
+            "no socket",
+            "permanent",
+            "cannot be executed",
+        )
+    )
 
 
 def _verification_feedback_items(node: PlanNode) -> list[dict[str, object]]:

@@ -13,7 +13,12 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 import src.infrastructure.agent.workspace_plan.outbox_handlers as outbox_handlers
 from src.domain.model.workspace.workspace_task import WorkspaceTask
@@ -33,6 +38,7 @@ from src.domain.model.workspace_plan import (
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentDefinitionModel,
+    Base,
     PlanModel,
     Project as DBProject,
     Tenant as DBTenant,
@@ -101,6 +107,11 @@ from src.infrastructure.agent.workspace_plan.outbox_worker import (
     WorkspacePlanOutboxWorker,
     WorkspacePlanSessionFactory,
 )
+from src.infrastructure.agent.workspace_plan.pipeline import (
+    DRONE_PROVIDER,
+    PipelineContractSpec,
+    PipelineDeploySpec,
+)
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 
@@ -114,6 +125,31 @@ async def _seed_plan(db_session: AsyncSession, workspace_id: str, plan_id: str) 
         )
     )
     await db_session.flush()
+
+
+async def _file_backed_outbox_session_maker(
+    tmp_path: Path,
+) -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'outbox-worker.db'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    return engine, async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def _seed_worker_launch_outbox_item(
+    session_maker: async_sessionmaker[AsyncSession],
+) -> str:
+    async with session_maker() as seed_session:
+        await _seed_workspace_and_plan(seed_session)
+        repo = SqlWorkspacePlanOutboxRepository(seed_session)
+        item = await repo.enqueue(
+            plan_id="worker-plan-1",
+            workspace_id="workspace-1",
+            event_type="worker_launch",
+            max_attempts=2,
+        )
+        await seed_session.commit()
+        return item.id
 
 
 async def _seed_workspace_and_plan(db_session: AsyncSession) -> None:
@@ -398,6 +434,97 @@ async def test_verification_judge_retry_projection_keeps_attempt_non_terminal(
     assert task.metadata_json["last_attempt_status"] == "awaiting_plan_verification"
     assert task.metadata_json["durable_plan_verdict"] == "verification_retry_scheduled"
     assert task.metadata_json[CURRENT_ATTEMPT_ID] == "attempt-a"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_required_verification_waits_for_pipeline_before_accepting(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_plan_verification",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Implementation completed.",
+            candidate_verifications_json=["commit_ref:abc1234", "test_run:npm run build"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Implement feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={"pipeline_required": True},
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": True,
+            "hard_fail": False,
+            "summary": "verified before pipeline",
+            "results": [
+                {
+                    "kind": "custom",
+                    "required": True,
+                    "passed": True,
+                    "confidence": 1.0,
+                    "message": "build passed",
+                    "evidence": [
+                        {"kind": "artifact", "ref": "commit_ref:abc1234"},
+                        {"kind": "log", "ref": "test_run:npm run build"},
+                    ],
+                }
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "awaiting_leader_adjudication"
+    assert attempt.completed_at is None
+    assert attempt.adjudication_reason == "pipeline_gate_pending"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "in_progress"
+    assert task.metadata_json["durable_plan_verdict"] == "pipeline_pending"
+    assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
+    assert task.metadata_json["pipeline_candidate_commit_ref"] == "abc1234"
 
 
 @pytest.mark.asyncio
@@ -840,6 +967,56 @@ def test_worktree_setup_command_initializes_greenfield_code_root(tmp_path: Path)
     assert "git_head=" in result.stdout
 
 
+def test_worktree_setup_command_updates_reused_worktree_to_latest_base(
+    tmp_path: Path,
+) -> None:
+    sandbox_code_root = tmp_path / "repo"
+    worktree_path = tmp_path / ".memstack" / "worktrees" / "attempt-1"
+
+    command = _worktree_setup_command(
+        sandbox_code_root=str(sandbox_code_root),
+        worktree_path=str(worktree_path),
+        branch_name="workspace/node-1-attempt-1",
+        base_ref="HEAD",
+    )
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+
+    (sandbox_code_root / "SPRINT.md").write_text("plan\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(sandbox_code_root), "add", "SPRINT.md"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(sandbox_code_root), "commit", "-m", "docs: add sprint plan"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (worktree_path / "local-note.txt").write_text("keep me\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "base_merged=" in result.stdout
+    assert (worktree_path / "SPRINT.md").read_text(encoding="utf-8") == "plan\n"
+    assert (worktree_path / "local-note.txt").read_text(encoding="utf-8") == "keep me\n"
+
+
 def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
     command = _worktree_setup_command(
         sandbox_code_root="/workspace/my-evo",
@@ -878,6 +1055,101 @@ def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
     assert "git merge --no-edit abc1234" in command
     assert 'echo "reason=merge_failed_aborted"' in command
     assert "git merge --abort" in command
+
+
+def test_drone_contract_suppresses_deploy_before_deploy_phase() -> None:
+    contract = PipelineContractSpec(
+        provider=DRONE_PROVIDER,
+        deploy=PipelineDeploySpec(enabled=True, mode="docker"),
+        provider_config={"repo": "octo/hello"},
+    )
+    node = PlanNode(
+        id="node-implement",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Implement feature",
+        metadata={"iteration_phase": "implement"},
+    )
+
+    scoped = outbox_handlers._pipeline_contract_for_node_phase(contract, node=node)
+
+    assert scoped.deploy is None
+    assert scoped.provider_config["deploy_suppressed_for_phase"] == "implement"
+
+
+def test_drone_contract_keeps_deploy_for_deploy_phase() -> None:
+    contract = PipelineContractSpec(
+        provider=DRONE_PROVIDER,
+        deploy=PipelineDeploySpec(enabled=True, mode="docker"),
+        provider_config={"repo": "octo/hello"},
+    )
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        metadata={"iteration_phase": "deploy"},
+    )
+
+    scoped = outbox_handlers._pipeline_contract_for_node_phase(contract, node=node)
+
+    assert scoped.deploy is contract.deploy
+    assert "deploy_suppressed_for_phase" not in scoped.provider_config
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_fast_forwards_and_pushes(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    git(repo, "add", "README.md")
+    git(repo, "commit", "-m", "base")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+
+    (repo / "README.md").write_text("candidate\n", encoding="utf-8")
+    git(repo, "commit", "-am", "candidate")
+    candidate_commit = git(repo, "rev-parse", "HEAD")
+    git(repo, "reset", "--hard", "HEAD~1")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=candidate_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish == {
+        "status": "published",
+        "reason": None,
+        "published_commit": candidate_commit,
+    }
+    assert git(repo, "rev-parse", "HEAD") == candidate_commit
+    assert git(remote, "rev-parse", "refs/heads/main") == candidate_commit
 
 
 def test_commit_ref_token_accepts_hash_prefix_and_rejects_notes() -> None:
@@ -1012,6 +1284,141 @@ async def test_accepted_terminal_attempt_integrates_worktree_commit(
     assert event.payload_json["commit_ref"] == "abc1234"
     assert event.payload_json["worktree_path"] == (
         "/workspace/.memstack/worktrees/attempt-integrate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_accepted_terminal_attempt_uses_feature_checkpoint_commit_ref(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    task = WorkspaceTaskModel(
+        id="task-checkpoint-integrate-1",
+        workspace_id="workspace-1",
+        title="Integrate accepted checkpoint commit",
+        description="Project accepted checkpoint commit to the main checkout.",
+        created_by="worker-user-1",
+        status="done",
+        priority=0,
+        metadata_json={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+        },
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-checkpoint-integrate",
+        workspace_task_id=task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-checkpoint-integrate",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary=None,
+        candidate_artifacts_json=[],
+        candidate_verifications_json=[],
+    )
+    db_session.add_all([task, attempt])
+    await db_session.flush()
+
+    commands: list[str] = []
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            assert timeout == 120
+            commands.append(command)
+            return {"exit_code": 0, "stdout": "status=merged\ngit_head=def5678\n", "stderr": ""}
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    node = PlanNode(
+        id="node-checkpoint-integrate",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Integrate accepted checkpoint commit",
+        workspace_task_id=task.id,
+        current_attempt_id=attempt.id,
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-checkpoint-integrate",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-checkpoint-integrate",
+            branch_name="workspace/node-checkpoint-integrate-attempt",
+            commit_ref="abc1234",
+        ),
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": attempt.id,
+        },
+    )
+
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+    )
+
+    result = await outbox_handlers._project_accepted_terminal_attempt_to_task(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+        summary="accepted from recovery",
+        now=datetime.now(UTC),
+    )
+
+    assert result["worktree_integration_status"] == "merged"
+    assert result["worktree_integration_commit_ref"] == "abc1234"
+    assert commands
+    assert "git merge --no-edit abc1234" in commands[0]
+
+
+@pytest.mark.asyncio
+async def test_projection_incomplete_when_attempt_commit_ref_was_not_projected(
+    db_session: AsyncSession,
+) -> None:
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-missing-node-commit-1",
+        workspace_task_id="task-missing-node-commit-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-missing-node-commit",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=["commit_ref:abc1234"],
+        candidate_verifications_json=["preflight:git-status"],
+    )
+    node = PlanNode(
+        id="node-missing-node-commit",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Accepted attempt with unprojected commit",
+        workspace_task_id=attempt.workspace_task_id,
+        current_attempt_id=attempt.id,
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": attempt.id,
+        },
+    )
+
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
     )
 
 
@@ -1496,73 +1903,65 @@ async def test_run_once_releases_claimed_item_when_cancelled(
 
 @pytest.mark.asyncio
 async def test_poll_loop_continues_after_claimed_item_cancelled(
-    test_engine,
+    tmp_path: Path,
 ) -> None:
-    session_maker = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_maker() as seed_session:
-        await _seed_workspace_and_plan(seed_session)
-        repo = SqlWorkspacePlanOutboxRepository(seed_session)
-        item = await repo.enqueue(
-            plan_id="worker-plan-1",
-            workspace_id="workspace-1",
-            event_type="worker_launch",
-            max_attempts=2,
-        )
-        item_id = item.id
-        await seed_session.commit()
-
-    calls = 0
-
-    @asynccontextmanager
-    async def factory() -> AsyncIterator[AsyncSession]:
-        async with session_maker() as session:
-            try:
-                yield session
-            except BaseException:
-                await session.rollback()
-                raise
-
-    async def flaky_handler(
-        _outbox_item: WorkspacePlanOutboxModel,
-        _session: AsyncSession,
-    ) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise asyncio.CancelledError
-
-    async def wait_for_completed() -> None:
-        deadline = asyncio.get_running_loop().time() + 2
-        while asyncio.get_running_loop().time() < deadline:
-            async with session_maker() as inspect_session:
-                inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
-                loaded = await inspect_repo.get_by_id(item_id)
-            if loaded is not None and loaded.status == "completed":
-                return
-            await asyncio.sleep(0.01)
-        raise AssertionError("outbox item was not retried after cancellation")
-
-    worker = WorkspacePlanOutboxWorker(
-        session_factory=factory,
-        handlers={"worker_launch": flaky_handler},
-        worker_id="worker-a",
-        poll_interval_seconds=0.01,
-    )
-
-    worker.start()
+    engine, session_maker = await _file_backed_outbox_session_maker(tmp_path)
     try:
-        await wait_for_completed()
-    finally:
-        await worker.stop()
+        item_id = await _seed_worker_launch_outbox_item(session_maker)
+        calls = 0
 
-    async with session_maker() as inspect_session:
-        inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
-        loaded = await inspect_repo.get_by_id(item_id)
-    assert loaded is not None
-    assert loaded.status == "completed"
-    assert loaded.attempt_count == 1
-    assert loaded.lease_owner is None
-    assert calls == 2
+        @asynccontextmanager
+        async def factory() -> AsyncIterator[AsyncSession]:
+            async with session_maker() as session:
+                try:
+                    yield session
+                except BaseException:
+                    await session.rollback()
+                    raise
+
+        async def flaky_handler(
+            _outbox_item: WorkspacePlanOutboxModel,
+            _session: AsyncSession,
+        ) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise asyncio.CancelledError
+
+        async def wait_for_completed() -> None:
+            deadline = asyncio.get_running_loop().time() + 2
+            while asyncio.get_running_loop().time() < deadline:
+                async with session_maker() as inspect_session:
+                    inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+                    loaded = await inspect_repo.get_by_id(item_id)
+                if loaded is not None and loaded.status == "completed":
+                    return
+                await asyncio.sleep(0.01)
+            raise AssertionError("outbox item was not retried after cancellation")
+
+        worker = WorkspacePlanOutboxWorker(
+            session_factory=factory,
+            handlers={"worker_launch": flaky_handler},
+            worker_id="worker-a",
+            poll_interval_seconds=0.01,
+        )
+
+        worker.start()
+        try:
+            await wait_for_completed()
+        finally:
+            await worker.stop()
+
+        async with session_maker() as inspect_session:
+            inspect_repo = SqlWorkspacePlanOutboxRepository(inspect_session)
+            loaded = await inspect_repo.get_by_id(item_id)
+        assert loaded is not None
+        assert loaded.status == "completed"
+        assert loaded.attempt_count == 1
+        assert loaded.lease_owner is None
+        assert calls == 2
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -3163,6 +3562,141 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
     attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, leaf.current_attempt_id)
     assert attempt is not None
     assert attempt.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_after_operator_replan_cancels_stale_active_attempt(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a redispatched durable plan",
+        start_supervisor=False,
+    )
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **_kwargs: None,
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+            ),
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    assert await worker.run_once() == 1
+    db_session.expire_all()
+    dispatched = await SqlPlanRepository(db_session).get(plan.id)
+    assert dispatched is not None
+    leaf = dispatched.leaf_tasks()[0]
+    assert leaf.current_attempt_id is not None
+    previous_attempt_id = leaf.current_attempt_id
+    assert leaf.workspace_task_id is not None
+    previous_attempt = await db_session.get(
+        WorkspaceTaskSessionAttemptModel,
+        previous_attempt_id,
+    )
+    assert previous_attempt is not None
+    assert previous_attempt.status == "running"
+
+    dispatched.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            assignee_agent_id=None,
+            current_attempt_id=None,
+            metadata={
+                **dict(leaf.metadata or {}),
+                "operator_action": {
+                    "action": "operator_replan_requested",
+                    "actor_id": "operator",
+                    "reason": "retry after platform fix",
+                    "created_at": datetime.now(UTC).isoformat(),
+                },
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(dispatched)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "root_task_id": "root-task-1",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+    )
+    await db_session.commit()
+
+    assert await worker.run_once() == 1
+    db_session.expire_all()
+    redispatched = await SqlPlanRepository(db_session).get(plan.id)
+    assert redispatched is not None
+    redispatched_leaf = redispatched.leaf_tasks()[0]
+    assert redispatched_leaf.current_attempt_id is not None
+    assert redispatched_leaf.current_attempt_id != previous_attempt_id
+    assert redispatched_leaf.execution is TaskExecution.DISPATCHED
+
+    old_attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, previous_attempt_id)
+    assert old_attempt is not None
+    assert old_attempt.status == "cancelled"
+    assert old_attempt.adjudication_reason == "plan_node_reset_superseded"
+
+    new_attempt = await db_session.get(
+        WorkspaceTaskSessionAttemptModel,
+        redispatched_leaf.current_attempt_id,
+    )
+    assert new_attempt is not None
+    assert new_attempt.status == "running"
+    assert new_attempt.attempt_number == 2
+
+    projected_task = await SqlWorkspaceTaskRepository(db_session).find_by_id(
+        redispatched_leaf.workspace_task_id or ""
+    )
+    assert projected_task is not None
+    assert projected_task.metadata[CURRENT_ATTEMPT_ID] == redispatched_leaf.current_attempt_id
+    assert projected_task.metadata["launch_state"] == "scheduled"
+
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel)
+                .where(WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT)
+                .order_by(WorkspacePlanOutboxModel.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [job.status for job in launch_jobs] == ["completed", "pending"]
+    assert launch_jobs[-1].payload_json["attempt_id"] == redispatched_leaf.current_attempt_id
 
 
 @pytest.mark.asyncio

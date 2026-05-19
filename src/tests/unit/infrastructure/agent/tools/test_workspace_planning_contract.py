@@ -197,3 +197,55 @@ async def test_valid_delivery_contract_persists_metadata_and_publishes(
     assert delivery["contract_confidence"] == 0.93
     assert delivery["services"][0]["service_id"] == "frontend"
     publish.assert_awaited_once()
+
+
+async def test_planner_contract_preserves_existing_drone_provider_config(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace(db_session)
+    workspace = await db_session.get(WorkspaceModel, "ws-planner-1")
+    assert workspace is not None
+    workspace.metadata_json = {
+        "delivery_cicd": {
+            "provider": "drone",
+            "code_root": "/workspace/app",
+            "auto_deploy": True,
+            "drone": {
+                "repo": "memstack/demo",
+                "branch": "main",
+                "server_url_env": "DRONE_SERVER_URL",
+                "token_env": "DRONE_TOKEN",
+            },
+        }
+    }
+    await db_session.flush()
+    monkeypatch.setattr(planning_contract, "_publish_workspace_updated_event", AsyncMock())
+
+    with _patch_session_factory(db_session):
+        result = await planning_contract.workspace_submit_planning_contract_tool.execute(
+            _ctx(),
+            task_graph=_task_graph(),
+            delivery_cicd={
+                "provider": "drone",
+                "auto_deploy": True,
+                "services": _delivery_cicd()["services"],
+            },
+            reasoning="Read package.json and existing deployment config.",
+            evidence_refs=["read:package.json", "workspace_metadata.delivery_cicd:drone"],
+            confidence=0.88,
+        )
+
+    assert result.is_error is False
+    workspace = await db_session.get(WorkspaceModel, "ws-planner-1")
+    assert workspace is not None
+    delivery = dict((workspace.metadata_json or {}).get("delivery_cicd") or {})
+    assert delivery["provider"] == "drone"
+    assert delivery["contract_source"] == "planner_agent_code_analysis"
+    assert delivery["services"][0]["service_id"] == "frontend"
+    assert delivery["drone"] == {
+        "repo": "memstack/demo",
+        "branch": "main",
+        "server_url_env": "DRONE_SERVER_URL",
+        "token_env": "DRONE_TOKEN",
+    }

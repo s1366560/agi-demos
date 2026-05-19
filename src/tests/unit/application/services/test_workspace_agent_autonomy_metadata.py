@@ -217,6 +217,37 @@ def test_execution_task_metadata_accepts_verification_integrity_policy() -> None
 
 
 @pytest.mark.unit
+def test_execution_task_metadata_accepts_pipeline_gate_projection_fields() -> None:
+    metadata = merge_validated_metadata(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "lineage_source": "agent",
+            "pipeline_gate_status": "requested",
+            "pipeline_candidate_commit_ref": "abc1234",
+        },
+        {
+            "current_attempt_id": "attempt-2",
+            "pipeline_status": "success",
+            "pipeline_gate_status": "success",
+            "pipeline_run_id": "run-1",
+            "pipeline_evidence_refs": ["ci_pipeline:passed", "pipeline_run:success:run-1"],
+        },
+    )
+
+    assert metadata["current_attempt_id"] == "attempt-2"
+    assert metadata["pipeline_status"] == "success"
+    assert metadata["pipeline_gate_status"] == "success"
+    assert metadata["pipeline_run_id"] == "run-1"
+    assert metadata["pipeline_candidate_commit_ref"] == "abc1234"
+    assert metadata["pipeline_evidence_refs"] == [
+        "ci_pipeline:passed",
+        "pipeline_run:success:run-1",
+    ]
+
+
+@pytest.mark.unit
 def test_merge_execution_task_metadata_accepts_verification_integrity_patch() -> None:
     metadata = merge_validated_metadata(
         {

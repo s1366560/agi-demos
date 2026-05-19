@@ -39,6 +39,33 @@ Programming workspaces can use Drone through `metadata.delivery_cicd`:
       "server_url_env": "DRONE_SERVER_URL",
       "token_env": "DRONE_TOKEN",
       "poll_interval_seconds": 5,
+      "deploy": {
+        "enabled": false,
+        "mode": "cli",
+        "stage": "deploy",
+        "required": true,
+        "target": "staging",
+        "docker": {
+          "registry": "registry.example.com",
+          "image": "registry.example.com/memstack/my-app",
+          "context": ".",
+          "dockerfile": "Dockerfile",
+          "tags": ["latest"],
+          "username_secret": "docker_username",
+          "password_secret": "docker_password"
+        },
+        "kubernetes": {
+          "namespace": "default",
+          "manifest_paths": ["k8s/*.yaml"],
+          "kubeconfig_secret": "kubeconfig",
+          "context": "staging",
+          "kubectl_image": "bitnami/kubectl:latest"
+        },
+        "cli": {
+          "image": "alpine:3.20",
+          "commands": ["./scripts/deploy.sh"]
+        }
+      },
       "source_control": {
         "provider": "github",
         "repo": "memstack/my-app",
@@ -88,6 +115,11 @@ Programming workspaces can use Drone through `metadata.delivery_cicd`:
 - `server_url` can be set directly, but the workspace default should use `server_url_env`.
 - `token_env` defaults to `DRONE_TOKEN`.
 - `branch`, `commit`, `target`, `params`, `build_params`, and `poll_interval_seconds` are optional.
+- `deploy` can be declared under `delivery_cicd.drone.deploy` or `delivery_cicd.deploy`.
+- `deploy.mode` supports `docker`, `kubernetes`, and `cli`; unsupported values normalize to `cli`.
+- When `deploy.enabled=true`, the Drone provider passes non-secret deploy metadata as build params such as `MEMSTACK_DEPLOY_MODE`, `MEMSTACK_DEPLOY_STAGE`, and `MEMSTACK_DEPLOY_TARGET`.
+- A configured deploy run must report a matching Drone stage/step (default `deploy`, also matches common names like `deploy-docker`) or the workspace pipeline result is marked failed with `deployment_status=missing`.
+- Deploy secret fields such as `username_secret`, `password_secret`, and `kubeconfig_secret` are secret names only. The actual values must live in Drone secrets or environment-backed secret storage.
 - `environment.*` is workspace configuration metadata for API/server/runner setup; the current provider reads `server_url_env` and `token_env` for API access.
 - `metadata.source_control` is the workspace-level source-of-truth for GitHub or GitLab.
 - `metadata.delivery_cicd.drone.source_control` mirrors the workspace SCM config so Drone agents can configure `.drone.yml`, repository activation, and provider-specific server settings from one shape.

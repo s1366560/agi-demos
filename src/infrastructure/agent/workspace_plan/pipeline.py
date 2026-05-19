@@ -18,9 +18,12 @@ from typing import Any, Protocol
 SANDBOX_NATIVE_PROVIDER = "sandbox_native"
 SANDBOX_NATIVE_PROVIDER_ALIASES = frozenset({SANDBOX_NATIVE_PROVIDER, "memstack-sandbox"})
 DRONE_PROVIDER = "drone"
+DRONE_DEPLOY_MODES = frozenset({"docker", "kubernetes", "cli"})
 PIPELINE_EVIDENCE_KEY = "pipeline_evidence_refs"
 DEFAULT_PIPELINE_TIMEOUT_SECONDS = 600
 DEFAULT_PREVIEW_PORT = 3000
+DEFAULT_DRONE_DEPLOY_MODE = "cli"
+DEFAULT_DRONE_DEPLOY_STAGE = "deploy"
 _EXIT_MARKER = "__MEMSTACK_PIPELINE_EXIT_CODE__="
 _EXIT_RE = re.compile(r"__MEMSTACK_PIPELINE_EXIT_CODE__=(\d+)")
 
@@ -94,6 +97,35 @@ class PipelineServiceSpec:
 
 
 @dataclass(frozen=True)
+class PipelineDeploySpec:
+    enabled: bool = False
+    mode: str = DEFAULT_DRONE_DEPLOY_MODE
+    stage: str = DEFAULT_DRONE_DEPLOY_STAGE
+    required: bool = True
+    target: str | None = None
+    docker: dict[str, Any] = field(default_factory=dict)
+    kubernetes: dict[str, Any] = field(default_factory=dict)
+    cli: dict[str, Any] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "enabled": self.enabled,
+            "mode": self.mode,
+            "stage": self.stage,
+            "required": self.required,
+        }
+        if self.target:
+            payload["target"] = self.target
+        if self.docker:
+            payload["docker"] = dict(self.docker)
+        if self.kubernetes:
+            payload["kubernetes"] = dict(self.kubernetes)
+        if self.cli:
+            payload["cli"] = dict(self.cli)
+        return payload
+
+
+@dataclass(frozen=True)
 class PipelineContractSpec:
     provider: str = SANDBOX_NATIVE_PROVIDER
     code_root: str | None = None
@@ -108,6 +140,7 @@ class PipelineContractSpec:
     agent_managed: bool = True
     contract_source: str = "metadata"
     contract_confidence: float = 1.0
+    deploy: PipelineDeploySpec | None = None
     provider_config: dict[str, Any] = field(default_factory=dict)
 
     def commands_json(self) -> list[dict[str, Any]]:
@@ -181,6 +214,7 @@ def build_pipeline_contract_from_metadata(
     )
     contract_confidence = _confidence(config.get("contract_confidence"), fallback=1.0)
     provider_config = _provider_config(config, provider)
+    deploy = _configured_deploy_spec(config, provider_config)
     services = _configured_service_specs(
         config,
         preview_port=preview_port,
@@ -225,6 +259,7 @@ def build_pipeline_contract_from_metadata(
         agent_managed=agent_managed,
         contract_source=contract_source,
         contract_confidence=contract_confidence,
+        deploy=deploy,
         provider_config=provider_config,
     )
 
@@ -253,10 +288,45 @@ def _provider_config(config: dict[str, Any], provider: str) -> dict[str, Any]:
         "server_url_env",
         "token_env",
         "poll_interval_seconds",
+        "deploy",
     ):
         if key in config and key not in output:
             output[key] = config[key]
     return output
+
+
+def _configured_deploy_spec(
+    config: dict[str, Any],
+    provider_config: dict[str, Any],
+) -> PipelineDeploySpec | None:
+    raw = config.get("deploy")
+    if not isinstance(raw, Mapping):
+        raw = provider_config.get("deploy")
+    if not isinstance(raw, Mapping):
+        mode = _string(config.get("deploy_mode") or provider_config.get("deploy_mode"))
+        if not mode:
+            return None
+        raw = {"mode": mode, "enabled": True}
+
+    raw_deploy = dict(raw)
+    mode = _normalize_deploy_mode(
+        _string(raw_deploy.get("mode") or raw_deploy.get("type") or raw_deploy.get("pipeline_type"))
+    )
+    enabled = _bool(raw_deploy.get("enabled"), default=False)
+    stage = _safe_stage_name(_string(raw_deploy.get("stage") or raw_deploy.get("step")))
+    target = _string(
+        raw_deploy.get("target") or config.get("target") or provider_config.get("target")
+    )
+    return PipelineDeploySpec(
+        enabled=enabled,
+        mode=mode,
+        stage=stage,
+        required=_bool(raw_deploy.get("required"), default=True),
+        target=target,
+        docker=_json_mapping(raw_deploy.get("docker")),
+        kubernetes=_json_mapping(raw_deploy.get("kubernetes")),
+        cli=_json_mapping(raw_deploy.get("cli")),
+    )
 
 
 class SandboxNativePipelineProvider:
@@ -382,6 +452,7 @@ def _configured_stage_specs(
                     command=command,
                     required=_bool(item.get("required"), default=True),
                     timeout_seconds=_positive_int(item.get("timeout_seconds"), default_timeout),
+                    service_id=_string(item.get("service_id")),
                 )
             )
         return output
@@ -685,6 +756,22 @@ def _normalize_provider(provider: str) -> str:
     return normalized
 
 
+def _normalize_deploy_mode(value: str | None) -> str:
+    normalized = (value or DEFAULT_DRONE_DEPLOY_MODE).strip().lower()
+    return normalized if normalized in DRONE_DEPLOY_MODES else DEFAULT_DRONE_DEPLOY_MODE
+
+
+def _safe_stage_name(value: str | None) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9_.:-]+", "-", (value or DEFAULT_DRONE_DEPLOY_STAGE).strip())
+    return normalized.strip("-") or DEFAULT_DRONE_DEPLOY_STAGE
+
+
+def _json_mapping(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): item for key, item in value.items() if isinstance(key, str)}
+
+
 def _normalize_path(value: str) -> str:
     normalized = value.strip() or "/"
     if normalized.startswith("http://") or normalized.startswith("https://"):
@@ -735,10 +822,12 @@ def _compact(value: str, *, limit: int = 4000) -> str:
 
 
 __all__ = [
+    "DRONE_DEPLOY_MODES",
     "DRONE_PROVIDER",
     "PIPELINE_EVIDENCE_KEY",
     "SANDBOX_NATIVE_PROVIDER",
     "PipelineContractSpec",
+    "PipelineDeploySpec",
     "PipelineRunResult",
     "PipelineServiceSpec",
     "PipelineStageResult",

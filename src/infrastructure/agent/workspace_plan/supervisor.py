@@ -31,6 +31,7 @@ from typing import Any
 from src.domain.model.workspace_plan import (
     Capability,
     CriterionKind,
+    CriterionResult,
     FeatureCheckpoint,
     GoalProgress,
     Plan,
@@ -237,6 +238,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         nodes_done = 0
         nodes_blocked = 0
 
+        reopened_pipeline_nodes = _reopen_done_nodes_with_failed_pipeline(plan)
+        for node in reopened_pipeline_nodes:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                node,
+                "pipeline_failed_done_node_reopened",
+                {
+                    "attempt_id": node.current_attempt_id,
+                    "pipeline_status": node.metadata.get("pipeline_status"),
+                    "pipeline_run_id": node.metadata.get("pipeline_run_id"),
+                    "summary": "done node reopened because required pipeline failed",
+                },
+            )
+
         # --- 1. verify any REPORTED nodes ------------------------------
         reported = [n for n in plan.nodes.values() if n.execution is TaskExecution.REPORTED]
         for node in reported:
@@ -270,7 +286,12 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 verifies_ran += 1
                 if report.passed:
                     if _should_request_pipeline_after_verification(node, ctx.artifacts):
-                        pipeline_node = _node_with_pipeline_request(node, report)
+                        evidenced_node = _node_with_verification_evidence(
+                            node,
+                            report,
+                            artifacts=ctx.artifacts,
+                        )
+                        pipeline_node = _node_with_pipeline_request(evidenced_node, report)
                         plan.replace_node(pipeline_node)
                         await self._emit_event(
                             errors,
@@ -337,7 +358,12 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     )
                     nodes_done += 1
                 elif _should_request_pipeline_from_report(node, report):
-                    pipeline_node = _node_with_pipeline_request(node, report)
+                    evidenced_node = _node_with_verification_evidence(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
+                    pipeline_node = _node_with_pipeline_request(evidenced_node, report)
                     plan.replace_node(pipeline_node)
                     await self._emit_event(
                         errors,
@@ -349,6 +375,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                             "summary": report.summary(),
                             "reason": "pipeline_criterion_missing",
                         },
+                    )
+                elif _hard_fail_report_requests_infrastructure_repair(report):
+                    evidenced_node = _node_with_retry_infrastructure_repair_request(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
+                    plan.replace_node(evidenced_node)
+                    await self._planner.replan(
+                        plan,
+                        ReplanTrigger(
+                            kind="verification_failed",
+                            node_id=evidenced_node.id,
+                            detail=report.summary(),
+                        ),
                     )
                 elif report.hard_fail:
                     failed_node = _node_with_verification_evidence(
@@ -379,6 +420,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                             "retry_not_before": retry_node.metadata.get("retry_not_before"),
                             "retry_verification_only": True,
                         },
+                    )
+                elif _retryable_infrastructure_report_requests_repair(report):
+                    evidenced_node = _node_with_retry_infrastructure_repair_request(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
+                    plan.replace_node(evidenced_node)
+                    await self._planner.replan(
+                        plan,
+                        ReplanTrigger(
+                            kind="verification_failed",
+                            node_id=evidenced_node.id,
+                            detail=report.summary(),
+                        ),
                     )
                 elif _is_retryable_infrastructure_report(report):
                     retry_node = _node_with_retry_backoff(node, report)
@@ -422,7 +478,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 invalidated_node,
                 "dependency_invalidated",
                 {
-                    "summary": "node reset because one or more dependencies are no longer done",
+                    "summary": "node reset because one or more dependencies are not ready",
                     "missing_dependency_ids": invalidated_node.metadata.get(
                         "dependency_invalidated_missing_ids",
                         [],
@@ -453,6 +509,20 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 },
             )
         ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
+        ready_candidates, deferred_by_dependency_projection = (
+            _select_ready_nodes_with_integrated_dependencies(ready_candidates, plan)
+        )
+        for deferred_node in deferred_by_dependency_projection:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                deferred_node,
+                "dispatch_deferred_dependency_projection",
+                {
+                    "summary": "node deferred because one or more dependencies are not ready",
+                    "missing_dependency_ids": _dependency_blocking_ids(plan, deferred_node),
+                },
+            )
         ready, deferred_by_write_scope = _select_ready_nodes_without_write_conflicts(
             ready_candidates,
             active_nodes=_active_write_scope_nodes(plan),
@@ -980,7 +1050,34 @@ def _iteration_review_context(
         deliverables=tuple(_iteration_deliverables(nodes)),
         feedback_items=tuple(_iteration_feedback_items(nodes)),
         max_next_tasks=max_next_tasks,
+        iteration_loop=_iteration_loop_review_payload(plan.goal_node),
     )
+
+
+def _iteration_loop_review_payload(goal_node: PlanNode) -> dict[str, object]:
+    loop = _goal_iteration_loop_metadata(goal_node)
+    payload: dict[str, object] = {}
+    for key in (
+        "mode",
+        "loop_status",
+        "current_iteration",
+        "max_iterations",
+        "operator_action",
+        "current_sprint_goal",
+        "next_sprint_goal",
+        "last_review_summary",
+        "last_review_confidence",
+        "feedback_items",
+    ):
+        value = loop.get(key)
+        if value is not None:
+            payload[key] = value
+    history = loop.get("history")
+    if isinstance(history, list) and history:
+        latest = history[-1]
+        if isinstance(latest, Mapping):
+            payload["latest_history"] = dict(latest)
+    return payload
 
 
 def _completed_task_payload(node: PlanNode) -> dict[str, object]:
@@ -1395,15 +1492,12 @@ def _invalidate_nodes_with_unmet_dependencies(plan: Plan) -> list[PlanNode]:
     and must not keep accepting reports from its old attempt.
     """
 
-    done_ids = frozenset(
-        node.node_id for node in plan.nodes.values() if node.intent is TaskIntent.DONE
-    )
     now = datetime.now(UTC)
     invalidated: list[PlanNode] = []
     for node in list(plan.nodes.values()):
         if node.kind not in {PlanNodeKind.TASK, PlanNodeKind.VERIFY} or not node.depends_on:
             continue
-        missing = tuple(sorted(dep.value for dep in node.depends_on if dep not in done_ids))
+        missing = tuple(_dependency_blocking_ids(plan, node))
         if not missing:
             continue
         if (
@@ -1417,6 +1511,7 @@ def _invalidate_nodes_with_unmet_dependencies(plan: Plan) -> list[PlanNode]:
             {
                 "dependency_invalidated_at": now.isoformat().replace("+00:00", "Z"),
                 "dependency_invalidated_missing_ids": list(missing),
+                "dependency_invalidated_reason": "dependencies_not_done_or_not_integrated",
                 "dependency_invalidated_previous_attempt_id": node.current_attempt_id,
                 "dependency_invalidated_previous_intent": node.intent.value,
                 "dependency_invalidated_previous_execution": node.execution.value,
@@ -1435,6 +1530,135 @@ def _invalidate_nodes_with_unmet_dependencies(plan: Plan) -> list[PlanNode]:
         plan.replace_node(updated)
         invalidated.append(updated)
     return invalidated
+
+
+def _select_ready_nodes_with_integrated_dependencies(
+    ready_nodes: list[PlanNode],
+    plan: Plan,
+) -> tuple[list[PlanNode], list[PlanNode]]:
+    ready: list[PlanNode] = []
+    deferred: list[PlanNode] = []
+    for node in ready_nodes:
+        if _dependency_blocking_ids(plan, node):
+            deferred.append(node)
+        else:
+            ready.append(node)
+    return ready, deferred
+
+
+def _reopen_done_nodes_with_failed_pipeline(plan: Plan) -> list[PlanNode]:
+    reopened: list[PlanNode] = []
+    now = datetime.now(UTC)
+    for node in list(plan.nodes.values()):
+        if node.intent is not TaskIntent.DONE or node.execution is not TaskExecution.IDLE:
+            continue
+        if not _node_requires_pipeline_gate(node):
+            continue
+        if _pipeline_gate_status(node) != "failed":
+            continue
+        metadata = dict(node.metadata or {})
+        metadata["pipeline_failed_done_reopened_at"] = now.isoformat().replace("+00:00", "Z")
+        metadata["last_verification_passed"] = False
+        metadata["last_verification_summary"] = str(
+            metadata.get("pipeline_last_summary") or "required pipeline failed after verification"
+        )
+        updated = replace(
+            node,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.REPORTED,
+            metadata=metadata,
+            updated_at=now,
+            completed_at=None,
+        )
+        plan.replace_node(updated)
+        reopened.append(updated)
+    return reopened
+
+
+_SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES = frozenset(
+    {"merged", "already_merged", "skipped"}
+)
+
+
+def _dependency_blocking_ids(plan: Plan, node: PlanNode) -> list[str]:
+    blocking: list[str] = []
+    for dep_id in sorted(node.depends_on, key=lambda item: item.value):
+        dependency = plan.nodes.get(dep_id)
+        if dependency is None or dependency.intent is not TaskIntent.DONE:
+            blocking.append(dep_id.value)
+            continue
+        if _dependency_commit_needs_integration(dependency):
+            blocking.append(dep_id.value)
+    return blocking
+
+
+def _dependency_commit_needs_integration(node: PlanNode) -> bool:
+    commit_ref = _node_verified_commit_ref(node)
+    if not commit_ref:
+        return False
+    worktree_path = _node_attempt_worktree_path(node)
+    if not _looks_like_attempt_worktree(worktree_path):
+        return False
+    status = _metadata_text(node.metadata.get("worktree_integration_status"))
+    if _node_pipeline_published_commit(node, commit_ref=commit_ref):
+        return False
+    return status not in _SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES
+
+
+def _node_pipeline_published_commit(node: PlanNode, *, commit_ref: str) -> bool:
+    metadata = dict(node.metadata or {})
+    if _pipeline_gate_status(node) != "success":
+        return False
+    if _metadata_text(metadata.get("source_publish_status")) != "published":
+        return False
+    published_commit = _metadata_text(metadata.get("source_publish_commit_ref"))
+    return _commit_refs_match(published_commit, commit_ref)
+
+
+def _commit_refs_match(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    left = left.strip()
+    right = right.strip()
+    if left == right:
+        return True
+    if min(len(left), len(right)) < 7:
+        return False
+    return left.startswith(right) or right.startswith(left)
+
+
+def _node_verified_commit_ref(node: PlanNode) -> str | None:
+    metadata = dict(node.metadata or {})
+    commit_ref = _metadata_text(metadata.get("verified_commit_ref")) or _metadata_text(
+        metadata.get("worktree_integration_commit_ref")
+    )
+    if commit_ref:
+        return commit_ref
+    if node.feature_checkpoint is not None:
+        return _metadata_text(node.feature_checkpoint.commit_ref)
+    return None
+
+
+def _node_attempt_worktree_path(node: PlanNode) -> str | None:
+    metadata = dict(node.metadata or {})
+    worktree_path = (
+        _metadata_text(metadata.get("worktree_integration_worktree_path"))
+        or _metadata_text(metadata.get("active_execution_root"))
+        or _metadata_text(metadata.get("worktree_path"))
+    )
+    if worktree_path:
+        return worktree_path
+    if node.feature_checkpoint is not None:
+        return _metadata_text(node.feature_checkpoint.worktree_path)
+    return None
+
+
+def _looks_like_attempt_worktree(path: str | None) -> bool:
+    return bool(path and "/.memstack/worktrees/" in path)
+
+
+def _metadata_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def _feature_checkpoint_expected_artifacts(
@@ -1555,6 +1779,72 @@ def _is_verification_judge_retry_report(report: VerificationReport) -> bool:
     return False
 
 
+def _retryable_infrastructure_report_requests_repair(report: VerificationReport) -> bool:
+    for result in report.results:
+        if not result.criterion.required or result.passed:
+            continue
+        if result.criterion.spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
+            continue
+        if result.criterion.spec.get("judge_verdict") != "retry_infrastructure":
+            continue
+        if result.criterion.spec.get("next_action_kind") == "create_repair_node":
+            return True
+        if _is_nontransient_sandbox_docker_runtime_failure(result):
+            return True
+    return False
+
+
+def _hard_fail_report_requests_infrastructure_repair(report: VerificationReport) -> bool:
+    if not report.hard_fail:
+        return False
+    return any(
+        result.criterion.required
+        and not result.passed
+        and _is_nontransient_sandbox_docker_runtime_failure(result)
+        for result in report.results
+    )
+
+
+def _is_nontransient_sandbox_docker_runtime_failure(result: CriterionResult) -> bool:
+    markers: list[object] = [
+        result.message,
+        result.criterion.spec.get("required_next_action"),
+        result.criterion.spec.get("failure_signature"),
+        result.criterion.spec.get("summary"),
+        result.criterion.spec.get("rationale"),
+    ]
+    markers.extend(_string_list(result.criterion.spec.get("failed_criteria")))
+    feedback_items = result.criterion.spec.get("feedback_items")
+    if isinstance(feedback_items, list):
+        for item in feedback_items:
+            if not isinstance(item, Mapping):
+                continue
+            markers.extend(
+                [
+                    item.get("failure_signature"),
+                    item.get("summary"),
+                    item.get("recommended_action"),
+                ]
+            )
+            markers.extend(_string_list(item.get("evidence_refs")))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if "sandbox-no-docker-runtime" in normalized:
+        return True
+    docker_runtime_missing = "docker runtime" in normalized and any(
+        token in normalized
+        for token in (
+            "not available",
+            "unavailable",
+            "absent",
+            "no socket",
+            "without docker",
+            "lacks docker",
+            "docker cli absent",
+        )
+    )
+    return docker_runtime_missing and "sandbox" in normalized
+
+
 def _should_request_pipeline_after_verification(
     node: PlanNode,
     artifacts: Mapping[str, Any],
@@ -1575,7 +1865,95 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
     pipeline_failures = [
         result for result in failed_required if result.criterion.kind in _PIPELINE_CRITERION_KINDS
     ]
-    return bool(pipeline_failures) and len(pipeline_failures) == len(failed_required)
+    if not pipeline_failures:
+        return False
+    non_pipeline_failures = [
+        result for result in failed_required if result.criterion.kind not in _PIPELINE_CRITERION_KINDS
+    ]
+    return all(
+        _is_pipeline_only_judge_failure(result)
+        or _is_pipeline_trigger_infrastructure_failure(result)
+        for result in non_pipeline_failures
+    )
+
+
+def _is_pipeline_only_judge_failure(result: CriterionResult) -> bool:
+    spec = result.criterion.spec
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if spec.get("name") != "workspace_verification_judge":
+        return False
+    failed = set(_string_list(spec.get("failed_criteria")))
+    feedback_items = spec.get("feedback_items")
+    failed_is_pipeline_only = bool(failed) and all(
+        _is_pipeline_failure_marker(item) for item in failed
+    )
+    if not isinstance(feedback_items, list) or not feedback_items:
+        return failed_is_pipeline_only
+    feedback_signatures = [
+        item.get("failure_signature") for item in feedback_items if isinstance(item, Mapping)
+    ]
+    if not feedback_signatures:
+        return failed_is_pipeline_only
+    return all(_is_pipeline_failure_marker(item) for item in feedback_signatures) and (
+        not failed or failed_is_pipeline_only
+    )
+
+
+def _is_pipeline_trigger_infrastructure_failure(result: CriterionResult) -> bool:
+    spec = result.criterion.spec
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
+        return False
+    if spec.get("judge_verdict") != "retry_infrastructure":
+        return False
+
+    markers: list[object] = [
+        result.message,
+        spec.get("required_next_action"),
+        spec.get("next_action_kind"),
+        spec.get("failure_signature"),
+        spec.get("summary"),
+        spec.get("rationale"),
+    ]
+    markers.extend(_string_list(spec.get("failed_criteria")))
+
+    feedback_items = spec.get("feedback_items")
+    if isinstance(feedback_items, list):
+        for item in feedback_items:
+            if not isinstance(item, Mapping):
+                continue
+            markers.extend(
+                [
+                    item.get("target_layer"),
+                    item.get("feedback_kind"),
+                    item.get("recommended_action"),
+                    item.get("summary"),
+                    item.get("failure_signature"),
+                ]
+            )
+            markers.extend(_string_list(item.get("evidence_refs")))
+
+    for evidence in result.evidence:
+        markers.extend([evidence.kind, evidence.ref, evidence.note])
+
+    return any(_is_pipeline_failure_marker(marker) for marker in markers)
+
+
+def _is_pipeline_failure_marker(value: object) -> bool:
+    marker = value.strip().lower() if isinstance(value, str) else ""
+    return bool(marker) and (
+        marker.startswith("ci_pipeline")
+        or marker.startswith("ci_")
+        or marker.startswith("pipeline_")
+        or marker.startswith("harness_native_cicd")
+        or "ci_pipeline" in marker
+        or "ci pipeline" in marker
+        or "ci/cd" in marker
+        or "drone" in marker
+        or "harness-native ci" in marker
+    )
 
 
 def _node_requires_pipeline_gate(node: PlanNode) -> bool:
@@ -1789,7 +2167,7 @@ def _node_with_verification_evidence(
     *,
     artifacts: Mapping[str, Any] | None = None,
 ) -> PlanNode:
-    refs = _report_evidence_refs(report)
+    refs = list(dict.fromkeys([*_report_evidence_refs(report), *_artifact_evidence_refs(artifacts)]))
     commit_ref = _first_prefixed_value(refs, "commit_ref:")
     git_diff_summary = _first_prefixed_value(refs, "git_diff_summary:")
     test_commands = tuple(
@@ -1844,6 +2222,23 @@ def _node_with_verification_evidence(
     )
 
 
+def _node_with_retry_infrastructure_repair_request(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    artifacts: Mapping[str, Any] | None = None,
+) -> PlanNode:
+    evidenced = _node_with_verification_evidence(node, report, artifacts=artifacts)
+    metadata = dict(evidenced.metadata)
+    metadata["last_verification_judge_next_action_kind"] = "create_repair_node"
+    if not metadata.get("last_verification_judge_required_next_action"):
+        metadata["last_verification_judge_required_next_action"] = (
+            "Revise the node so it can be verified with available infrastructure, "
+            "or route it to a runtime that has the required Docker capability."
+        )
+    return replace(evidenced, metadata=metadata, updated_at=datetime.now(UTC))
+
+
 def _node_with_verification_feedback_disposition(
     node: PlanNode,
     report: VerificationReport,
@@ -1863,6 +2258,24 @@ def _report_evidence_refs(report: VerificationReport) -> list[str]:
     refs: list[str] = []
     for result in report.results:
         refs.extend(evidence.ref for evidence in result.evidence if evidence.ref)
+    return list(dict.fromkeys(refs))
+
+
+def _artifact_evidence_refs(artifacts: Mapping[str, Any] | None) -> list[str]:
+    if not artifacts:
+        return []
+    refs: list[str] = []
+    for key in (
+        "candidate_artifacts",
+        "last_worker_report_artifacts",
+        "execution_artifacts",
+        "evidence_refs",
+        "candidate_verifications",
+        "last_worker_report_verifications",
+        "execution_verifications",
+        "verification_evidence_refs",
+    ):
+        refs.extend(_string_list(artifacts.get(key)))
     return list(dict.fromkeys(refs))
 
 

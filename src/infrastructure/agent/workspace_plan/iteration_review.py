@@ -249,8 +249,14 @@ def _user_payload(context: IterationReviewContext) -> str:
         "deliverables": list(context.deliverables),
         "feedback_items": list(context.feedback_items),
         "max_next_tasks": context.max_next_tasks,
+        "iteration_loop": context.iteration_loop,
         "review_policy": {
             "mode": "auto",
+            "complete_goal_requires": [
+                "no next_sprint_goal",
+                "no actionable follow-up findings",
+                "no operator request to continue the loop",
+            ],
             "available_next_sprint_capabilities": [
                 "public web research and reference-site inspection",
                 "browser_e2e workflows with screenshots and console capture",

@@ -172,6 +172,27 @@ describe('WorkspaceCreate', () => {
                   rpc_secret_env: 'DRONE_RPC_SECRET',
                 },
               },
+              deploy: {
+                enabled: false,
+                mode: 'cli',
+                stage: 'deploy',
+                required: true,
+                cli: {
+                  image: 'alpine:3.20',
+                  commands: [],
+                },
+                docker: {
+                  context: '.',
+                  dockerfile: 'Dockerfile',
+                  tags: ['latest'],
+                },
+                kubernetes: {
+                  namespace: 'default',
+                  manifest_paths: ['k8s/*.yaml'],
+                  kubeconfig_secret: 'kubeconfig',
+                  kubectl_image: 'bitnami/kubectl:latest',
+                },
+              },
             },
           },
         },

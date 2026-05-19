@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.services.workspace_agent_autonomy import is_goal_root_task
 from src.application.services.workspace_task_service import WorkspaceTaskService
 from src.configuration.di_container import DIContainer
-from src.domain.model.workspace.workspace_task import WorkspaceTask
+from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.infrastructure.adapters.primary.web.routers.agent.utils import get_container_with_db
 from src.infrastructure.adapters.primary.web.startup.container import get_app_container
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -220,6 +220,30 @@ async def _select_root_task_needing_progress(
 _EXECUTION_TASK_ROLES = frozenset({"execution_task"})
 
 
+def _is_durable_plan_projected_execution_child(metadata: object) -> bool:
+    return (
+        isinstance(metadata, dict)
+        and isinstance(metadata.get("workspace_plan_id"), str)
+        and isinstance(metadata.get("workspace_plan_node_id"), str)
+    )
+
+
+def _is_direct_worker_session_heal_candidate(child: object) -> bool:
+    worker_agent_id = getattr(child, "assignee_agent_id", None)
+    if not worker_agent_id:
+        return False
+    if getattr(child, "archived_at", None) is not None:
+        return False
+    status_value = getattr(getattr(child, "status", None), "value", getattr(child, "status", None))
+    if status_value in {WorkspaceTaskStatus.DONE.value, WorkspaceTaskStatus.BLOCKED.value}:
+        return False
+    metadata = getattr(child, "metadata", None) or {}
+    role = metadata.get("task_role") if isinstance(metadata, dict) else None
+    return role in _EXECUTION_TASK_ROLES and not _is_durable_plan_projected_execution_child(
+        metadata
+    )
+
+
 async def _heal_assigned_execution_tasks_without_sessions(
     *,
     db: AsyncSession,
@@ -240,7 +264,6 @@ async def _heal_assigned_execution_tasks_without_sessions(
     ``_ensure_execution_attempt`` re-uses active attempts), so repeated
     ticks are safe. Returns the number of sessions scheduled.
     """
-    from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
     from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_session_attempt_repository import (
         SqlWorkspaceTaskSessionAttemptRepository,
     )
@@ -267,17 +290,11 @@ async def _heal_assigned_execution_tasks_without_sessions(
         if healed >= max_heals:
             break
         worker_agent_id = getattr(child, "assignee_agent_id", None)
-        if not worker_agent_id:
+        if not _is_direct_worker_session_heal_candidate(child):
             continue
-        if getattr(child, "archived_at", None) is not None:
+        if not isinstance(worker_agent_id, str) or not worker_agent_id.strip():
             continue
-        status_value = getattr(child.status, "value", child.status)
-        if status_value in {WorkspaceTaskStatus.DONE.value, WorkspaceTaskStatus.BLOCKED.value}:
-            continue
-        metadata = child.metadata or {}
-        role = metadata.get("task_role") if isinstance(metadata, dict) else None
-        if role not in _EXECUTION_TASK_ROLES:
-            continue
+        worker_agent_id = worker_agent_id.strip()
 
         try:
             active_attempt = await attempt_repo.find_active_by_workspace_task_id(child.id)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import json
@@ -10,10 +11,12 @@ import os
 import posixpath
 import re
 import shlex
+import tempfile
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
@@ -130,6 +133,7 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
     PipelineContractSpec,
     PipelineRunResult,
     PipelineServiceSpec,
+    PipelineStageResult,
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
 )
@@ -733,7 +737,9 @@ async def _project_accepted_terminal_attempt_to_task(
     if task is None or task.workspace_id != workspace_id:
         return {}
     evidence_refs = _accepted_attempt_evidence_refs(attempt)
-    commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:")
+    commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:") or _feature_checkpoint_commit_ref(
+        node
+    )
     git_diff_summary = _first_prefixed_ref(evidence_refs, "git_diff_summary:")
     test_commands = [
         ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
@@ -838,6 +844,19 @@ async def _accepted_attempt_projection_complete_for_node(
     metadata = dict(node.metadata or {})
     if not _accepted_attempt_projection_complete(metadata):
         return False
+    checkpoint_commit_ref = _feature_checkpoint_commit_ref(node)
+    if checkpoint_commit_ref:
+        status = str(metadata.get("worktree_integration_status") or "")
+        if status not in _WORKTREE_INTEGRATION_DONE_STATUSES:
+            return False
+    attempt_commit_ref = _first_prefixed_ref(
+        _accepted_attempt_evidence_refs(attempt),
+        "commit_ref:",
+    )
+    if attempt_commit_ref:
+        status = str(metadata.get("worktree_integration_status") or "")
+        if status not in _WORKTREE_INTEGRATION_DONE_STATUSES:
+            return False
     if metadata.get("worktree_integration_status") != "blocked_dirty_main":
         return True
     return await _blocked_dirty_main_projection_still_current(
@@ -923,6 +942,13 @@ def _integration_commit_ref_from_metadata(metadata: Mapping[str, object]) -> str
     if isinstance(feature, Mapping):
         return _commit_ref_token(feature.get("commit_ref"))
     return None
+
+
+def _feature_checkpoint_commit_ref(node: PlanNode) -> str | None:
+    feature = node.feature_checkpoint
+    if feature is None:
+        return None
+    return _commit_ref_token(feature.commit_ref)
 
 
 async def _integrate_accepted_attempt_worktree(  # noqa: PLR0911
@@ -1629,6 +1655,49 @@ async def _build_child_task_metadata(
     return metadata
 
 
+async def _supersede_stale_active_attempt_for_dispatch(
+    *,
+    session: AsyncSession,
+    node: PlanNode,
+    active_attempt: WorkspaceTaskSessionAttempt | None,
+) -> WorkspaceTaskSessionAttempt | None:
+    if active_attempt is None:
+        return None
+    if not _node_reset_supersedes_active_attempt(node):
+        return active_attempt
+    stored = await SqlWorkspaceTaskSessionAttemptRepository(session).find_by_id(active_attempt.id)
+    if stored is None:
+        return None
+    if stored.status not in {
+        WorkspaceTaskSessionAttemptStatus.PENDING,
+        WorkspaceTaskSessionAttemptStatus.RUNNING,
+        WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
+    }:
+        return None
+    now = datetime.now(UTC)
+    stored.status = WorkspaceTaskSessionAttemptStatus.CANCELLED
+    stored.leader_feedback = stored.leader_feedback or (
+        "Superseded by durable plan redispatch after node reset."
+    )
+    stored.adjudication_reason = stored.adjudication_reason or "plan_node_reset_superseded"
+    stored.completed_at = stored.completed_at or now
+    stored.updated_at = now
+    await SqlWorkspaceTaskSessionAttemptRepository(session).save(stored)
+    return None
+
+
+def _node_reset_supersedes_active_attempt(node: PlanNode) -> bool:
+    if node.current_attempt_id:
+        return False
+    metadata = dict(node.metadata or {})
+    operator_action = metadata.get("operator_action")
+    if isinstance(operator_action, Mapping):
+        action = operator_action.get("action")
+        if action in {"operator_replan_requested", "operator_node_reopened"}:
+            return True
+    return bool(metadata.get("dependency_invalidated_previous_attempt_id"))
+
+
 def _make_sql_dispatcher(
     session: AsyncSession,
     item: WorkspacePlanOutboxModel,
@@ -1710,6 +1779,11 @@ def _make_sql_dispatcher(
             SqlWorkspaceTaskSessionAttemptRepository(session)
         )
         attempt = await attempt_service.get_active_attempt(existing_task.id)
+        attempt = await _supersede_stale_active_attempt_for_dispatch(
+            session=session,
+            node=node,
+            active_attempt=attempt,
+        )
         repair_context: dict[str, Any] | None = None
         should_schedule = False
         if attempt is None:
@@ -2787,6 +2861,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             workspace_metadata=workspace_metadata,
             root_metadata=root_metadata,
         )
+        contract = _pipeline_contract_for_node_phase(contract, node=node)
         if _needs_agent_managed_pipeline_proposal(contract):
             await _suspend_plan_for_pipeline(
                 session=session,
@@ -2815,6 +2890,19 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 reason=f"unsupported pipeline provider: {contract.provider}",
             )
             return
+
+        source_publish_result: PipelineRunResult | None = None
+        source_publish_metadata: dict[str, Any] = {}
+        if contract.provider == DRONE_PROVIDER:
+            contract, source_publish_metadata, source_publish_result = (
+                await _prepare_drone_source_ref(
+                    workspace=workspace,
+                    workspace_metadata=workspace_metadata,
+                    root_metadata=root_metadata,
+                    node=node,
+                    contract=contract,
+                )
+            )
 
         pipeline_repo = SqlWorkspacePipelineRepository(session)
         latest = await pipeline_repo.latest_run_for_node(
@@ -2864,6 +2952,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 "contract_confidence": contract.contract_confidence,
                 "services": contract.services_json(),
                 "provider_config": contract.provider_config,
+                **source_publish_metadata,
             },
         )
         run = await pipeline_repo.create_run(
@@ -2872,24 +2961,41 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             plan_id=plan_id,
             node_id=node_id,
             attempt_id=attempt_id,
-            commit_ref=_pipeline_commit_ref(node),
+            commit_ref=_pipeline_contract_commit_ref(contract) or _pipeline_commit_ref(node),
             provider=contract.provider,
-            metadata={"reason": payload.get("reason") or "pipeline_gate_required"},
+            metadata={
+                "reason": payload.get("reason") or "pipeline_gate_required",
+                **source_publish_metadata,
+            },
         )
         await _mark_pipeline_running(session=session, plan=plan, node=node, run_id=run.id)
 
         if contract.provider == DRONE_PROVIDER:
-            await _run_drone_pipeline(
-                session=session,
-                pipeline_repo=pipeline_repo,
-                plan=plan,
-                node=node,
-                run=run,
-                contract=contract,
-                workspace_id=workspace_id,
-                plan_id=plan_id,
-                node_id=node_id,
-            )
+            if source_publish_result is not None:
+                await _persist_external_pipeline_result(
+                    session=session,
+                    pipeline_repo=pipeline_repo,
+                    plan=plan,
+                    node=node,
+                    run=run,
+                    contract=contract,
+                    result=source_publish_result,
+                    workspace_id=workspace_id,
+                    plan_id=plan_id,
+                    node_id=node_id,
+                )
+            else:
+                await _run_drone_pipeline(
+                    session=session,
+                    pipeline_repo=pipeline_repo,
+                    plan=plan,
+                    node=node,
+                    run=run,
+                    contract=contract,
+                    workspace_id=workspace_id,
+                    plan_id=plan_id,
+                    node_id=node_id,
+                )
             return
 
         runner = _WorkspaceSandboxCommandRunner(
@@ -3061,6 +3167,363 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
     return _handle
 
 
+async def _prepare_drone_source_ref(
+    *,
+    workspace: Workspace,
+    workspace_metadata: Mapping[str, Any],
+    root_metadata: Mapping[str, Any],
+    node: PlanNode,
+    contract: PipelineContractSpec,
+) -> tuple[PipelineContractSpec, dict[str, Any], PipelineRunResult | None]:
+    commit_ref = _pipeline_commit_ref(node)
+    if not commit_ref:
+        return (
+            contract,
+            {
+                "source_publish_status": "skipped",
+                "source_publish_reason": "missing commit_ref",
+            },
+            None,
+        )
+
+    from src.infrastructure.agent.workspace.code_context import load_workspace_code_context
+
+    code_context = load_workspace_code_context(
+        project_id=str(workspace.project_id),
+        root_metadata=root_metadata,
+        workspace_metadata=workspace_metadata,
+    )
+    host_code_root = getattr(code_context, "host_code_root", None)
+    if host_code_root is None:
+        reason = "host_code_root is not available for Drone source publish"
+        metadata = _source_publish_metadata(
+            status="failed",
+            reason=reason,
+            commit_ref=commit_ref,
+            branch=None,
+        )
+        return contract, metadata, _source_publish_failure_result(reason, metadata=metadata)
+
+    source_control = _drone_source_control_config(
+        workspace_metadata=workspace_metadata,
+        provider_config=contract.provider_config,
+    )
+    branch = _drone_source_branch(source_control, contract.provider_config)
+    if not branch:
+        reason = "source_control.default_branch or delivery_cicd.drone.branch is required"
+        metadata = _source_publish_metadata(
+            status="failed",
+            reason=reason,
+            commit_ref=commit_ref,
+            branch=None,
+        )
+        return contract, metadata, _source_publish_failure_result(reason, metadata=metadata)
+
+    remote_url = _source_control_remote_url(source_control)
+    token_env = _source_control_token_env(source_control)
+    token = os.getenv(token_env) if token_env else None
+    publish = await _publish_git_ref_to_source_control(
+        host_code_root=host_code_root,
+        commit_ref=commit_ref,
+        branch=branch,
+        remote_url=remote_url,
+        token=token,
+        token_env=token_env,
+    )
+    publish_status = str(publish.get("status") or "failed")
+    metadata = _source_publish_metadata(
+        status=publish_status,
+        reason=publish.get("reason"),
+        commit_ref=publish.get("published_commit") or commit_ref,
+        branch=branch,
+        token_env=token_env,
+    )
+    if publish_status != "published":
+        return (
+            contract,
+            metadata,
+            _source_publish_failure_result(
+                str(publish.get("reason") or "source publish failed"),
+                metadata=metadata,
+            ),
+        )
+
+    published_commit = str(publish.get("published_commit") or commit_ref)
+    provider_config = dict(contract.provider_config)
+    provider_config["branch"] = branch
+    provider_config["commit"] = published_commit
+    provider_config["source_publish"] = {
+        "status": "published",
+        "branch": branch,
+        "commit_ref": published_commit,
+        "token_env": token_env,
+    }
+    return replace(contract, provider_config=provider_config), metadata, None
+
+
+def _drone_source_control_config(
+    *,
+    workspace_metadata: Mapping[str, Any],
+    provider_config: Mapping[str, Any],
+) -> dict[str, Any]:
+    source_control: dict[str, Any] = {}
+    raw_source_control = provider_config.get("source_control")
+    if isinstance(raw_source_control, Mapping):
+        source_control.update(dict(raw_source_control))
+    raw_workspace_source_control = workspace_metadata.get("source_control")
+    if isinstance(raw_workspace_source_control, Mapping):
+        source_control.update(dict(raw_workspace_source_control))
+    if "repo" not in source_control and isinstance(provider_config.get("repo"), str):
+        source_control["repo"] = provider_config["repo"]
+    if "default_branch" not in source_control and isinstance(provider_config.get("branch"), str):
+        source_control["default_branch"] = provider_config["branch"]
+    return source_control
+
+
+def _drone_source_branch(
+    source_control: Mapping[str, Any],
+    provider_config: Mapping[str, Any],
+) -> str | None:
+    branch = _metadata_string(provider_config.get("branch")) or _metadata_string(
+        source_control.get("default_branch")
+    )
+    if not branch:
+        return None
+    return branch if _is_safe_git_branch(branch) else None
+
+
+def _source_control_remote_url(source_control: Mapping[str, Any]) -> str | None:
+    remote_url = _metadata_string(source_control.get("clone_url"))
+    if remote_url:
+        return remote_url
+    repo = _metadata_string(source_control.get("repo"))
+    if not repo:
+        return None
+    provider = str(source_control.get("provider") or "github").strip().lower()
+    server_url = _metadata_string(source_control.get("server_url"))
+    if provider == "gitlab":
+        base_url = (server_url or "https://gitlab.com").rstrip("/")
+    else:
+        base_url = (server_url or "https://github.com").rstrip("/")
+    suffix = "" if repo.endswith(".git") else ".git"
+    return f"{base_url}/{repo}{suffix}"
+
+
+def _source_control_token_env(source_control: Mapping[str, Any]) -> str | None:
+    configured = _metadata_string(source_control.get("auth_token_env"))
+    if configured:
+        return configured
+    provider = str(source_control.get("provider") or "github").strip().lower()
+    if provider == "gitlab":
+        return "GITLAB_TOKEN"
+    return "GITHUB_TOKEN"
+
+
+def _is_safe_git_branch(value: str) -> bool:
+    if not value or value.startswith("-") or value.endswith("/") or ".." in value:
+        return False
+    if "@{" in value or "\\" in value or value.startswith("/") or "//" in value:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9._/-]+", value))
+
+
+async def _publish_git_ref_to_source_control(  # noqa: PLR0911
+    *,
+    host_code_root: Path,
+    commit_ref: str,
+    branch: str,
+    remote_url: str | None,
+    token: str | None,
+    token_env: str | None,
+) -> dict[str, str | None]:
+    if not host_code_root.exists():
+        return {
+            "status": "failed",
+            "reason": f"host_code_root does not exist: {host_code_root}",
+            "published_commit": None,
+        }
+    if not _is_safe_git_branch(branch):
+        return {"status": "failed", "reason": "unsafe git branch name", "published_commit": None}
+
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    askpass_path: str | None = None
+    if token:
+        fd, askpass_path = tempfile.mkstemp(prefix="memstack-git-askpass-", text=True)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "*Username*) printf '%s\\n' \"${GIT_USERNAME:-x-access-token}\" ;;\n"
+                "*) printf '%s\\n' \"$GIT_TOKEN\" ;;\n"
+                "esac\n"
+            )
+        os.chmod(askpass_path, 0o700)
+        env["GIT_ASKPASS"] = askpass_path
+        env["GIT_TOKEN"] = token
+        env["GIT_USERNAME"] = "oauth2" if token_env == "GITLAB_TOKEN" else "x-access-token"
+
+    try:
+        exists = await _run_git_command(
+            host_code_root,
+            ("cat-file", "-e", f"{commit_ref}^{{commit}}"),
+            env=env,
+        )
+        if exists["exit_code"] != "0":
+            return {
+                "status": "failed",
+                "reason": _compact_git_error(exists),
+                "published_commit": None,
+            }
+
+        dirty = await _run_git_command(host_code_root, ("status", "--porcelain"), env=env)
+        if str(dirty.get("stdout") or "").strip():
+            return {
+                "status": "failed",
+                "reason": "main checkout has uncommitted changes",
+                "published_commit": None,
+            }
+
+        already_ancestor = await _run_git_command(
+            host_code_root,
+            ("merge-base", "--is-ancestor", commit_ref, "HEAD"),
+            env=env,
+        )
+        if already_ancestor["exit_code"] != "0":
+            fast_forward = await _run_git_command(
+                host_code_root,
+                ("merge", "--ff-only", commit_ref),
+                env=env,
+                timeout=120,
+            )
+            if fast_forward["exit_code"] != "0":
+                return {
+                    "status": "failed",
+                    "reason": _compact_git_error(fast_forward),
+                    "published_commit": None,
+                }
+
+        head = await _run_git_command(host_code_root, ("rev-parse", "HEAD"), env=env)
+        if head["exit_code"] != "0":
+            return {
+                "status": "failed",
+                "reason": _compact_git_error(head),
+                "published_commit": None,
+            }
+        published_commit = str(head.get("stdout") or "").strip()
+        remote = remote_url or "origin"
+        push = await _run_git_command(
+            host_code_root,
+            ("push", remote, f"HEAD:refs/heads/{branch}"),
+            env=env,
+            timeout=180,
+        )
+        if push["exit_code"] != "0":
+            return {
+                "status": "failed",
+                "reason": _compact_git_error(push),
+                "published_commit": published_commit,
+            }
+        return {
+            "status": "published",
+            "reason": None,
+            "published_commit": published_commit,
+        }
+    finally:
+        if askpass_path:
+            with contextlib.suppress(OSError):
+                os.unlink(askpass_path)
+
+
+async def _run_git_command(
+    cwd: Path,
+    args: tuple[str, ...],
+    *,
+    env: Mapping[str, str],
+    timeout: int = 60,
+) -> dict[str, str]:
+    process = await asyncio.create_subprocess_exec(
+        "git",
+        *args,
+        cwd=str(cwd),
+        env=dict(env),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout)
+    except TimeoutError:
+        process.kill()
+        stdout_bytes, stderr_bytes = await process.communicate()
+        return {
+            "exit_code": "124",
+            "stdout": stdout_bytes.decode("utf-8", errors="replace"),
+            "stderr": stderr_bytes.decode("utf-8", errors="replace") or "git command timed out",
+        }
+    return {
+        "exit_code": str(process.returncode or 0),
+        "stdout": stdout_bytes.decode("utf-8", errors="replace"),
+        "stderr": stderr_bytes.decode("utf-8", errors="replace"),
+    }
+
+
+def _compact_git_error(result: Mapping[str, str], *, limit: int = 1200) -> str:
+    text = str(result.get("stderr") or result.get("stdout") or "").strip()
+    if not text:
+        text = f"git exited with {result.get('exit_code')}"
+    return _manager_compact_command_output(text, limit=limit)
+
+
+def _source_publish_metadata(
+    *,
+    status: str,
+    reason: str | None,
+    commit_ref: str | None,
+    branch: str | None,
+    token_env: str | None = None,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "source_publish_status": status,
+        "source_publish_provider": "git",
+    }
+    if reason:
+        metadata["source_publish_reason"] = reason
+    if commit_ref:
+        metadata["source_publish_commit_ref"] = commit_ref
+    if branch:
+        metadata["source_publish_branch"] = branch
+    if token_env:
+        metadata["source_publish_token_env"] = token_env
+    return metadata
+
+
+def _source_publish_failure_result(
+    reason: str,
+    *,
+    metadata: Mapping[str, Any],
+) -> PipelineRunResult:
+    return PipelineRunResult(
+        status="failed",
+        reason=reason,
+        stage_results=(
+            PipelineStageResult(
+                stage="source_publish",
+                status="failed",
+                command="git:publish",
+                exit_code=1,
+                stdout_preview="",
+                stderr_preview=reason,
+                metadata={
+                    "external_provider": DRONE_PROVIDER,
+                    **dict(metadata),
+                },
+            ),
+        ),
+        evidence_refs=("ci_pipeline:failed", "source_publish:failed"),
+        metadata={"external_provider": DRONE_PROVIDER, **dict(metadata)},
+    )
+
+
 async def _run_drone_pipeline(
     *,
     session: AsyncSession,
@@ -3207,6 +3670,24 @@ def _pipeline_contract_for_workspace(
     return _workspace_scoped_pipeline_contract(contract, workspace_id=workspace_id)
 
 
+_DRONE_DEPLOY_PHASES = frozenset({"deploy", "review"})
+
+
+def _pipeline_contract_for_node_phase(
+    contract: PipelineContractSpec,
+    *,
+    node: PlanNode,
+) -> PipelineContractSpec:
+    if contract.provider != DRONE_PROVIDER or contract.deploy is None:
+        return contract
+    phase = _metadata_string(dict(node.metadata or {}).get("iteration_phase"))
+    if phase in _DRONE_DEPLOY_PHASES:
+        return contract
+    provider_config = dict(contract.provider_config)
+    provider_config["deploy_suppressed_for_phase"] = phase or "unknown"
+    return replace(contract, deploy=None, provider_config=provider_config)
+
+
 def _needs_agent_managed_pipeline_proposal(contract: PipelineContractSpec) -> bool:
     if contract.provider != SANDBOX_NATIVE_PROVIDER:
         return False
@@ -3336,6 +3817,9 @@ async def _reflect_existing_pipeline_run(
 ) -> None:
     metadata = dict(node.metadata or {})
     now = datetime.now(UTC)
+    run = await session.get(WorkspacePipelineRunModel, run_id)
+    if run is not None:
+        metadata.update(_pipeline_node_metadata_projection(dict(run.metadata_json or {})))
     metadata.update(
         {
             "pipeline_run_id": run_id,
@@ -3400,6 +3884,9 @@ async def _finish_pipeline_on_node(
     metadata = dict(node.metadata or {})
     finished_at = datetime.now(UTC)
     summary = reason or "harness-native CI/CD pipeline passed"
+    run = await session.get(WorkspacePipelineRunModel, run_id)
+    if run is not None:
+        metadata.update(_pipeline_node_metadata_projection(dict(run.metadata_json or {})))
     metadata.update(
         {
             "pipeline_run_id": run_id,
@@ -3443,6 +3930,83 @@ async def _finish_pipeline_on_node(
         )
     )
     await SqlPlanRepository(session).save(plan)
+    if status == "success":
+        await _project_pipeline_success_to_workspace_task(
+            session=session,
+            node=node,
+            run_id=run_id,
+            summary=summary,
+            evidence_refs=evidence_refs,
+            now=finished_at,
+        )
+
+
+def _pipeline_node_metadata_projection(run_metadata: Mapping[str, Any]) -> dict[str, Any]:
+    projected: dict[str, Any] = {}
+    for key, value in run_metadata.items():
+        if key.startswith("source_publish_"):
+            projected[key] = value
+    for key in (
+        "deploy_mode",
+        "deployment_status",
+        "external_id",
+        "external_provider",
+        "external_url",
+    ):
+        if key in run_metadata:
+            projected[key] = run_metadata[key]
+    return projected
+
+
+async def _project_pipeline_success_to_workspace_task(
+    *,
+    session: AsyncSession,
+    node: PlanNode,
+    run_id: str,
+    summary: str,
+    evidence_refs: list[str],
+    now: datetime,
+) -> None:
+    attempt_id = node.current_attempt_id
+    if attempt_id:
+        attempt = await session.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+        if attempt is not None:
+            attempt.status = WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
+            attempt.leader_feedback = summary or "pipeline gate passed"
+            attempt.adjudication_reason = "pipeline_gate_passed"
+            attempt.completed_at = now
+            attempt.updated_at = now
+
+    if not node.workspace_task_id:
+        return
+    task = await session.get(WorkspaceTaskModel, node.workspace_task_id)
+    if task is None:
+        return
+    run = await session.get(WorkspacePipelineRunModel, run_id)
+    commit_ref = (
+        _metadata_string(getattr(run, "commit_ref", None))
+        if run is not None
+        else None
+    ) or _pipeline_commit_ref(node)
+    projected_refs = list(evidence_refs)
+    if commit_ref:
+        projected_refs.append(f"commit_ref:{commit_ref}")
+    metadata = dict(node.metadata or {})
+    git_diff_summary = _metadata_string(metadata.get("verified_git_diff_summary"))
+    test_commands = list(_iter_config_strings(metadata.get("verified_test_commands")))
+    await _project_verification_to_task(
+        db=session,
+        task=task,
+        attempt_id=attempt_id,
+        passed=True,
+        hard_fail=False,
+        summary=summary or "pipeline gate passed",
+        evidence_refs=list(dict.fromkeys(projected_refs)),
+        commit_ref=commit_ref,
+        git_diff_summary=git_diff_summary,
+        test_commands=test_commands,
+        now=now,
+    )
 
 
 def _pipeline_completion_node_state(
@@ -3467,6 +4031,11 @@ def _pipeline_commit_ref(node: PlanNode) -> str | None:
         if value.startswith("commit_ref:"):
             return value.removeprefix("commit_ref:")
     return None
+
+
+def _pipeline_contract_commit_ref(contract: PipelineContractSpec) -> str | None:
+    value = contract.provider_config.get("commit")
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 async def _register_pipeline_service_preview(

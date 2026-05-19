@@ -98,6 +98,97 @@ steps:
       - pnpm test --run
 ```
 
+## Deploy Stage Modes
+
+Workspace metadata can declare `delivery_cicd.drone.deploy.mode` as `docker`, `kubernetes`, or
+`cli`. Keep the Drone stage or step name aligned with `delivery_cicd.drone.deploy.stage`
+(default `deploy`) so MemStack can record deployment evidence from the Drone build.
+
+### Docker Deploy
+
+Use Docker deploy when the pipeline builds and publishes an image. Store registry credentials as
+Drone secrets, referenced by name only:
+
+```yaml
+kind: pipeline
+type: docker
+name: workspace-ci
+
+steps:
+  - name: test
+    image: node:22-bookworm
+    commands:
+      - corepack enable
+      - pnpm install --frozen-lockfile
+      - pnpm test
+
+  - name: deploy-docker
+    image: plugins/docker
+    settings:
+      repo: registry.example.com/memstack/my-app
+      dockerfile: Dockerfile
+      context: .
+      tags:
+        - latest
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+    when:
+      event:
+        - promote
+        - custom
+```
+
+### Kubernetes Deploy
+
+Use Kubernetes deploy when Drone should apply manifests from the repository. Kubernetes pipelines
+require a self-hosted Drone server and Kubernetes runner; Docker pipelines can also run `kubectl`
+inside a deploy step when the cluster credential is provided as a secret.
+
+```yaml
+kind: pipeline
+type: docker
+name: workspace-ci
+
+steps:
+  - name: deploy-kubernetes
+    image: bitnami/kubectl:latest
+    environment:
+      KUBECONFIG_DATA:
+        from_secret: kubeconfig
+    commands:
+      - mkdir -p "$HOME/.kube"
+      - printf "%s" "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+      - kubectl --namespace default apply -f k8s/
+    when:
+      event:
+        - promote
+        - custom
+```
+
+### CLI Deploy
+
+Use CLI deploy for repository-owned deployment scripts or tools. Keep commands explicit and avoid
+embedding secret values:
+
+```yaml
+kind: pipeline
+type: docker
+name: workspace-ci
+
+steps:
+  - name: deploy
+    image: alpine:3.20
+    commands:
+      - apk add --no-cache bash curl
+      - ./scripts/deploy.sh
+    when:
+      event:
+        - promote
+        - custom
+```
+
 ## Secrets
 
 Reference Drone secrets by name:

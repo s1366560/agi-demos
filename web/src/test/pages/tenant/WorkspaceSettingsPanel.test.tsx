@@ -210,6 +210,12 @@ describe('WorkspaceSettingsPanel', () => {
     fireEvent.change(screen.getByLabelText('workspaceSettings.delivery.droneRunnerName'), {
       target: { value: 'memstack-custom-runner' },
     });
+    fireEvent.change(screen.getByLabelText('workspaceSettings.delivery.droneDeployTarget'), {
+      target: { value: 'staging' },
+    });
+    fireEvent.change(screen.getByLabelText('workspaceSettings.delivery.droneDeployCliImage'), {
+      target: { value: 'alpine:3.21' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /Save/ }));
 
     await waitFor(() => expect(mockState.updateWorkspace).toHaveBeenCalled());
@@ -274,6 +280,17 @@ describe('WorkspaceSettingsPanel', () => {
                   rpc_secret_env: 'DRONE_RPC_SECRET',
                 },
               },
+              deploy: expect.objectContaining({
+                enabled: false,
+                mode: 'cli',
+                target: 'staging',
+                stage: 'deploy',
+                required: true,
+                cli: {
+                  image: 'alpine:3.21',
+                  commands: [],
+                },
+              }),
             }),
           }),
         }),

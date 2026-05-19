@@ -5,6 +5,7 @@ import {
   DEFAULT_GITLAB_SERVER_URL,
   buildDefaultSourceControlConfig,
   buildDefaultDroneDeliveryConfig,
+  isWorkspaceDroneDeployMode,
   getSandboxCodeRoot,
   getWorkspaceCollaborationMode,
   getWorkspaceUseCase,
@@ -17,6 +18,7 @@ import {
 import type {
   Workspace,
   WorkspaceCollaborationMode,
+  WorkspaceDroneDeployMode,
   WorkspaceDeliveryCicdConfig,
   WorkspaceDeliveryServiceConfig,
   WorkspaceMemberRole,
@@ -155,6 +157,25 @@ export interface SettingsDraft {
   deliveryDroneRunnerRpcProto: string;
   deliveryDroneRunnerRpcHost: string;
   deliveryDroneRunnerRpcSecretEnv: string;
+  deliveryDroneDeployEnabled: boolean;
+  deliveryDroneDeployMode: WorkspaceDroneDeployMode;
+  deliveryDroneDeployTarget: string;
+  deliveryDroneDeployStage: string;
+  deliveryDroneDeployRequired: boolean;
+  deliveryDroneDeployDockerRegistry: string;
+  deliveryDroneDeployDockerImage: string;
+  deliveryDroneDeployDockerContext: string;
+  deliveryDroneDeployDockerfile: string;
+  deliveryDroneDeployDockerTags: string;
+  deliveryDroneDeployDockerUsernameSecret: string;
+  deliveryDroneDeployDockerPasswordSecret: string;
+  deliveryDroneDeployKubernetesNamespace: string;
+  deliveryDroneDeployKubernetesManifestPaths: string;
+  deliveryDroneDeployKubeconfigSecret: string;
+  deliveryDroneDeployKubernetesContext: string;
+  deliveryDroneDeployKubectlImage: string;
+  deliveryDroneDeployCliImage: string;
+  deliveryDroneDeployCliCommands: string;
   rawMetadata: string;
 }
 
@@ -172,10 +193,15 @@ export function syncDraftFromWorkspace(workspace: Workspace): SettingsDraft {
   const defaultDrone = defaultDelivery?.drone;
   const drone = asRecord(delivery.drone);
   const defaultEnvironment = defaultDrone?.environment;
+  const defaultDeploy = defaultDrone?.deploy;
   const environment = asRecord(drone.environment);
   const apiEnvironment = asRecord(environment.api);
   const serverEnvironment = asRecord(environment.server);
   const runnerEnvironment = asRecord(environment.runner);
+  const deploy = asRecord(drone.deploy);
+  const deployDocker = asRecord(deploy.docker);
+  const deployKubernetes = asRecord(deploy.kubernetes);
+  const deployCli = asRecord(deploy.cli);
   const explicitDroneRepo = asString(drone.repo ?? drone.repository);
   const explicitDroneBranch = asString(drone.branch);
   const sourceControlSeed = {
@@ -323,6 +349,43 @@ export function syncDraftFromWorkspace(workspace: Workspace): SettingsDraft {
       asString(serverEnvironment.rpc_secret_env) ||
       defaultEnvironment?.runner?.rpc_secret_env ||
       'DRONE_RPC_SECRET',
+    deliveryDroneDeployEnabled: asBoolean(deploy.enabled, defaultDeploy?.enabled ?? false),
+    deliveryDroneDeployMode: isWorkspaceDroneDeployMode(deploy.mode)
+      ? deploy.mode
+      : (defaultDeploy?.mode ?? 'cli'),
+    deliveryDroneDeployTarget: asString(deploy.target),
+    deliveryDroneDeployStage: asString(deploy.stage) || defaultDeploy?.stage || 'deploy',
+    deliveryDroneDeployRequired: asBoolean(deploy.required, defaultDeploy?.required ?? true),
+    deliveryDroneDeployDockerRegistry: asString(deployDocker.registry),
+    deliveryDroneDeployDockerImage: asString(deployDocker.image),
+    deliveryDroneDeployDockerContext:
+      asString(deployDocker.context) || defaultDeploy?.docker?.context || '.',
+    deliveryDroneDeployDockerfile:
+      asString(deployDocker.dockerfile) || defaultDeploy?.docker?.dockerfile || 'Dockerfile',
+    deliveryDroneDeployDockerTags: formatListDraft(
+      deployDocker.tags || defaultDeploy?.docker?.tags
+    ),
+    deliveryDroneDeployDockerUsernameSecret: asString(deployDocker.username_secret),
+    deliveryDroneDeployDockerPasswordSecret: asString(deployDocker.password_secret),
+    deliveryDroneDeployKubernetesNamespace:
+      asString(deployKubernetes.namespace) || defaultDeploy?.kubernetes?.namespace || 'default',
+    deliveryDroneDeployKubernetesManifestPaths: formatListDraft(
+      deployKubernetes.manifest_paths || defaultDeploy?.kubernetes?.manifest_paths
+    ),
+    deliveryDroneDeployKubeconfigSecret:
+      asString(deployKubernetes.kubeconfig_secret) ||
+      defaultDeploy?.kubernetes?.kubeconfig_secret ||
+      'kubeconfig',
+    deliveryDroneDeployKubernetesContext: asString(deployKubernetes.context),
+    deliveryDroneDeployKubectlImage:
+      asString(deployKubernetes.kubectl_image) ||
+      defaultDeploy?.kubernetes?.kubectl_image ||
+      'bitnami/kubectl:latest',
+    deliveryDroneDeployCliImage:
+      asString(deployCli.image) || defaultDeploy?.cli?.image || 'alpine:3.20',
+    deliveryDroneDeployCliCommands: formatListDraft(
+      deployCli.commands || defaultDeploy?.cli?.commands
+    ),
     rawMetadata: prettyJson(metadata),
   };
 }
@@ -462,6 +525,33 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
           rpc_secret_env: draft.deliveryDroneRunnerRpcSecretEnv.trim() || undefined,
         },
       },
+      deploy: {
+        enabled: draft.deliveryDroneDeployEnabled,
+        mode: draft.deliveryDroneDeployMode,
+        target: draft.deliveryDroneDeployTarget.trim() || undefined,
+        stage: draft.deliveryDroneDeployStage.trim() || 'deploy',
+        required: draft.deliveryDroneDeployRequired,
+        docker: {
+          registry: draft.deliveryDroneDeployDockerRegistry.trim() || undefined,
+          image: draft.deliveryDroneDeployDockerImage.trim() || undefined,
+          context: draft.deliveryDroneDeployDockerContext.trim() || '.',
+          dockerfile: draft.deliveryDroneDeployDockerfile.trim() || 'Dockerfile',
+          tags: parseListDraft(draft.deliveryDroneDeployDockerTags),
+          username_secret: draft.deliveryDroneDeployDockerUsernameSecret.trim() || undefined,
+          password_secret: draft.deliveryDroneDeployDockerPasswordSecret.trim() || undefined,
+        },
+        kubernetes: {
+          namespace: draft.deliveryDroneDeployKubernetesNamespace.trim() || 'default',
+          manifest_paths: parseListDraft(draft.deliveryDroneDeployKubernetesManifestPaths),
+          kubeconfig_secret: draft.deliveryDroneDeployKubeconfigSecret.trim() || undefined,
+          context: draft.deliveryDroneDeployKubernetesContext.trim() || undefined,
+          kubectl_image: draft.deliveryDroneDeployKubectlImage.trim() || 'bitnami/kubectl:latest',
+        },
+        cli: {
+          image: draft.deliveryDroneDeployCliImage.trim() || 'alpine:3.20',
+          commands: parseListDraft(draft.deliveryDroneDeployCliCommands),
+        },
+      },
     };
   }
   metadata.delivery_cicd = deliveryCicd;
@@ -505,6 +595,19 @@ function formatPrefixDraft(value: unknown): string {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string').join(', ')
     : '';
+}
+
+function formatListDraft(value: unknown): string {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').join('\n')
+    : '';
+}
+
+function parseListDraft(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function asString(value: unknown): string {

@@ -216,12 +216,23 @@ async def _write_workspace_metadata(
     if workspace_model is None:
         raise WorkspacePlanningContractValidationError(f"workspace {workspace_id} not found")
     metadata = dict(workspace_model.metadata_json or {})
-    metadata["delivery_cicd"] = payload["delivery_cicd"]
+    metadata["delivery_cicd"] = _merge_delivery_cicd(
+        metadata.get("delivery_cicd"),
+        payload["delivery_cicd"],
+    )
     workspace_model.metadata_json = metadata
     workspace_model.updated_at = datetime.now(UTC)
     await session.flush()
     if commit:
         await session.commit()
+
+
+def _merge_delivery_cicd(existing: object, incoming: Mapping[str, Any]) -> dict[str, Any]:
+    """Merge planner-discovered services without dropping workspace-owned provider config."""
+
+    merged = dict(existing) if isinstance(existing, Mapping) else {}
+    merged.update(dict(incoming))
+    return merged
 
 
 async def _publish_workspace_updated_event(

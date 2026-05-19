@@ -21,6 +21,7 @@ from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceA
 from src.infrastructure.adapters.primary.web.routers import workspace_plans
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
+    PlanModel,
     Project as DBProject,
     Tenant as DBTenant,
     User as DBUser,
@@ -603,16 +604,12 @@ async def test_kickoff_suspends_software_workspace_when_planner_contract_missing
     assert plan.goal_node.metadata["planner_contract_missing"] is True
     assert plan.goal_node.metadata["retry_count"] == 1
 
-    outbox_items = (
-        (await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all()
-    )
+    outbox_items = (await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all()
     assert outbox_items == []
     events = (
         (
             await db_session.execute(
-                select(WorkspacePlanEventModel).where(
-                    WorkspacePlanEventModel.plan_id == plan.id
-                )
+                select(WorkspacePlanEventModel).where(WorkspacePlanEventModel.plan_id == plan.id)
             )
         )
         .scalars()
@@ -753,6 +750,76 @@ async def test_kickoff_skips_duplicate_plan_for_completed_root(
         .all()
     )
     assert plans == []
+
+
+async def test_kickoff_skips_duplicate_plan_for_active_root(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace(db_session)
+    _patch_planner_llm(monkeypatch)
+    monkeypatch.setattr(planning_contract_tools, "_publish_workspace_updated_event", AsyncMock())
+
+    with _patch_session_factory(db_session):
+        started = await kickoff_v2_plan(
+            workspace_id="ws-abc",
+            title="Build a CRUD blog",
+            description="Ship the first vertical slice",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    assert started is True
+    repo = SqlPlanRepository(db_session)
+    plan = await repo.get_by_workspace("ws-abc")
+    assert plan is not None
+    assert plan.status is PlanStatus.ACTIVE
+    assert plan.goal_node.metadata["root_goal_task_id"] == "root-bridge-1"
+    db_session.add(
+        WorkspaceTaskModel(
+            id="plan-child-task-1",
+            workspace_id="ws-abc",
+            title="Projected plan child",
+            created_by="bridge-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-bridge-1",
+                "workspace_plan_id": plan.id,
+                "workspace_plan_node_id": "node-1",
+            },
+        )
+    )
+    await db_session.execute(delete(WorkspacePlanOutboxModel))
+    await db_session.flush()
+
+    with (
+        _patch_session_factory(db_session),
+        patch.object(
+            v2_bridge,
+            "_build_workspace_task_decomposer",
+            new=AsyncMock(return_value=_FakeDecomposer()),
+        ) as decomposer_builder,
+    ):
+        duplicate_started = await kickoff_v2_plan(
+            workspace_id="ws-abc",
+            title="Build a CRUD blog",
+            description="Ship the first vertical slice",
+            created_by="bridge-user-1",
+            root_task_id="root-bridge-1",
+        )
+
+    assert duplicate_started is True
+    decomposer_builder.assert_not_awaited()
+    plans = (
+        (await db_session.execute(select(PlanModel).where(PlanModel.workspace_id == "ws-abc")))
+        .scalars()
+        .all()
+    )
+    assert [existing_plan.id for existing_plan in plans] == [plan.id]
+    outbox_items = (await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all()
+    assert outbox_items == []
 
 
 async def test_kickoff_uses_workspace_decomposer_to_create_dag(

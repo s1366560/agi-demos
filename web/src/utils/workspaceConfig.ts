@@ -3,8 +3,10 @@ import type {
   WorkspaceCollaborationMode,
   WorkspaceCreateRequest,
   WorkspaceDeliveryCicdConfig,
+  WorkspaceDeliveryDroneDeployConfig,
   WorkspaceDeliveryDroneConfig,
   WorkspaceDeliveryDroneEnvironmentConfig,
+  WorkspaceDroneDeployMode,
   WorkspaceSourceControlConfig,
   WorkspaceSourceControlProvider,
   WorkspaceType,
@@ -43,6 +45,16 @@ export const DEFAULT_DRONE_RUNNER_CAPACITY = 2;
 export const DEFAULT_DRONE_RUNNER_NAME = 'memstack-drone-runner';
 export const DEFAULT_DRONE_RUNNER_RPC_PROTO = 'http';
 export const DEFAULT_DRONE_RUNNER_RPC_HOST = 'drone-server';
+export const DEFAULT_DRONE_DEPLOY_MODE: WorkspaceDroneDeployMode = 'cli';
+export const DEFAULT_DRONE_DEPLOY_STAGE = 'deploy';
+export const DEFAULT_DRONE_DEPLOY_CLI_IMAGE = 'alpine:3.20';
+export const DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT = '.';
+export const DEFAULT_DRONE_DEPLOY_DOCKERFILE = 'Dockerfile';
+export const DEFAULT_DRONE_DEPLOY_DOCKER_TAGS = ['latest'];
+export const DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE = 'default';
+export const DEFAULT_DRONE_DEPLOY_KUBERNETES_MANIFEST_PATHS = ['k8s/*.yaml'];
+export const DEFAULT_DRONE_DEPLOY_KUBECONFIG_SECRET = 'kubeconfig';
+export const DEFAULT_DRONE_DEPLOY_KUBECTL_IMAGE = 'bitnami/kubectl:latest';
 
 export function workspaceTypeForUseCase(useCase: WorkspaceUseCase): WorkspaceType {
   if (useCase === 'programming') return 'software_development';
@@ -74,6 +86,10 @@ export function isWorkspaceSourceControlProvider(
   value: unknown
 ): value is WorkspaceSourceControlProvider {
   return value === 'github' || value === 'gitlab';
+}
+
+export function isWorkspaceDroneDeployMode(value: unknown): value is WorkspaceDroneDeployMode {
+  return value === 'docker' || value === 'kubernetes' || value === 'cli';
 }
 
 export function getWorkspaceUseCase(workspace: Workspace): WorkspaceUseCase {
@@ -256,6 +272,30 @@ export function buildDefaultDroneEnvironmentConfig(
   };
 }
 
+export function buildDefaultDroneDeployConfig(): WorkspaceDeliveryDroneDeployConfig {
+  return {
+    enabled: false,
+    mode: DEFAULT_DRONE_DEPLOY_MODE,
+    stage: DEFAULT_DRONE_DEPLOY_STAGE,
+    required: true,
+    cli: {
+      image: DEFAULT_DRONE_DEPLOY_CLI_IMAGE,
+      commands: [],
+    },
+    docker: {
+      context: DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT,
+      dockerfile: DEFAULT_DRONE_DEPLOY_DOCKERFILE,
+      tags: [...DEFAULT_DRONE_DEPLOY_DOCKER_TAGS],
+    },
+    kubernetes: {
+      namespace: DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE,
+      manifest_paths: [...DEFAULT_DRONE_DEPLOY_KUBERNETES_MANIFEST_PATHS],
+      kubeconfig_secret: DEFAULT_DRONE_DEPLOY_KUBECONFIG_SECRET,
+      kubectl_image: DEFAULT_DRONE_DEPLOY_KUBECTL_IMAGE,
+    },
+  };
+}
+
 function mergeSourceControlConfig(
   base: WorkspaceSourceControlConfig | undefined,
   override: WorkspaceSourceControlConfig | undefined
@@ -288,6 +328,29 @@ function mergeDroneEnvironmentConfig(
   };
 }
 
+function mergeDroneDeployConfig(
+  base: WorkspaceDeliveryDroneDeployConfig | undefined,
+  override: WorkspaceDeliveryDroneDeployConfig | undefined
+): WorkspaceDeliveryDroneDeployConfig | undefined {
+  if (!base && !override) return undefined;
+  return {
+    ...(base ?? {}),
+    ...(override ?? {}),
+    docker: {
+      ...(base?.docker ?? {}),
+      ...(override?.docker ?? {}),
+    },
+    kubernetes: {
+      ...(base?.kubernetes ?? {}),
+      ...(override?.kubernetes ?? {}),
+    },
+    cli: {
+      ...(base?.cli ?? {}),
+      ...(override?.cli ?? {}),
+    },
+  };
+}
+
 export function mergeDroneConfig(
   base: WorkspaceDeliveryDroneConfig | undefined,
   override: WorkspaceDeliveryDroneConfig | undefined
@@ -299,6 +362,7 @@ export function mergeDroneConfig(
     ...(override ?? {}),
     ...(sourceControl ? { source_control: sourceControl } : {}),
     environment: mergeDroneEnvironmentConfig(base?.environment, override?.environment),
+    deploy: mergeDroneDeployConfig(base?.deploy, override?.deploy),
   };
 }
 
@@ -324,6 +388,7 @@ export function buildDefaultDroneDeliveryConfig(
       poll_interval_seconds: DEFAULT_DRONE_POLL_INTERVAL_SECONDS,
       source_control: normalizedSourceControl,
       environment: buildDefaultDroneEnvironmentConfig(normalizedSourceControl),
+      deploy: buildDefaultDroneDeployConfig(),
     },
   };
 }

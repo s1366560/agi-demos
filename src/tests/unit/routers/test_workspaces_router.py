@@ -214,6 +214,27 @@ class TestWorkspacesRouter:
                     "rpc_secret_env": "DRONE_RPC_SECRET",
                 },
             },
+            "deploy": {
+                "enabled": False,
+                "mode": "cli",
+                "stage": "deploy",
+                "required": True,
+                "cli": {
+                    "image": "alpine:3.20",
+                    "commands": [],
+                },
+                "docker": {
+                    "context": ".",
+                    "dockerfile": "Dockerfile",
+                    "tags": ["latest"],
+                },
+                "kubernetes": {
+                    "namespace": "default",
+                    "manifest_paths": ["k8s/*.yaml"],
+                    "kubeconfig_secret": "kubeconfig",
+                    "kubectl_image": "bitnami/kubectl:latest",
+                },
+            },
         }
 
     def test_create_workspace_links_gitlab_source_control_to_drone(
@@ -251,6 +272,8 @@ class TestWorkspacesRouter:
         assert drone["source_control"] == metadata["source_control"]
         assert drone["environment"]["server"]["source_provider"] == "gitlab"
         assert drone["environment"]["server"]["gitlab_server"] == "https://gitlab.example.com"
+        assert drone["deploy"]["enabled"] is False
+        assert drone["deploy"]["mode"] == "cli"
 
     def test_create_workspace_preserves_explicit_programming_delivery_provider(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock

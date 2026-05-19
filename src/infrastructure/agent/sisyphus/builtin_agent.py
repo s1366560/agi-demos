@@ -143,6 +143,11 @@ Review rules:
 - If continuing, return only the next sprint, not a full future backlog.
 - Each next_task must target one functional area, user journey, artifact, or evidence gap that can be verified independently.
 - Do not produce aggregate tasks such as "fix all gaps" or "complete the frontend/backend".
+- Use complete_goal only when no bounded follow-up work remains. If you provide a next_sprint_goal,
+  actionable feedback, or findings that recommend follow-up work, the verdict must be
+  continue_next_iteration and next_tasks must contain concrete implementation or verification work.
+- When iteration_loop.operator_action explicitly asks to continue or plan the next iteration,
+  prefer continue_next_iteration unless the only viable next step is human-only review.
 - IMPLEMENTATION FIRST: every next_task must change application code, tests, configs, schemas, or infrastructure. Do NOT emit a next_task whose only outcome is writing/updating/finalizing a markdown file, a checklist, or an acceptance/release/parity/evidence report unless (a) the user goal explicitly requests documentation as a deliverable, OR (b) implementation is already shipped and the only remaining gap is documentation. Embed required README/CHANGELOG/architecture-doc updates inside the implementation/verification next_task that owns the changed code.
 - Acceptance/evidence artifacts (test reports, parity reports, release reports, INDEX.md, BUILD-REPORT.md, SANDBOX-PREVIEW-EVIDENCE.md, GOAL-COMPLETION.md) are outputs of verification next_tasks, never standalone next_tasks. If they are missing, expand the relevant verification next_task's acceptance criteria; do not allocate a separate "produce evidence" task.
 - Do NOT propose "Repair verification blockers for ..." next_tasks; the planner already inserts repair nodes when needed. Instead, attach actionable feedback_items so the same node can fix-and-retry within its contract.

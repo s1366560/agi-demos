@@ -58,6 +58,10 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     ROOT_GOAL_TASK_ID,
     WORKTREE_SETUP,
 )
+from src.infrastructure.agent.workspace_plan.pipeline import (
+    DRONE_PROVIDER,
+    build_pipeline_contract_from_metadata,
+)
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 logger = logging.getLogger(__name__)
@@ -503,6 +507,241 @@ def _render_visible_handoff_interpretation_gate(
     )
 
 
+def _workspace_delivery_cicd_context(
+    workspace_metadata: Mapping[str, Any] | None,
+    plan_node_metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Render workspace-owned CI/CD settings into safe worker-facing context."""
+    if not isinstance(workspace_metadata, Mapping):
+        return None
+    raw_delivery = workspace_metadata.get("delivery_cicd")
+    if not isinstance(raw_delivery, Mapping):
+        return None
+
+    try:
+        contract = build_pipeline_contract_from_metadata(
+            workspace_metadata=dict(workspace_metadata),
+            fallback_code_root=_metadata_text(workspace_metadata.get("sandbox_code_root")),
+        )
+    except Exception:
+        logger.debug("workspace_worker_launch.delivery_cicd_context_failed", exc_info=True)
+        return None
+
+    phase = None
+    if isinstance(plan_node_metadata, Mapping):
+        phase = _metadata_text(plan_node_metadata.get("iteration_phase"))
+    deploy = contract.deploy.to_json() if contract.deploy is not None else None
+    if isinstance(deploy, dict):
+        deploy = _deploy_context_with_runner_hints(deploy)
+    context: dict[str, Any] = {
+        "source": "workspace.metadata.delivery_cicd",
+        "provider": contract.provider,
+        "code_root": contract.code_root,
+        "auto_deploy": contract.auto_deploy,
+        "contract_source": contract.contract_source,
+        "node_phase": phase.lower() if phase else None,
+        "deploy": deploy,
+        "instructions": [
+            (
+                "Treat this workspace delivery contract as the source of truth for CI/CD "
+                "and deployment work."
+            ),
+            (
+                "Do not replace the configured deployment mode with a CLI smoke check unless "
+                "the contract itself says deploy.mode=cli."
+            ),
+        ],
+    }
+
+    if contract.provider == DRONE_PROVIDER:
+        provider_config = dict(contract.provider_config)
+        drone_context: dict[str, Any] = {
+            "repo": _metadata_text(provider_config.get("repo") or provider_config.get("repository")),
+            "branch": _metadata_text(provider_config.get("branch")),
+            "target": _metadata_text(provider_config.get("target")),
+            "server_url_env": _metadata_text(provider_config.get("server_url_env")),
+            "token_env": _metadata_text(provider_config.get("token_env")) or "DRONE_TOKEN",
+        }
+        poll_interval = provider_config.get("poll_interval_seconds")
+        if poll_interval is not None:
+            drone_context["poll_interval_seconds"] = poll_interval
+        source_control = provider_config.get("source_control")
+        if isinstance(source_control, Mapping):
+            drone_context["source_control"] = {
+                key: value
+                for key, value in {
+                    "provider": _metadata_text(source_control.get("provider")),
+                    "repo": _metadata_text(source_control.get("repo")),
+                    "default_branch": _metadata_text(source_control.get("default_branch")),
+                    "clone_url": _metadata_text(source_control.get("clone_url")),
+                    "auth_token_env": _metadata_text(source_control.get("auth_token_env")),
+                }.items()
+                if value
+            }
+        context["drone"] = {key: value for key, value in drone_context.items() if value}
+        context["instructions"].extend(
+            [
+                "Use Drone as the workspace-selected CI/CD provider.",
+                (
+                    "For deploy/review phases, .drone.yml must implement the configured "
+                    "deploy contract and the Drone run must produce matching deployment "
+                    "evidence."
+                ),
+                (
+                    "Drone/GitHub tokens and the Drone API are host-side harness concerns. "
+                    "A sandbox worker may not have DRONE_TOKEN, GITHUB_TOKEN, docker, or the "
+                    "drone CLI in its environment; do not treat those sandbox-local absences "
+                    "as a hard blocker. Commit or report the required .drone.yml/config state "
+                    "so the platform harness can trigger and verify Drone."
+                ),
+                (
+                    "If there are no deploy-code changes to commit, report the clean worktree "
+                    "and current commit instead of fabricating a no-op change just to trigger CI."
+                ),
+                (
+                    "For implement/test phases, the harness may trigger Drone for CI evidence; "
+                    "do not treat a suppressed or fallback CLI deploy step as proof of the "
+                    "configured deployment mode."
+                ),
+            ]
+        )
+
+    if deploy and deploy.get("enabled") is True:
+        mode = str(deploy.get("mode") or "")
+        if mode == "docker":
+            context["instructions"].append(
+                "Docker deploy mode requires Docker image build/publish semantics such as "
+                "plugins/docker or explicit docker build and docker push commands. A step "
+                "that only checks MEMSTACK_DEPLOY_MODE=cli is not valid docker deploy evidence."
+            )
+            context["instructions"].append(
+                "Drone Docker steps run inside runner/plugin containers; do not use localhost "
+                "or 127.0.0.1 for a registry on the host. When the configured registry is local, "
+                "use the Docker runner reachable registry/image values in this brief, such as "
+                "host.docker.internal:<port>, for plugins/docker repo and registry settings."
+            )
+            context["instructions"].append(
+                "Before reporting deploy completion, inspect .drone.yml. If docker mode still "
+                "uses localhost/127.0.0.1 for the registry or image, update it to the runner "
+                "reachable registry/image and commit that pipeline fix."
+            )
+        elif mode == "kubernetes":
+            context["instructions"].append(
+                "Kubernetes deploy mode requires applying the configured manifests with the "
+                "configured kubeconfig secret name; CLI-only smoke output is not enough."
+            )
+
+    return context
+
+
+def _deploy_context_with_runner_hints(deploy: dict[str, Any]) -> dict[str, Any]:
+    if str(deploy.get("mode") or "") != "docker":
+        return deploy
+    docker = deploy.get("docker")
+    if not isinstance(docker, Mapping):
+        return deploy
+
+    docker_context = dict(docker)
+    registry = _metadata_text(docker_context.get("registry"))
+    registry_internal = _drone_runner_localhost_alias(registry)
+    if registry_internal:
+        docker_context.setdefault("registry_internal", registry_internal)
+
+    image = _metadata_text(docker_context.get("image"))
+    if image and registry and registry_internal and image.startswith(f"{registry}/"):
+        docker_context.setdefault(
+            "image_internal",
+            f"{registry_internal}/{image.removeprefix(f'{registry}/')}",
+        )
+
+    output = dict(deploy)
+    output["docker"] = docker_context
+    return output
+
+
+def _drone_runner_localhost_alias(value: str | None) -> str | None:
+    if not value:
+        return None
+    prefix = ""
+    rest = value
+    if "://" in value:
+        scheme, rest = value.split("://", 1)
+        prefix = f"{scheme}://"
+    for host in ("localhost", "127.0.0.1", "::1"):
+        if rest == host:
+            return f"{prefix}host.docker.internal"
+        if rest.startswith(f"{host}:"):
+            return f"{prefix}host.docker.internal:{rest.split(':', 1)[1]}"
+    return None
+
+
+def _render_delivery_cicd_brief(context: Mapping[str, Any]) -> str:
+    provider = _metadata_text(context.get("provider")) or "unknown"
+    code_root = _metadata_text(context.get("code_root"))
+    phase = _metadata_text(context.get("node_phase"))
+    lines = ["## Workspace delivery CI/CD contract", f"Provider: {provider}"]
+    if phase:
+        lines.append(f"Current node phase: {phase}")
+    if code_root:
+        lines.append(f"Code root: `{code_root}`")
+
+    _append_delivery_drone_lines(lines, context.get("drone"))
+    _append_delivery_deploy_lines(lines, context.get("deploy"))
+    _append_delivery_instruction_lines(lines, context.get("instructions"))
+    return "\n".join(lines)
+
+
+def _append_delivery_drone_lines(lines: list[str], drone: object) -> None:
+    if not isinstance(drone, Mapping):
+        return
+    repo = _metadata_text(drone.get("repo"))
+    branch = _metadata_text(drone.get("branch"))
+    if repo:
+        lines.append(f"Drone repo: `{repo}`")
+    if branch:
+        lines.append(f"Drone branch: `{branch}`")
+
+
+def _append_delivery_deploy_lines(lines: list[str], deploy: object) -> None:
+    if not isinstance(deploy, Mapping) or deploy.get("enabled") is not True:
+        return
+    mode = _metadata_text(deploy.get("mode")) or "cli"
+    stage = _metadata_text(deploy.get("stage")) or "deploy"
+    lines.append(f"Deploy mode: {mode}")
+    lines.append(f"Deploy stage: `{stage}`")
+    _append_delivery_docker_lines(lines, deploy.get("docker"))
+
+
+def _append_delivery_docker_lines(lines: list[str], docker: object) -> None:
+    if not isinstance(docker, Mapping):
+        return
+    for key, label in (
+        ("image", "Docker image"),
+        ("image_internal", "Docker image (Drone runner)"),
+        ("registry", "Docker registry"),
+        ("registry_internal", "Docker registry (Drone runner)"),
+        ("dockerfile", "Dockerfile"),
+    ):
+        value = _metadata_text(docker.get(key))
+        if value:
+            lines.append(f"{label}: `{value}`")
+    tags = docker.get("tags")
+    if isinstance(tags, list) and tags:
+        safe_tags = [str(tag) for tag in tags if str(tag).strip()]
+        if safe_tags:
+            lines.append(f"Docker tags: {', '.join(safe_tags)}")
+
+
+def _append_delivery_instruction_lines(lines: list[str], instructions: object) -> None:
+    if not isinstance(instructions, list) or not instructions:
+        return
+    rendered = [str(item).strip() for item in instructions if str(item).strip()]
+    if not rendered:
+        return
+    lines.append("Contract rules:")
+    lines.extend(f"- {item}" for item in rendered)
+
+
 def _launch_authority_actor_id(leader_agent_id: str | None) -> str:
     return leader_agent_id or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
@@ -642,6 +881,7 @@ def _build_worker_system_context(
     code_context: WorkspaceCodeContext | None = None,
     preferred_language: str | None = None,
     plan_node_metadata: Mapping[str, Any] | None = None,
+    workspace_metadata: Mapping[str, Any] | None = None,
     attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build system-level workspace context for a launched worker session."""
@@ -680,7 +920,8 @@ def _build_worker_system_context(
                 ),
                 "harness_pipeline_gate": (
                     "For software implement/test/deploy/review tasks, the workspace harness "
-                    "will run sandbox-native CI/CD after your completion report. Do not treat "
+                    "will run the workspace-selected CI/CD provider after your completion "
+                    "report. Do not treat "
                     "self-reported tests as the final gate; provide enough context for the "
                     "harness pipeline and wait for durable pipeline evidence in follow-up work."
                 ),
@@ -718,7 +959,7 @@ def _build_worker_system_context(
                 (
                     "For deploy/review work, include preview URL, health-check command/result, "
                     "and rollback or stop notes when available; final acceptance requires "
-                    "harness-native pipeline/deployment evidence."
+                    "workspace-selected pipeline/deployment evidence."
                 ),
                 "Call workspace_report_blocked if a hard blocker cannot be recovered.",
             ],
@@ -812,6 +1053,12 @@ def _build_worker_system_context(
     )
     if verification_integrity is not None:
         context["workspace_verification_integrity"] = verification_integrity
+    delivery_cicd = _workspace_delivery_cicd_context(
+        workspace_metadata,
+        plan_node_metadata,
+    )
+    if delivery_cicd is not None:
+        context["delivery_cicd"] = delivery_cicd
     harness_context = _task_harness_context(task)
     if harness_context:
         context["harness"] = harness_context
@@ -1077,6 +1324,7 @@ def _build_worker_brief(
     extra_instructions: str | None = None,
     code_context: WorkspaceCodeContext | None = None,
     plan_node_metadata: Mapping[str, Any] | None = None,
+    workspace_metadata: Mapping[str, Any] | None = None,
     attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> str:
     """Compose the visible task brief for the worker agent.
@@ -1132,10 +1380,18 @@ def _build_worker_brief(
             "or source files. Run project reads, edits, tests, reports, git status, commits, "
             "and evidence collection from the current attempt root. If a required artifact is "
             "missing there, regenerate it there or report a blocker instead of probing the "
-            "baseline checkout."
+            "baseline checkout. Do not switch the attempt worktree to main/master or push/merge "
+            "from the sandbox; leave final changes on the attempt branch and report commit_ref "
+            "so the platform harness can publish and merge after verification."
         )
     if description:
         sections.append(f"## Task description\n{description}")
+    delivery_cicd = _workspace_delivery_cicd_context(
+        workspace_metadata,
+        plan_node_metadata,
+    )
+    if delivery_cicd is not None:
+        sections.append(_render_delivery_cicd_brief(delivery_cicd))
     sections.append(
         "## Artifact write discipline\n"
         "Never use bash heredocs, inline Python scripts, or one-shot write calls to create "
@@ -1242,7 +1498,7 @@ def _build_worker_brief(
         "reject the attempt. If you include commit_ref:<sha>, run `git status --short` "
         "after the commit and do not call workspace_report_complete unless it is empty; "
         "stage intended untracked files before committing. For software delivery phases, "
-        "the harness will run the final sandbox-native CI/CD gate after your report, so "
+        "the harness will run the final workspace-selected CI/CD gate after your report, so "
         "include preview, health, and rollback details when they exist."
     )
 
@@ -1657,6 +1913,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     resolved_conversation_id: str | None = None
     code_context: WorkspaceCodeContext | None = None
     plan_node_metadata: dict[str, Any] = {}
+    workspace_metadata_for_context: dict[str, Any] = {}
     root_goal_task_id = ""
     candidate = task.metadata.get(ROOT_GOAL_TASK_ID)
     if isinstance(candidate, str) and candidate:
@@ -1712,6 +1969,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
             if resolved_preferred_language is None:
                 resolved_preferred_language = await _user_preferred_language(db, task.created_by)
             workspace_metadata = dict(getattr(workspace, "metadata", {}) or {})
+            workspace_metadata_for_context = workspace_metadata
             plan_node_metadata = await _load_plan_node_metadata_for_task(db, task)
             code_context_evaluation = evaluate_workspace_code_context(
                 root_metadata=root_metadata,
@@ -2119,6 +2377,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         ),
         code_context=code_context,
         plan_node_metadata=plan_node_metadata,
+        workspace_metadata=workspace_metadata_for_context,
         attempt_worktree_context=attempt_worktree_context,
     )
     app_model_context = _build_worker_system_context(
@@ -2130,6 +2389,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
         code_context=code_context,
         preferred_language=resolved_preferred_language,
         plan_node_metadata=plan_node_metadata,
+        workspace_metadata=workspace_metadata_for_context,
         attempt_worktree_context=attempt_worktree_context,
     )
     final_content = ""

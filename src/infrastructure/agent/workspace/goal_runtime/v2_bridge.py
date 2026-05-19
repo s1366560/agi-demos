@@ -16,17 +16,23 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_autonomy_profiles import resolve_workspace_type
-from src.domain.model.workspace_plan.plan import PlanStatus
+from src.domain.model.workspace_plan.plan import Plan, PlanStatus
+from src.domain.model.workspace_plan.plan_node import PlanNodeKind
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlanModel,
+    PlanNodeModel,
     WorkspaceTaskModel,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
+    SqlPlanRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
     SqlWorkspacePlanEventRepository,
@@ -64,6 +70,11 @@ _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
 _DEFAULT_SOFTWARE_WORKSPACE_MIN_SUBTASKS = 6
 _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 _SOFTWARE_ITERATION_PHASES = ("research", "plan", "implement", "test", "deploy", "review")
+_ROOT_PLAN_DEDUP_STATUSES = (
+    PlanStatus.ACTIVE.value,
+    PlanStatus.DRAFT.value,
+    PlanStatus.COMPLETED.value,
+)
 
 
 def set_orchestrator_singleton_for_testing(orchestrator: WorkspaceOrchestrator | None) -> None:
@@ -103,13 +114,18 @@ async def kickoff_v2_plan(
             return True
 
         async with async_session_factory() as db:
+            await _acquire_root_kickoff_lock(
+                db,
+                workspace_id=workspace_id,
+                root_task_id=root_task_id,
+            )
             if await _completed_plan_exists_for_root_task(
                 db,
                 workspace_id=workspace_id,
                 root_task_id=root_task_id,
             ):
                 logger.info(
-                    "v2_bridge: skipping duplicate kickoff for completed root plan",
+                    "v2_bridge: skipping duplicate kickoff for existing root plan",
                     extra={
                         "workspace_id": workspace_id,
                         "root_task_id": root_task_id,
@@ -136,6 +152,8 @@ async def kickoff_v2_plan(
                 conversation_context=planning_context,
                 start_supervisor=False,
             )
+            if root_task_id:
+                await _attach_root_task_id_to_plan(db, plan=plan, root_task_id=root_task_id)
             if plan.status is PlanStatus.SUSPENDED and plan.goal_node.metadata.get(
                 "planner_contract_missing"
             ):
@@ -182,15 +200,30 @@ async def _completed_plan_exists_for_root_task(
     if not root_task_id:
         return False
 
-    active_stmt = (
-        select(PlanModel.id)
-        .where(PlanModel.workspace_id == workspace_id)
-        .where(PlanModel.status.in_((PlanStatus.ACTIVE.value, PlanStatus.DRAFT.value)))
-        .limit(1)
+    plan_ids = await _root_task_plan_ids(
+        db,
+        workspace_id=workspace_id,
+        root_task_id=root_task_id,
     )
-    if (await db.execute(active_stmt)).scalar_one_or_none() is not None:
+    if not plan_ids:
         return False
 
+    existing_stmt = (
+        select(PlanModel.id)
+        .where(PlanModel.workspace_id == workspace_id)
+        .where(PlanModel.id.in_(plan_ids))
+        .where(PlanModel.status.in_(_ROOT_PLAN_DEDUP_STATUSES))
+        .limit(1)
+    )
+    return (await db.execute(existing_stmt)).scalar_one_or_none() is not None
+
+
+async def _root_task_plan_ids(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    root_task_id: str,
+) -> set[str]:
     task_stmt = (
         select(WorkspaceTaskModel.metadata_json)
         .where(WorkspaceTaskModel.workspace_id == workspace_id)
@@ -205,17 +238,49 @@ async def _completed_plan_exists_for_root_task(
         for plan_id in (metadata.get(WORKSPACE_PLAN_ID),)
         if isinstance(plan_id, str) and plan_id
     }
-    if not plan_ids:
-        return False
 
-    completed_stmt = (
-        select(PlanModel.id)
+    goal_stmt = (
+        select(PlanNodeModel.plan_id)
+        .join(PlanModel, PlanModel.id == PlanNodeModel.plan_id)
         .where(PlanModel.workspace_id == workspace_id)
-        .where(PlanModel.id.in_(plan_ids))
-        .where(PlanModel.status == PlanStatus.COMPLETED.value)
-        .limit(1)
+        .where(PlanNodeModel.kind == PlanNodeKind.GOAL.value)
+        .where(PlanNodeModel.metadata_json[ROOT_GOAL_TASK_ID].as_string() == root_task_id)
     )
-    return (await db.execute(completed_stmt)).scalar_one_or_none() is not None
+    plan_ids.update(str(plan_id) for plan_id in (await db.execute(goal_stmt)).scalars().all())
+    return plan_ids
+
+
+async def _attach_root_task_id_to_plan(
+    db: AsyncSession,
+    *,
+    plan: Plan,
+    root_task_id: str,
+) -> None:
+    goal_node = plan.goal_node
+    if goal_node.metadata.get(ROOT_GOAL_TASK_ID) == root_task_id:
+        return
+    plan.replace_node(
+        replace(
+            goal_node,
+            metadata={**dict(goal_node.metadata or {}), ROOT_GOAL_TASK_ID: root_task_id},
+        )
+    )
+    await SqlPlanRepository(db).save(plan)
+
+
+async def _acquire_root_kickoff_lock(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    root_task_id: str | None,
+) -> None:
+    if not root_task_id:
+        return
+    bind = db.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    lock_name = f"workspace_v2_kickoff:{workspace_id}:{root_task_id}"
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtext(lock_name))))
 
 
 async def _build_workspace_task_decomposer(

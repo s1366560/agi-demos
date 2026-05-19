@@ -603,6 +603,82 @@ class TestBuildBrief:
         assert "empty string" in shell_instructions
         assert "ss" in shell_instructions
 
+    def test_includes_drone_docker_delivery_contract(self) -> None:
+        task = _make_task()
+        workspace_metadata = {
+            "sandbox_code_root": "/workspace/my-evo",
+            "delivery_cicd": {
+                "provider": "drone",
+                "code_root": "/workspace/my-evo",
+                "auto_deploy": True,
+                "drone": {
+                    "repo": "s1366560/my-evo",
+                    "branch": "main",
+                    "server_url_env": "DRONE_SERVER_URL",
+                    "token_env": "DRONE_TOKEN",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "stage": "deploy",
+                        "docker": {
+                            "image": "localhost:5001/my-evo",
+                            "registry": "localhost:5001",
+                            "dockerfile": "Dockerfile",
+                            "tags": ["drone-docker-e2e"],
+                        },
+                    },
+                },
+            },
+        }
+        node_metadata = {"iteration_phase": "deploy"}
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata=node_metadata,
+        )
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata=node_metadata,
+        )
+
+        assert "## Workspace delivery CI/CD contract" in brief
+        assert "Provider: drone" in brief
+        assert "Deploy mode: docker" in brief
+        assert "Docker image: `localhost:5001/my-evo`" in brief
+        assert "Docker image (Drone runner): `host.docker.internal:5001/my-evo`" in brief
+        assert "Docker registry (Drone runner): `host.docker.internal:5001`" in brief
+        assert "MEMSTACK_DEPLOY_MODE=cli is not valid docker deploy evidence" in brief
+        assert "do not use localhost" in brief
+        assert "sandbox worker may not have DRONE_TOKEN" in brief
+        assert "platform harness can trigger and verify Drone" in brief
+        assert "If docker mode still uses localhost/127.0.0.1" in brief
+        assert system_context["delivery_cicd"]["provider"] == "drone"
+        assert system_context["delivery_cicd"]["deploy"]["mode"] == "docker"
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["image_internal"]
+            == "host.docker.internal:5001/my-evo"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["registry_internal"]
+            == "host.docker.internal:5001"
+        )
+        assert system_context["delivery_cicd"]["drone"]["repo"] == "s1366560/my-evo"
+        assert (
+            "Do not replace the configured deployment mode with a CLI smoke check"
+            in " ".join(system_context["delivery_cicd"]["instructions"])
+        )
+        assert "sandbox worker may not have DRONE_TOKEN" in " ".join(
+            system_context["delivery_cicd"]["instructions"]
+        )
+
     def test_system_context_includes_harness_preflight_contract(self) -> None:
         task = _make_task(
             metadata={
@@ -1095,6 +1171,8 @@ class TestBuildBrief:
         )
 
         assert "The current attempt root is `/workspace/.memstack/worktrees/att-2`" in brief
+        assert "Do not switch the attempt worktree to main/master" in brief
+        assert "report commit_ref so the platform harness can publish and merge" in brief
         assert system_context["active_execution_root"] == "/workspace/.memstack/worktrees/att-2"
         assert system_context["attempt_worktree"]["attempt_id"] == "att-2"
         assert system_context["worktree_setup"]["status"] == "prepared"

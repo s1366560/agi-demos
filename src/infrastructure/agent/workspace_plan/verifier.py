@@ -1484,7 +1484,6 @@ def _reported_commit_refs(ctx: VerificationContext) -> list[str]:
 def _reported_changed_paths(ctx: VerificationContext) -> set[str]:
     values = _attempt_scoped_artifact_text_values(
         ctx,
-        "git_diff_summary",
         "evidence_refs",
         "last_worker_report_artifacts",
         "candidate_artifacts",
@@ -1494,7 +1493,10 @@ def _reported_changed_paths(ctx: VerificationContext) -> set[str]:
     )
     paths: set[str] = set()
     for value in values:
-        paths.update(_extract_path_like_tokens(value))
+        normalized = value.strip()
+        if not normalized.startswith("changed_file:"):
+            continue
+        paths.update(_extract_path_like_tokens(normalized.removeprefix("changed_file:")))
     return paths
 
 

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { App, Button } from 'antd';
+import { Button, message } from 'antd';
 import {
   ChevronDown,
   ChevronUp,
@@ -842,7 +842,6 @@ export function GoalsTab({
   onProjectObjective,
   onCreateObjective,
 }: GoalsTabProps) {
-  const { message } = App.useApp();
   const { t, i18n } = useTranslation();
   const [expandedObjectiveIds, setExpandedObjectiveIds] = useState<Record<string, boolean>>({});
   const [expandedChildTaskIds, setExpandedChildTaskIds] = useState<Record<string, boolean>>({});

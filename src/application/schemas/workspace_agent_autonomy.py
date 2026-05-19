@@ -382,6 +382,11 @@ class ExecutionTaskMetadataModel(ContractModel):
     durable_plan_verdict: str | None = None
     durable_plan_verification_summary: str | None = None
     durable_plan_verified_at: str | None = None
+    pipeline_status: str | None = None
+    pipeline_gate_status: str | None = None
+    pipeline_run_id: str | None = None
+    pipeline_evidence_refs: list[str] = Field(default_factory=list)
+    pipeline_candidate_commit_ref: str | None = None
     task_execution_session_health: str | None = None
     task_execution_session_status: str | None = None
     task_execution_session_last_error: str | None = None

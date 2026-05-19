@@ -195,6 +195,7 @@ class ProviderService:
         updated = await self.repository.update(provider_id, config)
 
         self.resolution_service.invalidate_cache()
+        self._invalidate_model_pool_cache()
         if updated is not None:
             await self._sync_health_checker_provider_type(original_provider_type)
             if updated.provider_type != original_provider_type:
@@ -202,6 +203,15 @@ class ProviderService:
 
         logger.info(f"Updated provider: {provider_id}")
         return updated
+
+    def _invalidate_model_pool_cache(self) -> None:
+        """Best-effort cache invalidation for pooled LLM routing."""
+        try:
+            from src.infrastructure.llm.model_pool import get_model_pool_service
+
+            get_model_pool_service().invalidate()
+        except Exception:
+            logger.exception("Failed to invalidate model pool cache after provider update")
 
     async def delete_provider(self, provider_id: UUID) -> bool:
         """Delete provider (hard delete)."""

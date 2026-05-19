@@ -15,6 +15,7 @@ export type WorkspaceUseCase =
   | 'operations';
 export type WorkspaceVerificationGrade = 'pass' | 'warn' | 'fail';
 export type WorkspaceSourceControlProvider = 'github' | 'gitlab';
+export type WorkspaceDroneDeployMode = 'docker' | 'kubernetes' | 'cli';
 export type WorkspaceCollaborationMode =
   | 'single_agent'
   | 'multi_agent_shared'
@@ -107,6 +108,40 @@ export interface WorkspaceDeliveryDroneEnvironmentConfig {
   runner?: WorkspaceDeliveryDroneRunnerEnvironmentConfig | undefined;
 }
 
+export interface WorkspaceDeliveryDroneDeployDockerConfig {
+  registry?: string | undefined;
+  image?: string | undefined;
+  context?: string | undefined;
+  dockerfile?: string | undefined;
+  tags?: string[] | undefined;
+  username_secret?: string | undefined;
+  password_secret?: string | undefined;
+}
+
+export interface WorkspaceDeliveryDroneDeployKubernetesConfig {
+  namespace?: string | undefined;
+  manifest_paths?: string[] | undefined;
+  kubeconfig_secret?: string | undefined;
+  context?: string | undefined;
+  kubectl_image?: string | undefined;
+}
+
+export interface WorkspaceDeliveryDroneDeployCliConfig {
+  image?: string | undefined;
+  commands?: string[] | undefined;
+}
+
+export interface WorkspaceDeliveryDroneDeployConfig {
+  enabled?: boolean | undefined;
+  mode?: WorkspaceDroneDeployMode | undefined;
+  stage?: string | undefined;
+  target?: string | undefined;
+  required?: boolean | undefined;
+  docker?: WorkspaceDeliveryDroneDeployDockerConfig | undefined;
+  kubernetes?: WorkspaceDeliveryDroneDeployKubernetesConfig | undefined;
+  cli?: WorkspaceDeliveryDroneDeployCliConfig | undefined;
+}
+
 export interface WorkspaceDeliveryDroneConfig {
   repo?: string | undefined;
   repository?: string | undefined;
@@ -119,6 +154,7 @@ export interface WorkspaceDeliveryDroneConfig {
   poll_interval_seconds?: number | undefined;
   source_control?: WorkspaceSourceControlConfig | undefined;
   environment?: WorkspaceDeliveryDroneEnvironmentConfig | undefined;
+  deploy?: WorkspaceDeliveryDroneDeployConfig | undefined;
   params?: Record<string, string> | undefined;
   build_params?: Record<string, string> | undefined;
 }

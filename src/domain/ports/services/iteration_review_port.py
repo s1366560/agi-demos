@@ -55,6 +55,7 @@ class IterationReviewContext:
     feedback_items: tuple[str, ...] = field(default_factory=tuple)
     max_next_tasks: int = 6
     linter_covered_categories: tuple[str, ...] = field(default_factory=tuple)
+    iteration_loop: dict[str, object] = field(default_factory=dict)
 
 
 class IterationReviewPort(Protocol):

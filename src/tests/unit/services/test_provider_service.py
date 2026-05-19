@@ -159,6 +159,34 @@ class TestProviderService:
         service.repository.update.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_update_provider_invalidates_model_pool_cache(self, service):
+        """Provider updates should refresh pooled model routing immediately."""
+        provider_id = uuid4()
+        config = ProviderConfigUpdate(pool_enabled=False)
+
+        existing = MagicMock()
+        existing.is_default = False
+        existing.operation_type = OperationType.LLM
+        existing.provider_type = ProviderType.OPENAI
+        service.repository.get_by_id.return_value = existing
+
+        updated = MagicMock()
+        updated.provider_type = ProviderType.OPENAI
+        service.repository.update.return_value = updated
+
+        service.resolution_service = MagicMock()
+
+        with patch("src.infrastructure.llm.model_pool.get_model_pool_service") as mock_get_pool:
+            mock_pool = MagicMock()
+            mock_get_pool.return_value = mock_pool
+
+            result = await service.update_provider(provider_id, config)
+
+        assert result == updated
+        service.resolution_service.invalidate_cache.assert_called_once()
+        mock_pool.invalidate.assert_called_once_with()
+
+    @pytest.mark.asyncio
     async def test_update_provider_not_found(self, service):
         """Test updating non-existent provider."""
         provider_id = uuid4()

@@ -132,6 +132,51 @@ class TestWorkerSessionHealLimit:
         assert scheduled == ["child-0", "child-1"]
         assert attempt_repo.find_active_by_workspace_task_id.await_count == 2
 
+    @pytest.mark.asyncio
+    async def test_skips_durable_plan_projected_children(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        child = SimpleNamespace(
+            id="plan-child",
+            assignee_agent_id="worker-1",
+            archived_at=None,
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={
+                "task_role": "execution_task",
+                "workspace_plan_id": "plan-1",
+                "workspace_plan_node_id": "node-1",
+            },
+        )
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        attempt_repo = MagicMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
+        scheduled: list[str] = []
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_task_session_attempt_repository."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            lambda _db: attempt_repo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+            lambda **kwargs: scheduled.append(kwargs["task"].id),
+        )
+
+        healed = await wlb._heal_assigned_execution_tasks_without_sessions(
+            db=MagicMock(),
+            task_repo=task_repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+
+        assert healed == 0
+        assert scheduled == []
+        attempt_repo.find_active_by_workspace_task_id.assert_not_awaited()
+
 
 class TestScheduleAutonomyTick:
     @pytest.mark.asyncio

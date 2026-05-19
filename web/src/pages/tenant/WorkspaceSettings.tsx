@@ -795,6 +795,283 @@ export const WorkspaceSettingsPanel: React.FC<{
 
                 <div className="grid gap-3 border-t border-border-light pt-4 dark:border-border-dark">
                   <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
+                    {t('workspaceSettings.delivery.droneDeployStage')}
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <SwitchField
+                      label={t('workspaceSettings.delivery.droneDeployEnabled')}
+                      checked={draft.deliveryDroneDeployEnabled}
+                      onChange={(checked) => {
+                        updateDraft('deliveryDroneDeployEnabled', checked);
+                      }}
+                    />
+                    <SwitchField
+                      label={t('workspaceSettings.delivery.droneDeployRequired')}
+                      checked={draft.deliveryDroneDeployRequired}
+                      onChange={(checked) => {
+                        updateDraft('deliveryDroneDeployRequired', checked);
+                      }}
+                    />
+                    <Field
+                      label={t('workspaceSettings.delivery.droneDeployMode')}
+                      htmlFor="workspace-delivery-drone-deploy-mode"
+                    >
+                      <Select
+                        id="workspace-delivery-drone-deploy-mode"
+                        value={draft.deliveryDroneDeployMode}
+                        onChange={(value) => {
+                          updateDraft('deliveryDroneDeployMode', value);
+                        }}
+                        options={[
+                          { value: 'docker', label: 'docker' },
+                          { value: 'kubernetes', label: 'kubernetes' },
+                          { value: 'cli', label: 'cli' },
+                        ]}
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneDeployTarget')}
+                      htmlFor="workspace-delivery-drone-deploy-target"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-deploy-target"
+                        value={draft.deliveryDroneDeployTarget}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneDeployTarget', event.target.value);
+                        }}
+                        placeholder="staging"
+                      />
+                    </Field>
+                    <Field
+                      label={t('workspaceSettings.delivery.droneDeployStageName')}
+                      htmlFor="workspace-delivery-drone-deploy-stage"
+                    >
+                      <Input
+                        id="workspace-delivery-drone-deploy-stage"
+                        value={draft.deliveryDroneDeployStage}
+                        onChange={(event) => {
+                          updateDraft('deliveryDroneDeployStage', event.target.value);
+                        }}
+                        placeholder="deploy"
+                      />
+                    </Field>
+                  </div>
+
+                  {draft.deliveryDroneDeployMode === 'docker' ? (
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerImage')}
+                        htmlFor="workspace-delivery-drone-deploy-docker-image"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-docker-image"
+                          value={draft.deliveryDroneDeployDockerImage}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployDockerImage', event.target.value);
+                          }}
+                          placeholder="registry.example.com/app"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerRegistry')}
+                        htmlFor="workspace-delivery-drone-deploy-docker-registry"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-docker-registry"
+                          value={draft.deliveryDroneDeployDockerRegistry}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployDockerRegistry', event.target.value);
+                          }}
+                          placeholder="registry.example.com"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerContext')}
+                        htmlFor="workspace-delivery-drone-deploy-docker-context"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-docker-context"
+                          value={draft.deliveryDroneDeployDockerContext}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployDockerContext', event.target.value);
+                          }}
+                          placeholder="."
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerfile')}
+                        htmlFor="workspace-delivery-drone-deploy-dockerfile"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-dockerfile"
+                          value={draft.deliveryDroneDeployDockerfile}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployDockerfile', event.target.value);
+                          }}
+                          placeholder="Dockerfile"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerUsernameSecret')}
+                        htmlFor="workspace-delivery-drone-deploy-docker-username-secret"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-docker-username-secret"
+                          value={draft.deliveryDroneDeployDockerUsernameSecret}
+                          onChange={(event) => {
+                            updateDraft(
+                              'deliveryDroneDeployDockerUsernameSecret',
+                              event.target.value
+                            );
+                          }}
+                          placeholder="docker_username"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerPasswordSecret')}
+                        htmlFor="workspace-delivery-drone-deploy-docker-password-secret"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-docker-password-secret"
+                          value={draft.deliveryDroneDeployDockerPasswordSecret}
+                          onChange={(event) => {
+                            updateDraft(
+                              'deliveryDroneDeployDockerPasswordSecret',
+                              event.target.value
+                            );
+                          }}
+                          placeholder="docker_password"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployDockerTags')}
+                        htmlFor="workspace-delivery-drone-deploy-docker-tags"
+                      >
+                        <TextArea
+                          id="workspace-delivery-drone-deploy-docker-tags"
+                          value={draft.deliveryDroneDeployDockerTags}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployDockerTags', event.target.value);
+                          }}
+                          className="font-mono text-xs"
+                          rows={3}
+                        />
+                      </Field>
+                    </div>
+                  ) : null}
+
+                  {draft.deliveryDroneDeployMode === 'kubernetes' ? (
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployKubernetesNamespace')}
+                        htmlFor="workspace-delivery-drone-deploy-kubernetes-namespace"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-kubernetes-namespace"
+                          value={draft.deliveryDroneDeployKubernetesNamespace}
+                          onChange={(event) => {
+                            updateDraft(
+                              'deliveryDroneDeployKubernetesNamespace',
+                              event.target.value
+                            );
+                          }}
+                          placeholder="default"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployKubeconfigSecret')}
+                        htmlFor="workspace-delivery-drone-deploy-kubeconfig-secret"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-kubeconfig-secret"
+                          value={draft.deliveryDroneDeployKubeconfigSecret}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployKubeconfigSecret', event.target.value);
+                          }}
+                          placeholder="kubeconfig"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployKubernetesContext')}
+                        htmlFor="workspace-delivery-drone-deploy-kubernetes-context"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-kubernetes-context"
+                          value={draft.deliveryDroneDeployKubernetesContext}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployKubernetesContext', event.target.value);
+                          }}
+                          placeholder="staging"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployKubectlImage')}
+                        htmlFor="workspace-delivery-drone-deploy-kubectl-image"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-kubectl-image"
+                          value={draft.deliveryDroneDeployKubectlImage}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployKubectlImage', event.target.value);
+                          }}
+                          placeholder="bitnami/kubectl:latest"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployKubernetesManifestPaths')}
+                        htmlFor="workspace-delivery-drone-deploy-kubernetes-manifests"
+                      >
+                        <TextArea
+                          id="workspace-delivery-drone-deploy-kubernetes-manifests"
+                          value={draft.deliveryDroneDeployKubernetesManifestPaths}
+                          onChange={(event) => {
+                            updateDraft(
+                              'deliveryDroneDeployKubernetesManifestPaths',
+                              event.target.value
+                            );
+                          }}
+                          className="font-mono text-xs"
+                          rows={3}
+                        />
+                      </Field>
+                    </div>
+                  ) : null}
+
+                  {draft.deliveryDroneDeployMode === 'cli' ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployCliImage')}
+                        htmlFor="workspace-delivery-drone-deploy-cli-image"
+                      >
+                        <Input
+                          id="workspace-delivery-drone-deploy-cli-image"
+                          value={draft.deliveryDroneDeployCliImage}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployCliImage', event.target.value);
+                          }}
+                          placeholder="alpine:3.20"
+                        />
+                      </Field>
+                      <Field
+                        label={t('workspaceSettings.delivery.droneDeployCliCommands')}
+                        htmlFor="workspace-delivery-drone-deploy-cli-commands"
+                      >
+                        <TextArea
+                          id="workspace-delivery-drone-deploy-cli-commands"
+                          value={draft.deliveryDroneDeployCliCommands}
+                          onChange={(event) => {
+                            updateDraft('deliveryDroneDeployCliCommands', event.target.value);
+                          }}
+                          className="font-mono text-xs"
+                          rows={3}
+                        />
+                      </Field>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="grid gap-3 border-t border-border-light pt-4 dark:border-border-dark">
+                  <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
                     {t('workspaceSettings.delivery.droneServerEnvironment')}
                   </div>
                   <div className="grid gap-4 lg:grid-cols-3">
