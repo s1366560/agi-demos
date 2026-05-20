@@ -51,6 +51,12 @@ export const DEFAULT_DRONE_DEPLOY_CLI_IMAGE = 'alpine:3.20';
 export const DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT = '.';
 export const DEFAULT_DRONE_DEPLOY_DOCKERFILE = 'Dockerfile';
 export const DEFAULT_DRONE_DEPLOY_DOCKER_TAGS = ['latest'];
+export const DEFAULT_DRONE_DEPLOY_DOCKER_STRATEGY = 'local_build';
+export const DEFAULT_DRONE_DEPLOY_DOCKER_ALLOW_DAEMON_REGISTRY_PULL = false;
+export const DEFAULT_DRONE_DEPLOY_DOCKER_HOST_PORT = 18080;
+export const DEFAULT_DRONE_DEPLOY_DOCKER_RESERVED_HOST_PORTS = [
+  3000, 3001, 5001, 5432, 6379, 7474, 7687, 8000, 8080,
+];
 export const DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE = 'default';
 export const DEFAULT_DRONE_DEPLOY_KUBERNETES_MANIFEST_PATHS = ['k8s/*.yaml'];
 export const DEFAULT_DRONE_DEPLOY_KUBECONFIG_SECRET = 'kubeconfig';
@@ -283,9 +289,14 @@ export function buildDefaultDroneDeployConfig(): WorkspaceDeliveryDroneDeployCon
       commands: [],
     },
     docker: {
+      trusted: true,
       context: DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT,
       dockerfile: DEFAULT_DRONE_DEPLOY_DOCKERFILE,
       tags: [...DEFAULT_DRONE_DEPLOY_DOCKER_TAGS],
+      deploy_strategy: DEFAULT_DRONE_DEPLOY_DOCKER_STRATEGY,
+      deploy_host_port: DEFAULT_DRONE_DEPLOY_DOCKER_HOST_PORT,
+      reserved_host_ports: [...DEFAULT_DRONE_DEPLOY_DOCKER_RESERVED_HOST_PORTS],
+      allow_daemon_registry_pull: DEFAULT_DRONE_DEPLOY_DOCKER_ALLOW_DAEMON_REGISTRY_PULL,
     },
     kubernetes: {
       namespace: DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE,

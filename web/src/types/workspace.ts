@@ -111,9 +111,16 @@ export interface WorkspaceDeliveryDroneEnvironmentConfig {
 export interface WorkspaceDeliveryDroneDeployDockerConfig {
   registry?: string | undefined;
   image?: string | undefined;
+  trusted?: boolean | undefined;
   context?: string | undefined;
   dockerfile?: string | undefined;
   tags?: string[] | undefined;
+  deploy_strategy?: string | undefined;
+  deploy_host_port?: number | undefined;
+  reserved_host_ports?: number[] | undefined;
+  allow_daemon_registry_pull?: boolean | undefined;
+  image_deploy_local?: string | undefined;
+  deploy_local_build_command?: string | undefined;
   username_secret?: string | undefined;
   password_secret?: string | undefined;
 }

@@ -814,6 +814,15 @@ class MCPWebSocketClient:
                     self._timed_out_request_ids.clear()
             error_msg = f"MCP request '{method}' timed out after {timeout}s (url={self.url})"
             logger.error(error_msg)
+            self._connected = False
+            try:
+                await self.disconnect()
+            except Exception as cleanup_error:
+                logger.warning(
+                    "MCP WebSocket cleanup after timeout failed for %s: %s",
+                    self.url,
+                    cleanup_error,
+                )
             return None
         except (ConnectionError, ConnectionResetError, RuntimeError) as e:
             async with self._request_id_lock:

@@ -264,7 +264,7 @@ def _user_payload(context: IterationReviewContext) -> str:
                 "API contract verification and integration tests",
                 "code, test, and sandbox-native release-readiness implementation",
                 "sandbox preview proxy deployment and health-check verification",
-                "Drone docker CI/CD evidence through Drone pipeline logs and registry manifest checks",
+                "Drone docker CI/CD evidence through deploy-step logs and registry manifest checks",
             ],
             "continue_next_iteration_for": [
                 "missing acceptance evidence",
@@ -281,7 +281,7 @@ def _user_payload(context: IterationReviewContext) -> str:
             ],
             "runtime_rules": [
                 "If runtime_constraints.sandbox_docker_runtime.available is false, do not create next_tasks requiring docker/podman/containerd CLI, Docker daemon/socket access, docker pull/run, or a deployed container stack inside the sandbox worker.",
-                "For Drone docker deployment evidence under that constraint, use Drone pipeline success, registry manifest/tag checks, and sandbox-native preview/service health or browser evidence.",
+                "For Drone docker deployment evidence under that constraint, use Drone pipeline deploy-step success, registry manifest/tag checks, and sandbox-native preview/service health or browser evidence.",
                 "If a live container run is mandatory and no Docker-enabled runtime exists, choose needs_human_review instead of retrying a sandbox worker.",
             ],
             "needs_human_review_only_for": [
@@ -305,7 +305,7 @@ def _runtime_constraints_payload(context: IterationReviewContext) -> dict[str, o
             "source": "completed_iteration_feedback",
             "policy": (
                 "Workers in this sandbox must not be asked to run docker/podman/containerd "
-                "commands or to start a deployed container stack. Treat Drone docker pipeline "
+                "commands or to start a deployed container stack. Treat Drone docker deploy-step "
                 "success plus registry manifest/tag checks as the Docker deployment evidence, "
                 "and use sandbox-native preview/service health or browser checks for worker-side "
                 "verification."

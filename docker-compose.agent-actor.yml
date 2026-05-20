@@ -1,12 +1,12 @@
 services:
   agent-actor-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: agi-demos-ray-head:latest
     container_name: memstack-agent-actor-worker
-    command: uv run python -m src.agent_actor_worker
+    command: >
+      bash -c "pip install -e . --quiet 2>/dev/null || true
+      && python -m src.agent_actor_worker"
     environment:
-      - RAY_ADDRESS=ray://ray-head:10001
+      - RAY_ADDRESS=auto
       - RAY_NAMESPACE=memstack
 
       - NEO4J_URI=bolt://neo4j:7687
@@ -33,6 +33,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    network_mode: service:ray-head
+    volumes:
+      - ./src:/app/src:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ray-runtime:/tmp/ray
     mem_limit: 2g
     cpus: "1.0"
     restart: unless-stopped

@@ -151,6 +151,20 @@ _DEFAULT_DRONE_DEPLOY_CLI_IMAGE = "alpine:3.20"
 _DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT = "."
 _DEFAULT_DRONE_DEPLOY_DOCKERFILE = "Dockerfile"
 _DEFAULT_DRONE_DEPLOY_DOCKER_TAGS = ["latest"]
+_DEFAULT_DRONE_DEPLOY_DOCKER_STRATEGY = "local_build"
+_DEFAULT_DRONE_DEPLOY_DOCKER_ALLOW_DAEMON_REGISTRY_PULL = False
+_DEFAULT_DRONE_DEPLOY_DOCKER_HOST_PORT = 18080
+_DEFAULT_DRONE_DEPLOY_DOCKER_RESERVED_HOST_PORTS = [
+    3000,
+    3001,
+    5001,
+    5432,
+    6379,
+    7474,
+    7687,
+    8000,
+    8080,
+]
 _DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE = "default"
 _DEFAULT_DRONE_DEPLOY_KUBERNETES_MANIFEST_PATHS = ["k8s/*.yaml"]
 _DEFAULT_DRONE_DEPLOY_KUBECONFIG_SECRET = "kubeconfig"
@@ -284,7 +298,7 @@ def _ensure_default_bool(mapping: dict[str, Any], key: str, value: bool) -> None
         mapping[key] = value
 
 
-def _ensure_default_list(mapping: dict[str, Any], key: str, value: list[str]) -> None:
+def _ensure_default_list(mapping: dict[str, Any], key: str, value: list[Any]) -> None:
     if not isinstance(mapping.get(key), list):
         mapping[key] = list(value)
 
@@ -418,9 +432,22 @@ def _ensure_drone_deploy(drone: dict[str, Any]) -> None:
     _ensure_default_list(cli, "commands", [])
 
     docker = _ensure_mapping(deploy, "docker")
+    _ensure_default_bool(docker, "trusted", True)
     _ensure_default_text(docker, "context", _DEFAULT_DRONE_DEPLOY_DOCKER_CONTEXT)
     _ensure_default_text(docker, "dockerfile", _DEFAULT_DRONE_DEPLOY_DOCKERFILE)
     _ensure_default_list(docker, "tags", _DEFAULT_DRONE_DEPLOY_DOCKER_TAGS)
+    _ensure_default_text(docker, "deploy_strategy", _DEFAULT_DRONE_DEPLOY_DOCKER_STRATEGY)
+    _ensure_default_int(docker, "deploy_host_port", _DEFAULT_DRONE_DEPLOY_DOCKER_HOST_PORT)
+    _ensure_default_list(
+        docker,
+        "reserved_host_ports",
+        _DEFAULT_DRONE_DEPLOY_DOCKER_RESERVED_HOST_PORTS,
+    )
+    _ensure_default_bool(
+        docker,
+        "allow_daemon_registry_pull",
+        _DEFAULT_DRONE_DEPLOY_DOCKER_ALLOW_DAEMON_REGISTRY_PULL,
+    )
 
     kubernetes = _ensure_mapping(deploy, "kubernetes")
     _ensure_default_text(kubernetes, "namespace", _DEFAULT_DRONE_DEPLOY_KUBERNETES_NAMESPACE)

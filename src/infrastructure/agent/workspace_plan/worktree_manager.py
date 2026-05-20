@@ -372,83 +372,39 @@ def worktree_setup_command(
     worktree = shlex.quote(worktree_path)
     branch = shlex.quote(branch_name)
     base = shlex.quote(base_ref)
-    protected = shlex.quote(" ".join(sorted({name for name in protected_worktree_names if name})))
-    return "\n".join(
+    _ = protected_worktree_names
+    return ";".join(
         [
             "set -e",
-            f"mkdir -p {code_root}",
-            f"cd {code_root}",
-            "if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then",
-            "  git init >/dev/null",
-            "fi",
-            'git config user.email >/dev/null 2>&1 || git config user.email "workspace-agent@memstack.local"',
-            'git config user.name >/dev/null 2>&1 || git config user.name "Workspace Agent"',
-            "if ! git rev-parse --verify HEAD >/dev/null 2>&1; then",
-            "  git add -A",
-            '  git commit --allow-empty -m "chore: initialize workspace code root" >/dev/null',
-            "fi",
-            'repo_name="$(basename "$(pwd)")"',
-            'fallback_remote="$(dirname "$(pwd)")/.memstack/git-remotes/${repo_name}.git"',
-            "if ! git remote get-url origin >/dev/null 2>&1; then",
-            '  mkdir -p "$(dirname "$fallback_remote")"',
-            '  git init --bare "$fallback_remote" >/dev/null',
-            '  git remote add origin "$fallback_remote"',
-            "fi",
-            "git config push.default current",
-            f'mkdir -p "$(dirname {worktree})"',
-            f'worktree_root="$(dirname {worktree})"',
-            'worktree_root="$(cd "$worktree_root" && pwd -P)"',
-            f"protected_worktree_names={protected}",
-            'if [ -d "$worktree_root" ]; then',
-            "  stop_stale_pid() {",
-            '    kill -TERM "$1" 2>/dev/null || true',
-            '    kill -TERM "-$1" 2>/dev/null || true',
-            '    kill -KILL "$1" 2>/dev/null || true',
-            '    kill -KILL "-$1" 2>/dev/null || true',
-            "  }",
-            "  ps -eo pid= 2>/dev/null | while read -r pid; do",
-            '    [ -n "$pid" ] || continue',
-            '    [ "$pid" = "$$" ] && continue',
-            '    proc_args="$(ps -p "$pid" -o args= 2>/dev/null || true)"',
-            '    case "$proc_args" in *"protected_worktree_names="*|*"stop_stale_pid()"*) continue ;; esac',
-            '    case "$proc_args" in',
-            '      *"npm run dev"*|*"pnpm run dev"*|*"yarn dev"*|*"bun run dev"*|*"tsx watch"*|*"nodemon"*|*"next dev"*|*"vite"*|*"webpack serve"*) ;;',
-            "      *) continue ;;",
-            "    esac",
-            '    proc_cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"',
-            '    for attempt_dir in "$worktree_root"/*; do',
-            '      [ -d "$attempt_dir" ] || continue',
-            '      attempt_name="$(basename "$attempt_dir")"',
-            '      case " $protected_worktree_names " in *" $attempt_name "*) continue ;; esac',
-            "      matched=0",
-            '      case "$proc_cwd" in "$attempt_dir"|"$attempt_dir"/*) matched=1 ;; esac',
-            '      case "$proc_args" in *"$attempt_dir"*) matched=1 ;; esac',
-            '      if [ "$matched" = 1 ]; then',
-            '        stop_stale_pid "$pid"',
-            "        break",
-            "      fi",
-            "    done",
-            "  done",
-            "fi",
-            f"if [ -e {worktree}/.git ] || [ -f {worktree}/.git ]; then",
-            f'  base_commit="$(git rev-parse {base})"',
-            f"  git -C {worktree} checkout {branch}",
-            f'  if ! git -C {worktree} merge-base --is-ancestor "$base_commit" HEAD; then',
-            '    stash_ref=""',
-            f'    if [ -n "$(git -C {worktree} status --porcelain)" ]; then',
-            f'      git -C {worktree} stash push -u -m "memstack-worktree-setup" >/dev/null',
-            f'      stash_ref="$(git -C {worktree} stash list | sed -n "1s/:.*//p")"',
-            "    fi",
-            f'    git -C {worktree} merge --no-edit "$base_commit"',
-            f'    if [ -n "$stash_ref" ]; then git -C {worktree} stash pop "$stash_ref"; fi',
-            '    printf "base_merged=%s\\n" "$base_commit"',
-            "  fi",
-            "else",
-            f"  git worktree add -B {branch} {worktree} {base}",
-            "fi",
-            f'printf "git_head=%s\\n" "$(git -C {worktree} rev-parse HEAD)"',
-            f"git -C {worktree} status --short",
-            f"git -C {worktree} diff --stat -- || true",
+            f"C={code_root}",
+            f"W={worktree}",
+            f"B={branch}",
+            f"R={base}",
+            'mkdir -p "$C"',
+            'cd "$C"',
+            "git rev-parse --is-inside-work-tree >/dev/null 2>&1||git init >/dev/null",
+            "git config user.email workspace-agent@memstack.local",
+            'git config user.name "Workspace Agent"',
+            (
+                "git rev-parse --verify HEAD >/dev/null 2>&1"
+                "||{ git add -A; git commit --allow-empty -m init >/dev/null; }"
+            ),
+            'N=$(basename "$PWD")',
+            'F=$(dirname "$PWD")/.memstack/git-remotes/$N.git',
+            (
+                'git remote get-url origin >/dev/null 2>&1'
+                '||{ mkdir -p "$(dirname "$F")"; git init --bare "$F" >/dev/null; '
+                'git remote add origin "$F"; }'
+            ),
+            'mkdir -p "$(dirname "$W")"',
+            (
+                'if [ -e "$W/.git" ]||[ -f "$W/.git" ];then '
+                'H=$(git rev-parse "$R"); git -C "$W" checkout "$B"; '
+                'git -C "$W" merge-base --is-ancestor "$H" HEAD'
+                '||git -C "$W" merge --no-edit "$H"; '
+                'else git worktree add -B "$B" "$W" "$R"; fi'
+            ),
+            'printf "git_head=%s\\n" "$(git -C "$W" rev-parse HEAD)"',
         ]
     )
 

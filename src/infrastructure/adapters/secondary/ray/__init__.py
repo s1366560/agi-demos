@@ -15,6 +15,9 @@ _ray_init_failed = False
 
 def _check_ray_reachable(address: str, timeout: float = 3) -> bool:
     """Quick TCP check to see if Ray head node is reachable."""
+    if address.strip().lower() == "auto":
+        return True
+
     # Parse host:port from "ray://host:port"
     addr = address.replace("ray://", "")
     if ":" in addr:

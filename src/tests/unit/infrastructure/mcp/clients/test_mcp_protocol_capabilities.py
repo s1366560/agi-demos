@@ -398,6 +398,25 @@ class TestPingMechanism:
             assert result is False
 
     @pytest.mark.asyncio
+    async def test_send_request_timeout_disconnects_stale_websocket(self):
+        """A timed-out request should force the next tool call to reconnect."""
+        from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+        client = MCPWebSocketClient(url="ws://localhost:8765")
+        mock_ws = MagicMock()
+        mock_ws.closed = False
+        mock_ws.send_json = AsyncMock()
+        mock_ws.close = AsyncMock()
+        client._ws = mock_ws
+        client._connected = True
+
+        result = await client._send_request("tools/call", {"name": "bash"}, timeout=0.001)
+
+        assert result is None
+        assert client.is_connected is False
+        mock_ws.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_websocket_client_ping_not_connected(self):
         """Test ping when not connected raises error."""
         from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient

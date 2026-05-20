@@ -39,6 +39,8 @@ services:
     cpus: "1.5"
     restart: unless-stopped
     shm_size: 2g
+    volumes:
+      - ray-runtime:/tmp/ray
 
   ray-worker:
     build:
@@ -74,3 +76,6 @@ services:
     cpus: "1.5"
     restart: unless-stopped
     shm_size: 2g
+
+volumes:
+  ray-runtime:

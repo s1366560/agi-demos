@@ -1,4 +1,8 @@
 import {
+  DEFAULT_DRONE_DEPLOY_DOCKER_ALLOW_DAEMON_REGISTRY_PULL,
+  DEFAULT_DRONE_DEPLOY_DOCKER_HOST_PORT,
+  DEFAULT_DRONE_DEPLOY_DOCKER_RESERVED_HOST_PORTS,
+  DEFAULT_DRONE_DEPLOY_DOCKER_STRATEGY,
   DEFAULT_DRONE_GITLAB_CLIENT_ID_ENV,
   DEFAULT_DRONE_GITLAB_CLIENT_SECRET_ENV,
   DEFAULT_GITHUB_SERVER_URL,
@@ -488,8 +492,11 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
       sourceProvider === 'gitlab'
         ? sourceControl.server_url || DEFAULT_GITLAB_SERVER_URL
         : DEFAULT_GITLAB_SERVER_URL;
+    const existingDrone = asRecord(metadata.delivery_cicd?.drone);
+    const existingDeploy = asRecord(existingDrone.deploy);
+    const existingDeployDocker = asRecord(existingDeploy.docker);
     deliveryCicd.drone = {
-      ...asRecord(metadata.delivery_cicd?.drone),
+      ...existingDrone,
       repo: sourceControl.repo || draft.deliveryDroneRepo.trim() || undefined,
       branch: sourceControl.default_branch || draft.deliveryDroneBranch.trim() || undefined,
       server_url_env: draft.deliveryDroneServerUrlEnv.trim() || undefined,
@@ -537,6 +544,22 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
           context: draft.deliveryDroneDeployDockerContext.trim() || '.',
           dockerfile: draft.deliveryDroneDeployDockerfile.trim() || 'Dockerfile',
           tags: parseListDraft(draft.deliveryDroneDeployDockerTags),
+          deploy_strategy:
+            asString(existingDeployDocker.deploy_strategy) || DEFAULT_DRONE_DEPLOY_DOCKER_STRATEGY,
+          deploy_host_port: Math.max(
+            1,
+            Math.trunc(
+              asNumber(existingDeployDocker.deploy_host_port, DEFAULT_DRONE_DEPLOY_DOCKER_HOST_PORT)
+            )
+          ),
+          reserved_host_ports: normalisePortList(
+            existingDeployDocker.reserved_host_ports,
+            DEFAULT_DRONE_DEPLOY_DOCKER_RESERVED_HOST_PORTS
+          ),
+          allow_daemon_registry_pull: asBoolean(
+            existingDeployDocker.allow_daemon_registry_pull,
+            DEFAULT_DRONE_DEPLOY_DOCKER_ALLOW_DAEMON_REGISTRY_PULL
+          ),
           username_secret: draft.deliveryDroneDeployDockerUsernameSecret.trim() || undefined,
           password_secret: draft.deliveryDroneDeployDockerPasswordSecret.trim() || undefined,
         },
@@ -629,6 +652,11 @@ function asNumber(value: unknown, fallback: number): number {
     return Number.isFinite(parsed) ? parsed : fallback;
   }
   return fallback;
+}
+
+function normalisePortList(value: unknown, fallback: number[]): number[] {
+  const rawItems = Array.isArray(value) ? value : fallback;
+  return rawItems.map((item) => Math.trunc(asNumber(item, 0))).filter((item) => item > 0);
 }
 
 function clampConfidence(value: unknown): number {

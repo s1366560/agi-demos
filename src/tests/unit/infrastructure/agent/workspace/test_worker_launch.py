@@ -603,6 +603,33 @@ class TestBuildBrief:
         assert "empty string" in shell_instructions
         assert "ss" in shell_instructions
 
+    def test_renders_repair_turn_prompt_without_worktree_override(self) -> None:
+        task = _make_task()
+        repair_prompt = (
+            "[repair-turn]\n"
+            "{\n"
+            '  "repair_brief": {\n'
+            '    "required_next_action": "Fix Drone deploy startup failure",\n'
+            '    "failed_items": ["drone_docker_deploy_unhealthy_container"]\n'
+            "  }\n"
+            "}\n"
+            "[/repair-turn]\n"
+        )
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            extra_instructions=repair_prompt,
+        )
+
+        assert "## Repair turn instructions - highest priority" in brief
+        assert "Fix Drone deploy startup failure" in brief
+        assert "drone_docker_deploy_unhealthy_container" in brief
+        assert "Address the listed verification failures" in brief
+        assert "## Workspace checkpoint and worktree" not in brief
+
     def test_includes_drone_docker_delivery_contract(self) -> None:
         task = _make_task()
         workspace_metadata = {
@@ -611,6 +638,17 @@ class TestBuildBrief:
                 "provider": "drone",
                 "code_root": "/workspace/my-evo",
                 "auto_deploy": True,
+                "services": [
+                    {
+                        "service_id": "my-evo-app",
+                        "name": "my-evo Application",
+                        "start_command": "docker run -p 8080:8080 localhost:5001/my-evo",
+                        "internal_port": 8080,
+                        "health_path": "/api/health",
+                        "required": True,
+                        "auto_open": True,
+                    }
+                ],
                 "drone": {
                     "repo": "s1366560/my-evo",
                     "branch": "main",
@@ -652,14 +690,96 @@ class TestBuildBrief:
         assert "## Workspace delivery CI/CD contract" in brief
         assert "Provider: drone" in brief
         assert "Deploy mode: docker" in brief
-        assert "Docker image: `localhost:5001/my-evo`" in brief
-        assert "Docker image (Drone runner): `host.docker.internal:5001/my-evo`" in brief
-        assert "Docker registry (Drone runner): `host.docker.internal:5001`" in brief
-        assert "MEMSTACK_DEPLOY_MODE=cli is not valid docker deploy evidence" in brief
-        assert "do not use localhost" in brief
-        assert "sandbox worker may not have DRONE_TOKEN" in brief
-        assert "platform harness can trigger and verify Drone" in brief
-        assert "If docker mode still uses localhost/127.0.0.1" in brief
+        for expected in (
+            "Docker image: `localhost:5001/my-evo`",
+            "Docker image (Drone runner): `host.docker.internal:5001/my-evo`",
+            "Docker image (host Docker deploy): `localhost:5001/my-evo`",
+            "Docker image (deploy local tag): `my-evo:drone-docker-e2e`",
+            "Docker deploy strategy: `local_build`",
+            "Docker deploy local build command: "
+            "`docker build -t my-evo:drone-docker-e2e -f Dockerfile .`",
+            "Docker deploy host port: `18080`",
+            "Docker deploy container port: `8080`",
+            "Docker deploy port mapping: `18080:8080`",
+            "Docker deploy health URL: `http://host.docker.internal:18080/api/health`",
+            "Docker deploy health check command: "
+            "`wget -qO- http://host.docker.internal:18080/api/health >/dev/null`",
+            "Docker deploy dependency strategy: `compose_or_sidecars`",
+            "Docker deploy dependency network: `workspace-deploy`",
+            "Docker deploy PostgreSQL sidecar image: `postgres:16-alpine`",
+            "Docker deploy PostgreSQL sidecar command: "
+            "`docker run -d --name <postgres-container> --network workspace-deploy "
+            "-e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<db> "
+            "postgres:16-alpine`",
+            "Docker deploy PostgreSQL cleanup command: "
+            "`docker rm -f <postgres-container> 2>/dev/null || true`",
+            "Docker deploy PostgreSQL readiness command: "
+            "`for i in $(seq 1 30); do docker exec <postgres-container> "
+            "pg_isready -U postgres >/dev/null 2>&1 && break || sleep 1; done`",
+            "Docker deploy Redis sidecar image: `redis:7-alpine`",
+            "Docker deploy Redis sidecar command: "
+            "`docker run -d --name <redis-container> --network workspace-deploy "
+            "redis:7-alpine`",
+            "Docker deploy Redis cleanup command: "
+            "`docker rm -f <redis-container> 2>/dev/null || true`",
+            "Docker daemon registry pull allowed: `false`",
+            "Reserved Docker host ports: 3000, 3001, 5001, 5432, 6379, 7474, 7687, 8000, 8080",
+            "Docker registry (Drone runner): `host.docker.internal:5001`",
+            "Docker registry (host Docker deploy): `localhost:5001`",
+            "Drone Docker socket: `/var/run/docker.sock`",
+            "Drone Docker socket volume: `docker-sock`",
+            "plugins/docker or docker build/push alone is image publication",
+            "distinct deploy step/stage named by deploy.stage",
+            "Deployment services:",
+            "my-evo-app (my-evo Application)",
+            "docker run -p 8080:8080 localhost:5001/my-evo",
+            "health: `/api/health`",
+            "Drone step health: `http://host.docker.internal:8080/api/health`",
+            "do not use localhost",
+            "sandbox worker may not have DRONE_TOKEN",
+            "platform harness can trigger and verify Drone",
+            "verify every `steps[].commands[]` item is a string",
+            "echo \"label: value\"",
+            "Keep host.docker.internal:<port> for plugins/docker build/push settings",
+            "deploy-local image path",
+            "docker.allow_daemon_registry_pull is false",
+            "must not docker pull or docker run images from host.docker.internal:<port>",
+            "replace that daemon-side pull with a deploy-local build/load plus docker run",
+            "Do not set DOCKER_HOST=tcp://docker:2376",
+            "do not add a docker:dind service",
+            "Do not mask deployment failures",
+            "health check skipped",
+            "Best-effort cleanup may be limited to cleanup-only commands",
+            "Treat Drone deploy repairs as cumulative",
+            "preserve prior .drone.yml fixes",
+            "root build steps",
+            "Do not replace the deploy step with an older partial version",
+            "expects compiled artifacts such as dist/index.js",
+            "Add or preserve a root build step before plugins/docker",
+            "Use this exact Drone socket volume shape",
+            "`volumes: [{ name: docker-sock, path: /var/run/docker.sock }]`",
+            "Never mount the socket to `/var/run`",
+            "Do not use list syntax such as `- DOCKER_HOST=...`",
+            "http://host.docker.internal:<service-port><health-path>",
+            "docker.deploy_health_check_command",
+            "docker:cli deploy image in this environment does not guarantee curl",
+            "docker logs <container>",
+            "DATABASE_URL",
+            "Docker deploy must be self-contained for app runtime dependencies",
+            "sidecar containers on a named Docker network",
+            "remove stale containers with `docker rm -f <app-container> "
+            "<postgres-container> <redis-container> 2>/dev/null || true`",
+            "Do not satisfy DATABASE_URL, REDIS_URL",
+            "postgresql://postgres:postgres@<postgres-container>:5432/<db>",
+            "-e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<db> "
+            "postgres:16-alpine",
+            "Do not put `-c POSTGRES_PASSWORD=...` after the image",
+            "docker.deploy_host_port",
+            "docker.deploy_health_url",
+            "inspect the project Dockerfile and application routes",
+            "container-side port and health path must match",
+        ):
+            assert expected in brief
         assert system_context["delivery_cicd"]["provider"] == "drone"
         assert system_context["delivery_cicd"]["deploy"]["mode"] == "docker"
         assert (
@@ -670,11 +790,111 @@ class TestBuildBrief:
             system_context["delivery_cicd"]["deploy"]["docker"]["registry_internal"]
             == "host.docker.internal:5001"
         )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["image_host_docker"]
+            == "localhost:5001/my-evo"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["image_deploy_local"]
+            == "my-evo:drone-docker-e2e"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_strategy"]
+            == "local_build"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["allow_daemon_registry_pull"]
+            is False
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_local_build_command"]
+            == "docker build -t my-evo:drone-docker-e2e -f Dockerfile ."
+        )
+        assert system_context["delivery_cicd"]["deploy"]["docker"]["deploy_host_port"] == 18080
+        assert system_context["delivery_cicd"]["deploy"]["docker"]["container_port"] == 8080
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_port_mapping"]
+            == "18080:8080"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_health_url"]
+            == "http://host.docker.internal:18080/api/health"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_health_check_command"]
+            == "wget -qO- http://host.docker.internal:18080/api/health >/dev/null"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_dependency_strategy"]
+            == "compose_or_sidecars"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_dependency_network"]
+            == "workspace-deploy"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_postgres_sidecar_image"]
+            == "postgres:16-alpine"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_postgres_sidecar_command"]
+            == "docker run -d --name <postgres-container> --network workspace-deploy "
+            "-e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<db> "
+            "postgres:16-alpine"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_postgres_cleanup_command"]
+            == "docker rm -f <postgres-container> 2>/dev/null || true"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_postgres_readiness_command"]
+            == "for i in $(seq 1 30); do docker exec <postgres-container> "
+            "pg_isready -U postgres >/dev/null 2>&1 && break || sleep 1; done"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_redis_sidecar_image"]
+            == "redis:7-alpine"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_redis_sidecar_command"]
+            == "docker run -d --name <redis-container> --network workspace-deploy redis:7-alpine"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_redis_cleanup_command"]
+            == "docker rm -f <redis-container> 2>/dev/null || true"
+        )
+        assert 8080 in system_context["delivery_cicd"]["deploy"]["docker"]["reserved_host_ports"]
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["registry_host_docker"]
+            == "localhost:5001"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["runner_docker_socket"]
+            == "/var/run/docker.sock"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["runner_docker_socket_volume"]
+            == "docker-sock"
+        )
         assert system_context["delivery_cicd"]["drone"]["repo"] == "s1366560/my-evo"
         assert (
             "Do not replace the configured deployment mode with a CLI smoke check"
             in " ".join(system_context["delivery_cicd"]["instructions"])
         )
+        assert (
+            "plugins/docker or docker build/push alone is image publication"
+            in " ".join(system_context["delivery_cicd"]["instructions"])
+        )
+        assert "Do not mask deployment failures" in " ".join(
+            system_context["delivery_cicd"]["instructions"]
+        )
+        assert "Drone step environment variables must use YAML mapping syntax" in " ".join(
+            system_context["delivery_cicd"]["instructions"]
+        )
+        assert "Docker deploy must be self-contained for app runtime dependencies" in " ".join(
+            system_context["delivery_cicd"]["instructions"]
+        )
+        assert system_context["delivery_cicd"]["services"][0]["service_id"] == "my-evo-app"
         assert "sandbox worker may not have DRONE_TOKEN" in " ".join(
             system_context["delivery_cicd"]["instructions"]
         )

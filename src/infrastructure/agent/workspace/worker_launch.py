@@ -78,9 +78,9 @@ WORKER_STREAM_FINISH_POLL_SECONDS = int(
 WORKER_STREAM_ORPHAN_GRACE_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_STREAM_ORPHAN_GRACE_SECONDS", "900")
 )
-WORKER_MAX_SINGLE_WRITE_CHARS = 64_000
-WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 4_000
-WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 6_000
+WORKER_MAX_SINGLE_WRITE_CHARS = 900
+WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 700
+WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 900
 WORKER_REPAIR_SOURCE_METADATA_MAX_DEPTH = 12
 WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
     "preflight:read-progress",
@@ -96,6 +96,42 @@ _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
 _WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
 _WORKER_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
 _TERMINAL_REPORT_TOOLS = frozenset({"workspace_report_complete", "workspace_report_blocked"})
+_LOCAL_REGISTRY_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "host.docker.internal"})
+_LOCAL_DOCKER_DEPLOY_STRATEGY = "local_build"
+_DEFAULT_DOCKER_DEPLOY_HOST_PORT = 18080
+_DEFAULT_DOCKER_DEPLOY_DEPENDENCY_STRATEGY = "compose_or_sidecars"
+_DEFAULT_DOCKER_DEPLOY_NETWORK = "workspace-deploy"
+_DEFAULT_DOCKER_DEPLOY_POSTGRES_IMAGE = "postgres:16-alpine"
+_DEFAULT_DOCKER_DEPLOY_REDIS_IMAGE = "redis:7-alpine"
+_DEFAULT_DOCKER_DEPLOY_POSTGRES_COMMAND = (
+    "docker run -d --name <postgres-container> --network workspace-deploy "
+    "-e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<db> "
+    "postgres:16-alpine"
+)
+_DEFAULT_DOCKER_DEPLOY_POSTGRES_CLEANUP_COMMAND = (
+    "docker rm -f <postgres-container> 2>/dev/null || true"
+)
+_DEFAULT_DOCKER_DEPLOY_POSTGRES_READY_COMMAND = (
+    "for i in $(seq 1 30); do docker exec <postgres-container> "
+    "pg_isready -U postgres >/dev/null 2>&1 && break || sleep 1; done"
+)
+_DEFAULT_DOCKER_DEPLOY_REDIS_COMMAND = (
+    "docker run -d --name <redis-container> --network workspace-deploy redis:7-alpine"
+)
+_DEFAULT_DOCKER_DEPLOY_REDIS_CLEANUP_COMMAND = (
+    "docker rm -f <redis-container> 2>/dev/null || true"
+)
+_PLATFORM_RESERVED_DOCKER_HOST_PORTS = (
+    3000,  # frontend dev server
+    3001,  # Drone runner / common app internal port
+    5001,  # local Docker registry
+    5432,  # PostgreSQL
+    6379,  # Redis
+    7474,  # Neo4j HTTP
+    7687,  # Neo4j Bolt
+    8000,  # API server
+    8080,  # Drone server
+)
 _NATIVE_TOOL_PROTOCOL_GUARD = (
     "Use only the platform's native tool-call channel for tools. Do not print "
     "tool-call markup, JSON/function-call stubs, or shell command code blocks as "
@@ -507,7 +543,7 @@ def _render_visible_handoff_interpretation_gate(
     )
 
 
-def _workspace_delivery_cicd_context(
+def _workspace_delivery_cicd_context(  # noqa: PLR0915
     workspace_metadata: Mapping[str, Any] | None,
     plan_node_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
@@ -531,8 +567,9 @@ def _workspace_delivery_cicd_context(
     if isinstance(plan_node_metadata, Mapping):
         phase = _metadata_text(plan_node_metadata.get("iteration_phase"))
     deploy = contract.deploy.to_json() if contract.deploy is not None else None
+    services = contract.services_json()
     if isinstance(deploy, dict):
-        deploy = _deploy_context_with_runner_hints(deploy)
+        deploy = _deploy_context_with_runner_hints(deploy, services=services)
     context: dict[str, Any] = {
         "source": "workspace.metadata.delivery_cicd",
         "provider": contract.provider,
@@ -541,6 +578,7 @@ def _workspace_delivery_cicd_context(
         "contract_source": contract.contract_source,
         "node_phase": phase.lower() if phase else None,
         "deploy": deploy,
+        "services": services,
         "instructions": [
             (
                 "Treat this workspace delivery contract as the source of truth for CI/CD "
@@ -599,6 +637,12 @@ def _workspace_delivery_cicd_context(
                     "and current commit instead of fabricating a no-op change just to trigger CI."
                 ),
                 (
+                    "Before committing `.drone.yml`, parse it and verify every "
+                    "`steps[].commands[]` item is a string. YAML can parse commands such as "
+                    "`echo \"label: value\"` as a mapping even when syntax validation passes; "
+                    "quote those commands or use block scalars."
+                ),
+                (
                     "For implement/test phases, the harness may trigger Drone for CI evidence; "
                     "do not treat a suppressed or fallback CLI deploy step as proof of the "
                     "configured deployment mode."
@@ -610,9 +654,10 @@ def _workspace_delivery_cicd_context(
         mode = str(deploy.get("mode") or "")
         if mode == "docker":
             context["instructions"].append(
-                "Docker deploy mode requires Docker image build/publish semantics such as "
-                "plugins/docker or explicit docker build and docker push commands. A step "
-                "that only checks MEMSTACK_DEPLOY_MODE=cli is not valid docker deploy evidence."
+                "Docker deploy mode requires two separate Drone concerns: first publish the "
+                "image, then run a distinct deploy step/stage named by deploy.stage that "
+                "consumes the published image and performs Docker deployment. plugins/docker "
+                "or docker build/push alone is image publication, not deployment evidence."
             )
             context["instructions"].append(
                 "Drone Docker steps run inside runner/plugin containers; do not use localhost "
@@ -621,9 +666,141 @@ def _workspace_delivery_cicd_context(
                 "host.docker.internal:<port>, for plugins/docker repo and registry settings."
             )
             context["instructions"].append(
-                "Before reporting deploy completion, inspect .drone.yml. If docker mode still "
+                "A deploy step that mounts /var/run/docker.sock is different from plugins/docker: "
+                "the docker CLI runs in the step container, but docker pull/run are executed by "
+                "the host Docker daemon. In local Docker Desktop style environments, the daemon "
+                "may neither trust host.docker.internal:<port> nor reach localhost:<port> for the "
+                "plain-HTTP registry. Do not solve this by flipping between those registry hosts "
+                "in deploy pull/run commands. Prefer a deploy-local image path: build or load the "
+                "image into the mounted Docker daemon in the deploy step, then docker run that "
+                "local tag. Keep host.docker.internal:<port> for plugins/docker build/push settings."
+            )
+            context["instructions"].append(
+                "When docker.deploy_strategy is local_build or "
+                "docker.allow_daemon_registry_pull is false, the host-socket deploy step must use "
+                "the provided Docker deploy local build command or an equivalent docker load path, "
+                "then docker run the Docker image (deploy local tag). It must not docker pull or "
+                "docker run images from host.docker.internal:<port>, localhost:<port>, or "
+                "127.0.0.1:<port> through the host Docker daemon."
+            )
+            context["instructions"].append(
+                "Before reporting deploy completion, inspect .drone.yml. If plugins/docker still "
                 "uses localhost/127.0.0.1 for the registry or image, update it to the runner "
-                "reachable registry/image and commit that pipeline fix."
+                "reachable registry/image. If a host-socket deploy step pulls from "
+                "host.docker.internal:<port> or localhost:<port> for a local insecure registry, "
+                "replace that daemon-side pull with a deploy-local build/load plus docker run."
+            )
+            context["instructions"].append(
+                "The deploy step should use Docker deployment semantics such as docker build/load "
+                "plus docker run, docker pull plus docker run when the daemon can reach the registry, "
+                "docker compose up, docker stack deploy, or docker service update, and should include "
+                "a health check when a workspace service health path is known."
+            )
+            context["instructions"].append(
+                "Docker deploy commands must fail fast when pull, run, compose, stack, service, "
+                "or health-check commands fail. Do not mask deployment failures with `|| true`, "
+                "`|| echo ... skipped`, best-effort fallbacks, or messages such as container "
+                "start skipped or health check skipped. Best-effort cleanup may be limited to "
+                "cleanup-only commands such as `docker rm -f ... || true`."
+            )
+            context["instructions"].append(
+                "Treat Drone deploy repairs as cumulative. When fixing one failing condition, "
+                "preserve prior .drone.yml fixes such as root build steps, deploy-local docker "
+                "build/load, stale container cleanup, sidecar dependencies, runtime environment, "
+                "and health-log diagnostics. Do not replace the deploy step with an older partial "
+                "version that drops an already-needed fix."
+            )
+            context["instructions"].append(
+                "For Node/TypeScript apps whose Dockerfile or startup command expects compiled "
+                "artifacts such as dist/index.js, ensure those artifacts exist before Docker "
+                "image creation. Add or preserve a root build step before plugins/docker and "
+                "before deploy-local docker build, or move the build into Dockerfile."
+            )
+            context["instructions"].append(
+                "Health checks executed from a Drone step container must target the host-mapped "
+                "service endpoint, for example http://host.docker.internal:<service-port><health-path>; "
+                "do not use localhost for a service that was started by host Docker."
+            )
+            context["instructions"].append(
+                "The docker:cli deploy image in this environment does not guarantee curl. "
+                "Use docker.deploy_health_check_command from this brief, or install curl before "
+                "using it. Prefer `wget -qO- ... >/dev/null` for the deploy health probe."
+            )
+            context["instructions"].append(
+                "If a Docker deploy health probe fails, print `docker ps -a` and "
+                "`docker logs <container>` before exiting so verification can see the real "
+                "runtime failure. Inspect Dockerfile, docker-compose, .env.example, and app "
+                "startup code for required runtime variables such as DATABASE_URL, REDIS_URL, "
+                "NODE_SECRET, and SESSION_SECRET; pass required values with the docker run "
+                "environment or use a compose-based deploy that starts the required services."
+            )
+            context["instructions"].append(
+                "Docker deploy must be self-contained for app runtime dependencies. If the "
+                "image requires PostgreSQL, Redis, or another service and the workspace contract "
+                "does not explicitly provide a reachable external service, start those dependencies "
+                "inside the deploy step with docker compose or sidecar containers on a named Docker "
+                "network before starting the app container."
+            )
+            context["instructions"].append(
+                "Before starting app or dependency sidecar containers in a retryable Drone deploy "
+                "step, remove stale containers with `docker rm -f <app-container> "
+                "<postgres-container> <redis-container> 2>/dev/null || true`; otherwise failed "
+                "prior attempts can make Docker return a container-name conflict before the real "
+                "deploy validation runs."
+            )
+            context["instructions"].append(
+                "Do not satisfy DATABASE_URL, REDIS_URL, or similar runtime endpoints by pointing "
+                "at host.docker.internal:<port> unless the contract explicitly declares that host "
+                "service. For disposable CI deploy verification, prefer sidecar endpoints such as "
+                "postgresql://postgres:postgres@<postgres-container>:5432/<db> and "
+                "redis://<redis-container>:6379 on the deploy Docker network, then wait for the "
+                "dependency to become ready before running the app health check."
+            )
+            context["instructions"].append(
+                "For PostgreSQL sidecars, pass initialization values as docker run environment "
+                "flags before the image: `-e POSTGRES_USER=postgres -e "
+                "POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<db> postgres:16-alpine`. Do not put "
+                "`-c POSTGRES_PASSWORD=...` after the image; that is parsed as a postgres server "
+                "flag and the database container exits before the app can connect."
+            )
+            context["instructions"].append(
+                "Do not bind Docker deploy containers to platform-reserved host ports listed "
+                "in docker.reserved_host_ports. In particular, port 8080 is the Drone server "
+                "and 3001 is reserved for runner/platform use. If older service metadata or "
+                ".drone.yml examples use `-p 8080:<container-port>`, replace the host side "
+                "with docker.deploy_host_port, keep the container-side port matched to the "
+                "Dockerfile/app, and update the Drone health check to docker.deploy_health_url."
+            )
+            context["instructions"].append(
+                "Before finalizing Docker deploy port mappings or health paths, inspect the "
+                "project Dockerfile and application routes. Workspace service metadata may be a "
+                "desired host endpoint; the container-side port and health path must match what "
+                "the image actually exposes and the app actually serves."
+            )
+            context["instructions"].append(
+                "For this infrastructure, memstack-drone-runner exposes Docker through the Unix "
+                "socket /var/run/docker.sock. A Drone docker deploy step using docker:cli should "
+                "mount that host socket with a top-level host volume and step volume, then use the "
+                "default Unix socket. Do not set DOCKER_HOST=tcp://docker:2376 unless the pipeline "
+                "also defines a matching docker:dind service."
+            )
+            context["instructions"].append(
+                "For this workspace's host-socket deploy mode, do not add a docker:dind service, "
+                "a service named docker, privileged service settings, or network_mode: host. Those "
+                "belong to a separate TCP DinD design and do not fix Unix-socket host deployment."
+            )
+            context["instructions"].append(
+                "Use this exact Drone socket volume shape: in the deploy step, add "
+                "`volumes: [{ name: docker-sock, path: /var/run/docker.sock }]`; at the "
+                "pipeline top level, add `volumes: [{ name: docker-sock, host: { path: "
+                "/var/run/docker.sock } }]`. Never mount the socket to `/var/run`; that "
+                "mounts a file onto a directory and Docker rejects the deploy step."
+            )
+            context["instructions"].append(
+                "Drone step environment variables must use YAML mapping syntax, for example "
+                "`environment: { DOCKER_HOST: unix:///var/run/docker.sock }` or a nested "
+                "`DOCKER_HOST: unix:///var/run/docker.sock` mapping. Do not use list syntax such "
+                "as `- DOCKER_HOST=...`; Drone rejects that shape."
             )
         elif mode == "kubernetes":
             context["instructions"].append(
@@ -634,7 +811,11 @@ def _workspace_delivery_cicd_context(
     return context
 
 
-def _deploy_context_with_runner_hints(deploy: dict[str, Any]) -> dict[str, Any]:
+def _deploy_context_with_runner_hints(
+    deploy: dict[str, Any],
+    *,
+    services: Iterable[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
     if str(deploy.get("mode") or "") != "docker":
         return deploy
     docker = deploy.get("docker")
@@ -643,20 +824,231 @@ def _deploy_context_with_runner_hints(deploy: dict[str, Any]) -> dict[str, Any]:
 
     docker_context = dict(docker)
     registry = _metadata_text(docker_context.get("registry"))
-    registry_internal = _drone_runner_localhost_alias(registry)
-    if registry_internal:
-        docker_context.setdefault("registry_internal", registry_internal)
-
+    registry_internal = _add_docker_registry_hints(docker_context, registry)
     image = _metadata_text(docker_context.get("image"))
-    if image and registry and registry_internal and image.startswith(f"{registry}/"):
-        docker_context.setdefault(
-            "image_internal",
-            f"{registry_internal}/{image.removeprefix(f'{registry}/')}",
-        )
+    _add_docker_image_hints(docker_context, registry, registry_internal, image)
+    _add_docker_deploy_strategy_hints(docker_context, registry, image)
+    _add_docker_deploy_port_hints(docker_context, services=services)
+    _add_docker_deploy_dependency_hints(docker_context)
+    docker_context.setdefault("runner_docker_socket", "/var/run/docker.sock")
+    docker_context.setdefault("runner_docker_socket_volume", "docker-sock")
 
     output = dict(deploy)
     output["docker"] = docker_context
     return output
+
+
+def _add_docker_registry_hints(
+    docker_context: dict[str, Any],
+    registry: str | None,
+) -> str | None:
+    if registry:
+        docker_context.setdefault("registry_host_docker", registry)
+    registry_internal = _drone_runner_localhost_alias(registry)
+    if registry_internal:
+        docker_context.setdefault("registry_internal", registry_internal)
+    return registry_internal
+
+
+def _add_docker_image_hints(
+    docker_context: dict[str, Any],
+    registry: str | None,
+    registry_internal: str | None,
+    image: str | None,
+) -> None:
+    if image:
+        docker_context.setdefault("image_host_docker", image)
+    if image and registry and registry_internal and image.startswith(f"{registry}/"):
+        image_without_registry = image.removeprefix(f"{registry}/")
+        deploy_local_image = _docker_image_with_primary_tag(image_without_registry, docker_context)
+        docker_context.setdefault(
+            "image_internal",
+            f"{registry_internal}/{image_without_registry}",
+        )
+        docker_context.setdefault("image_deploy_local", deploy_local_image)
+    elif image:
+        docker_context.setdefault(
+            "image_deploy_local",
+            _docker_image_with_primary_tag(image, docker_context),
+        )
+
+
+def _add_docker_deploy_strategy_hints(
+    docker_context: dict[str, Any],
+    registry: str | None,
+    image: str | None,
+) -> None:
+    strategy = _metadata_text(docker_context.get("deploy_strategy"))
+    if strategy:
+        strategy = strategy.lower()
+    elif _docker_registry_is_local(registry) or _docker_image_registry_is_local(image):
+        strategy = _LOCAL_DOCKER_DEPLOY_STRATEGY
+    else:
+        strategy = "registry_pull"
+    docker_context["deploy_strategy"] = strategy
+    if strategy == _LOCAL_DOCKER_DEPLOY_STRATEGY:
+        docker_context["allow_daemon_registry_pull"] = False
+        deploy_local_image = _metadata_text(docker_context.get("image_deploy_local"))
+        if deploy_local_image:
+            dockerfile = _metadata_text(docker_context.get("dockerfile")) or "Dockerfile"
+            context_path = _metadata_text(docker_context.get("context")) or "."
+            docker_context.setdefault(
+                "deploy_local_build_command",
+                f"docker build -t {deploy_local_image} -f {dockerfile} {context_path}",
+            )
+    else:
+        docker_context.setdefault("allow_daemon_registry_pull", True)
+
+
+def _add_docker_deploy_port_hints(
+    docker_context: dict[str, Any],
+    *,
+    services: Iterable[Mapping[str, Any]],
+) -> None:
+    reserved_ports = tuple(sorted(_PLATFORM_RESERVED_DOCKER_HOST_PORTS))
+    docker_context.setdefault("reserved_host_ports", list(reserved_ports))
+    configured_host_port = _positive_int_metadata(
+        docker_context.get("deploy_host_port")
+        or docker_context.get("host_port")
+        or docker_context.get("service_port")
+    )
+    if configured_host_port in _PLATFORM_RESERVED_DOCKER_HOST_PORTS:
+        docker_context.setdefault("requested_host_port", configured_host_port)
+        configured_host_port = None
+
+    deploy_host_port = configured_host_port or _DEFAULT_DOCKER_DEPLOY_HOST_PORT
+    docker_context["deploy_host_port"] = deploy_host_port
+    docker_context.setdefault("host_port", deploy_host_port)
+
+    container_port = _positive_int_metadata(
+        docker_context.get("container_port") or docker_context.get("internal_port")
+    ) or _first_service_internal_port(services)
+    if container_port is not None:
+        docker_context.setdefault("container_port", container_port)
+        docker_context.setdefault(
+            "deploy_port_mapping",
+            f"{deploy_host_port}:{container_port}",
+        )
+
+    health_path = _first_service_health_path(services)
+    if health_path:
+        health_url = _docker_deploy_health_url(health_path, host_port=deploy_host_port)
+        docker_context.setdefault("deploy_health_url", health_url)
+        docker_context.setdefault(
+            "deploy_health_check_command",
+            _docker_deploy_health_check_command(health_url),
+        )
+
+
+def _add_docker_deploy_dependency_hints(docker_context: dict[str, Any]) -> None:
+    docker_context.setdefault(
+        "deploy_dependency_strategy",
+        _DEFAULT_DOCKER_DEPLOY_DEPENDENCY_STRATEGY,
+    )
+    docker_context.setdefault("deploy_dependency_network", _DEFAULT_DOCKER_DEPLOY_NETWORK)
+    docker_context.setdefault(
+        "deploy_postgres_sidecar_image",
+        _DEFAULT_DOCKER_DEPLOY_POSTGRES_IMAGE,
+    )
+    docker_context.setdefault(
+        "deploy_postgres_sidecar_command",
+        _DEFAULT_DOCKER_DEPLOY_POSTGRES_COMMAND,
+    )
+    docker_context.setdefault(
+        "deploy_postgres_cleanup_command",
+        _DEFAULT_DOCKER_DEPLOY_POSTGRES_CLEANUP_COMMAND,
+    )
+    docker_context.setdefault(
+        "deploy_postgres_readiness_command",
+        _DEFAULT_DOCKER_DEPLOY_POSTGRES_READY_COMMAND,
+    )
+    docker_context.setdefault("deploy_redis_sidecar_image", _DEFAULT_DOCKER_DEPLOY_REDIS_IMAGE)
+    docker_context.setdefault("deploy_redis_sidecar_command", _DEFAULT_DOCKER_DEPLOY_REDIS_COMMAND)
+    docker_context.setdefault("deploy_redis_cleanup_command", _DEFAULT_DOCKER_DEPLOY_REDIS_CLEANUP_COMMAND)
+
+
+def _positive_int_metadata(value: Any) -> int | None:  # noqa: ANN401
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _first_service_internal_port(services: Iterable[Mapping[str, Any]]) -> int | None:
+    for service in services:
+        value = _positive_int_metadata(service.get("internal_port"))
+        if value is not None:
+            return value
+    return None
+
+
+def _first_service_health_path(services: Iterable[Mapping[str, Any]]) -> str | None:
+    for service in services:
+        health_path = _metadata_text(service.get("health_path"))
+        if health_path:
+            return health_path
+    return None
+
+
+def _docker_deploy_health_url(health_path: str, *, host_port: int) -> str:
+    if health_path.startswith("http://") or health_path.startswith("https://"):
+        return health_path
+    normalized_path = health_path if health_path.startswith("/") else f"/{health_path}"
+    return f"http://host.docker.internal:{host_port}{normalized_path}"
+
+
+def _docker_deploy_health_check_command(health_url: str) -> str:
+    return f"wget -qO- {health_url} >/dev/null"
+
+
+def _docker_image_with_primary_tag(image: str, docker: Mapping[str, Any]) -> str:
+    if _docker_image_has_tag(image):
+        return image
+    tag = _primary_docker_tag(docker)
+    return f"{image}:{tag}" if tag else image
+
+
+def _docker_image_has_tag(image: str) -> bool:
+    last_segment = image.rsplit("/", 1)[-1]
+    return ":" in last_segment
+
+
+def _primary_docker_tag(docker: Mapping[str, Any]) -> str | None:
+    tags = docker.get("tags")
+    if not isinstance(tags, list):
+        return None
+    for tag in tags:
+        value = str(tag).strip()
+        if value:
+            return value
+    return None
+
+
+def _docker_registry_is_local(value: str | None) -> bool:
+    host = _docker_registry_host(value)
+    return bool(host and host in _LOCAL_REGISTRY_HOSTS)
+
+
+def _docker_image_registry_is_local(value: str | None) -> bool:
+    if not value:
+        return False
+    first_segment = value.split("/", 1)[0]
+    if "." not in first_segment and ":" not in first_segment and first_segment != "localhost":
+        return False
+    return _docker_registry_is_local(first_segment)
+
+
+def _docker_registry_host(value: str | None) -> str | None:
+    if not value:
+        return None
+    rest = value.strip()
+    if "://" in rest:
+        rest = rest.split("://", 1)[1]
+    rest = rest.rsplit("@", 1)[-1].split("/", 1)[0]
+    if rest.startswith("[") and "]" in rest:
+        return rest[1 : rest.index("]")].lower()
+    return rest.split(":", 1)[0].lower()
 
 
 def _drone_runner_localhost_alias(value: str | None) -> str | None:
@@ -687,6 +1079,7 @@ def _render_delivery_cicd_brief(context: Mapping[str, Any]) -> str:
 
     _append_delivery_drone_lines(lines, context.get("drone"))
     _append_delivery_deploy_lines(lines, context.get("deploy"))
+    _append_delivery_service_lines(lines, context.get("services"))
     _append_delivery_instruction_lines(lines, context.get("instructions"))
     return "\n".join(lines)
 
@@ -718,18 +1111,95 @@ def _append_delivery_docker_lines(lines: list[str], docker: object) -> None:
     for key, label in (
         ("image", "Docker image"),
         ("image_internal", "Docker image (Drone runner)"),
+        ("image_host_docker", "Docker image (host Docker deploy)"),
+        ("image_deploy_local", "Docker image (deploy local tag)"),
+        ("deploy_strategy", "Docker deploy strategy"),
+        ("deploy_local_build_command", "Docker deploy local build command"),
+        ("deploy_host_port", "Docker deploy host port"),
+        ("container_port", "Docker deploy container port"),
+        ("deploy_port_mapping", "Docker deploy port mapping"),
+        ("deploy_health_url", "Docker deploy health URL"),
+        ("deploy_health_check_command", "Docker deploy health check command"),
+        ("deploy_dependency_strategy", "Docker deploy dependency strategy"),
+        ("deploy_dependency_network", "Docker deploy dependency network"),
+        ("deploy_postgres_sidecar_image", "Docker deploy PostgreSQL sidecar image"),
+        ("deploy_postgres_sidecar_command", "Docker deploy PostgreSQL sidecar command"),
+        ("deploy_postgres_cleanup_command", "Docker deploy PostgreSQL cleanup command"),
+        ("deploy_postgres_readiness_command", "Docker deploy PostgreSQL readiness command"),
+        ("deploy_redis_sidecar_image", "Docker deploy Redis sidecar image"),
+        ("deploy_redis_sidecar_command", "Docker deploy Redis sidecar command"),
+        ("deploy_redis_cleanup_command", "Docker deploy Redis cleanup command"),
         ("registry", "Docker registry"),
         ("registry_internal", "Docker registry (Drone runner)"),
+        ("registry_host_docker", "Docker registry (host Docker deploy)"),
         ("dockerfile", "Dockerfile"),
+        ("runner_docker_socket", "Drone Docker socket"),
+        ("runner_docker_socket_volume", "Drone Docker socket volume"),
     ):
-        value = _metadata_text(docker.get(key))
+        value = _metadata_display_value(docker.get(key))
         if value:
             lines.append(f"{label}: `{value}`")
+    if isinstance(docker.get("allow_daemon_registry_pull"), bool):
+        value = str(docker["allow_daemon_registry_pull"]).lower()
+        lines.append(f"Docker daemon registry pull allowed: `{value}`")
+    reserved_ports = docker.get("reserved_host_ports")
+    if isinstance(reserved_ports, list) and reserved_ports:
+        safe_ports = [str(port) for port in reserved_ports if str(port).strip()]
+        if safe_ports:
+            lines.append(f"Reserved Docker host ports: {', '.join(safe_ports)}")
     tags = docker.get("tags")
     if isinstance(tags, list) and tags:
         safe_tags = [str(tag) for tag in tags if str(tag).strip()]
         if safe_tags:
             lines.append(f"Docker tags: {', '.join(safe_tags)}")
+
+
+def _append_delivery_service_lines(lines: list[str], services: object) -> None:
+    if not isinstance(services, list) or not services:
+        return
+    rendered: list[str] = []
+    for service in services:
+        if not isinstance(service, Mapping):
+            continue
+        service_id = _metadata_text(service.get("service_id")) or "service"
+        name = _metadata_text(service.get("name")) or service_id
+        start_command = _metadata_text(service.get("start_command"))
+        internal_port = service.get("internal_port")
+        health_path = _metadata_text(service.get("health_path"))
+        parts = [f"- {service_id} ({name})"]
+        if start_command:
+            parts.append(f"start: `{start_command}`")
+        if isinstance(internal_port, int):
+            parts.append(f"port: {internal_port}")
+        if health_path:
+            parts.append(f"health: `{health_path}`")
+        drone_health_url = _drone_runner_service_health_url(service)
+        if drone_health_url:
+            parts.append(f"Drone step health: `{drone_health_url}`")
+        rendered.append("; ".join(parts))
+    if rendered:
+        lines.append("Deployment services:")
+        lines.extend(rendered)
+
+
+def _metadata_display_value(value: object) -> str | None:
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return str(value)
+    return _metadata_text(value)
+
+
+def _drone_runner_service_health_url(service: Mapping[str, Any]) -> str | None:
+    internal_port = service.get("internal_port")
+    if not isinstance(internal_port, int) or internal_port <= 0:
+        return None
+    scheme = _metadata_text(service.get("internal_scheme")) or "http"
+    if scheme not in {"http", "https"}:
+        scheme = "http"
+    health_path = _metadata_text(service.get("health_path")) or "/"
+    if health_path.startswith("http://") or health_path.startswith("https://"):
+        return health_path
+    normalized_path = health_path if health_path.startswith("/") else f"/{health_path}"
+    return f"{scheme}://host.docker.internal:{internal_port}{normalized_path}"
 
 
 def _append_delivery_instruction_lines(lines: list[str], instructions: object) -> None:
@@ -994,6 +1464,11 @@ def _build_worker_system_context(
                     "If a write/edit tool reports truncated arguments or incomplete JSON, "
                     "do not retry using bash, Python, or a full-file write. Switch immediately "
                     "to smaller chunks via edit/append and record the failed attempt as evidence."
+                ),
+                (
+                    "In this sandbox, oversized MCP tool arguments can time out without reaching "
+                    "the server. Keep each edit/write/bash payload below the stated limits even "
+                    "when the apparent source change is small."
                 ),
                 "Split very large documentation into multiple focused files when appropriate.",
             ],
@@ -1400,8 +1875,9 @@ def _build_worker_brief(
         f"payload under {WORKER_RECOMMENDED_WRITE_CHUNK_CHARS} characters; the hard write "
         f"limit is {WORKER_MAX_SINGLE_WRITE_CHARS} characters and any bash command under "
         f"{WORKER_MAX_SINGLE_BASH_COMMAND_CHARS} characters. If a tool reports truncated "
-        "arguments, do not retry with the same shape; immediately switch to smaller "
-        "edit/append chunks."
+        "arguments or times out, do not retry with the same shape; immediately switch to smaller "
+        "edit/append chunks. Oversized MCP tool arguments can time out without reaching the "
+        "sandbox server."
     )
     sections.append(
         "## Shell execution discipline\n"
@@ -1461,6 +1937,14 @@ def _build_worker_brief(
                 verification_integrity=verification_integrity,
             ):
                 sections.append(handoff_gate)
+        elif _contains_repair_turn_prompt(rendered_extra):
+            sections.append(
+                "## Repair turn instructions - highest priority\n"
+                f"{rendered_extra}\n\n"
+                "Treat this repair turn as the active task context. Address the listed "
+                "verification failures before reusing any older worker report or completion "
+                "summary."
+            )
     if verification_integrity_section := _render_visible_verification_integrity_gate(
         verification_integrity
     ):
@@ -1591,6 +2075,10 @@ def _append_worker_instruction_note(existing: str | None, note: str | None) -> s
     if not existing:
         return note.strip()
     return f"{existing.rstrip()}\n\n{note.strip()}"
+
+
+def _contains_repair_turn_prompt(value: str) -> bool:
+    return "[repair-turn]" in value and "[/repair-turn]" in value
 
 
 async def _agent_finished_message_id(

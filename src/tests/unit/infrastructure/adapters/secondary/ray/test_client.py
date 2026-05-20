@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
+import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -39,6 +40,14 @@ def _settings() -> SimpleNamespace:
     )
 
 
+def _direct_settings() -> SimpleNamespace:
+    return SimpleNamespace(
+        ray_address="ray-head:6379",
+        ray_namespace="memstack",
+        ray_log_to_driver=False,
+    )
+
+
 def test_ray_init_timeout_default_allows_container_client_startup():
     """The default Ray client init window must tolerate normal Docker startup latency."""
 
@@ -63,6 +72,14 @@ def test_ray_adapter_import_has_no_connection_side_effects(monkeypatch):
     assert os.environ.get("RAY_ADDRESS") is None
     assert os.environ.get("RAY_NAMESPACE") is None
     assert reloaded._ray_init_failed is False
+
+
+def test_ray_reachable_accepts_auto_address_without_tcp_probe(monkeypatch):
+    tcp_connect = MagicMock()
+    monkeypatch.setattr(ray_pkg.socket, "create_connection", tcp_connect)
+
+    assert ray_pkg._check_ray_reachable("auto") is True
+    tcp_connect.assert_not_called()
 
 
 @pytest.mark.unit
@@ -90,6 +107,26 @@ async def test_init_ray_if_needed_reads_package_failure_flag_dynamically(monkeyp
         log_to_driver=False,
         ignore_reinit_error=True,
     )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ray_client_init_runs_on_event_loop_thread(monkeypatch):
+    """Ray Client forks a server process and must not run in executor threads."""
+
+    monkeypatch.setattr(client.ray, "is_initialized", MagicMock(return_value=False))
+    monkeypatch.setattr(client.ray_pkg, "_check_ray_reachable", MagicMock(return_value=True))
+    monkeypatch.setattr(client, "get_ray_settings", _settings)
+    event_loop_thread = threading.get_ident()
+    init_threads: list[int] = []
+
+    def record_init(**_kwargs):
+        init_threads.append(threading.get_ident())
+
+    monkeypatch.setattr(client.ray, "init", MagicMock(side_effect=record_init))
+
+    assert await client.init_ray_if_needed() is True
+    assert init_threads == [event_loop_thread]
 
 
 @pytest.mark.unit
@@ -138,7 +175,7 @@ async def test_slow_ray_init_does_not_block_event_loop(monkeypatch):
     monkeypatch.setenv("RAY_INIT_TIMEOUT_SECONDS", "0.05")
     monkeypatch.setattr(client.ray, "is_initialized", MagicMock(return_value=False))
     monkeypatch.setattr(client.ray_pkg, "_check_ray_reachable", MagicMock(return_value=True))
-    monkeypatch.setattr(client, "get_ray_settings", _settings)
+    monkeypatch.setattr(client, "get_ray_settings", _direct_settings)
 
     def slow_init(**_kwargs):
         time.sleep(0.2)

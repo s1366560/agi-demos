@@ -1772,6 +1772,14 @@ def _dependency_commit_needs_integration(node: PlanNode) -> bool:
     if not _looks_like_attempt_worktree(worktree_path):
         return False
     status = _metadata_text(node.metadata.get("worktree_integration_status"))
+    if (
+        status == "failed"
+        and node.metadata.get("terminal_attempt_status") == "accepted"
+        and node.metadata.get("worktree_integration_dirty_signature") is None
+        and "commit_ref not found in attempt worktree"
+        in _metadata_text(node.metadata.get("worktree_integration_summary")).lower()
+    ):
+        return False
     if _node_pipeline_published_commit(node, commit_ref=commit_ref):
         return False
     return status not in _SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES
@@ -2075,8 +2083,6 @@ def _accept_ready_nodes_with_completed_repair_alternatives(
             continue
         if _dependency_blocking_ids(plan, node):
             continue
-        if not _node_metadata_has_nontransient_sandbox_docker_runtime_failure(node):
-            continue
         repair_alternative = _completed_repair_alternative_for_node(
             plan,
             node,
@@ -2116,56 +2122,46 @@ def _completed_repair_alternative_for_node(
         if candidate.metadata.get("last_verification_passed") is not True:
             continue
         if _repair_alternative_evidence_is_sufficient(candidate):
+            if not _repair_alternative_pipeline_gate_is_satisfied(
+                original=node,
+                repair=candidate,
+            ):
+                continue
             return candidate
     return None
 
 
-def _node_metadata_has_nontransient_sandbox_docker_runtime_failure(node: PlanNode) -> bool:
-    metadata = dict(node.metadata or {})
-    raw_items = metadata.get("last_verification_feedback_items")
-    if isinstance(raw_items, list):
-        for item in raw_items:
-            if not isinstance(item, Mapping):
-                continue
-            markers = [
-                item.get("failure_signature"),
-                item.get("summary"),
-                item.get("recommended_action"),
-            ]
-            normalized = "\n".join(str(marker).lower() for marker in markers if marker)
-            if _is_sandbox_docker_runtime_failure_marker(normalized):
-                return True
-    markers = [
-        metadata.get("last_verification_summary"),
-        metadata.get("last_verification_judge_required_next_action"),
-        metadata.get("last_verification_judge_rationale"),
-    ]
-    markers.extend(_string_list(metadata.get("last_verification_judge_failed_criteria")))
-    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
-    return _is_sandbox_docker_runtime_failure_marker(normalized)
-
-
-def _is_sandbox_docker_runtime_failure_marker(normalized: str) -> bool:
-    if "sandbox-no-docker-runtime" in normalized:
+def _repair_alternative_pipeline_gate_is_satisfied(
+    *,
+    original: PlanNode,
+    repair: PlanNode,
+) -> bool:
+    if not _node_requires_pipeline_gate(original):
         return True
-    if "docker-runtime-unavailable-sandbox" in normalized:
+
+    repair_refs = _node_protocol_evidence_refs(repair)
+    if "ci_pipeline:passed" in repair_refs or any(
+        ref.startswith("pipeline_run:success:") for ref in repair_refs
+    ):
         return True
-    docker_runtime_missing = "docker runtime" in normalized and any(
-        token in normalized
-        for token in (
-            "not available",
-            "unavailable",
-            "absent",
-            "without docker",
-            "lacks docker",
-            "no docker",
-            "no socket",
-        )
-    )
-    return docker_runtime_missing and "sandbox" in normalized
+
+    repair_commit = _first_prefixed_value(repair_refs, "commit_ref:")
+    if not repair_commit:
+        repair_commit = _first_prefixed_value(_node_artifacts(repair), "commit_ref:")
+    if not repair_commit:
+        return False
+
+    if _pipeline_gate_status(original) != "success":
+        return False
+    metadata = dict(original.metadata or {})
+    published_commit = _metadata_text(metadata.get("source_publish_commit_ref"))
+    return _commit_refs_match(published_commit, repair_commit)
 
 
 def _repair_alternative_evidence_is_sufficient(node: PlanNode) -> bool:
+    if _verified_judge_repair_evidence_is_sufficient(node):
+        return True
+
     refs = _node_protocol_evidence_refs(node)
     has_disposition = any(
         ref.startswith("contract_disposition:repair_node")
@@ -2185,6 +2181,31 @@ def _repair_alternative_evidence_is_sufficient(node: PlanNode) -> bool:
         for ref in refs
     )
     return has_disposition and has_registry and has_service_substitute
+
+
+def _verified_judge_repair_evidence_is_sufficient(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    if metadata.get("repair_source") != "verification_judge_create_repair_node":
+        return False
+    if metadata.get("source_verification_judge_next_action_kind") != "create_repair_node":
+        return False
+    if metadata.get("last_verification_judge_verdict") != "accepted":
+        return False
+
+    refs = _node_protocol_evidence_refs(node)
+    has_checkpoint = any(
+        ref.startswith("commit_ref:") or ref.startswith("git_diff_summary:") for ref in refs
+    )
+    has_terminal_report = any(
+        ref == "accepted" or ref.startswith("worker_report:completed") for ref in refs
+    )
+    has_verification = any(
+        ref.startswith("test_run:")
+        or ref.startswith("preflight:")
+        or ref.startswith("pipeline_run:success:")
+        for ref in refs
+    )
+    return has_checkpoint and has_terminal_report and has_verification
 
 
 def _should_request_pipeline_after_verification(
@@ -2214,10 +2235,71 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
         for result in failed_required
         if result.criterion.kind not in _PIPELINE_CRITERION_KINDS
     ]
+    pipeline_runtime_retryable = _pipeline_failures_are_runtime_retryable(pipeline_failures)
     return all(
         _is_pipeline_only_judge_failure(result)
         or _is_pipeline_trigger_infrastructure_failure(result)
+        or (
+            pipeline_runtime_retryable
+            and _is_verification_judge_inconclusive_failure(result)
+        )
         for result in non_pipeline_failures
+    )
+
+
+def _pipeline_failures_are_runtime_retryable(results: list[CriterionResult]) -> bool:
+    return any(
+        _is_pipeline_runtime_retry_marker(result.message)
+        or any(
+            _is_pipeline_runtime_retry_marker(evidence.ref)
+            or _is_pipeline_runtime_retry_marker(evidence.note)
+            for evidence in result.evidence
+        )
+        for result in results
+    )
+
+
+def _is_pipeline_runtime_retry_marker(value: object) -> bool:
+    marker = value.strip().lower() if isinstance(value, str) else ""
+    return bool(marker) and any(
+        token in marker
+        for token in (
+            "source_publish",
+            "drone_api",
+            "all connection attempts failed",
+            "failed to connect",
+            "couldn't connect",
+            "connection reset",
+            "connection refused",
+            "temporarily unavailable",
+            "rate limit",
+            "tls handshake timeout",
+            "i/o timeout",
+            "context deadline exceeded",
+            "registry-1.docker.io",
+            "docker.io/v2/",
+        )
+    )
+
+
+def _is_verification_judge_inconclusive_failure(result: CriterionResult) -> bool:
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    spec = result.criterion.spec
+    if spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
+        return False
+    if spec.get("judge_verdict") != "retry_infrastructure":
+        return False
+    failed = set(_string_list(spec.get("failed_criteria")))
+    if "workspace_verification_judge" in failed:
+        return True
+    feedback_items = spec.get("feedback_items")
+    if not isinstance(feedback_items, list):
+        return False
+    return any(
+        isinstance(item, Mapping)
+        and item.get("failure_signature") == "workspace_verification_judge_failed"
+        for item in feedback_items
     )
 
 
@@ -2234,13 +2316,83 @@ def _is_pipeline_only_judge_failure(result: CriterionResult) -> bool:
     )
     if not isinstance(feedback_items, list) or not feedback_items:
         return failed_is_pipeline_only
+    if _feedback_items_require_worker_retry(feedback_items):
+        return False
     feedback_signatures = [
         item.get("failure_signature") for item in feedback_items if isinstance(item, Mapping)
     ]
+    feedback_items_are_pipeline_evidence_gaps = all(
+        isinstance(item, Mapping) and _feedback_item_is_pipeline_evidence_gap(item)
+        for item in feedback_items
+    )
     if not feedback_signatures:
         return failed_is_pipeline_only
-    return all(_is_pipeline_failure_marker(item) for item in feedback_signatures) and (
-        not failed or failed_is_pipeline_only
+    feedback_signatures_match = feedback_items_are_pipeline_evidence_gaps or all(
+        _is_pipeline_failure_marker(item) for item in feedback_signatures
+    )
+    return feedback_signatures_match and (not failed or failed_is_pipeline_only)
+
+
+def _feedback_items_require_worker_retry(feedback_items: list[object]) -> bool:
+    has_worker_retry = False
+    has_stale_or_obsolete_disposition = False
+    for item in feedback_items:
+        if not isinstance(item, Mapping):
+            continue
+        if _feedback_item_is_pipeline_evidence_gap(item):
+            continue
+        target_layer = str(item.get("target_layer") or "").strip().lower()
+        feedback_kind = str(item.get("feedback_kind") or "").strip().lower()
+        recommended_action = str(item.get("recommended_action") or "").strip().lower()
+        if (
+            target_layer == "worker"
+            or feedback_kind == "product_code_failure"
+            or recommended_action == "retry_worker"
+        ):
+            has_worker_retry = True
+        if (
+            feedback_kind == "stale_or_invalid_task_target"
+            or recommended_action == "obsolete_node"
+        ):
+            has_stale_or_obsolete_disposition = True
+    return has_worker_retry and not has_stale_or_obsolete_disposition
+
+
+def _feedback_item_is_pipeline_evidence_gap(item: Mapping[str, object]) -> bool:
+    markers = [
+        item.get("feedback_kind"),
+        item.get("recommended_action"),
+        item.get("summary"),
+        item.get("failure_signature"),
+    ]
+    markers.extend(_string_list(item.get("evidence_refs")))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if not any(
+        token in normalized
+        for token in (
+            "evidence",
+            "not triggered",
+            "not yet on main",
+            "publish",
+            "trigger",
+            "worktree commit",
+        )
+    ):
+        return False
+    if not any(_is_pipeline_failure_marker(marker) for marker in markers):
+        return False
+    return any(
+        token in normalized
+        for token in (
+            "missing",
+            "not captured",
+            "not found",
+            "required",
+            "not triggered",
+            "not yet on main",
+            "publish",
+            "trigger",
+        )
     )
 
 
@@ -2290,13 +2442,20 @@ def _is_pipeline_failure_marker(value: object) -> bool:
     return bool(marker) and (
         marker.startswith("ci_pipeline")
         or marker.startswith("ci_")
+        or marker.startswith("ci-")
         or marker.startswith("pipeline_")
+        or marker.startswith("pipeline-")
+        or marker.startswith("missing_ci_evidence")
+        or marker.startswith("missing_drone_pipeline")
         or marker.startswith("harness_native_cicd")
+        or marker.startswith("harness-native-cicd")
         or "ci_pipeline" in marker
+        or "ci-pipeline" in marker
         or "ci pipeline" in marker
         or "ci/cd" in marker
         or "drone" in marker
         or "harness-native ci" in marker
+        or "harness-native-ci" in marker
     )
 
 
@@ -2310,12 +2469,31 @@ def _node_requires_pipeline_gate(node: PlanNode) -> bool:
 
 
 def _node_has_pipeline_success(node: PlanNode, artifacts: Mapping[str, Any]) -> bool:
-    values = set(_string_list(node.metadata.get("pipeline_evidence_refs")))
-    values.update(_string_list(node.metadata.get("execution_verifications")))
-    values.update(_string_list(artifacts.get("pipeline_evidence_refs")))
-    values.update(_string_list(artifacts.get("execution_verifications")))
-    return "ci_pipeline:passed" in values or any(
-        value.startswith("pipeline_run:success:") for value in values
+    artifact_status = artifacts.get("pipeline_status")
+    if isinstance(artifact_status, str) and artifact_status.strip().lower() not in {
+        "",
+        "success",
+    }:
+        return False
+
+    artifact_pipeline_status, _ = _pipeline_status_from_refs(
+        _pipeline_refs_for_verification([], artifacts)
+    )
+    if artifact_pipeline_status == "failed":
+        return False
+
+    if _pipeline_gate_status(node) != "success":
+        return False
+
+    candidate_refs = _artifact_evidence_refs(artifacts)
+    candidate_commit = _first_prefixed_value(candidate_refs, "commit_ref:")
+    if not candidate_commit:
+        candidate_commit = _metadata_text(node.metadata.get("verified_commit_ref"))
+    published_commit = _metadata_text(node.metadata.get("source_publish_commit_ref"))
+    return not (
+        candidate_commit
+        and published_commit
+        and not _commit_refs_match(published_commit, candidate_commit)
     )
 
 
@@ -2497,12 +2675,22 @@ def _verification_feedback_counts(feedback_items: list[dict[str, Any]]) -> dict[
 
 
 def _verification_feedback_obsoletes_node(report: VerificationReport) -> bool:
-    for item in _verification_feedback_items(report):
+    items = _verification_feedback_items(report)
+    has_obsolete_action = False
+    for item in items:
         if item.get("recommended_action") != "obsolete_node":
             continue
         if item.get("target_layer") in {"planner", "reviewer"}:
-            return True
-    return False
+            has_obsolete_action = True
+            break
+    if not has_obsolete_action:
+        return False
+
+    return not any(
+        item.get("recommended_action") != "obsolete_node"
+        and item.get("severity") in {"blocking", "critical"}
+        for item in items
+    )
 
 
 def _verification_feedback_disposes_sandbox_docker_runtime_node(
@@ -2533,8 +2721,8 @@ def _node_with_verification_evidence(
     refs = list(
         dict.fromkeys([*_report_evidence_refs(report), *_artifact_evidence_refs(artifacts)])
     )
-    commit_ref = _first_prefixed_value(refs, "commit_ref:")
-    git_diff_summary = _first_prefixed_value(refs, "git_diff_summary:")
+    commit_ref = _last_prefixed_value(refs, "commit_ref:")
+    git_diff_summary = _last_prefixed_value(refs, "git_diff_summary:")
     test_commands = tuple(
         dict.fromkeys(ref.removeprefix("test_run:") for ref in refs if ref.startswith("test_run:"))
     )
@@ -2812,6 +3000,14 @@ def _first_prefixed_value(values: list[str], prefix: str) -> str | None:
         if value.startswith(prefix):
             return value.removeprefix(prefix)
     return None
+
+
+def _last_prefixed_value(values: list[str], prefix: str) -> str | None:
+    matched: str | None = None
+    for value in values:
+        if value.startswith(prefix):
+            matched = value.removeprefix(prefix)
+    return matched
 
 
 def _select_ready_nodes_without_write_conflicts(

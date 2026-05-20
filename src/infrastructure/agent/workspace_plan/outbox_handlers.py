@@ -11,6 +11,7 @@ import os
 import posixpath
 import re
 import shlex
+import shutil
 import tempfile
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -128,6 +129,7 @@ from src.infrastructure.agent.workspace_plan.iteration_review import (
 from src.infrastructure.agent.workspace_plan.orchestrator import OrchestratorConfig
 from src.infrastructure.agent.workspace_plan.outbox_worker import WorkspacePlanOutboxHandler
 from src.infrastructure.agent.workspace_plan.pipeline import (
+    DRONE_DOCKER_DEPLOY_VALIDATION,
     DRONE_PROVIDER,
     SANDBOX_NATIVE_PROVIDER,
     PipelineContractSpec,
@@ -523,6 +525,8 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             changed = True
             continue
         status = _attempt_status_value(attempt)
+        if _reported_node_has_pipeline_result_pending_verification(node, status):
+            continue
         if status == "accepted":
             if (
                 recoverable_done_idle
@@ -635,6 +639,21 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     if changed:
         await repo.save(plan)
     return changed
+
+
+def _reported_node_has_pipeline_result_pending_verification(node: PlanNode, status: str) -> bool:
+    if node.execution is not TaskExecution.REPORTED:
+        return False
+    if status == WorkspaceTaskSessionAttemptStatus.ACCEPTED.value:
+        return False
+    metadata = node.metadata or {}
+    pipeline_status = (_metadata_string(metadata.get("pipeline_status")) or "").lower()
+    if pipeline_status not in {"failed", "failure", "error", "success"}:
+        return False
+    return bool(
+        _metadata_string(metadata.get("pipeline_run_id"))
+        or _metadata_string(metadata.get("external_id"))
+    )
 
 
 async def _reconcile_plan_nodes_with_reported_attempts(
@@ -798,6 +817,17 @@ def _first_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
         if ref.startswith(artifact_prefix):
             return ref.removeprefix(artifact_prefix)
     return None
+
+
+def _last_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
+    matched: str | None = None
+    artifact_prefix = f"artifact:{prefix}"
+    for ref in refs:
+        if ref.startswith(prefix):
+            matched = ref.removeprefix(prefix)
+        elif ref.startswith(artifact_prefix):
+            matched = ref.removeprefix(artifact_prefix)
+    return matched
 
 
 def _accepted_attempt_evidence_metadata(
@@ -1981,6 +2011,9 @@ def make_worker_launch_handler(
                 session=session,
                 task=task,
                 context=worktree_context,
+                attempt_id=attempt_id,
+                plan_id=item.plan_id,
+                node_id=_payload_string(payload, "node_id"),
             )
             return
 
@@ -2839,6 +2872,11 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
         node = plan.nodes.get(PlanNodeId(node_id))
         if node is None:
             raise ValueError(f"workspace plan node {node_id} not found")
+        current_attempt = (
+            await _load_plan_attempt(session, node.current_attempt_id)
+            if node.current_attempt_id
+            else None
+        )
 
         workspace_repo = SqlWorkspaceRepository(session)
         workspace = await workspace_repo.find_by_id(workspace_id)
@@ -2908,6 +2946,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 workspace_metadata=workspace_metadata,
                 root_metadata=root_metadata,
                 node=node,
+                current_attempt=current_attempt,
                 contract=contract,
             )
 
@@ -2917,15 +2956,10 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             node_id=node_id,
             attempt_id=attempt_id,
         )
-        if latest is not None and (
-            latest.status == "running"
-            or (
-                latest.status == "success"
-                and (
-                    not _requires_preview_deployment(contract)
-                    or _node_has_required_deployment_health(node, contract=contract)
-                )
-            )
+        if latest is not None and _can_reflect_existing_pipeline_run(
+            run=latest,
+            contract=contract,
+            node=node,
         ):
             await _reflect_existing_pipeline_run(
                 session=session,
@@ -2968,7 +3002,8 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             plan_id=plan_id,
             node_id=node_id,
             attempt_id=attempt_id,
-            commit_ref=_pipeline_contract_commit_ref(contract) or _pipeline_commit_ref(node),
+            commit_ref=_pipeline_contract_commit_ref(contract)
+            or _pipeline_commit_ref(node, current_attempt=current_attempt),
             provider=contract.provider,
             metadata={
                 "reason": payload.get("reason") or "pipeline_gate_required",
@@ -3180,9 +3215,10 @@ async def _prepare_drone_source_ref(
     workspace_metadata: Mapping[str, Any],
     root_metadata: Mapping[str, Any],
     node: PlanNode,
+    current_attempt: WorkspaceTaskSessionAttemptModel | None = None,
     contract: PipelineContractSpec,
 ) -> tuple[PipelineContractSpec, dict[str, Any], PipelineRunResult | None]:
-    commit_ref = _pipeline_commit_ref(node)
+    commit_ref = _pipeline_commit_ref(node, current_attempt=current_attempt)
     if not commit_ref:
         return (
             contract,
@@ -3208,6 +3244,7 @@ async def _prepare_drone_source_ref(
             reason=reason,
             commit_ref=commit_ref,
             branch=None,
+            source_commit_ref=commit_ref,
         )
         return contract, metadata, _source_publish_failure_result(reason, metadata=metadata)
 
@@ -3223,6 +3260,7 @@ async def _prepare_drone_source_ref(
             reason=reason,
             commit_ref=commit_ref,
             branch=None,
+            source_commit_ref=commit_ref,
         )
         return contract, metadata, _source_publish_failure_result(reason, metadata=metadata)
 
@@ -3243,6 +3281,7 @@ async def _prepare_drone_source_ref(
         reason=publish.get("reason"),
         commit_ref=publish.get("published_commit") or commit_ref,
         branch=branch,
+        source_commit_ref=commit_ref,
         token_env=token_env,
     )
     if publish_status != "published":
@@ -3263,6 +3302,7 @@ async def _prepare_drone_source_ref(
         "status": "published",
         "branch": branch,
         "commit_ref": published_commit,
+        "source_commit_ref": commit_ref,
         "token_env": token_env,
     }
     return replace(contract, provider_config=provider_config), metadata, None
@@ -3385,11 +3425,13 @@ async def _publish_git_ref_to_source_control(  # noqa: PLR0911
 
         dirty = await _run_git_command(host_code_root, ("status", "--porcelain"), env=env)
         if str(dirty.get("stdout") or "").strip():
-            return {
-                "status": "failed",
-                "reason": "main checkout has uncommitted changes",
-                "published_commit": None,
-            }
+            return await _publish_git_ref_from_temporary_worktree(
+                host_code_root=host_code_root,
+                publish_ref=commit_ref,
+                branch=branch,
+                remote_url=remote_url,
+                env=env,
+            )
 
         already_ancestor = await _run_git_command(
             host_code_root,
@@ -3404,6 +3446,20 @@ async def _publish_git_ref_to_source_control(  # noqa: PLR0911
                 timeout=120,
             )
             if fast_forward["exit_code"] != "0":
+                if _is_non_fast_forward_push_rejection(
+                    fast_forward
+                ) or _is_unrelated_history_merge_rejection(fast_forward):
+                    return await _publish_git_ref_from_temporary_worktree(
+                        host_code_root=host_code_root,
+                        publish_ref=commit_ref,
+                        branch=branch,
+                        remote_url=remote_url,
+                        env=env,
+                        default_reason=(
+                            "published from temporary worktree after local branch "
+                            "could not fast-forward to candidate"
+                        ),
+                    )
                 return {
                     "status": "failed",
                     "reason": _compact_git_error(fast_forward),
@@ -3418,9 +3474,110 @@ async def _publish_git_ref_to_source_control(  # noqa: PLR0911
                 "published_commit": None,
             }
         published_commit = str(head.get("stdout") or "").strip()
-        remote = remote_url or "origin"
-        push = await _run_git_command(
+        return await _push_git_head_to_source_branch(
+            host_code_root=host_code_root,
+            published_commit=published_commit,
+            branch=branch,
+            remote_url=remote_url,
+            env=env,
+        )
+    finally:
+        if askpass_path:
+            with contextlib.suppress(OSError):
+                os.unlink(askpass_path)
+
+
+async def _push_git_head_to_source_branch(
+    *,
+    host_code_root: Path,
+    published_commit: str,
+    branch: str,
+    remote_url: str | None,
+    env: Mapping[str, str],
+) -> dict[str, str | None]:
+    remote = remote_url or "origin"
+    push = await _run_git_command(
+        host_code_root,
+        ("push", remote, f"HEAD:refs/heads/{branch}"),
+        env=env,
+        timeout=180,
+    )
+    if push["exit_code"] == "0":
+        return {
+            "status": "published",
+            "reason": None,
+            "published_commit": published_commit,
+        }
+    if _is_non_fast_forward_push_rejection(push):
+        return await _publish_git_ref_from_temporary_worktree(
+            host_code_root=host_code_root,
+            publish_ref=published_commit,
+            branch=branch,
+            remote_url=remote_url,
+            env=env,
+            default_reason="published from temporary worktree after remote branch advanced",
+        )
+    return {
+        "status": "failed",
+        "reason": _compact_git_error(push),
+        "published_commit": published_commit,
+    }
+
+
+async def _publish_git_ref_from_temporary_worktree(
+    *,
+    host_code_root: Path,
+    publish_ref: str,
+    branch: str,
+    remote_url: str | None,
+    env: Mapping[str, str],
+    default_reason: str = (
+        "published from temporary worktree because main checkout has uncommitted changes"
+    ),
+) -> dict[str, str | None]:
+    temp_parent = Path(tempfile.mkdtemp(prefix="memstack-source-publish-"))
+    worktree_path = temp_parent / "worktree"
+    added = False
+    try:
+        add = await _run_git_command(
             host_code_root,
+            ("worktree", "add", "--detach", str(worktree_path), publish_ref),
+            env=env,
+            timeout=120,
+        )
+        if add["exit_code"] != "0":
+            return {
+                "status": "failed",
+                "reason": _compact_git_error(add),
+                "published_commit": None,
+            }
+        added = True
+
+        remote = remote_url or "origin"
+        remote_merge = await _merge_remote_branch_for_publish(
+            worktree_path=worktree_path,
+            candidate_ref=publish_ref,
+            remote=remote,
+            branch=branch,
+            env=env,
+        )
+        if remote_merge.get("status") == "failed":
+            return {
+                "status": "failed",
+                "reason": str(remote_merge.get("reason") or "remote branch merge failed"),
+                "published_commit": None,
+            }
+
+        head = await _run_git_command(worktree_path, ("rev-parse", "HEAD"), env=env)
+        if head["exit_code"] != "0":
+            return {
+                "status": "failed",
+                "reason": _compact_git_error(head),
+                "published_commit": None,
+            }
+        published_commit = str(head.get("stdout") or "").strip()
+        push = await _run_git_command(
+            worktree_path,
             ("push", remote, f"HEAD:refs/heads/{branch}"),
             env=env,
             timeout=180,
@@ -3433,13 +3590,286 @@ async def _publish_git_ref_to_source_control(  # noqa: PLR0911
             }
         return {
             "status": "published",
-            "reason": None,
+            "reason": str(remote_merge.get("reason") or default_reason),
             "published_commit": published_commit,
         }
     finally:
-        if askpass_path:
-            with contextlib.suppress(OSError):
-                os.unlink(askpass_path)
+        if added:
+            remove = await _run_git_command(
+                host_code_root,
+                ("worktree", "remove", "--force", str(worktree_path)),
+                env=env,
+                timeout=120,
+            )
+            if remove["exit_code"] != "0":
+                logger.warning("temporary source publish worktree cleanup failed: %s", remove)
+        shutil.rmtree(temp_parent, ignore_errors=True)
+
+
+async def _merge_remote_branch_for_publish(  # noqa: PLR0911
+    *,
+    worktree_path: Path,
+    candidate_ref: str,
+    remote: str,
+    branch: str,
+    env: Mapping[str, str],
+) -> dict[str, str | None]:
+    remote_ref = f"refs/remotes/memstack-source-publish/{branch}"
+    fetch = await _run_git_command(
+        worktree_path,
+        ("fetch", "--no-tags", remote, f"refs/heads/{branch}:{remote_ref}"),
+        env=env,
+        timeout=180,
+    )
+    if fetch["exit_code"] != "0":
+        reason = _compact_git_error(fetch)
+        if "couldn't find remote ref" in reason.lower():
+            return {"status": "skipped", "reason": None}
+        return {"status": "failed", "reason": reason}
+
+    remote_ancestor = await _run_git_command(
+        worktree_path,
+        ("merge-base", "--is-ancestor", remote_ref, "HEAD"),
+        env=env,
+    )
+    if remote_ancestor["exit_code"] == "0":
+        return {"status": "skipped", "reason": None}
+
+    local_ancestor = await _run_git_command(
+        worktree_path,
+        ("merge-base", "--is-ancestor", "HEAD", remote_ref),
+        env=env,
+    )
+    if local_ancestor["exit_code"] == "0":
+        return await _merge_remote_branch_preserving_local_tree(
+            worktree_path=worktree_path,
+            remote_ref=remote_ref,
+            env=env,
+        )
+
+    merge = await _run_git_command(
+        worktree_path,
+        ("merge", "--no-edit", remote_ref),
+        env=env,
+        timeout=120,
+    )
+    if merge["exit_code"] == "0":
+        return await _restore_candidate_publish_paths_after_merge(
+            worktree_path=worktree_path,
+            candidate_ref=candidate_ref,
+            remote_ref=remote_ref,
+            env=env,
+            reason="merged remote branch before publish",
+        )
+
+    await _run_git_command(worktree_path, ("merge", "--abort"), env=env, timeout=60)
+    merged = await _merge_remote_branch_with_local_preference(
+        worktree_path=worktree_path,
+        remote_ref=remote_ref,
+        env=env,
+    )
+    if merged.get("status") == "failed":
+        return merged
+    return await _restore_candidate_publish_paths_after_merge(
+        worktree_path=worktree_path,
+        candidate_ref=candidate_ref,
+        remote_ref=remote_ref,
+        env=env,
+        reason=str(merged.get("reason") or "merged remote branch before publish"),
+    )
+
+
+async def _merge_remote_branch_preserving_local_tree(
+    *,
+    worktree_path: Path,
+    remote_ref: str,
+    env: Mapping[str, str],
+) -> dict[str, str | None]:
+    merge_ours_strategy = await _run_git_command(
+        worktree_path,
+        ("merge", "--no-edit", "-s", "ours", remote_ref),
+        env=env,
+        timeout=120,
+    )
+    if merge_ours_strategy["exit_code"] == "0":
+        return {
+            "status": "merged",
+            "reason": "merged remote branch history before publish preserving candidate tree",
+        }
+    return {"status": "failed", "reason": _compact_git_error(merge_ours_strategy)}
+
+
+async def _restore_candidate_publish_paths_after_merge(  # noqa: PLR0911
+    *,
+    worktree_path: Path,
+    candidate_ref: str,
+    remote_ref: str,
+    env: Mapping[str, str],
+    reason: str,
+) -> dict[str, str | None]:
+    paths = await _candidate_publish_path_states(
+        worktree_path=worktree_path,
+        candidate_ref=candidate_ref,
+        remote_ref=remote_ref,
+        env=env,
+    )
+    if not paths:
+        return {"status": "merged", "reason": reason}
+
+    present_paths = tuple(path for path, present in paths if present)
+    removed_paths = tuple(path for path, present in paths if not present)
+    if present_paths:
+        checkout = await _run_git_command(
+            worktree_path,
+            ("checkout", candidate_ref, "--", *present_paths),
+            env=env,
+            timeout=120,
+        )
+        if checkout["exit_code"] != "0":
+            return {"status": "failed", "reason": _compact_git_error(checkout)}
+    if removed_paths:
+        remove = await _run_git_command(
+            worktree_path,
+            ("rm", "-f", "--ignore-unmatch", "--", *removed_paths),
+            env=env,
+            timeout=120,
+        )
+        if remove["exit_code"] != "0":
+            return {"status": "failed", "reason": _compact_git_error(remove)}
+
+    changed = await _run_git_command(
+        worktree_path,
+        ("diff", "--cached", "--quiet", "--", *tuple(path for path, _ in paths)),
+        env=env,
+    )
+    if changed["exit_code"] == "0":
+        return {"status": "merged", "reason": reason}
+    if changed["exit_code"] != "1":
+        return {"status": "failed", "reason": _compact_git_error(changed)}
+
+    commit = await _run_git_command(
+        worktree_path,
+        ("commit", "-m", "Preserve candidate source publish paths"),
+        env=env,
+        timeout=120,
+    )
+    if commit["exit_code"] != "0":
+        return {"status": "failed", "reason": _compact_git_error(commit)}
+    return {
+        "status": "merged",
+        "reason": f"{reason}; restored candidate-changed paths after merge",
+    }
+
+
+async def _candidate_publish_path_states(
+    *,
+    worktree_path: Path,
+    candidate_ref: str,
+    remote_ref: str,
+    env: Mapping[str, str],
+) -> tuple[tuple[str, bool], ...]:
+    base = await _run_git_command(
+        worktree_path,
+        ("merge-base", candidate_ref, remote_ref),
+        env=env,
+    )
+    if base["exit_code"] != "0":
+        return ()
+    base_ref = str(base.get("stdout") or "").strip()
+    if not base_ref:
+        return ()
+    diff = await _run_git_command(
+        worktree_path,
+        ("diff", "--name-status", "-z", base_ref, candidate_ref),
+        env=env,
+    )
+    if diff["exit_code"] != "0":
+        return ()
+    return _parse_git_name_status_path_states(str(diff.get("stdout") or ""))
+
+
+def _parse_git_name_status_path_states(raw: str) -> tuple[tuple[str, bool], ...]:
+    parts = [part for part in raw.split("\0") if part]
+    paths: dict[str, bool] = {}
+    index = 0
+    while index < len(parts):
+        status = parts[index]
+        index += 1
+        if not status:
+            continue
+        code = status[0]
+        if code in {"R", "C"}:
+            if index + 1 >= len(parts):
+                break
+            old_path = parts[index]
+            new_path = parts[index + 1]
+            index += 2
+            if code == "R" and old_path:
+                paths[old_path] = False
+            if new_path:
+                paths[new_path] = True
+            continue
+        if index >= len(parts):
+            break
+        path = parts[index]
+        index += 1
+        if path:
+            paths[path] = code != "D"
+    return tuple(paths.items())
+
+
+async def _merge_remote_branch_with_local_preference(
+    *,
+    worktree_path: Path,
+    remote_ref: str,
+    env: Mapping[str, str],
+) -> dict[str, str | None]:
+    merge_ours = await _run_git_command(
+        worktree_path,
+        ("merge", "--no-edit", "-X", "ours", remote_ref),
+        env=env,
+        timeout=120,
+    )
+    if merge_ours["exit_code"] == "0":
+        return {
+            "status": "merged",
+            "reason": "merged remote branch before publish using local conflict preference",
+        }
+    if _is_unrelated_history_merge_rejection(merge_ours):
+        await _run_git_command(worktree_path, ("merge", "--abort"), env=env, timeout=60)
+        merge_unrelated_ours = await _run_git_command(
+            worktree_path,
+            ("merge", "--no-edit", "--allow-unrelated-histories", "-X", "ours", remote_ref),
+            env=env,
+            timeout=120,
+        )
+        if merge_unrelated_ours["exit_code"] == "0":
+            return {
+                "status": "merged",
+                "reason": (
+                    "merged unrelated remote branch before publish using local conflict preference"
+                ),
+            }
+        return {"status": "failed", "reason": _compact_git_error(merge_unrelated_ours)}
+    return {"status": "failed", "reason": _compact_git_error(merge_ours)}
+
+
+def _is_non_fast_forward_push_rejection(result: Mapping[str, object]) -> bool:
+    text = "\n".join(
+        str(result.get(key) or "") for key in ("stdout", "stderr", "reason")
+    ).lower()
+    return (
+        "non-fast-forward" in text
+        or "fetch first" in text
+        or "updates were rejected" in text
+        or "tip of your current branch is behind" in text
+        or "not possible to fast-forward" in text
+    )
+
+
+def _is_unrelated_history_merge_rejection(result: Mapping[str, object]) -> bool:
+    text = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr", "reason"))
+    return "refusing to merge unrelated histories" in text.lower()
 
 
 async def _run_git_command(
@@ -3487,6 +3917,7 @@ def _source_publish_metadata(
     reason: str | None,
     commit_ref: str | None,
     branch: str | None,
+    source_commit_ref: str | None = None,
     token_env: str | None = None,
 ) -> dict[str, Any]:
     metadata: dict[str, Any] = {
@@ -3497,6 +3928,8 @@ def _source_publish_metadata(
         metadata["source_publish_reason"] = reason
     if commit_ref:
         metadata["source_publish_commit_ref"] = commit_ref
+    if source_commit_ref:
+        metadata["source_publish_source_commit_ref"] = source_commit_ref
     if branch:
         metadata["source_publish_branch"] = branch
     if token_env:
@@ -3596,18 +4029,26 @@ async def _persist_external_pipeline_result(
             },
         )
 
+    result_summary = _pipeline_result_summary(result)
     evidence_refs = list(result.evidence_refs)
     evidence_refs.append(f"pipeline_run:{result.status}:{run.id}")
     if result.external_id:
         evidence_refs.append(f"pipeline_run_external:{contract.provider}:{result.external_id}")
+    result_metadata = dict(result.metadata or {})
+    if result_summary and result.status != "success":
+        result_metadata["pipeline_failure_summary"] = result_summary
+        result_metadata["pipeline_last_summary"] = result_summary
+        failed_stage = _first_failed_pipeline_stage(result.stage_results)
+        if failed_stage is not None:
+            result_metadata["pipeline_failed_stage"] = failed_stage.stage
     await pipeline_repo.finish_run(
         run,
         status=result.status,
-        reason=result.reason,
+        reason=result_summary,
         metadata={
             "stage_count": len(result.stage_results),
             "service_count": len(contract.services),
-            **dict(result.metadata or {}),
+            **result_metadata,
         },
     )
     await _finish_pipeline_on_node(
@@ -3616,7 +4057,7 @@ async def _persist_external_pipeline_result(
         node=node,
         run_id=run.id,
         status=result.status,
-        reason=result.reason,
+        reason=result_summary,
         evidence_refs=list(dict.fromkeys(evidence_refs)),
         preview_url=result.preview_url,
         health_url=result.health_url,
@@ -3675,6 +4116,37 @@ def _pipeline_contract_for_workspace(
         fallback_code_root=code_context.sandbox_code_root,
     )
     return _workspace_scoped_pipeline_contract(contract, workspace_id=workspace_id)
+
+
+def _can_reflect_existing_pipeline_run(
+    *,
+    run: WorkspacePipelineRunModel,
+    contract: PipelineContractSpec,
+    node: PlanNode,
+) -> bool:
+    if run.status == "running":
+        return True
+    if run.status != "success":
+        return False
+    if _requires_drone_docker_deploy_validation(contract):
+        metadata = dict(run.metadata_json or {})
+        if metadata.get("deploy_validation") != DRONE_DOCKER_DEPLOY_VALIDATION:
+            return False
+    return not _requires_preview_deployment(contract) or _node_has_required_deployment_health(
+        node,
+        contract=contract,
+    )
+
+
+def _requires_drone_docker_deploy_validation(contract: PipelineContractSpec) -> bool:
+    deploy = contract.deploy
+    return (
+        contract.provider == DRONE_PROVIDER
+        and deploy is not None
+        and deploy.enabled
+        and deploy.required
+        and deploy.mode == "docker"
+    )
 
 
 _DRONE_DEPLOY_PHASES = frozenset({"deploy", "review"})
@@ -3955,14 +4427,69 @@ def _pipeline_node_metadata_projection(run_metadata: Mapping[str, Any]) -> dict[
             projected[key] = value
     for key in (
         "deploy_mode",
+        "deploy_validation",
         "deployment_status",
         "external_id",
         "external_provider",
         "external_url",
+        "pipeline_failed_stage",
+        "pipeline_failure_summary",
+        "pipeline_last_summary",
     ):
         if key in run_metadata:
             projected[key] = run_metadata[key]
     return projected
+
+
+def _pipeline_result_summary(result: PipelineRunResult) -> str:
+    if result.status == "success":
+        return result.reason or "harness-native CI/CD pipeline passed"
+
+    failed_stage = _first_failed_pipeline_stage(result.stage_results)
+    if failed_stage is None:
+        return result.reason or "harness-native CI/CD pipeline failed"
+
+    parts = [result.reason or "harness-native CI/CD pipeline failed"]
+    stage_label = f"failing stage {failed_stage.stage}"
+    if failed_stage.exit_code is not None:
+        stage_label += f" exited {failed_stage.exit_code}"
+    parts.append(stage_label)
+    stage_preview = _pipeline_stage_failure_preview(failed_stage)
+    if stage_preview:
+        parts.append(stage_preview)
+    return _compact_pipeline_failure_text("; ".join(parts), limit=1800)
+
+
+def _first_failed_pipeline_stage(
+    stage_results: Iterable[PipelineStageResult],
+) -> PipelineStageResult | None:
+    for stage_result in stage_results:
+        if not stage_result.passed:
+            return stage_result
+    return None
+
+
+def _pipeline_stage_failure_preview(stage_result: PipelineStageResult) -> str:
+    previews = []
+    drone_error = stage_result.metadata.get("drone_error")
+    if isinstance(drone_error, str) and drone_error.strip():
+        previews.append(drone_error.strip())
+    preview = (stage_result.stderr_preview or stage_result.stdout_preview or "").strip()
+    if preview and preview not in previews:
+        previews.append(preview)
+    if not previews:
+        return ""
+    return _compact_pipeline_failure_text("; ".join(previews), limit=1200)
+
+
+def _compact_pipeline_failure_text(value: str, *, limit: int) -> str:
+    compacted = value.strip().replace("\n", "\\n")
+    if len(compacted) <= limit:
+        return compacted
+    marker = "...[truncated]..."
+    head_size = max(1, (limit - len(marker)) // 2)
+    tail_size = max(1, limit - len(marker) - head_size)
+    return f"{compacted[:head_size]}{marker}{compacted[-tail_size:]}"
 
 
 async def _project_pipeline_success_to_workspace_task(
@@ -4027,15 +4554,74 @@ def _pipeline_completion_node_state(
     return TaskIntent.IN_PROGRESS, TaskExecution.REPORTED
 
 
-def _pipeline_commit_ref(node: PlanNode) -> str | None:
+def _pipeline_commit_ref(
+    node: PlanNode,
+    *,
+    current_attempt: WorkspaceTaskSessionAttemptModel | None = None,
+) -> str | None:
+    metadata = dict(node.metadata or {})
+    candidates = (
+        _current_attempt_candidate_commit_ref(node, current_attempt),
+        _current_attempt_report_commit_ref(node, metadata=metadata),
+        _integration_commit_ref_from_metadata(metadata),
+        _first_prefixed_ref(
+            _merge_string_values(metadata.get("accepted_repair_evidence_refs"), []),
+            "commit_ref:",
+        ),
+    )
+    for candidate in candidates:
+        if candidate:
+            return candidate
     feature = node.feature_checkpoint
     if feature is not None and feature.commit_ref:
         return feature.commit_ref
-    metadata = dict(node.metadata or {})
-    for value in _merge_string_values(metadata.get("evidence_refs"), []):
-        if value.startswith("commit_ref:"):
-            return value.removeprefix("commit_ref:")
-    return None
+    return _first_prefixed_ref(_merge_string_values(metadata.get("evidence_refs"), []), "commit_ref:")
+
+
+def _current_attempt_candidate_commit_ref(
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttemptModel | None,
+) -> str | None:
+    current_attempt_id = str(node.current_attempt_id or "").strip()
+    if not current_attempt_id or attempt is None or str(attempt.id) != current_attempt_id:
+        return None
+    refs: list[str] = []
+    for domain_field, model_field in (
+        ("candidate_verifications", "candidate_verifications_json"),
+        ("candidate_artifacts", "candidate_artifacts_json"),
+    ):
+        refs.extend(
+            _attempt_list_field(
+                attempt,
+                domain_field=domain_field,
+                model_field=model_field,
+            )
+        )
+    return _last_prefixed_ref(refs, "commit_ref:")
+
+
+def _current_attempt_report_commit_ref(
+    node: PlanNode,
+    *,
+    metadata: Mapping[str, object],
+) -> str | None:
+    current_attempt_id = str(node.current_attempt_id or "").strip()
+    if not current_attempt_id and node.execution is not TaskExecution.REPORTED:
+        return None
+    report_attempt_id = str(metadata.get("last_worker_report_attempt_id") or "").strip()
+    if current_attempt_id and report_attempt_id and report_attempt_id != current_attempt_id:
+        return None
+    if current_attempt_id and not report_attempt_id and node.execution is not TaskExecution.REPORTED:
+        return None
+    refs: list[str] = []
+    for key in (
+        "candidate_verifications",
+        "candidate_artifacts",
+        "last_worker_report_verifications",
+        "last_worker_report_artifacts",
+    ):
+        refs.extend(_merge_string_values(metadata.get(key), []))
+    return _last_prefixed_ref(refs, "commit_ref:")
 
 
 def _pipeline_contract_commit_ref(contract: PipelineContractSpec) -> str | None:
@@ -4357,21 +4943,65 @@ async def _block_task_for_worktree_setup_failure(
     session: AsyncSession,
     task: WorkspaceTask,
     context: AttemptWorktreeContext,
+    attempt_id: str | None = None,
+    plan_id: str | None = None,
+    node_id: str | None = None,
 ) -> None:
     task_model = await session.get(WorkspaceTaskModel, task.id)
     if task_model is None:
         return
     reason = context.setup_reason or "attempt worktree setup failed"
+    summary = f"worktree_setup_failed: {reason}"
     metadata = dict(task_model.metadata_json or {})
     metadata.update(context.metadata_patch())
     metadata["launch_state"] = "worktree_setup_failed"
+    metadata["last_attempt_status"] = WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+    if attempt_id:
+        metadata[CURRENT_ATTEMPT_ID] = attempt_id
     task_model.metadata_json = metadata
     task_model.status = WorkspaceTaskStatus.BLOCKED.value
-    task_model.blocker_reason = f"worktree_setup_failed: {reason}"
+    task_model.blocker_reason = summary
     task_model.updated_at = datetime.now(UTC)
     task.metadata = metadata
     task.status = WorkspaceTaskStatus.BLOCKED
     task.blocker_reason = task_model.blocker_reason
+
+    if attempt_id:
+        attempt = await session.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+        if attempt is not None:
+            attempt.status = WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+            attempt.leader_feedback = summary
+            attempt.adjudication_reason = "worktree_setup_failed"
+            attempt.completed_at = datetime.now(UTC)
+            attempt.updated_at = attempt.completed_at
+
+    if plan_id and node_id:
+        plan_repo = SqlPlanRepository(session)
+        plan = await plan_repo.get(plan_id)
+        node = plan.nodes.get(PlanNodeId(node_id)) if plan is not None else None
+        if plan is not None and node is not None:
+            node_metadata = dict(node.metadata or {})
+            node_metadata.update(context.metadata_patch())
+            node_metadata["worktree_setup_failure_summary"] = summary
+            node_metadata["last_attempt_status"] = WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+            if attempt_id:
+                node_metadata["terminal_attempt_status"] = (
+                    WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+                )
+                node_metadata["terminal_attempt_reconciled_at"] = (
+                    datetime.now(UTC).isoformat().replace("+00:00", "Z")
+                )
+            plan.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.BLOCKED,
+                    execution=TaskExecution.IDLE,
+                    current_attempt_id=None,
+                    metadata=node_metadata,
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            await plan_repo.save(plan)
 
 
 def _append_launch_instruction_note(instructions: str | None, note: str | None) -> str | None:
@@ -4933,8 +5563,22 @@ def _apply_attempt_worktree_checkpoint(node: PlanNode, attempt_id: str) -> None:
         feature,
         worktree_path=worktree_path,
         branch_name=branch_name,
-        base_ref=feature.base_ref or "HEAD",
+        base_ref=_attempt_retry_base_ref(node) or feature.commit_ref or feature.base_ref or "HEAD",
     )
+
+
+def _attempt_retry_base_ref(node: PlanNode) -> str | None:
+    metadata = dict(node.metadata or {})
+    for key in (
+        "source_publish_commit_ref",
+        "source_publish_source_commit_ref",
+        "worktree_integration_commit_ref",
+        "verified_commit_ref",
+    ):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 _STALE_ATTEMPT_METADATA_KEYS = frozenset(

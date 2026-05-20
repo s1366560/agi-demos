@@ -67,6 +67,7 @@ from src.infrastructure.agent.workspace_plan.progress import ProgressProjector
 from src.infrastructure.agent.workspace_plan.repository import InMemoryPlanRepository
 from src.infrastructure.agent.workspace_plan.supervisor import (
     WorkspaceSupervisor,
+    _accept_ready_nodes_with_completed_repair_alternatives,
     _node_with_verification_evidence,
     _reopen_done_nodes_with_failed_pipeline,
 )
@@ -2799,6 +2800,54 @@ class _VerificationJudgeRetryVerifier:
         )
 
 
+class _PipelineRuntimeFailureWithJudgeRetryVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.8,
+                    message=(
+                        "harness-native CI pipeline failed: fatal: unable to access "
+                        "'https://github.com/s1366560/my-evo.git/': Failed to connect "
+                        "to github.com port 443; failing stage source_publish exited 1"
+                    ),
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "retryable_infrastructure_failure",
+                            "judge_verdict": "retry_infrastructure",
+                            "failed_criteria": ["workspace_verification_judge"],
+                            "required_next_action": "retry verification judge",
+                            "next_action_kind": "retry_same_node",
+                            "feedback_items": [
+                                {
+                                    "target_layer": "runtime",
+                                    "feedback_kind": "runtime_infra_failure",
+                                    "severity": "warning",
+                                    "recommended_action": "retry_infra",
+                                    "failure_signature": "workspace_verification_judge_failed",
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.5,
+                    message="judge verdict=retry_infrastructure; retry verification judge",
+                ),
+            ),
+        )
+
+
 class _VerificationJudgeRepairInfrastructureVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -3011,6 +3060,105 @@ class _PipelineOnlyJudgeFailureVerifier:
         )
 
 
+class _StalePipelineWithBlockingWorkerFeedbackVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message="Drone build #35 failed for a stale commit",
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "failed_criteria": ["ci_pipeline"],
+                            "feedback_items": [
+                                {
+                                    "target_layer": "worker",
+                                    "feedback_kind": "product_code_failure",
+                                    "severity": "blocking",
+                                    "recommended_action": "retry_worker",
+                                    "summary": "stale Drone run still used localhost registry pull",
+                                    "failure_signature": (
+                                        "drone-host-socket-localhost-registry-unreachable"
+                                    ),
+                                },
+                                {
+                                    "target_layer": "planner",
+                                    "feedback_kind": "stale_or_invalid_task_target",
+                                    "severity": "info",
+                                    "recommended_action": "obsolete_node",
+                                    "summary": "Drone failure belongs to an older commit",
+                                    "failure_signature": "drone-pipeline-stale-commit",
+                                },
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message="judge verdict=needs_rework; stale Drone pipeline",
+                ),
+            ),
+        )
+
+
+class _PipelineWorkerActionFailureVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message=(
+                        "Drone build #40 finished with status killed; "
+                        "failing stage workspace-ci/docker-build exited 137"
+                    ),
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "failed_criteria": ["ci_pipeline", "drone_docker_build_timeout"],
+                            "feedback_items": [
+                                {
+                                    "target_layer": "worker",
+                                    "feedback_kind": "product_code_failure",
+                                    "severity": "blocking",
+                                    "recommended_action": "retry_worker",
+                                    "summary": "shrink Docker context and update Dockerfile",
+                                    "failure_signature": (
+                                        "drone-docker-build-timeout-context-or-node"
+                                    ),
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message="judge verdict=needs_rework; docker-build requires code changes",
+                ),
+            ),
+        )
+
+
 class _PipelineOnlyJudgeFailureWithoutFeedbackVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -3099,6 +3247,73 @@ class _PipelineRetryInfrastructureVerifier:
         )
 
 
+class _PipelineHumanPublishRequiredVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=1.0,
+                    message=(
+                        "missing harness-native CI pipeline evidence for current commit d9184e2"
+                    ),
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "judge_verdict": "blocked_human_required",
+                            "failed_criteria": [
+                                (
+                                    "ci_pipeline: missing harness-native CI pipeline evidence "
+                                    "for current commit d9184e2"
+                                )
+                            ],
+                            "required_next_action": (
+                                "Platform harness must publish the worktree branch to GitHub "
+                                "main so Drone CI/CD is triggered for commit d9184e2."
+                            ),
+                            "next_action_kind": "human_required",
+                            "feedback_items": [
+                                {
+                                    "target_layer": "runtime",
+                                    "feedback_kind": "runtime_infra_failure",
+                                    "severity": "blocking",
+                                    "recommended_action": "retry_worker",
+                                    "summary": (
+                                        "Drone docker deploy pipeline not triggered: worktree "
+                                        "commit d9184e2 not yet on main branch."
+                                    ),
+                                    "failure_signature": (
+                                        "drone_no_pipeline_for_worktree_commit"
+                                    ),
+                                    "evidence_refs": [
+                                        "commit_ref:d9184e2",
+                                        "ci_pipeline:missing",
+                                    ],
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.9,
+                    message=(
+                        "judge verdict=blocked_human_required; platform harness must publish "
+                        "the worktree branch to GitHub main"
+                    ),
+                ),
+            ),
+        )
+
+
 class _PipelineEmbeddedMarkerJudgeFailureVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -3127,7 +3342,7 @@ class _PipelineEmbeddedMarkerJudgeFailureVerifier:
                                     "severity": "blocking",
                                     "recommended_action": "retry_worker",
                                     "summary": "No CI pipeline evidence was captured.",
-                                    "failure_signature": "missing_ci_pipeline_evidence",
+                                    "failure_signature": "ci-pipeline-missing-def5678",
                                 }
                             ],
                         },
@@ -3230,6 +3445,28 @@ def test_node_with_verification_evidence_uses_worker_artifact_commit_refs() -> N
         "git_diff_summary:CHANGELOG.md updated",
         "preflight:git-status",
     ]
+
+
+def test_node_with_verification_evidence_uses_latest_worker_artifact_commit_ref() -> None:
+    node = _leaf_node()
+    report = VerificationReport(node_id=node.id, attempt_id="attempt-1", results=())
+
+    updated = _node_with_verification_evidence(
+        node,
+        report,
+        artifacts={
+            "candidate_artifacts": [
+                "commit_ref:bce4286b",
+                "git_diff_summary:.drone.yml old deploy fix",
+                "commit_ref:13aeda8",
+                "git_diff_summary:.drone.yml removed registry pull",
+            ],
+            "candidate_verifications": ["preflight:git-status"],
+        },
+    )
+
+    assert updated.metadata["verified_commit_ref"] == "13aeda8"
+    assert updated.metadata["verified_git_diff_summary"] == ".drone.yml removed registry pull"
 
 
 def _mark_plan_tasks_done(plan: Plan) -> Plan:
@@ -4181,6 +4418,72 @@ class TestSupervisorTick:
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_verification_only"] is True
 
+    async def test_pipeline_runtime_failure_with_judge_retry_requests_pipeline(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={"pipeline_required": True, "pipeline_status": "failed"},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("pipeline runtime retry should not redispatch worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineRuntimeFailureWithJudgeRetryVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.allocations_made == 0
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        assert not any(event[0] == "verification_retry_scheduled" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        retry_node = reloaded.nodes[PlanNodeId("a")]
+        assert retry_node.intent is TaskIntent.IN_PROGRESS
+        assert retry_node.execution is TaskExecution.IDLE
+        assert retry_node.metadata["pipeline_gate_status"] == "requested"
+
     async def test_repairable_infrastructure_judge_creates_repair_node(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -4577,9 +4880,16 @@ class TestSupervisorTick:
         report = await sup.tick("ws-1")
 
         assert report.verifications_ran == 0
-        assert report.nodes_completed == 1
+        assert report.nodes_completed == 2
         reloaded = await repo.get_by_workspace("ws-1")
         assert reloaded is not None
+        original = reloaded.nodes[PlanNodeId("a")]
+        assert original.intent is TaskIntent.DONE
+        assert original.execution is TaskExecution.IDLE
+        assert original.metadata["verification_feedback_disposition"] == (
+            "accepted_via_repair_alternative"
+        )
+        assert original.metadata["accepted_repair_node_id"] == "repair-a"
         duplicate = reloaded.nodes[duplicate_repair_id]
         assert duplicate.intent is TaskIntent.DONE
         assert duplicate.execution is TaskExecution.IDLE
@@ -4700,6 +5010,274 @@ class TestSupervisorTick:
         ]
         assert disposition_events[0][1] == "a"
         assert disposition_events[0][2]["disposition"] == "accepted_via_repair_alternative"
+
+    async def test_ready_judge_repair_node_accepts_original_before_redispatch(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "blocked_by_repair_node_id": "repair-a",
+                    "last_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_judge_verdict": "needs_rework",
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted stale target repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_passed": True,
+                    "last_verification_judge_verdict": "accepted",
+                    "last_verification_summary": "verified corrected target",
+                    "verification_evidence_refs": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:e2e-screenshot-journey.mjs - 18 pages, 0 errors",
+                        "commit_ref:852a59fe",
+                        "worker_report:completed",
+                    ],
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [WorkspaceAgent(id="agent-1", capabilities=(Capability(name="codegen"),))]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("verified repair alternative must not redispatch original node")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerifierShouldNotRun(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 0
+        assert report.allocations_made == 0
+        assert report.nodes_completed == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        accepted = reloaded.nodes[PlanNodeId("a")]
+        assert accepted.intent is TaskIntent.DONE
+        assert accepted.execution is TaskExecution.IDLE
+        assert accepted.metadata["verification_feedback_disposition"] == (
+            "accepted_via_repair_alternative"
+        )
+        assert accepted.metadata["accepted_repair_node_id"] == "repair-a"
+        disposition_events = [
+            event for event in events if event[0] == "verification_feedback_disposition"
+        ]
+        assert disposition_events[0][1] == "a"
+        assert disposition_events[0][2]["disposition"] == "accepted_via_repair_alternative"
+
+    def test_pipeline_required_node_waits_for_repair_commit_pipeline_success(
+        self,
+    ) -> None:
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_status": "failed",
+                    "source_publish_commit_ref": "41480536",
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted drone repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_passed": True,
+                    "last_verification_judge_verdict": "accepted",
+                    "verification_evidence_refs": [
+                        "preflight:read-progress",
+                        "commit_ref:2e83bccd",
+                        "worker_report:completed",
+                    ],
+                },
+            )
+        )
+
+        accepted = _accept_ready_nodes_with_completed_repair_alternatives(plan)
+
+        assert accepted == []
+        assert plan.nodes[PlanNodeId("a")].intent is TaskIntent.TODO
+
+    def test_pipeline_required_node_accepts_repair_after_matching_pipeline_success(
+        self,
+    ) -> None:
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_status": "success",
+                    "source_publish_commit_ref": "2e83bccd1234",
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted drone repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_passed": True,
+                    "last_verification_judge_verdict": "accepted",
+                    "verification_evidence_refs": [
+                        "preflight:read-progress",
+                        "commit_ref:2e83bccd",
+                        "worker_report:completed",
+                    ],
+                },
+            )
+        )
+
+        accepted = _accept_ready_nodes_with_completed_repair_alternatives(plan)
+
+        assert [(node.id, repair.id) for node, repair in accepted] == [("a", "repair-a")]
+        assert plan.nodes[PlanNodeId("a")].intent is TaskIntent.DONE
+
+    async def test_clean_stale_commit_integration_failure_does_not_block_dependencies(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "terminal_attempt_status": "accepted",
+                    "verified_commit_ref": "852a59fe",
+                    "worktree_integration_status": "failed",
+                    "worktree_integration_worktree_path": (
+                        "/workspace/.memstack/worktrees/attempt-a"
+                    ),
+                    "worktree_integration_dirty_signature": None,
+                    "worktree_integration_summary": (
+                        "Exit code: 65\n"
+                        "status=failed\n"
+                        "reason=commit_ref not found in attempt worktree"
+                    ),
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="agent-1",
+                    display_name="Agent One",
+                    capabilities=frozenset({"codegen"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            dispatched.append(node.id)
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerifierShouldNotRun(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 0
+        assert report.allocations_made == 1
+        assert dispatched == ["b"]
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.nodes[PlanNodeId("b")].execution is TaskExecution.DISPATCHED
 
     async def test_planner_feedback_obsoletes_stale_node_without_worker_retry(self) -> None:
         repo = InMemoryPlanRepository()
@@ -4996,6 +5574,160 @@ class TestSupervisorTick:
         assert node.metadata["verified_commit_ref"] == "abc1234"
         assert "commit_ref:abc1234" in node.metadata["verification_evidence_refs"]
 
+    async def test_stale_pipeline_feedback_with_worker_blocker_requests_pipeline(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={"pipeline_required": True},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("stale pipeline feedback should request pipeline before retry")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:c817fbc8"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_StalePipelineWithBlockingWorkerFeedbackVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 0
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        assert not any(event[0] == "verification_feedback_disposition" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["verified_commit_ref"] == "c817fbc8"
+
+    async def test_pipeline_required_node_ignores_stale_success_when_current_pipeline_failed(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_status": "failed",
+                    "pipeline_gate_status": "failed",
+                    "pipeline_run_id": "old-run",
+                    "pipeline_evidence_refs": [
+                        "ci_pipeline:passed",
+                        "pipeline_run:success:old-run",
+                    ],
+                    "execution_verifications": ["ci_pipeline:passed"],
+                    "source_publish_commit_ref": "old1234",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("current failed pipeline must request Drone before completion")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={
+                    "candidate_artifacts": ["commit_ref:new1234"],
+                    "pipeline_status": "failed",
+                    "pipeline_evidence_refs": [
+                        "ci_pipeline:passed",
+                        "pipeline_run:success:old-run",
+                    ],
+                    "execution_verifications": ["ci_pipeline:passed"],
+                },
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 0
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["verified_commit_ref"] == "new1234"
+
     async def test_pipeline_gate_routes_judge_pipeline_text_without_feedback_items(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -5058,6 +5790,72 @@ class TestSupervisorTick:
         node = reloaded.nodes[PlanNodeId("a")]
         assert node.execution is TaskExecution.IDLE
         assert node.metadata["pipeline_gate_status"] == "requested"
+
+    async def test_pipeline_gate_does_not_rerun_when_judge_requires_worker_retry(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={"pipeline_required": True},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("worker-actionable CI feedback must not rerun Drone first")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:abc1234"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineWorkerActionFailureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert not any(event[0] == "pipeline_run_requested" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata.get("last_verification_judge_next_action_kind") is None
+        assert node.metadata["verified_commit_ref"] == "abc1234"
 
     async def test_pipeline_gate_routes_retry_infra_drone_trigger_to_pipeline(self) -> None:
         repo = InMemoryPlanRepository()
@@ -5124,6 +5922,72 @@ class TestSupervisorTick:
         assert node.execution is TaskExecution.IDLE
         assert node.metadata["pipeline_gate_status"] == "requested"
         assert node.metadata["verified_commit_ref"] == "abc1234"
+
+    async def test_pipeline_gate_routes_human_required_publish_gap_to_pipeline(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={"pipeline_required": True},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("platform publish gap should request pipeline, not a worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:d9184e2"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineHumanPublishRequiredVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        assert not any(event[0] == "worker_launch" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["verified_commit_ref"] == "d9184e2"
 
     async def test_pipeline_gate_routes_embedded_ci_pipeline_marker_to_pipeline(self) -> None:
         repo = InMemoryPlanRepository()

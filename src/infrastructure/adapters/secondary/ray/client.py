@@ -151,6 +151,10 @@ def _ray_is_initialized() -> bool:
     return True
 
 
+def _is_ray_client_address(address: str) -> bool:
+    return address.strip().startswith("ray://")
+
+
 def _log_cooldown_skip(settings: Any) -> bool:
     cooldown_remaining = _cooldown_remaining_seconds()
     if cooldown_remaining <= 0:
@@ -204,18 +208,19 @@ async def _connect_ray(settings: Any, *, start: float) -> bool:
     global _ray_available
     loop = asyncio.get_running_loop()
     try:
-        await asyncio.wait_for(
-            loop.run_in_executor(
-                None,
-                partial(
-                    _init_ray_blocking,
-                    address=settings.ray_address,
-                    namespace=settings.ray_namespace,
-                    log_to_driver=settings.ray_log_to_driver,
-                ),
-            ),
-            timeout=_ray_init_timeout_seconds(settings),
+        init = partial(
+            _init_ray_blocking,
+            address=settings.ray_address,
+            namespace=settings.ray_namespace,
+            log_to_driver=settings.ray_log_to_driver,
         )
+        if _is_ray_client_address(settings.ray_address):
+            init()
+        else:
+            await asyncio.wait_for(
+                loop.run_in_executor(None, init),
+                timeout=_ray_init_timeout_seconds(settings),
+            )
         _ray_available = True
         _ray_log(
             logging.INFO,

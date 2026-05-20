@@ -156,9 +156,9 @@ Review rules:
 - If the review payload says sandbox Docker runtime is unavailable, do NOT emit next_tasks that
   require docker/podman/containerd CLI, Docker daemon/socket access, docker pull/run, or a
   "deployed container stack" inside the sandbox worker. For Drone docker deployment, use Drone
-  pipeline success, registry manifest/tag checks, and sandbox-native preview/service health or
-  browser evidence. If a live container run is mandatory, choose needs_human_review instead of
-  retrying a sandbox worker.
+  deploy-step success, registry manifest/tag checks, and sandbox-native preview/service health
+  or browser evidence. If a live container run is mandatory, choose needs_human_review instead
+  of retrying a sandbox worker.
 - Treat attempt worktree isolation as an intentional execution contract. Do not propose main-checkout
   execution, symlinks, or artifact copying to bypass it; if hardcoded artifact paths block verification,
   create bounded follow-up work to make the scripts worktree-relative or environment-configurable.

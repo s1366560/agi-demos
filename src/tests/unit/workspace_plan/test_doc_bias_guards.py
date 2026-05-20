@@ -102,7 +102,7 @@ def test_iteration_review_payload_exposes_sandbox_docker_runtime_constraint() ->
     assert '"runtime_constraints"' in payload
     assert '"sandbox_docker_runtime"' in payload
     assert '"available": false' in payload
-    assert "Drone docker pipeline success plus registry manifest/tag checks" in payload
+    assert "Drone docker deploy-step success plus registry manifest/tag checks" in payload
 
 
 def test_workspace_software_decomposition_context_forbids_doc_only_tasks() -> None:

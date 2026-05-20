@@ -799,6 +799,20 @@ async def test_worker_launch_handler_blocks_when_worktree_setup_fails(
             },
         )
     )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-worktree-fail-1",
+            workspace_task_id="task-worktree-fail-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="running",
+            worker_agent_id="worker-agent",
+            leader_agent_id=None,
+            candidate_artifacts_json=[],
+            candidate_verifications_json=[],
+        )
+    )
     await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
         plan_id="worker-plan-1",
         workspace_id="workspace-1",
@@ -808,6 +822,7 @@ async def test_worker_launch_handler_blocks_when_worktree_setup_fails(
             "task_id": "task-worktree-fail-1",
             "worker_agent_id": "worker-agent",
             "actor_user_id": "worker-user-1",
+            "attempt_id": "attempt-worktree-fail-1",
         },
         metadata={"source": "unit"},
     )
@@ -854,6 +869,8 @@ async def test_worker_launch_handler_blocks_when_worktree_setup_fails(
     assert task is not None
     assert task.status == "blocked"
     assert task.blocker_reason == "worktree_setup_failed: git worktree add failed"
+    assert task.metadata_json[CURRENT_ATTEMPT_ID] == "attempt-worktree-fail-1"
+    assert task.metadata_json["last_attempt_status"] == "blocked"
     assert task.metadata_json[WORKTREE_SETUP]["status"] == "failed"
     assert task.metadata_json[ATTEMPT_WORKTREE]["worktree_path"] == (
         "/workspace/.memstack/worktrees/attempt-fail-1"
@@ -861,6 +878,12 @@ async def test_worker_launch_handler_blocks_when_worktree_setup_fails(
     assert task.metadata_json[ACTIVE_EXECUTION_ROOT] == (
         "/workspace/.memstack/worktrees/attempt-fail-1"
     )
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-worktree-fail-1")
+    assert attempt is not None
+    assert attempt.status == "blocked"
+    assert attempt.leader_feedback == "worktree_setup_failed: git worktree add failed"
+    assert attempt.adjudication_reason == "worktree_setup_failed"
+    assert attempt.completed_at is not None
 
 
 @pytest.mark.asyncio
@@ -936,10 +959,9 @@ def test_worktree_setup_command_installs_local_push_remote_when_missing() -> Non
     )
 
     assert "git remote get-url origin" in command
-    assert ".memstack/git-remotes/${repo_name}.git" in command
-    assert 'git init --bare "$fallback_remote"' in command
-    assert 'git remote add origin "$fallback_remote"' in command
-    assert "git config push.default current" in command
+    assert ".memstack/git-remotes/$N.git" in command
+    assert 'git init --bare "$F"' in command
+    assert 'git remote add origin "$F"' in command
 
 
 def test_worktree_setup_command_initializes_greenfield_code_root(tmp_path: Path) -> None:
@@ -1012,12 +1034,11 @@ def test_worktree_setup_command_updates_reused_worktree_to_latest_base(
     )
 
     assert result.returncode == 0, result.stderr
-    assert "base_merged=" in result.stdout
     assert (worktree_path / "SPRINT.md").read_text(encoding="utf-8") == "plan\n"
     assert (worktree_path / "local-note.txt").read_text(encoding="utf-8") == "keep me\n"
 
 
-def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
+def test_worktree_setup_command_stays_below_small_websocket_frame_limit() -> None:
     command = _worktree_setup_command(
         sandbox_code_root="/workspace/my-evo",
         worktree_path="/workspace/my-evo/../.memstack/worktrees/attempt-2",
@@ -1026,18 +1047,10 @@ def test_worktree_setup_command_cleans_stale_attempt_dev_processes() -> None:
         protected_worktree_names=("attempt-2", "attempt-active"),
     )
 
-    assert (
-        'worktree_root="$(dirname /workspace/my-evo/../.memstack/worktrees/attempt-2)"' in command
-    )
-    assert 'worktree_root="$(cd "$worktree_root" && pwd -P)"' in command
-    assert "protected_worktree_names='attempt-2 attempt-active'" in command
-    assert '*"npm run dev"*' in command
-    assert '*"tsx watch"*' in command
-    assert 'case " $protected_worktree_names " in *" $attempt_name "*) continue ;; esac' in command
-    assert 'kill -TERM "$1" 2>/dev/null || true' in command
-    assert 'kill -KILL "-$1" 2>/dev/null || true' in command
-    assert 'stop_stale_pid "$pid"' in command
-    assert "git worktree add -B" in command
+    assert len(command) < 1000
+    assert "protected_worktree_names" not in command
+    assert "stop_stale_pid" not in command
+    assert 'git worktree add -B "$B" "$W" "$R"' in command
 
 
 def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
@@ -1220,6 +1233,285 @@ def test_drone_contract_keeps_deploy_for_deploy_phase() -> None:
     assert "deploy_suppressed_for_phase" not in scoped.provider_config
 
 
+def test_pipeline_commit_ref_prefers_accepted_repair_commit_over_stale_feature() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-deploy",
+            sequence=1,
+            title="Deploy feature",
+            worktree_path="/workspace/.memstack/worktrees/original",
+            commit_ref="41480536",
+        ),
+        metadata={
+            "verification_feedback_disposition": "accepted_via_repair_alternative",
+            "accepted_repair_node_id": "node-repair",
+            "accepted_repair_evidence_refs": [
+                "preflight:read-progress",
+                "commit_ref:2e83bccd",
+                "git_diff_summary:.drone.yml +22 lines",
+            ],
+            "evidence_refs": ["commit_ref:41480536"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "2e83bccd"
+
+
+def test_pipeline_commit_ref_prefers_current_attempt_report_over_repair_history() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-deploy",
+            sequence=1,
+            title="Deploy feature",
+            worktree_path="/workspace/.memstack/worktrees/original",
+            commit_ref="41480536",
+        ),
+        metadata={
+            "last_worker_report_attempt_id": "attempt-current",
+            "candidate_verifications": ["preflight:git-status", "commit_ref:1469ac15"],
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+            "evidence_refs": ["commit_ref:41480536"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "1469ac15"
+
+
+def test_pipeline_commit_ref_uses_latest_current_attempt_report_commit() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        metadata={
+            "last_worker_report_attempt_id": "attempt-current",
+            "candidate_verifications": ["preflight:git-status", "commit_ref:bce4286b"],
+            "last_worker_report_artifacts": [
+                "commit_ref:41480536",
+                "git_diff_summary:.drone.yml old deploy fix",
+                "commit_ref:13aeda8",
+                "git_diff_summary:.drone.yml removed registry pull",
+            ],
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "13aeda8"
+
+
+def test_pipeline_commit_ref_prefers_verified_commit_over_repair_history() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-deploy",
+            sequence=1,
+            title="Deploy feature",
+            worktree_path="/workspace/.memstack/worktrees/current",
+            commit_ref="d7c44ac7",
+        ),
+        metadata={
+            "verified_commit_ref": "d7c44ac7",
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+            "evidence_refs": ["commit_ref:41480536"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "d7c44ac7"
+
+
+def test_pipeline_commit_ref_ignores_stale_attempt_report_commit() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        metadata={
+            "last_worker_report_attempt_id": "attempt-stale",
+            "candidate_verifications": ["commit_ref:1469ac15"],
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "2e83bccd"
+
+
+def test_pipeline_commit_ref_accepts_reported_candidate_without_report_attempt_id() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.REPORTED,
+        metadata={
+            "candidate_verifications": ["commit_ref:345a2e42"],
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "345a2e42"
+
+
+def test_pipeline_commit_ref_ignores_unscoped_candidate_after_verifier_idle() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.IDLE,
+        metadata={
+            "verified_commit_ref": "13aeda8",
+            "candidate_verifications": ["preflight:git-status", "commit_ref:c6b1e7d"],
+            "last_worker_report_artifacts": [
+                "commit_ref:13aeda8",
+                "git_diff_summary:.drone.yml old deploy fix",
+                "commit_ref:c6b1e7d",
+                "git_diff_summary:.drone.yml pull built image",
+            ],
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "13aeda8"
+
+
+def test_pipeline_commit_ref_uses_current_attempt_record_after_verifier_idle() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.IDLE,
+        metadata={
+            "verified_commit_ref": "13aeda8",
+            "candidate_verifications": ["preflight:git-status", "commit_ref:stale123"],
+        },
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-current",
+        workspace_task_id="task-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=4,
+        status="accepted",
+        conversation_id="conversation-current",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=[
+            "commit_ref:13aeda8",
+            "git_diff_summary:.drone.yml old deploy fix",
+            "commit_ref:c6b1e7d",
+            "git_diff_summary:.drone.yml pull built image",
+        ],
+        candidate_verifications_json=["preflight:git-status", "commit_ref:c6b1e7d"],
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "c6b1e7d"
+
+
+def test_pipeline_commit_ref_ignores_nonmatching_attempt_record() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.IDLE,
+        metadata={"verified_commit_ref": "13aeda8"},
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-stale",
+        workspace_task_id="task-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=3,
+        status="accepted",
+        conversation_id="conversation-stale",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_artifacts_json=["commit_ref:c6b1e7d"],
+        candidate_verifications_json=[],
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "13aeda8"
+
+
+def test_pipeline_commit_ref_accepts_reported_candidate_after_verifier_idle_with_attempt() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.IDLE,
+        metadata={
+            "verified_commit_ref": "13aeda8",
+            "candidate_verifications": ["preflight:git-status", "commit_ref:c6b1e7d"],
+            "accepted_repair_evidence_refs": ["commit_ref:2e83bccd"],
+        },
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-current",
+        workspace_task_id="task-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=4,
+        status="accepted",
+        conversation_id="conversation-current",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_artifacts_json=[],
+        candidate_verifications_json=["preflight:git-status", "commit_ref:c6b1e7d"],
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "c6b1e7d"
+
+
+def test_pipeline_commit_ref_uses_reported_metadata_when_attempt_record_unavailable() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.REPORTED,
+        metadata={
+            "verified_commit_ref": "13aeda8",
+            "candidate_verifications": ["preflight:git-status", "commit_ref:c6b1e7d"],
+        },
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node) == "c6b1e7d"
+
+
 @pytest.mark.asyncio
 async def test_publish_git_ref_to_source_control_fast_forwards_and_pushes(
     tmp_path: Path,
@@ -1271,6 +1563,437 @@ async def test_publish_git_ref_to_source_control_fast_forwards_and_pushes(
     }
     assert git(repo, "rev-parse", "HEAD") == candidate_commit
     assert git(remote, "rev-parse", "refs/heads/main") == candidate_commit
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_uses_temp_worktree_when_main_dirty(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    (repo / "app.txt").write_text("base\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "base")
+    base_commit = git(repo, "rev-parse", "HEAD")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+
+    git(repo, "checkout", "-b", "candidate")
+    (repo / "app.txt").write_text("candidate\n", encoding="utf-8")
+    git(repo, "commit", "-am", "candidate")
+    candidate_commit = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "main")
+    (repo / "README.md").write_text("dirty local note\n", encoding="utf-8")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=candidate_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish == {
+        "status": "published",
+        "reason": "published from temporary worktree because main checkout has uncommitted changes",
+        "published_commit": candidate_commit,
+    }
+    assert git(repo, "rev-parse", "HEAD") == base_commit
+    assert git(repo, "status", "--short") == "M README.md"
+    assert (repo / "README.md").read_text(encoding="utf-8") == "dirty local note\n"
+    assert git(remote, "rev-parse", "refs/heads/main") == candidate_commit
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_honors_candidate_when_dirty_head_descends(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / ".drone.yml").write_text("deploy: base\n", encoding="utf-8")
+    git(repo, "add", ".drone.yml")
+    git(repo, "commit", "-m", "base")
+
+    (repo / ".drone.yml").write_text("deploy: docker build\n", encoding="utf-8")
+    git(repo, "commit", "-am", "candidate")
+    candidate_commit = git(repo, "rev-parse", "HEAD")
+
+    (repo / ".drone.yml").write_text("deploy: docker pull stale\n", encoding="utf-8")
+    git(repo, "commit", "-am", "stale published head")
+    stale_head = git(repo, "rev-parse", "HEAD")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+    (repo / "local-note.txt").write_text("dirty\n", encoding="utf-8")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=candidate_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    published_commit = git(remote, "rev-parse", "refs/heads/main")
+    published_drone = git(tmp_path, "--git-dir", str(remote), "show", "refs/heads/main:.drone.yml")
+
+    assert publish["status"] == "published"
+    assert publish["published_commit"] == published_commit
+    assert published_commit != stale_head
+    assert published_drone == "deploy: docker build"
+    assert git(repo, "rev-parse", "HEAD") == stale_head
+    assert git(repo, "status", "--short") == "?? local-note.txt"
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_merges_remote_when_branch_advanced(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    remote_clone = tmp_path / "remote-clone"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / ".drone.yml").write_text("pipeline: base\n", encoding="utf-8")
+    git(repo, "add", ".drone.yml")
+    git(repo, "commit", "-m", "base")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+
+    git(repo, "checkout", "-b", "repair")
+    (repo / ".drone.yml").write_text("pipeline: repair\n", encoding="utf-8")
+    git(repo, "commit", "-am", "repair")
+    repair_commit = git(repo, "rev-parse", "HEAD")
+
+    git(tmp_path, "clone", str(remote), str(remote_clone))
+    git(remote_clone, "config", "user.email", "remote@example.com")
+    git(remote_clone, "config", "user.name", "Remote")
+    (remote_clone / ".drone.yml").write_text("pipeline: stale\n", encoding="utf-8")
+    git(remote_clone, "commit", "-am", "stale remote")
+    stale_remote_commit = git(remote_clone, "rev-parse", "HEAD")
+    git(remote_clone, "push", "origin", "main")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=repair_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish["status"] == "published"
+    assert publish["reason"] == (
+        "merged remote branch before publish using local conflict preference"
+    )
+    published_commit = str(publish["published_commit"])
+    assert published_commit != repair_commit
+    assert git(remote, "rev-parse", "refs/heads/main") == published_commit
+    assert git(remote, "show", "refs/heads/main:.drone.yml") == "pipeline: repair"
+    git(remote, "merge-base", "--is-ancestor", repair_commit, "refs/heads/main")
+    git(remote, "merge-base", "--is-ancestor", stale_remote_commit, "refs/heads/main")
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_restores_candidate_paths_after_clean_merge(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    remote_clone = tmp_path / "remote-clone"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    base_drone = (
+        "kind: pipeline\n"
+        "type: docker\n"
+        "name: default\n"
+        "\n"
+        "steps:\n"
+        "  - name: deploy\n"
+        "    image: docker:cli\n"
+        "    environment:\n"
+        "      DOCKER_HOST: unix:///var/run/docker.sock\n"
+        "    commands:\n"
+        "      - docker pull host.docker.internal:5001/my-evo:latest\n"
+    )
+    candidate_drone = base_drone.replace(
+        "docker pull host.docker.internal:5001/my-evo:latest",
+        "docker build -t my-evo:drone-docker-e2e -f Dockerfile .",
+    )
+    stale_remote_drone = base_drone.replace(
+        "      DOCKER_HOST: unix:///var/run/docker.sock",
+        "      - DOCKER_HOST=unix:///var/run/docker.sock",
+    )
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / ".drone.yml").write_text(base_drone, encoding="utf-8")
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "base")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+
+    git(repo, "checkout", "-b", "repair")
+    (repo / ".drone.yml").write_text(candidate_drone, encoding="utf-8")
+    git(repo, "commit", "-am", "repair drone deploy")
+    repair_commit = git(repo, "rev-parse", "HEAD")
+
+    git(tmp_path, "clone", str(remote), str(remote_clone))
+    git(remote_clone, "config", "user.email", "remote@example.com")
+    git(remote_clone, "config", "user.name", "Remote")
+    (remote_clone / ".drone.yml").write_text(stale_remote_drone, encoding="utf-8")
+    (remote_clone / "REMOTE.md").write_text("remote-only\n", encoding="utf-8")
+    git(remote_clone, "add", ".")
+    git(remote_clone, "commit", "-m", "remote drift")
+    stale_remote_commit = git(remote_clone, "rev-parse", "HEAD")
+    git(remote_clone, "push", "origin", "main")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=repair_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish["status"] == "published"
+    assert publish["reason"] == (
+        "merged remote branch before publish; restored candidate-changed paths after merge"
+    )
+    published_commit = str(publish["published_commit"])
+    assert git(remote, "rev-parse", "refs/heads/main") == published_commit
+    assert git(remote, "show", "refs/heads/main:.drone.yml") == candidate_drone.rstrip("\n")
+    assert git(remote, "show", "refs/heads/main:REMOTE.md") == "remote-only"
+    git(remote, "merge-base", "--is-ancestor", repair_commit, "refs/heads/main")
+    git(remote, "merge-base", "--is-ancestor", stale_remote_commit, "refs/heads/main")
+
+
+def test_source_publish_metadata_preserves_worker_commit_after_merge_publish() -> None:
+    metadata = outbox_handlers._source_publish_metadata(
+        status="published",
+        reason="merged remote branch before publish using local conflict preference",
+        commit_ref="6d2c2848",
+        source_commit_ref="bce4286b",
+        branch="main",
+        token_env="GITHUB_TOKEN",
+    )
+
+    assert metadata["source_publish_commit_ref"] == "6d2c2848"
+    assert metadata["source_publish_source_commit_ref"] == "bce4286b"
+
+
+def test_reported_pipeline_result_guard_ignores_missing_pipeline_status() -> None:
+    node = PlanNode(
+        id="node-without-pipeline",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Reported node",
+        execution=TaskExecution.REPORTED,
+        current_attempt_id="attempt-1",
+        metadata={},
+    )
+
+    assert (
+        outbox_handlers._reported_node_has_pipeline_result_pending_verification(
+            node,
+            "rejected",
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_merges_unrelated_remote_history(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote_seed = tmp_path / "remote-seed"
+    remote = tmp_path / "remote.git"
+    repo.mkdir()
+    remote_seed.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / ".drone.yml").write_text("pipeline: repair\n", encoding="utf-8")
+    git(repo, "add", ".drone.yml")
+    git(repo, "commit", "-m", "repair")
+    repair_commit = git(repo, "rev-parse", "HEAD")
+
+    git(remote_seed, "init", "-b", "main")
+    git(remote_seed, "config", "user.email", "remote@example.com")
+    git(remote_seed, "config", "user.name", "Remote")
+    (remote_seed / ".drone.yml").write_text("pipeline: stale\n", encoding="utf-8")
+    (remote_seed / "remote.txt").write_text("remote\n", encoding="utf-8")
+    git(remote_seed, "add", ".")
+    git(remote_seed, "commit", "-m", "unrelated remote")
+    unrelated_remote_commit = git(remote_seed, "rev-parse", "HEAD")
+    git(tmp_path, "init", "--bare", str(remote))
+    git(remote_seed, "remote", "add", "origin", str(remote))
+    git(remote_seed, "push", "origin", "main")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=repair_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish["status"] == "published"
+    assert publish["reason"] == (
+        "merged unrelated remote branch before publish using local conflict preference"
+    )
+    published_commit = str(publish["published_commit"])
+    assert published_commit != repair_commit
+    assert git(remote, "rev-parse", "refs/heads/main") == published_commit
+    assert git(remote, "show", "refs/heads/main:.drone.yml") == "pipeline: repair"
+    assert git(remote, "show", "refs/heads/main:remote.txt") == "remote"
+    git(remote, "merge-base", "--is-ancestor", repair_commit, "refs/heads/main")
+    git(remote, "merge-base", "--is-ancestor", unrelated_remote_commit, "refs/heads/main")
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_uses_temp_worktree_when_candidate_is_unrelated(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / ".drone.yml").write_text("pipeline: stale\n", encoding="utf-8")
+    git(repo, "add", ".drone.yml")
+    git(repo, "commit", "-m", "base")
+    base_commit = git(repo, "rev-parse", "HEAD")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+
+    git(repo, "checkout", "--orphan", "candidate")
+    git(repo, "rm", "-rf", ".")
+    (repo / ".drone.yml").write_text("pipeline: repair\n", encoding="utf-8")
+    git(repo, "add", ".drone.yml")
+    git(repo, "commit", "-m", "repair")
+    repair_commit = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "main")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=repair_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish["status"] == "published"
+    assert publish["reason"] == (
+        "merged unrelated remote branch before publish using local conflict preference"
+    )
+    published_commit = str(publish["published_commit"])
+    assert published_commit != repair_commit
+    assert git(repo, "rev-parse", "HEAD") == base_commit
+    assert git(remote, "show", "refs/heads/main:.drone.yml") == "pipeline: repair"
+    git(remote, "merge-base", "--is-ancestor", repair_commit, "refs/heads/main")
+    git(remote, "merge-base", "--is-ancestor", base_commit, "refs/heads/main")
 
 
 def test_commit_ref_token_accepts_hash_prefix_and_rejects_notes() -> None:
@@ -1713,11 +2436,10 @@ async def test_prepare_attempt_worktree_defaults_to_attempt_scope_without_checkp
     assert "worktree_path=/workspace/.memstack/worktrees/attempt-direct-1" in note
     assert "branch_name=workspace/task-no-feature-attempt-dire" in note
     assert commands
-    assert "cd /workspace/my-evo" in commands[0]
-    assert (
-        "git worktree add -B workspace/task-no-feature-attempt-dire "
-        "/workspace/.memstack/worktrees/attempt-direct-1 HEAD"
-    ) in commands[0]
+    assert "C=/workspace/my-evo" in commands[0]
+    assert "W=/workspace/.memstack/worktrees/attempt-direct-1" in commands[0]
+    assert "B=workspace/task-no-feature-attempt-dire" in commands[0]
+    assert 'git worktree add -B "$B" "$W" "$R"' in commands[0]
 
 
 def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> None:
@@ -1742,6 +2464,78 @@ def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> No
         "${sandbox_code_root}/../.memstack/worktrees/new-attempt"
     )
     assert node.feature_checkpoint.branch_name == "workspace/node-1-new-attempt"
+    assert node.feature_checkpoint.base_ref == "HEAD"
+
+
+def test_apply_attempt_worktree_checkpoint_uses_previous_commit_as_retry_base() -> None:
+    node = PlanNode(
+        id="node-1",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("goal-1"),
+        title="retryable task",
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-1",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/old-attempt",
+            branch_name="workspace/node-1-old-attempt",
+            commit_ref="1469ac15",
+            base_ref="HEAD",
+        ),
+    )
+
+    _apply_attempt_worktree_checkpoint(node, "new-attempt")
+
+    assert node.feature_checkpoint is not None
+    assert node.feature_checkpoint.base_ref == "1469ac15"
+
+
+def test_apply_attempt_worktree_checkpoint_prefers_published_pipeline_ref() -> None:
+    node = PlanNode(
+        id="node-1",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("goal-1"),
+        title="retryable task",
+        metadata={
+            "source_publish_commit_ref": "a068cb8",
+            "source_publish_source_commit_ref": "705b16a",
+        },
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-1",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/old-attempt",
+            branch_name="workspace/node-1-old-attempt",
+            commit_ref="9a779c1",
+            base_ref="HEAD",
+        ),
+    )
+
+    _apply_attempt_worktree_checkpoint(node, "new-attempt")
+
+    assert node.feature_checkpoint is not None
+    assert node.feature_checkpoint.base_ref == "a068cb8"
+
+
+def test_apply_attempt_worktree_checkpoint_uses_failed_pipeline_source_without_publish_ref() -> None:
+    node = PlanNode(
+        id="node-1",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("goal-1"),
+        title="retryable task",
+        metadata={"source_publish_source_commit_ref": "98bc211"},
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-1",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/old-attempt",
+            branch_name="workspace/node-1-old-attempt",
+            commit_ref="9a779c1",
+            base_ref="HEAD",
+        ),
+    )
+
+    _apply_attempt_worktree_checkpoint(node, "new-attempt")
+
+    assert node.feature_checkpoint is not None
+    assert node.feature_checkpoint.base_ref == "98bc211"
 
 
 def test_node_allowed_sandbox_commands_collects_checkpoint_and_preflight_commands() -> None:
@@ -2781,6 +3575,70 @@ async def test_supervisor_tick_releases_in_progress_idle_node_with_rejected_atte
     assert retried_leaf.current_attempt_id == f"retry-{leaf.id}"
     assert retried_leaf.metadata["terminal_attempt_retry_reason"] == ("terminal_attempt_rejected")
     assert retried_leaf.metadata["terminal_attempt_retry_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_attempt_reconcile_preserves_reported_pipeline_result_for_verifier(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="reported-pipeline-failed-attempt",
+            workspace_task_id="workspace-task-pipeline",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="rejected",
+            conversation_id="pipeline-failed-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="Drone deploy failed",
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.REPORTED,
+            current_attempt_id="reported-pipeline-failed-attempt",
+            workspace_task_id="workspace-task-pipeline",
+            metadata={
+                **dict(leaf.metadata or {}),
+                "pipeline_status": "failed",
+                "pipeline_run_id": "drone-43",
+                "external_id": "drone-43",
+                "pipeline_failed_stage": "workspace-ci/deploy",
+                "pipeline_last_summary": "Drone deploy failed",
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    changed = await outbox_handlers._reconcile_plan_nodes_with_terminal_attempts(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed is False
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    preserved_leaf = loaded.leaf_tasks()[0]
+    assert preserved_leaf.execution is TaskExecution.REPORTED
+    assert preserved_leaf.current_attempt_id == "reported-pipeline-failed-attempt"
+    assert "terminal_attempt_retry_reason" not in preserved_leaf.metadata
 
 
 @pytest.mark.asyncio

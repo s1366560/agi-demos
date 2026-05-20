@@ -19,6 +19,7 @@ SANDBOX_NATIVE_PROVIDER = "sandbox_native"
 SANDBOX_NATIVE_PROVIDER_ALIASES = frozenset({SANDBOX_NATIVE_PROVIDER, "memstack-sandbox"})
 DRONE_PROVIDER = "drone"
 DRONE_DEPLOY_MODES = frozenset({"docker", "kubernetes", "cli"})
+DRONE_DOCKER_DEPLOY_VALIDATION = "explicit_deploy_step_v1"
 PIPELINE_EVIDENCE_KEY = "pipeline_evidence_refs"
 DEFAULT_PIPELINE_TIMEOUT_SECONDS = 600
 DEFAULT_PREVIEW_PORT = 3000
@@ -823,6 +824,7 @@ def _compact(value: str, *, limit: int = 4000) -> str:
 
 __all__ = [
     "DRONE_DEPLOY_MODES",
+    "DRONE_DOCKER_DEPLOY_VALIDATION",
     "DRONE_PROVIDER",
     "PIPELINE_EVIDENCE_KEY",
     "SANDBOX_NATIVE_PROVIDER",

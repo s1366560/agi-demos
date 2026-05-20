@@ -4,15 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote
 
 import httpx
+import yaml
+from dotenv import dotenv_values
 
 from src.infrastructure.agent.workspace_plan.pipeline import (
+    DRONE_DOCKER_DEPLOY_VALIDATION,
     DRONE_PROVIDER,
     PipelineContractSpec,
     PipelineDeploySpec,
@@ -22,11 +28,40 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
 
 DRONE_SERVER_URL_ENV = "DRONE_SERVER_URL"
 DRONE_TOKEN_ENV = "DRONE_TOKEN"
+DRONE_DOTENV_PATH_ENV = "MEMSTACK_DRONE_DOTENV_PATH"
 DRONE_TERMINAL_STATUSES = frozenset({"success", "failure", "error", "killed", "declined"})
 DRONE_FAILED_STATUSES = frozenset({"failure", "error", "killed", "declined"})
 DRONE_RUNNING_STATUSES = frozenset({"pending", "running", "blocked", "waiting"})
 _DEFAULT_POLL_INTERVAL_SECONDS = 5
 _HTTP_TIMEOUT_SECONDS = 30
+_DOCKER_LOCAL_REGISTRY_PULL_OR_RUN_RE = re.compile(
+    r"\bdocker(?:\s+container)?\s+(?:pull|run)\b[^\n;&|]*(?<!://)"
+    r"(?:host\.docker\.internal|localhost|127\.0\.0\.1|\[?::1\]?)(?::\d+)?/",
+    re.I,
+)
+_FAILURE_SIGNAL_MARKERS = (
+    "http: server gave http response to https client",
+    "connection refused",
+    "can't connect to remote host",
+    "cannot connect to remote host",
+    "connection reset",
+    "no route to host",
+    "exited (",
+    "cannot find module",
+    "module_not_found",
+    "environment variable not found",
+    "database_url",
+    "redis_url",
+    "postgres_password",
+    "no migration found",
+    "prisma schema validation",
+    "error code: p1001",
+    "error code: p1012",
+    "bind for 0.0.0.0",
+    "port is already allocated",
+    "container name",
+    "already in use",
+)
 
 
 class DroneConfigurationError(ValueError):
@@ -34,6 +69,16 @@ class DroneConfigurationError(ValueError):
 
 
 class DroneClientProtocol(Protocol):
+    async def get_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]: ...
+
+    async def update_repo(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        trusted: bool | None = None,
+    ) -> Mapping[str, Any]: ...
+
     async def create_build(
         self,
         *,
@@ -44,7 +89,17 @@ class DroneClientProtocol(Protocol):
         params: Mapping[str, str],
     ) -> Mapping[str, Any]: ...
 
+    async def list_builds(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        per_page: int = 25,
+    ) -> list[Mapping[str, Any]]: ...
+
     async def get_build(self, *, owner: str, repo: str, build_number: int) -> Mapping[str, Any]: ...
+
+    async def stop_build(self, *, owner: str, repo: str, build_number: int) -> Mapping[str, Any]: ...
 
     async def get_logs(
         self,
@@ -85,12 +140,15 @@ class DronePipelineConfig:
 
         server_url = _string(raw.get("server_url"))
         if not server_url:
-            server_url = os.getenv(_string(raw.get("server_url_env")) or DRONE_SERVER_URL_ENV)
+            server_url_env = _string(raw.get("server_url_env")) or DRONE_SERVER_URL_ENV
+            server_url = _config_env(server_url_env) or _server_url_from_environment(
+                raw.get("environment")
+            )
         if not server_url:
             raise DroneConfigurationError(f"{DRONE_SERVER_URL_ENV} is required for Drone CI/CD")
 
         token_env = _string(raw.get("token_env")) or DRONE_TOKEN_ENV
-        token = os.getenv(token_env)
+        token = _config_env(token_env)
         if not token:
             raise DroneConfigurationError(f"{token_env} is required for Drone CI/CD")
 
@@ -128,6 +186,9 @@ class DronePipelineConfig:
         return f"{self.server_url}/{owner}/{repo}/{build_number}"
 
 
+DroneBuildCleanup = Callable[[DronePipelineConfig, int], Awaitable[Mapping[str, Any]]]
+
+
 class HttpDroneClient:
     """Small Drone API client for build trigger, polling, and log capture."""
 
@@ -141,6 +202,27 @@ class HttpDroneClient:
         self._server_url = server_url.rstrip("/")
         self._token = token
         self._timeout_seconds = timeout_seconds
+
+    async def get_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]:
+        raw = await self._request("GET", _build_path(owner, repo))
+        if isinstance(raw, Mapping):
+            return raw
+        raise DroneConfigurationError("Drone repo response was not an object")
+
+    async def update_repo(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        trusted: bool | None = None,
+    ) -> Mapping[str, Any]:
+        payload: dict[str, Any] = {}
+        if trusted is not None:
+            payload["trusted"] = trusted
+        raw = await self._request("PATCH", _build_path(owner, repo), json_body=payload)
+        if isinstance(raw, Mapping):
+            return raw
+        raise DroneConfigurationError("Drone repo update response was not an object")
 
     async def create_build(
         self,
@@ -167,6 +249,28 @@ class HttpDroneClient:
             return raw
         raise DroneConfigurationError("Drone build response was not an object")
 
+    async def list_builds(
+        self,
+        *,
+        owner: str,
+        repo: str,
+        per_page: int = 25,
+    ) -> list[Mapping[str, Any]]:
+        raw = await self._request(
+            "GET",
+            _build_path(owner, repo, "builds"),
+            params={"per_page": str(per_page)},
+        )
+        if not isinstance(raw, list):
+            return []
+        return [dict(item) for item in raw if isinstance(item, Mapping)]
+
+    async def stop_build(self, *, owner: str, repo: str, build_number: int) -> Mapping[str, Any]:
+        raw = await self._request("DELETE", _build_path(owner, repo, "builds", str(build_number)))
+        if isinstance(raw, Mapping):
+            return raw
+        return {"number": build_number, "status": "killed"}
+
     async def get_logs(
         self,
         *,
@@ -186,6 +290,7 @@ class HttpDroneClient:
         path: str,
         *,
         params: Mapping[str, str] | None = None,
+        json_body: Mapping[str, Any] | None = None,
     ) -> object:
         headers = {"Authorization": f"Bearer {self._token}"}
         async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
@@ -194,6 +299,7 @@ class HttpDroneClient:
                 f"{self._server_url}{path}",
                 headers=headers,
                 params=dict(params or {}),
+                json=dict(json_body or {}) if json_body is not None else None,
             )
         response.raise_for_status()
         return response.json()
@@ -207,9 +313,11 @@ class DronePipelineProvider:
         *,
         client: DroneClientProtocol | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        cleanup_build: DroneBuildCleanup | None = None,
     ) -> None:
         self._client = client
         self._sleep = sleep
+        self._cleanup_build = cleanup_build or _cleanup_local_drone_build_containers
 
     async def run(self, contract: PipelineContractSpec) -> PipelineRunResult:
         try:
@@ -217,16 +325,25 @@ class DronePipelineProvider:
         except DroneConfigurationError as exc:
             return _configuration_failure(str(exc))
 
+        preflight_failure = _drone_yaml_preflight_failure(contract)
+        if preflight_failure is not None:
+            return preflight_failure
+
         client = self._client or HttpDroneClient(server_url=config.server_url, token=config.token)
         try:
-            created = await client.create_build(
-                owner=config.owner,
-                repo=config.repo,
-                branch=config.branch,
-                commit=config.commit,
-                params=config.params,
-            )
-            build_number = _required_int(created.get("number"), "Drone build number")
+            await _ensure_docker_deploy_repo_trusted(client=client, config=config)
+            running_build = await _running_build_for_commit(client=client, config=config)
+            if running_build is None:
+                created = await client.create_build(
+                    owner=config.owner,
+                    repo=config.repo,
+                    branch=config.branch,
+                    commit=config.commit,
+                    params=config.params,
+                )
+                build_number = _required_int(created.get("number"), "Drone build number")
+            else:
+                build_number = _required_int(running_build.get("number"), "Drone build number")
             build = await self._poll_build(client=client, config=config, build_number=build_number)
             return await _result_from_build(client=client, config=config, build=build)
         except Exception as exc:
@@ -253,7 +370,133 @@ class DronePipelineProvider:
             await self._sleep(float(config.poll_interval_seconds))
         if latest is None:
             latest = {"number": build_number, "status": "timeout", "stages": []}
-        return {**dict(latest), "status": "timeout"}
+        timeout_build = dict(latest)
+        try:
+            stopped = await client.stop_build(
+                owner=config.owner,
+                repo=config.repo,
+                build_number=build_number,
+            )
+        except Exception as exc:
+            timeout_build["drone_stop_error"] = str(exc)
+        else:
+            timeout_build = {
+                **dict(stopped),
+                "drone_stop_status": _status(stopped.get("status")),
+            }
+        cleanup = await self._cleanup_build(config, build_number)
+        if cleanup:
+            timeout_build["drone_cleanup"] = dict(cleanup)
+        return {**timeout_build, "status": "timeout"}
+
+
+async def _ensure_docker_deploy_repo_trusted(
+    *,
+    client: DroneClientProtocol,
+    config: DronePipelineConfig,
+) -> None:
+    if not _docker_deploy_requires_trusted_repo(config.deploy):
+        return
+    repo = await client.get_repo(owner=config.owner, repo=config.repo)
+    if repo.get("trusted") is True:
+        return
+    updated = await client.update_repo(owner=config.owner, repo=config.repo, trusted=True)
+    if updated.get("trusted") is not True:
+        raise DroneConfigurationError(
+            f"Drone repo {config.repo_slug} must be trusted for docker deploy host volumes"
+        )
+
+
+async def _running_build_for_commit(
+    *,
+    client: DroneClientProtocol,
+    config: DronePipelineConfig,
+) -> Mapping[str, Any] | None:
+    if not config.commit:
+        return None
+    try:
+        builds = await client.list_builds(owner=config.owner, repo=config.repo, per_page=25)
+    except Exception:
+        return None
+    for build in builds:
+        if _status(build.get("status")) not in DRONE_RUNNING_STATUSES:
+            continue
+        if _build_matches_commit(build, config.commit):
+            return build
+    return None
+
+
+def _build_matches_commit(build: Mapping[str, Any], commit: str) -> bool:
+    for key in ("after", "commit", "sha"):
+        value = _string(build.get(key))
+        if value and (value == commit or value.startswith(commit) or commit.startswith(value)):
+            return True
+    return False
+
+
+def _docker_deploy_requires_trusted_repo(deploy: PipelineDeploySpec | None) -> bool:
+    if deploy is None or deploy.mode != "docker":
+        return False
+    value = deploy.docker.get("trusted") if isinstance(deploy.docker, Mapping) else None
+    return value is not False
+
+
+async def _cleanup_local_drone_build_containers(
+    config: DronePipelineConfig,
+    build_number: int,
+) -> Mapping[str, Any]:
+    try:
+        ps = await _run_process(
+            "docker",
+            "ps",
+            "-aq",
+            "--filter",
+            "label=io.drone=true",
+            "--filter",
+            f"label=io.drone.repo.slug={config.repo_slug}",
+            "--filter",
+            f"label=io.drone.build.number={build_number}",
+        )
+    except OSError as exc:
+        return {"cleanup_error": str(exc)}
+    container_ids = [line.strip() for line in ps["stdout"].splitlines() if line.strip()]
+    if not container_ids:
+        return {"removed_container_count": 0}
+    try:
+        rm = await _run_process("docker", "rm", "-f", *container_ids)
+    except OSError as exc:
+        return {
+            "removed_container_count": 0,
+            "cleanup_error": str(exc),
+            "container_ids": container_ids[:20],
+        }
+    return {
+        "removed_container_count": len(container_ids),
+        "container_ids": container_ids[:20],
+        "stdout_preview": _compact_text(rm["stdout"], limit=400),
+        "stderr_preview": _compact_text(rm["stderr"], limit=400),
+    }
+
+
+async def _run_process(*args: str) -> dict[str, str]:
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    return {
+        "stdout": stdout.decode(errors="replace"),
+        "stderr": stderr.decode(errors="replace"),
+        "returncode": str(process.returncode),
+    }
+
+
+def _compact_text(value: str, *, limit: int) -> str:
+    normalized = value.strip()
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: max(0, limit - 3)].rstrip() + "..."
 
 
 async def _result_from_build(
@@ -314,9 +557,19 @@ async def _result_from_build(
             "drone_repo": config.repo_slug,
             "drone_status": drone_status,
             "drone_link": _string(build.get("link")),
+            **_drone_timeout_metadata(build),
             **_deploy_metadata(config.deploy, deploy_state),
         },
     )
+
+
+def _drone_timeout_metadata(build: Mapping[str, Any]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    for key in ("drone_stop_status", "drone_stop_error", "drone_cleanup"):
+        value = build.get(key)
+        if value:
+            metadata[key] = dict(value) if isinstance(value, Mapping) else value
+    return metadata
 
 
 async def _stage_results(
@@ -337,6 +590,7 @@ async def _stage_results(
                 status=_status(build.get("status")),
                 exit_code=_optional_int(build.get("exit_code")),
                 log_text="",
+                error_text=_string(build.get("error")),
                 log_ref=f"drone://{config.repo_slug}/{build_number}/build",
                 external_url=external_url,
                 deploy=deploy,
@@ -377,6 +631,7 @@ async def _stage_results(
                     status=_status(stage.get("status")),
                     exit_code=_optional_int(stage.get("exit_code")),
                     log_text="",
+                    error_text=_string(stage.get("error")),
                     log_ref=f"drone://{config.repo_slug}/{build_number}/{stage_name}",
                     external_url=external_url,
                     deploy=deploy,
@@ -417,6 +672,7 @@ async def _step_result(
         status=_status(step.get("status")),
         exit_code=_optional_int(step.get("exit_code")),
         log_text=log_text,
+        error_text=_string(step.get("error")),
         log_ref=log_ref,
         external_url=external_url,
         deploy=deploy,
@@ -431,6 +687,7 @@ def _pipeline_stage_result(
     status: str,
     exit_code: int | None,
     log_text: str,
+    error_text: str | None,
     log_ref: str,
     external_url: str,
     deploy: PipelineDeploySpec | None = None,
@@ -438,7 +695,10 @@ def _pipeline_stage_result(
 ) -> PipelineStageResult:
     internal_status = _internal_status(status)
     stage_label = _stage_label(stage_name=stage_name, step_name=step_name)
-    compact_log = _compact(log_text)
+    compact_log = (
+        _compact_failure_preview(log_text) if internal_status == "failed" else _compact(log_text)
+    )
+    compact_error = _compact(error_text or "")
     metadata = {
         "external_provider": DRONE_PROVIDER,
         "external_url": external_url,
@@ -446,6 +706,8 @@ def _pipeline_stage_result(
         "drone_step": step_name,
         "drone_status": status,
     }
+    if compact_error:
+        metadata["drone_error"] = compact_error
     if step_image:
         metadata["drone_image"] = step_image
     if _is_deploy_stage(stage_name=stage_name, step_name=step_name, deploy=deploy):
@@ -455,17 +717,63 @@ def _pipeline_stage_result(
             metadata["deploy_stage"] = deploy.stage
             if deploy.target:
                 metadata["deploy_target"] = deploy.target
+    failure_preview = _combine_failure_preview(compact_error, compact_log)
     return PipelineStageResult(
         stage=stage_label,
         status=internal_status,
         command=f"drone:{stage_name}/{step_name}",
         exit_code=exit_code,
         stdout_preview=compact_log if internal_status == "success" else "",
-        stderr_preview=compact_log if internal_status == "failed" else "",
+        stderr_preview=failure_preview if internal_status == "failed" else "",
         log_ref=log_ref,
         artifact_refs=(f"drone_build:{external_url}",),
         metadata=metadata,
     )
+
+
+def _combine_failure_preview(error_text: str, log_text: str) -> str:
+    parts = []
+    for text in (error_text, log_text):
+        value = text.strip()
+        if value and value not in parts:
+            parts.append(value)
+    return _compact_failure_preview("\n".join(parts))
+
+
+def _compact_failure_preview(value: str, *, limit: int = 4000) -> str:
+    compacted = value.strip()
+    if len(compacted) <= limit:
+        return compacted
+    signal_preview = _failure_signal_preview(compacted)
+    marker = "...[truncated]..."
+    signal_prefix = f"failure_signals:\n{signal_preview}\n" if signal_preview else ""
+    remaining = limit - len(signal_prefix) - len(marker)
+    if remaining <= 20:
+        return f"{signal_prefix}{compacted[-max(1, limit - len(signal_prefix)):]}"[:limit]
+    head_size = max(1, remaining // 2)
+    tail_size = max(1, remaining - head_size)
+    return f"{signal_prefix}{compacted[:head_size]}{marker}{compacted[-tail_size:]}"
+
+
+def _failure_signal_preview(value: str, *, limit: int = 900) -> str:
+    selected: list[str] = []
+    seen: set[str] = set()
+    for line in value.splitlines():
+        normalized = line.strip()
+        if not normalized:
+            continue
+        lower = normalized.lower()
+        if not any(marker in lower for marker in _FAILURE_SIGNAL_MARKERS):
+            continue
+        capped = normalized[:320]
+        if capped in seen:
+            continue
+        seen.add(capped)
+        selected.append(capped)
+        joined = "\n".join(selected)
+        if len(joined) >= limit:
+            return joined[:limit]
+    return "\n".join(selected)
 
 
 def _add_deploy_params(params: dict[str, str], deploy: PipelineDeploySpec | None) -> None:
@@ -526,15 +834,6 @@ def _deploy_state(
         if result.metadata.get("drone_step_kind") == "deploy"
         or _is_deploy_label(result.stage, deploy=deploy)
     ]
-    if deploy.mode in {"docker", "kubernetes"}:
-        semantic_results = [
-            result
-            for result in stage_results
-            if _deploy_result_matches_mode(result, deploy=deploy)
-        ]
-        for result in semantic_results:
-            if all(existing is not result for existing in deploy_results):
-                deploy_results.append(result)
     if not deploy_results:
         return "missing"
     if not all(result.passed for result in deploy_results):
@@ -581,6 +880,8 @@ def _deploy_metadata(
     }
     if deploy.target:
         metadata["deploy_target"] = deploy.target
+    if deploy.mode == "docker" and deploy_state == "passed":
+        metadata["deploy_validation"] = DRONE_DOCKER_DEPLOY_VALIDATION
     return metadata
 
 
@@ -623,14 +924,68 @@ def _deploy_result_matches_mode(
 
 
 def _docker_deploy_evidence(result: PipelineStageResult) -> bool:
-    image = str(result.metadata.get("drone_image") or "").lower()
-    if "plugins/docker" in image or image.endswith("/drone-docker"):
-        return True
-
     output = _result_output(result).lower()
-    has_build = "docker build" in output or "docker buildx build" in output
-    has_push = "docker push" in output or ("docker buildx build" in output and "--push" in output)
-    return has_build and has_push
+    if _docker_deploy_output_masks_failure(output):
+        return False
+    if _docker_deploy_uses_forbidden_local_registry_pull(output):
+        return False
+    return any(
+        marker in output
+        for marker in (
+            "docker run",
+            "docker container run",
+            "docker compose up",
+            "docker-compose up",
+            "docker stack deploy",
+            "docker service create",
+            "docker service update",
+        )
+    )
+
+
+def _docker_deploy_uses_forbidden_local_registry_pull(output: str) -> bool:
+    return any(
+        _DOCKER_LOCAL_REGISTRY_PULL_OR_RUN_RE.search(line) is not None
+        for line in output.splitlines()
+    )
+
+
+def _docker_deploy_output_masks_failure(output: str) -> bool:
+    if any(
+        marker in output
+        for marker in (
+            "|| echo",
+            "container start skipped",
+            "health check skipped",
+            "image may not exist yet",
+            "deployment skipped",
+            "deploy skipped",
+        )
+    ):
+        return True
+    return any(_line_masks_docker_deploy_failure(line) for line in output.splitlines())
+
+
+def _line_masks_docker_deploy_failure(line: str) -> bool:
+    if "|| true" not in line:
+        return False
+    if "docker rm" in line or "docker container rm" in line:
+        return False
+    return any(
+        marker in line
+        for marker in (
+            "docker pull",
+            "docker run",
+            "docker container run",
+            "docker compose up",
+            "docker-compose up",
+            "docker stack deploy",
+            "docker service create",
+            "docker service update",
+            "wget ",
+            "curl ",
+        )
+    )
 
 
 def _kubernetes_deploy_evidence(result: PipelineStageResult) -> bool:
@@ -645,6 +1000,65 @@ def _result_output(result: PipelineStageResult) -> str:
         for value in (result.stdout_preview, result.stderr_preview)
         if value
     )
+
+
+def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRunResult | None:
+    if not contract.code_root:
+        return None
+    drone_path = Path(contract.code_root) / ".drone.yml"
+    if not drone_path.is_file():
+        return None
+    try:
+        parsed = yaml.safe_load(drone_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        return _configuration_failure(
+            f"Drone build .drone.yml preflight failed; yaml: {exc}"
+        )
+    command_issue = _first_non_string_drone_command(parsed)
+    if command_issue is None:
+        return None
+    step_name, command_index, tag, preview = command_issue
+    return _configuration_failure(
+        "Drone build .drone.yml preflight failed; yaml: unmarshal errors: "
+        f"step {step_name} commands[{command_index}] cannot unmarshal {tag} into string; "
+        f"value={preview}"
+    )
+
+
+def _first_non_string_drone_command(
+    parsed: object,
+) -> tuple[str, int, str, str] | None:
+    if not isinstance(parsed, Mapping):
+        return None
+    steps = parsed.get("steps")
+    if not isinstance(steps, list):
+        return None
+    for step_number, step in enumerate(steps, 1):
+        if not isinstance(step, Mapping):
+            continue
+        step_name = _string(step.get("name")) or f"step-{step_number}"
+        commands = step.get("commands")
+        if not isinstance(commands, list):
+            continue
+        for command_index, command in enumerate(commands, 1):
+            if not isinstance(command, str):
+                return (
+                    step_name,
+                    command_index,
+                    _yaml_type_tag(command),
+                    _compact(str(command), limit=300),
+                )
+    return None
+
+
+def _yaml_type_tag(value: object) -> str:
+    if isinstance(value, Mapping):
+        return "!!map"
+    if isinstance(value, list):
+        return "!!seq"
+    if value is None:
+        return "!!null"
+    return type(value).__name__
 
 
 def _configuration_failure(message: str) -> PipelineRunResult:
@@ -720,6 +1134,47 @@ def _stage_label(*, stage_name: str, step_name: str) -> str:
 
 def _string(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _config_env(name: str) -> str | None:
+    value = _string(os.getenv(name))
+    if value:
+        return value
+    dotenv = _drone_dotenv_values(_drone_dotenv_path())
+    return _string(dotenv.get(name))
+
+
+def _drone_dotenv_path() -> str:
+    return os.getenv(DRONE_DOTENV_PATH_ENV, ".env")
+
+
+@lru_cache(maxsize=8)
+def _drone_dotenv_values(path: str) -> Mapping[str, str | None]:
+    dotenv_path = Path(path)
+    if not dotenv_path.exists() or not dotenv_path.is_file():
+        return {}
+    return dotenv_values(dotenv_path)
+
+
+def _server_url_from_environment(value: object) -> str | None:
+    if not isinstance(value, Mapping):
+        return None
+    server = value.get("server")
+    if not isinstance(server, Mapping):
+        return None
+    server_url = _string(server.get("server_url"))
+    if server_url:
+        return server_url
+    host = _string(server.get("server_host"))
+    port = _positive_int(server.get("server_port"), 0)
+    if not host and port > 0:
+        host = f"localhost:{port}"
+    if not host:
+        return None
+    if "://" in host:
+        return host
+    proto = _string(server.get("server_proto")) or "http"
+    return f"{proto}://{host}"
 
 
 def _log_part(value: object) -> str | None:
