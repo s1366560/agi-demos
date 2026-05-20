@@ -866,6 +866,7 @@ class WorkspaceAttemptRecoveryService:
             )
             return 0
         if plan_recovery_suppressed:
+            await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
             await self._touch_awaiting_leader_attempt(attempt)
             logger.info(
                 "workspace_attempt_recovery.skip_plan_suppressed_awaiting_leader",
@@ -902,6 +903,7 @@ class WorkspaceAttemptRecoveryService:
                 },
             )
             return 1
+        await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
         await self._touch_awaiting_leader_attempt(attempt)
         scheduled_roots.add((attempt.workspace_id, actor_user_id))
         logger.warning(

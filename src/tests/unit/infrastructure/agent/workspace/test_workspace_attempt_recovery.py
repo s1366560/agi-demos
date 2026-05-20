@@ -662,12 +662,14 @@ class TestStartupSweep:
 
     @pytest.mark.asyncio
     async def test_awaiting_leader_attempt_reschedules_tick_without_blocking(self) -> None:
+        cleanup_attempt_runtime = AsyncMock(return_value=2)
         att = _make_attempt(
             workspace_task_id="task-1",
             status=WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
         )
         service, apply_report, schedule_tick = _make_service(
             stale_attempts=[att],
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
             task_lookup={"task-1": "user-1"},
         )
         for p in service._patches:  # type: ignore[attr-defined]
@@ -680,6 +682,7 @@ class TestStartupSweep:
 
         assert recovered == 1
         apply_report.assert_not_awaited()
+        cleanup_attempt_runtime.assert_awaited_once_with(att)
         schedule_tick.assert_called_once_with("ws-1", "user-1")
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         assert (
@@ -729,6 +732,7 @@ class TestStartupSweep:
 
     @pytest.mark.asyncio
     async def test_paused_plan_awaiting_leader_attempt_does_not_reschedule_tick(self) -> None:
+        cleanup_attempt_runtime = AsyncMock(return_value=1)
         att = _make_attempt(
             attempt_id="att-awaiting-paused",
             workspace_task_id="task-1",
@@ -736,6 +740,7 @@ class TestStartupSweep:
         )
         service, apply_report, schedule_tick = _make_service(
             stale_attempts=[att],
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
             task_lookup={"task-1": "user-1"},
             task_metadata_lookup={
                 "task-1": {
@@ -755,6 +760,7 @@ class TestStartupSweep:
 
         assert recovered == 0
         apply_report.assert_not_awaited()
+        cleanup_attempt_runtime.assert_awaited_once_with(att)
         schedule_tick.assert_not_called()
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         assert (
