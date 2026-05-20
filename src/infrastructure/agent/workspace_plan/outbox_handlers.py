@@ -467,6 +467,31 @@ def _software_iteration_task_budget() -> int:
     return max(1, min(value, _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS))
 
 
+def _node_has_recoverable_attempt_pointer(node: PlanNode) -> bool:
+    if not node.current_attempt_id:
+        return False
+    if node.execution in {
+        TaskExecution.DISPATCHED,
+        TaskExecution.RUNNING,
+        TaskExecution.REPORTED,
+        TaskExecution.VERIFYING,
+    }:
+        return True
+    return node.execution is TaskExecution.IDLE and node.intent in {
+        TaskIntent.IN_PROGRESS,
+        TaskIntent.BLOCKED,
+        TaskIntent.DONE,
+    }
+
+
+def _node_is_done_idle_with_attempt(node: PlanNode) -> bool:
+    return (
+        node.intent is TaskIntent.DONE
+        and node.execution is TaskExecution.IDLE
+        and bool(node.current_attempt_id)
+    )
+
+
 async def _reconcile_plan_nodes_with_terminal_attempts(
     *,
     session: AsyncSession,
@@ -483,37 +508,12 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     now = datetime.now(UTC)
     changed = False
     for node in list(plan.nodes.values()):
-        recoverable_execution = node.execution in {
-            TaskExecution.DISPATCHED,
-            TaskExecution.RUNNING,
-            TaskExecution.REPORTED,
-            TaskExecution.VERIFYING,
-        }
-        recoverable_in_progress_idle = (
-            node.intent is TaskIntent.IN_PROGRESS
-            and node.execution is TaskExecution.IDLE
-            and bool(node.current_attempt_id)
-        )
-        recoverable_blocked = (
-            node.intent is TaskIntent.BLOCKED
-            and node.execution is TaskExecution.IDLE
-            and bool(node.current_attempt_id)
-        )
-        recoverable_done_idle = (
-            node.intent is TaskIntent.DONE
-            and node.execution is TaskExecution.IDLE
-            and bool(node.current_attempt_id)
-        )
-        if not (
-            recoverable_execution
-            or recoverable_in_progress_idle
-            or recoverable_blocked
-            or recoverable_done_idle
-        ):
+        if not _node_has_recoverable_attempt_pointer(node):
             continue
-        if not node.current_attempt_id:
-            continue
-        attempt = await _load_plan_attempt(session, node.current_attempt_id)
+        recoverable_done_idle = _node_is_done_idle_with_attempt(node)
+        attempt_id = node.current_attempt_id
+        assert attempt_id is not None
+        attempt = await _load_plan_attempt(session, attempt_id)
         if attempt is None:
             plan.replace_node(
                 _plan_node_released_for_retry(
@@ -528,6 +528,16 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
         if _reported_node_has_pipeline_result_pending_verification(node, status):
             continue
         if status == "accepted":
+            if not _accepted_attempt_matches_node_expected_commit(node, attempt):
+                plan.replace_node(
+                    _plan_node_released_for_retry(
+                        node,
+                        reason="accepted_attempt_commit_mismatch",
+                        now=now,
+                    )
+                )
+                changed = True
+                continue
             if (
                 recoverable_done_idle
                 and node.metadata.get("terminal_attempt_status") == "accepted"
@@ -577,6 +587,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             accepted_attempt = await _load_reconciling_accepted_attempt_for_task(
                 session=session,
                 workspace_id=workspace_id,
+                node=node,
                 terminal_attempt=attempt,
             )
             if accepted_attempt is not None:
@@ -1336,6 +1347,7 @@ async def _load_reconciling_accepted_attempt_for_task(
     *,
     session: AsyncSession,
     workspace_id: str,
+    node: PlanNode,
     terminal_attempt: WorkspaceTaskSessionAttemptModel,
 ) -> WorkspaceTaskSessionAttemptModel | None:
     workspace_task_id = terminal_attempt.workspace_task_id
@@ -1350,13 +1362,15 @@ async def _load_reconciling_accepted_attempt_for_task(
         .limit(1)
     )
     accepted_attempt = result.scalar_one_or_none()
-    if accepted_attempt is None:
-        return None
-    if accepted_attempt.id == terminal_attempt.id:
-        return None
-    if accepted_attempt.attempt_number > terminal_attempt.attempt_number:
-        return accepted_attempt
-    if _attempt_cancelled_because_parent_done(terminal_attempt):
+    if (
+        accepted_attempt is not None
+        and accepted_attempt.id != terminal_attempt.id
+        and _accepted_attempt_matches_node_expected_commit(node, accepted_attempt)
+        and (
+            accepted_attempt.attempt_number > terminal_attempt.attempt_number
+            or _attempt_cancelled_because_parent_done(terminal_attempt)
+        )
+    ):
         return accepted_attempt
     return None
 
@@ -1369,6 +1383,48 @@ def _attempt_cancelled_because_parent_done(
     reason = str(getattr(attempt, "adjudication_reason", None) or "")
     feedback = str(getattr(attempt, "leader_feedback", None) or "")
     return "recovery:parent_done" in {reason, feedback}
+
+
+def _accepted_attempt_matches_node_expected_commit(
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    expected = _node_expected_commit_ref(node)
+    if not expected:
+        return True
+    actual = _first_prefixed_ref(_accepted_attempt_evidence_refs(attempt), "commit_ref:")
+    if not actual:
+        return False
+    return _git_commit_refs_match(expected, actual)
+
+
+def _node_expected_commit_ref(node: PlanNode) -> str | None:
+    if node.feature_checkpoint is not None:
+        commit_ref = _commit_ref_token(node.feature_checkpoint.commit_ref)
+        if commit_ref:
+            return commit_ref
+    metadata = dict(node.metadata or {})
+    for key in (
+        "source_publish_source_commit_ref",
+        "verified_commit_ref",
+        "worktree_integration_commit_ref",
+    ):
+        commit_ref = _commit_ref_token(metadata.get(key))
+        if commit_ref:
+            return commit_ref
+    return None
+
+
+def _git_commit_refs_match(left: str, right: str) -> bool:
+    left = left.strip()
+    right = right.strip()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    return (len(left) >= 7 and right.startswith(left)) or (
+        len(right) >= 7 and left.startswith(right)
+    )
 
 
 def _plan_node_released_for_retry(
@@ -3707,7 +3763,7 @@ async def _restore_candidate_publish_paths_after_merge(  # noqa: PLR0911
     env: Mapping[str, str],
     reason: str,
 ) -> dict[str, str | None]:
-    paths = await _candidate_publish_path_states(
+    paths = await _candidate_publish_restore_path_states(
         worktree_path=worktree_path,
         candidate_ref=candidate_ref,
         remote_ref=remote_ref,
@@ -3757,8 +3813,42 @@ async def _restore_candidate_publish_paths_after_merge(  # noqa: PLR0911
         return {"status": "failed", "reason": _compact_git_error(commit)}
     return {
         "status": "merged",
-        "reason": f"{reason}; restored candidate-changed paths after merge",
+        "reason": f"{reason}; restored candidate tree paths after merge",
     }
+
+
+async def _candidate_publish_restore_path_states(
+    *,
+    worktree_path: Path,
+    candidate_ref: str,
+    remote_ref: str,
+    env: Mapping[str, str],
+) -> tuple[tuple[str, bool], ...]:
+    restore_paths: dict[str, bool] = dict(
+        await _candidate_publish_path_states(
+            worktree_path=worktree_path,
+            candidate_ref=candidate_ref,
+            remote_ref=remote_ref,
+            env=env,
+        )
+    )
+    candidate_paths = await _git_tracked_paths(
+        worktree_path=worktree_path,
+        ref=candidate_ref,
+        env=env,
+    )
+    if not candidate_paths:
+        return tuple(restore_paths.items())
+    drift_paths = await _git_diff_name_only_paths(
+        worktree_path=worktree_path,
+        left_ref=candidate_ref,
+        right_ref="HEAD",
+        env=env,
+    )
+    for path in drift_paths:
+        if path in candidate_paths:
+            restore_paths[path] = True
+    return tuple(restore_paths.items())
 
 
 async def _candidate_publish_path_states(
@@ -3786,6 +3876,43 @@ async def _candidate_publish_path_states(
     if diff["exit_code"] != "0":
         return ()
     return _parse_git_name_status_path_states(str(diff.get("stdout") or ""))
+
+
+async def _git_tracked_paths(
+    *,
+    worktree_path: Path,
+    ref: str,
+    env: Mapping[str, str],
+) -> set[str]:
+    tree = await _run_git_command(
+        worktree_path,
+        ("ls-tree", "-r", "-z", "--name-only", ref),
+        env=env,
+    )
+    if tree["exit_code"] != "0":
+        return set()
+    return set(_parse_git_z_paths(str(tree.get("stdout") or "")))
+
+
+async def _git_diff_name_only_paths(
+    *,
+    worktree_path: Path,
+    left_ref: str,
+    right_ref: str,
+    env: Mapping[str, str],
+) -> tuple[str, ...]:
+    diff = await _run_git_command(
+        worktree_path,
+        ("diff", "--name-only", "-z", left_ref, right_ref),
+        env=env,
+    )
+    if diff["exit_code"] != "0":
+        return ()
+    return _parse_git_z_paths(str(diff.get("stdout") or ""))
+
+
+def _parse_git_z_paths(raw: str) -> tuple[str, ...]:
+    return tuple(part for part in raw.split("\0") if part)
 
 
 def _parse_git_name_status_path_states(raw: str) -> tuple[tuple[str, bool], ...]:
@@ -5471,10 +5598,10 @@ def _extract_task_evidence(
     report_attempt_id = metadata.get(LAST_WORKER_REPORT_ATTEMPT_ID) or metadata.get(
         "last_attempt_id"
     )
+    report_attempt_id_text = report_attempt_id if isinstance(report_attempt_id, str) else None
     report_belongs_to_current_attempt = (
         not current_attempt_id
-        or not isinstance(report_attempt_id, str)
-        or report_attempt_id == current_attempt_id
+        or (report_attempt_id_text is not None and report_attempt_id_text == current_attempt_id)
     )
     summary = metadata.get(LAST_WORKER_REPORT_SUMMARY) if report_belongs_to_current_attempt else ""
     stdout = summary if isinstance(summary, str) else json.dumps(summary or "", ensure_ascii=False)

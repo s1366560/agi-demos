@@ -706,6 +706,9 @@ class TestBuildBrief:
             "`wget -qO- http://host.docker.internal:18080/api/health >/dev/null`",
             "Docker deploy dependency strategy: `compose_or_sidecars`",
             "Docker deploy dependency network: `workspace-deploy`",
+            "Docker deploy network create command: "
+            "`docker network inspect workspace-deploy >/dev/null 2>&1 "
+            "|| docker network create workspace-deploy`",
             "Docker deploy PostgreSQL sidecar image: `postgres:16-alpine`",
             "Docker deploy PostgreSQL sidecar command: "
             "`docker run -d --name <postgres-container> --network workspace-deploy "
@@ -769,6 +772,9 @@ class TestBuildBrief:
             "sidecar containers on a named Docker network",
             "remove stale containers with `docker rm -f <app-container> "
             "<postgres-container> <redis-container> 2>/dev/null || true`",
+            "docker.deploy_network_create_command",
+            "Do not use `docker network rm <network> || true` followed by "
+            "`docker network create <network>`",
             "Do not satisfy DATABASE_URL, REDIS_URL",
             "postgresql://postgres:postgres@<postgres-container>:5432/<db>",
             "-e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=<db> "
@@ -831,6 +837,11 @@ class TestBuildBrief:
         assert (
             system_context["delivery_cicd"]["deploy"]["docker"]["deploy_dependency_network"]
             == "workspace-deploy"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_network_create_command"]
+            == "docker network inspect workspace-deploy >/dev/null 2>&1 "
+            "|| docker network create workspace-deploy"
         )
         assert (
             system_context["delivery_cicd"]["deploy"]["docker"]["deploy_postgres_sidecar_image"]

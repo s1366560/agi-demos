@@ -319,6 +319,32 @@ def test_extract_task_evidence_omits_worker_report_from_prior_attempt() -> None:
     assert artifacts["code_context"] == {"sandbox_code_root": "/workspace/my-evo"}
 
 
+def test_extract_task_evidence_omits_unscoped_worker_report_for_current_attempt() -> None:
+    task = SimpleNamespace(
+        metadata={
+            CURRENT_ATTEMPT_ID: "attempt-new",
+            LAST_WORKER_REPORT_SUMMARY: "unscoped completion",
+            "last_worker_report_type": "completed",
+            "last_worker_report_artifacts": ["commit_ref:stale"],
+            "last_worker_report_verifications": ["test_run:stale"],
+            "evidence_refs": ["commit_ref:stale"],
+            "execution_verifications": ["test_run:stale"],
+            "preflight_checks": [{"name": "read", "passed": True}],
+        }
+    )
+
+    stdout, artifacts = _extract_task_evidence(task, current_attempt_id="attempt-new")
+
+    assert stdout == ""
+    assert "last_worker_report_type" not in artifacts
+    assert "last_worker_report_artifacts" not in artifacts
+    assert "last_worker_report_verifications" not in artifacts
+    assert "evidence_refs" not in artifacts
+    assert "execution_verifications" not in artifacts
+    assert artifacts[CURRENT_ATTEMPT_ID] == "attempt-new"
+    assert artifacts["preflight_checks"] == [{"name": "read", "passed": True}]
+
+
 def test_extract_task_evidence_keeps_worker_report_for_current_attempt() -> None:
     task = SimpleNamespace(
         metadata={
@@ -1111,6 +1137,7 @@ def test_worktree_integration_command_cleans_generated_artifacts_before_merge(
 
     (repo / "frontend/tests/e2e-results.json").write_text('{"status":"dirty"}\n', encoding="utf-8")
     (repo / "frontend/tests/screenshots/01-homepage.png").write_text("dirty\n", encoding="utf-8")
+    (repo / "ITERATION-REPORT-20260520.md").write_text("stale report\n", encoding="utf-8")
 
     command = _worktree_integration_command(
         sandbox_code_root=str(repo),
@@ -1134,6 +1161,7 @@ def test_worktree_integration_command_cleans_generated_artifacts_before_merge(
     assert (repo / "frontend/tests/screenshots/01-homepage.png").read_text(
         encoding="utf-8"
     ) == "base\n"
+    assert not (repo / "ITERATION-REPORT-20260520.md").exists()
     assert git(repo, "status", "--short") == ""
 
 
@@ -1828,13 +1856,93 @@ async def test_publish_git_ref_to_source_control_restores_candidate_paths_after_
 
     assert publish["status"] == "published"
     assert publish["reason"] == (
-        "merged remote branch before publish; restored candidate-changed paths after merge"
+        "merged remote branch before publish; restored candidate tree paths after merge"
     )
     published_commit = str(publish["published_commit"])
     assert git(remote, "rev-parse", "refs/heads/main") == published_commit
     assert git(remote, "show", "refs/heads/main:.drone.yml") == candidate_drone.rstrip("\n")
     assert git(remote, "show", "refs/heads/main:REMOTE.md") == "remote-only"
     git(remote, "merge-base", "--is-ancestor", repair_commit, "refs/heads/main")
+    git(remote, "merge-base", "--is-ancestor", stale_remote_commit, "refs/heads/main")
+
+
+@pytest.mark.asyncio
+async def test_publish_git_ref_to_source_control_restores_candidate_tree_when_remote_drifted(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    remote_clone = tmp_path / "remote-clone"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / ".drone.yml").write_text(
+        "commands:\n  - docker network create workspace-deploy 2>/dev/null || true\n",
+        encoding="utf-8",
+    )
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "base")
+
+    git(tmp_path, "init", "--bare", str(remote))
+    git(repo, "remote", "add", "origin", str(remote))
+    git(repo, "push", "origin", "main")
+
+    git(repo, "checkout", "-b", "review")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "ITERATION-REVIEW.md").write_text("review\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "review docs")
+    review_commit = git(repo, "rev-parse", "HEAD")
+
+    git(tmp_path, "clone", str(remote), str(remote_clone))
+    git(remote_clone, "config", "user.email", "remote@example.com")
+    git(remote_clone, "config", "user.name", "Remote")
+    (remote_clone / ".drone.yml").write_text(
+        "commands:\n"
+        "  - docker network rm workspace-deploy 2>/dev/null || true\n"
+        "  - docker network create workspace-deploy\n",
+        encoding="utf-8",
+    )
+    (remote_clone / "REMOTE.md").write_text("remote-only\n", encoding="utf-8")
+    git(remote_clone, "add", ".")
+    git(remote_clone, "commit", "-m", "stale remote deploy")
+    stale_remote_commit = git(remote_clone, "rev-parse", "HEAD")
+    git(remote_clone, "push", "origin", "main")
+
+    publish = await outbox_handlers._publish_git_ref_to_source_control(
+        host_code_root=repo,
+        commit_ref=review_commit,
+        branch="main",
+        remote_url=str(remote),
+        token=None,
+        token_env=None,
+    )
+
+    assert publish["status"] == "published"
+    assert publish["reason"] == (
+        "merged remote branch before publish; restored candidate tree paths after merge"
+    )
+    assert (
+        git(remote, "show", "refs/heads/main:.drone.yml")
+        == "commands:\n  - docker network create workspace-deploy 2>/dev/null || true"
+    )
+    assert git(remote, "show", "refs/heads/main:REMOTE.md") == "remote-only"
+    assert git(remote, "show", "refs/heads/main:docs/ITERATION-REVIEW.md") == "review"
+    git(remote, "merge-base", "--is-ancestor", review_commit, "refs/heads/main")
     git(remote, "merge-base", "--is-ancestor", stale_remote_commit, "refs/heads/main")
 
 
@@ -3999,6 +4107,134 @@ async def test_supervisor_tick_uses_accepted_attempt_when_current_attempt_was_pa
     assert task.metadata_json[CURRENT_ATTEMPT_ID] == "accepted-before-parent-done"
     assert task.metadata_json["last_attempt_status"] == "accepted"
     assert task.metadata_json["durable_plan_verdict"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_rejects_stale_parent_done_accepted_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="stale-parent-done-task",
+            workspace_id="workspace-1",
+            title="Accepted projection",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "cancelled-after-parent-done",
+            },
+        )
+    )
+    db_session.add_all(
+        [
+            WorkspaceTaskSessionAttemptModel(
+                id="accepted-before-parent-done",
+                workspace_task_id="stale-parent-done-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=2,
+                status="accepted",
+                conversation_id="accepted-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                leader_feedback="accepted before recovery sweep",
+                candidate_artifacts_json=["docs/OLD.md", "commit_ref:4171b352"],
+                candidate_verifications_json=["test_run:pytest old", "commit_ref:4171b352"],
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="cancelled-after-parent-done",
+                workspace_task_id="stale-parent-done-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=3,
+                status="cancelled",
+                conversation_id="cancelled-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                leader_feedback="recovery:parent_done",
+                adjudication_reason="recovery:parent_done",
+            ),
+        ]
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            current_attempt_id="cancelled-after-parent-done",
+            workspace_task_id="stale-parent-done-task",
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Review",
+                base_ref="HEAD",
+                commit_ref="8d65d60",
+            ),
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    dispatched: list[str] = []
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return [WorkspaceAgent(agent_id="agent-1", display_name="Agent One")]
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        node: PlanNode,
+    ) -> str:
+        dispatched.append(node.id)
+        return f"retry-{node.id}"
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    retried_leaf = loaded.leaf_tasks()[0]
+    assert dispatched == [retried_leaf.id]
+    assert retried_leaf.intent is TaskIntent.IN_PROGRESS
+    assert retried_leaf.execution is TaskExecution.DISPATCHED
+    assert retried_leaf.current_attempt_id == f"retry-{retried_leaf.id}"
+    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == "terminal_attempt_cancelled"
+    assert "terminal_attempt_status" not in retried_leaf.metadata
 
 
 @pytest.mark.asyncio

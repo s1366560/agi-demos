@@ -1458,6 +1458,51 @@ class TestVerifier:
         assert not rep.passed
         assert "uncommitted changes remain after commit_ref" in rep.summary()
 
+    async def test_verifier_accepts_commit_checkpoint_with_generated_dirty_worktree(self) -> None:
+        class DirtySandbox:
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                assert command == "git -C /workspace/my-evo status --short"
+                assert timeout == 15
+                return {
+                    "exit_code": 0,
+                    "stdout": (
+                        " M frontend/tsconfig.tsbuildinfo\n"
+                        "?? frontend/playwright-report/index.html\n"
+                    ),
+                    "stderr": "",
+                }
+
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "write_set": ["frontend/app/page.tsx"],
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            },
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-1",
+                sequence=1,
+                title="Generated artifact evidence",
+                expected_artifacts=("frontend/app/page.tsx",),
+            ),
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "evidence_refs": ["commit_ref:78dacf1", "git_diff_summary:1 file changed"],
+            },
+            sandbox=DirtySandbox(),
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        clean_result = next(
+            result for result in rep.results if result.criterion.spec["name"] == "clean_worktree_after_commit"
+        )
+        assert "ignored generated artifacts" in clean_result.message
+
     async def test_verifier_accepts_commit_checkpoint_with_clean_worktree(self) -> None:
         class CleanSandbox:
             async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
@@ -3942,9 +3987,36 @@ class TestSupervisorTick:
                 execution=TaskExecution.RUNNING,
                 current_attempt_id="attempt-b",
                 assignee_agent_id="ag-code",
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-b",
+                    sequence=2,
+                    worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-b",
+                    branch_name="workspace/b-attempt-b",
+                    base_ref="old-base",
+                    commit_ref="old-commit",
+                ),
                 metadata={
+                    "candidate_artifacts": ["commit_ref:old-commit"],
+                    "deployment_status": "deployed",
+                    "evidence_refs": ["ci_pipeline:passed"],
+                    "execution_verifications": ["ci_pipeline:passed"],
+                    "external_id": "s1366560/my-evo#13",
                     "last_verification_passed": True,
+                    "last_worker_report_attempt_id": "attempt-b",
+                    "last_worker_report_artifacts": ["commit_ref:old-commit"],
+                    "last_worker_report_summary": "old report",
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_verifications": ["worker_report:completed"],
+                    "pipeline_evidence_refs": ["ci_pipeline:passed"],
                     "pipeline_status": "success",
+                    "reported_attempt_status": "awaiting_leader_adjudication",
+                    "source_publish_commit_ref": "old-commit",
+                    "source_publish_status": "published",
+                    "terminal_attempt_superseded_attempt_id": "old-parent",
+                    "terminal_attempt_superseded_reason": "parent_done",
+                    "terminal_attempt_superseded_status": "cancelled",
+                    "worktree_integration_commit_ref": "old-commit",
+                    "worktree_integration_status": "already_merged",
                 },
             )
         )
@@ -3996,6 +4068,33 @@ class TestSupervisorTick:
         assert invalidated.metadata["dependency_invalidated_previous_attempt_id"] == "attempt-b"
         assert "last_verification_passed" not in invalidated.metadata
         assert "pipeline_status" not in invalidated.metadata
+        assert invalidated.feature_checkpoint is not None
+        assert invalidated.feature_checkpoint.worktree_path is None
+        assert invalidated.feature_checkpoint.branch_name is None
+        assert invalidated.feature_checkpoint.base_ref == "HEAD"
+        assert invalidated.feature_checkpoint.commit_ref is None
+        for stale_key in (
+            "candidate_artifacts",
+            "deployment_status",
+            "evidence_refs",
+            "execution_verifications",
+            "external_id",
+            "last_worker_report_attempt_id",
+            "last_worker_report_artifacts",
+            "last_worker_report_summary",
+            "last_worker_report_type",
+            "last_worker_report_verifications",
+            "pipeline_evidence_refs",
+            "reported_attempt_status",
+            "source_publish_commit_ref",
+            "source_publish_status",
+            "terminal_attempt_superseded_attempt_id",
+            "terminal_attempt_superseded_reason",
+            "terminal_attempt_superseded_status",
+            "worktree_integration_commit_ref",
+            "worktree_integration_status",
+        ):
+            assert stale_key not in invalidated.metadata
         assert events == [
             (
                 "dependency_invalidated",

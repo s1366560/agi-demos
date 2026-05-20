@@ -1686,6 +1686,7 @@ def _invalidate_nodes_with_unmet_dependencies(plan: Plan) -> list[PlanNode]:
             execution=TaskExecution.IDLE,
             assignee_agent_id=None,
             current_attempt_id=None,
+            feature_checkpoint=_reset_stale_feature_checkpoint(node.feature_checkpoint),
             metadata=metadata,
             updated_at=now,
             completed_at=None,
@@ -1860,6 +1861,15 @@ def _pid(value: str) -> PlanNodeId:
 
 _STALE_ATTEMPT_METADATA_KEYS = frozenset(
     {
+        "candidate_artifacts",
+        "candidate_verifications",
+        "deploy_mode",
+        "deployment_status",
+        "evidence_refs",
+        "execution_verifications",
+        "external_id",
+        "external_provider",
+        "external_url",
         "last_verification_summary",
         "last_verification_passed",
         "last_verification_hard_fail",
@@ -1873,22 +1883,49 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "last_verification_judge_required_next_action",
         "last_verification_judge_verdict",
         "last_verification_feedback_items",
+        "last_worker_report_attempt_id",
+        "last_worker_report_artifacts",
+        "last_worker_report_summary",
+        "last_worker_report_type",
+        "last_worker_report_verifications",
         "verification_feedback_disposition",
         "obsolete_by_verifier_feedback",
         "obsolete_feedback_items",
         "current_repair_turn",
+        "pipeline_finished_at",
+        "pipeline_request_count",
+        "pipeline_requested_at",
         "verification_evidence_refs",
         "verified_commit_ref",
         "verified_git_diff_summary",
         "verified_test_commands",
+        "reported_attempt_reconciled_at",
+        "reported_attempt_status",
         "retry_last_reason",
+        "source_publish_branch",
+        "source_publish_commit_ref",
+        "source_publish_provider",
+        "source_publish_reason",
+        "source_publish_source_commit_ref",
+        "source_publish_status",
+        "source_publish_token_env",
         "terminal_attempt_status",
         "terminal_attempt_reconciled_at",
+        "terminal_attempt_superseded_attempt_id",
+        "terminal_attempt_superseded_reason",
+        "terminal_attempt_superseded_status",
         "pipeline_status",
         "pipeline_gate_status",
         "pipeline_run_id",
         "pipeline_evidence_refs",
         "pipeline_last_summary",
+        "worktree_integration_attempt_id",
+        "worktree_integration_commit_ref",
+        "worktree_integration_dirty_signature",
+        "worktree_integration_ran_at",
+        "worktree_integration_status",
+        "worktree_integration_summary",
+        "worktree_integration_worktree_path",
     }
 )
 
@@ -1898,6 +1935,20 @@ def _clear_stale_attempt_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]
     for key in _STALE_ATTEMPT_METADATA_KEYS:
         cleaned.pop(key, None)
     return cleaned
+
+
+def _reset_stale_feature_checkpoint(
+    feature_checkpoint: FeatureCheckpoint | None,
+) -> FeatureCheckpoint | None:
+    if feature_checkpoint is None:
+        return None
+    return replace(
+        feature_checkpoint,
+        worktree_path=None,
+        branch_name=None,
+        base_ref="HEAD",
+        commit_ref=None,
+    )
 
 
 def _node_dispatched_with_fresh_attempt(

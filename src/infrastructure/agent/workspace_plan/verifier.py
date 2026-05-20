@@ -48,6 +48,7 @@ from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationNextActionKind,
     WorkspaceVerificationRecommendedAction,
 )
+from src.infrastructure.agent.workspace_plan.worktree_manager import is_generated_dirty_path
 
 logger = logging.getLogger(__name__)
 
@@ -1118,6 +1119,36 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             feedback_items=(host_port_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
+    network_exists_feedback = _drone_docker_deploy_network_exists_feedback(results)
+    if network_exists_feedback is not None:
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone docker-deploy failed before validation because the deploy network already "
+                "existed from a previous attempt. The deploy step must create or reuse the "
+                "network idempotently instead of deleting and recreating it. Judge rationale: "
+                f"{result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_deploy_network_exists",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Fix .drone.yml docker-deploy so the named deploy network is created "
+                "idempotently before sidecars or the app run, for example "
+                "`docker network inspect <network> >/dev/null 2>&1 || docker network create "
+                "<network>`. Do not use `docker network rm <network> || true` followed by "
+                "`docker network create <network>` as the normal retry path. Preserve existing "
+                "deploy fixes: deploy-local docker build tag, stale container cleanup, sidecars, "
+                "runtime env, health probe, and docker log diagnostics. Commit and rerun Drone."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(network_exists_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
     container_name_conflict_feedback = _drone_docker_deploy_container_name_conflict_feedback(
         results
     )
@@ -1732,6 +1763,35 @@ def _drone_docker_deploy_container_name_conflict_feedback(
             "drone_deploy:retry_cleanup",
         ),
         failure_signature="drone-docker-deploy-container-name-conflict",
+    )
+
+
+def _drone_docker_deploy_network_exists_feedback(
+    results: list[CriterionResult],
+) -> WorkspaceVerificationFeedbackItem | None:
+    text = "\n".join(result.message for result in results if result.message).lower()
+    has_network_exists = (
+        "docker network create" in text
+        and "network with name" in text
+        and "already exists" in text
+    )
+    if not ("failing stage" in text and "deploy" in text and has_network_exists):
+        return None
+    return WorkspaceVerificationFeedbackItem(
+        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+        feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+        summary=(
+            "The deploy step deletes and recreates a fixed Docker network, but a retry can leave "
+            "that network in place. It must use idempotent create-or-reuse network setup before "
+            "starting sidecars or the app container."
+        ),
+        evidence_refs=(
+            "drone_error:deploy_network_already_exists",
+            "drone_deploy:network_retry_idempotency",
+        ),
+        failure_signature="drone-docker-deploy-network-already-exists",
     )
 
 
@@ -2555,7 +2615,17 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
             message=f"git status failed: {stderr or stdout or exit_code}",
         )
     if stdout:
-        preview = stdout.replace("\n", "; ")[:300]
+        blocking_lines = _blocking_git_status_lines(stdout)
+        if not blocking_lines:
+            preview = stdout.replace("\n", "; ")[:300]
+            return CriterionResult(
+                criterion=criterion,
+                passed=True,
+                confidence=0.95,
+                message=f"clean worktree after commit (ignored generated artifacts: {preview})",
+                evidence=(EvidenceRef(kind="git_status", ref=stdout[:2000], note=command),),
+            )
+        preview = "\n".join(blocking_lines).replace("\n", "; ")[:300]
         return CriterionResult(
             criterion=criterion,
             passed=False,
@@ -2569,6 +2639,24 @@ async def _clean_worktree_after_commit_guard(  # noqa: PLR0911
         confidence=1.0,
         message="clean worktree after commit",
     )
+
+
+def _blocking_git_status_lines(stdout: str) -> tuple[str, ...]:
+    blocking: list[str] = []
+    for raw_line in stdout.splitlines():
+        line = raw_line.rstrip()
+        if not line:
+            continue
+        if not is_generated_dirty_path(_git_status_path(line)):
+            blocking.append(line)
+    return tuple(blocking)
+
+
+def _git_status_path(line: str) -> str:
+    path = line[3:] if len(line) > 3 else line
+    if " -> " in path:
+        return path.rsplit(" -> ", maxsplit=1)[-1]
+    return path
 
 
 def _should_check_clean_worktree(ctx: VerificationContext, evidence_values: set[str]) -> bool:

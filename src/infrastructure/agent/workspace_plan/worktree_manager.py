@@ -6,6 +6,7 @@ import posixpath
 import shlex
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from typing import Any, Protocol, SupportsInt, cast
 
 from sqlalchemy import select
@@ -34,6 +35,8 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 from src.infrastructure.agent.workspace_plan.run_contract import WorkspaceRunContract
 
 _GENERATED_DIRTY_PATH_PATTERNS = (
+    "ITERATION-REPORT-*.md",
+    "*.tsbuildinfo",
     "frontend/tests/e2e-results.json",
     "frontend/tests/screenshots/*",
     "frontend/test-results/*",
@@ -43,6 +46,13 @@ _GENERATED_DIRTY_PATH_PATTERNS = (
     "playwright-report/*",
     "coverage/*",
 )
+
+
+def is_generated_dirty_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lstrip("./")
+    if not normalized:
+        return False
+    return any(fnmatchcase(normalized, pattern) for pattern in _GENERATED_DIRTY_PATH_PATTERNS)
 
 
 class WorkspaceCommandRunner(Protocol):

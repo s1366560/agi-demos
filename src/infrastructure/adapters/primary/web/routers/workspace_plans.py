@@ -25,7 +25,14 @@ from src.configuration.di_container import DIContainer
 from src.domain.events.types import AgentEventType
 from src.domain.model.workspace.workspace_role import WorkspaceRole
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
-from src.domain.model.workspace_plan import Plan, PlanNode, PlanNodeId, PlanStatus, Progress
+from src.domain.model.workspace_plan import (
+    FeatureCheckpoint,
+    Plan,
+    PlanNode,
+    PlanNodeId,
+    PlanStatus,
+    Progress,
+)
 from src.domain.model.workspace_plan.plan_node import TaskExecution, TaskIntent
 from src.domain.model.workspace_plan.state_machine import transition_execution, transition_intent
 from src.domain.ports.services.blackboard_port import BlackboardEntry
@@ -2964,6 +2971,73 @@ _OPERATOR_CLEARED_RETRY_KEYS = frozenset(
         "terminal_attempt_retry_reason",
         "terminal_attempt_reconciled_at",
         "terminal_attempt_status",
+        "terminal_attempt_superseded_attempt_id",
+        "terminal_attempt_superseded_reason",
+        "terminal_attempt_superseded_status",
+    }
+)
+
+_OPERATOR_CLEARED_ATTEMPT_KEYS = frozenset(
+    {
+        "candidate_artifacts",
+        "candidate_verifications",
+        "deploy_mode",
+        "deployment_status",
+        "evidence_refs",
+        "execution_verifications",
+        "external_id",
+        "external_provider",
+        "external_url",
+        "current_repair_turn",
+        "last_verification_attempt_id",
+        "last_verification_feedback_items",
+        "last_verification_hard_fail",
+        "last_verification_judge_confidence",
+        "last_verification_judge_failed_criteria",
+        "last_verification_judge_next_action_kind",
+        "last_verification_judge_rationale",
+        "last_verification_judge_repair_brief",
+        "last_verification_judge_required_next_action",
+        "last_verification_judge_verdict",
+        "last_verification_passed",
+        "last_verification_ran_at",
+        "last_verification_summary",
+        "last_worker_report_attempt_id",
+        "last_worker_report_artifacts",
+        "last_worker_report_summary",
+        "last_worker_report_type",
+        "last_worker_report_verifications",
+        "obsolete_by_verifier_feedback",
+        "obsolete_feedback_items",
+        "pipeline_evidence_refs",
+        "pipeline_finished_at",
+        "pipeline_gate_status",
+        "pipeline_last_summary",
+        "pipeline_request_count",
+        "pipeline_requested_at",
+        "pipeline_run_id",
+        "pipeline_status",
+        "reported_attempt_reconciled_at",
+        "reported_attempt_status",
+        "source_publish_branch",
+        "source_publish_commit_ref",
+        "source_publish_provider",
+        "source_publish_reason",
+        "source_publish_source_commit_ref",
+        "source_publish_status",
+        "source_publish_token_env",
+        "verification_evidence_refs",
+        "verification_feedback_disposition",
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "worktree_integration_attempt_id",
+        "worktree_integration_commit_ref",
+        "worktree_integration_dirty_signature",
+        "worktree_integration_ran_at",
+        "worktree_integration_status",
+        "worktree_integration_summary",
+        "worktree_integration_worktree_path",
     }
 )
 
@@ -2973,6 +3047,27 @@ def _operator_cleared_retry_metadata(metadata: Mapping[str, Any]) -> dict[str, A
     for key in _OPERATOR_CLEARED_RETRY_KEYS:
         cleaned.pop(key, None)
     return cleaned
+
+
+def _operator_cleared_attempt_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    cleaned = _operator_cleared_retry_metadata(metadata)
+    for key in _OPERATOR_CLEARED_ATTEMPT_KEYS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
+def _reset_stale_feature_checkpoint(
+    feature_checkpoint: FeatureCheckpoint | None,
+) -> FeatureCheckpoint | None:
+    if feature_checkpoint is None:
+        return None
+    return replace(
+        feature_checkpoint,
+        worktree_path=None,
+        branch_name=None,
+        base_ref="HEAD",
+        commit_ref=None,
+    )
 
 
 def _reset_node_for_operator(
@@ -2992,7 +3087,7 @@ def _reset_node_for_operator(
 
     current_time = datetime.now(UTC)
     action_label = "reopened" if action == "operator_node_reopened" else "sent back for replan"
-    metadata = _operator_cleared_retry_metadata(node.metadata)
+    metadata = _operator_cleared_attempt_metadata(node.metadata)
     metadata["operator_action"] = {
         "action": action,
         "actor_id": actor_id,
@@ -3010,6 +3105,7 @@ def _reset_node_for_operator(
         ),
         assignee_agent_id=None,
         current_attempt_id=None,
+        feature_checkpoint=_reset_stale_feature_checkpoint(node.feature_checkpoint),
         metadata=metadata,
         completed_at=None,
         updated_at=current_time,
@@ -3662,6 +3758,11 @@ async def _active_nodes_with_terminal_attempts(
             }
             or (node.intent is TaskIntent.IN_PROGRESS and node.execution is TaskExecution.IDLE)
             or (node.intent is TaskIntent.BLOCKED and node.execution is TaskExecution.IDLE)
+            or (
+                node.intent is TaskIntent.DONE
+                and node.execution is TaskExecution.IDLE
+                and node.metadata.get("worktree_integration_status") == "blocked_dirty_main"
+            )
         )
     ]
     if not attempt_ids:

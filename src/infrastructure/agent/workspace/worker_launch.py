@@ -101,6 +101,10 @@ _LOCAL_DOCKER_DEPLOY_STRATEGY = "local_build"
 _DEFAULT_DOCKER_DEPLOY_HOST_PORT = 18080
 _DEFAULT_DOCKER_DEPLOY_DEPENDENCY_STRATEGY = "compose_or_sidecars"
 _DEFAULT_DOCKER_DEPLOY_NETWORK = "workspace-deploy"
+_DEFAULT_DOCKER_DEPLOY_NETWORK_CREATE_COMMAND = (
+    "docker network inspect workspace-deploy >/dev/null 2>&1 "
+    "|| docker network create workspace-deploy"
+)
 _DEFAULT_DOCKER_DEPLOY_POSTGRES_IMAGE = "postgres:16-alpine"
 _DEFAULT_DOCKER_DEPLOY_REDIS_IMAGE = "redis:7-alpine"
 _DEFAULT_DOCKER_DEPLOY_POSTGRES_COMMAND = (
@@ -749,6 +753,14 @@ def _workspace_delivery_cicd_context(  # noqa: PLR0915
                 "deploy validation runs."
             )
             context["instructions"].append(
+                "Before any `docker run --network <network>` in a retryable Drone deploy step, "
+                "ensure the network exists idempotently with docker.deploy_network_create_command. "
+                "Do not use `docker network rm <network> || true` followed by "
+                "`docker network create <network>` as the normal retry path; Docker can leave the "
+                "network in place with active endpoints, and a second create then fails before "
+                "real deployment validation runs."
+            )
+            context["instructions"].append(
                 "Do not satisfy DATABASE_URL, REDIS_URL, or similar runtime endpoints by pointing "
                 "at host.docker.internal:<port> unless the contract explicitly declares that host "
                 "service. For disposable CI deploy verification, prefer sidecar endpoints such as "
@@ -947,6 +959,10 @@ def _add_docker_deploy_dependency_hints(docker_context: dict[str, Any]) -> None:
     )
     docker_context.setdefault("deploy_dependency_network", _DEFAULT_DOCKER_DEPLOY_NETWORK)
     docker_context.setdefault(
+        "deploy_network_create_command",
+        _DEFAULT_DOCKER_DEPLOY_NETWORK_CREATE_COMMAND,
+    )
+    docker_context.setdefault(
         "deploy_postgres_sidecar_image",
         _DEFAULT_DOCKER_DEPLOY_POSTGRES_IMAGE,
     )
@@ -1122,6 +1138,7 @@ def _append_delivery_docker_lines(lines: list[str], docker: object) -> None:
         ("deploy_health_check_command", "Docker deploy health check command"),
         ("deploy_dependency_strategy", "Docker deploy dependency strategy"),
         ("deploy_dependency_network", "Docker deploy dependency network"),
+        ("deploy_network_create_command", "Docker deploy network create command"),
         ("deploy_postgres_sidecar_image", "Docker deploy PostgreSQL sidecar image"),
         ("deploy_postgres_sidecar_command", "Docker deploy PostgreSQL sidecar command"),
         ("deploy_postgres_cleanup_command", "Docker deploy PostgreSQL cleanup command"),

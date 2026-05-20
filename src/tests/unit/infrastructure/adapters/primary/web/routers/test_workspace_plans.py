@@ -886,13 +886,60 @@ def test_reopen_blocked_clears_terminal_retry_debt() -> None:
         intent=TaskIntent.BLOCKED,
         execution=TaskExecution.IDLE,
         current_attempt_id=None,
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-task-api",
+            sequence=1,
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/old-attempt",
+            branch_name="workspace/task-api-old",
+            base_ref="old-base",
+            commit_ref="old-commit",
+        ),
         metadata={
             **node.metadata,
+            "candidate_artifacts": ["commit_ref:old-commit"],
+            "deployment_status": "deployed",
+            "evidence_refs": ["ci_pipeline:passed"],
+            "execution_verifications": ["ci_pipeline:passed"],
+            "external_id": "s1366560/my-evo#13",
+            "current_repair_turn": 2,
+            "last_verification_attempt_id": "old-attempt",
+            "last_verification_feedback_items": [{"target": "worker"}],
+            "last_verification_hard_fail": False,
+            "last_verification_judge_confidence": 0.91,
+            "last_verification_judge_failed_criteria": ["old-check"],
+            "last_verification_judge_next_action_kind": "retry_same_node",
+            "last_verification_judge_rationale": "old rationale",
+            "last_verification_judge_repair_brief": "old repair",
+            "last_verification_judge_required_next_action": "old action",
+            "last_verification_judge_verdict": "accepted",
+            "last_verification_passed": True,
+            "last_verification_ran_at": "2026-05-07T00:01:00Z",
+            "last_verification_summary": "old pipeline passed",
+            "last_worker_report_attempt_id": "old-attempt",
+            "last_worker_report_artifacts": ["commit_ref:old-commit"],
+            "last_worker_report_summary": "old report",
+            "last_worker_report_type": "completed",
+            "last_worker_report_verifications": ["worker_report:completed"],
+            "obsolete_by_verifier_feedback": True,
+            "obsolete_feedback_items": [{"target": "runtime"}],
+            "pipeline_evidence_refs": ["ci_pipeline:passed"],
+            "source_publish_commit_ref": "old-commit",
+            "source_publish_status": "published",
             "terminal_attempt_retry_count": 11,
             "terminal_attempt_retry_reason": "terminal_attempt_blocked",
             "terminal_attempt_reconciled_at": "2026-05-07T00:00:00Z",
+            "terminal_attempt_superseded_attempt_id": "old-attempt",
+            "terminal_attempt_superseded_reason": "parent_done",
+            "terminal_attempt_superseded_status": "cancelled",
             "retry_count": 3,
             "retry_not_before": "2026-05-07T00:05:00Z",
+            "verification_evidence_refs": ["old-evidence"],
+            "verification_feedback_disposition": "routed",
+            "verified_commit_ref": "old-commit",
+            "verified_git_diff_summary": "old diff",
+            "verified_test_commands": ["old test"],
+            "worktree_integration_commit_ref": "old-commit",
+            "worktree_integration_status": "already_merged",
         },
     )
 
@@ -909,7 +956,54 @@ def test_reopen_blocked_clears_terminal_retry_debt() -> None:
     assert "terminal_attempt_retry_count" not in reopened.metadata
     assert "terminal_attempt_retry_reason" not in reopened.metadata
     assert "terminal_attempt_reconciled_at" not in reopened.metadata
+    assert "terminal_attempt_superseded_attempt_id" not in reopened.metadata
+    assert "terminal_attempt_superseded_reason" not in reopened.metadata
+    assert "terminal_attempt_superseded_status" not in reopened.metadata
     assert "retry_count" not in reopened.metadata
+    assert reopened.feature_checkpoint is not None
+    assert reopened.feature_checkpoint.worktree_path is None
+    assert reopened.feature_checkpoint.branch_name is None
+    assert reopened.feature_checkpoint.base_ref == "HEAD"
+    assert reopened.feature_checkpoint.commit_ref is None
+    for stale_key in (
+        "candidate_artifacts",
+        "deployment_status",
+        "evidence_refs",
+        "execution_verifications",
+        "external_id",
+        "current_repair_turn",
+        "last_verification_attempt_id",
+        "last_verification_feedback_items",
+        "last_verification_hard_fail",
+        "last_verification_judge_confidence",
+        "last_verification_judge_failed_criteria",
+        "last_verification_judge_next_action_kind",
+        "last_verification_judge_rationale",
+        "last_verification_judge_repair_brief",
+        "last_verification_judge_required_next_action",
+        "last_verification_judge_verdict",
+        "last_verification_passed",
+        "last_verification_ran_at",
+        "last_verification_summary",
+        "last_worker_report_attempt_id",
+        "last_worker_report_artifacts",
+        "last_worker_report_summary",
+        "last_worker_report_type",
+        "last_worker_report_verifications",
+        "obsolete_by_verifier_feedback",
+        "obsolete_feedback_items",
+        "pipeline_evidence_refs",
+        "source_publish_commit_ref",
+        "source_publish_status",
+        "verification_evidence_refs",
+        "verification_feedback_disposition",
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "worktree_integration_commit_ref",
+        "worktree_integration_status",
+    ):
+        assert stale_key not in reopened.metadata
     assert reopened.metadata["operator_action"]["reason"] == "operator wants another attempt"
 
 
@@ -1914,6 +2008,78 @@ async def test_snapshot_recovery_enqueues_tick_for_blocked_node_with_accepted_at
         updated_at=datetime.now(UTC),
         workspace_task_id="workspace-task-blocked-terminal",
         current_attempt_id="attempt-accepted-blocked-terminal",
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
+    assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_enqueues_tick_for_done_node_with_blocked_integration(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-done-blocked-integration"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-done-blocked-integration",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-done-blocked-integration",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-accepted-done-blocked-integration",
+                workspace_task_id="workspace-task-done-blocked-integration",
+                root_goal_task_id="root-api-done-blocked-integration",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-done-blocked-integration",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.DONE,
+        execution=TaskExecution.IDLE,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-done-blocked-integration",
+        current_attempt_id="attempt-accepted-done-blocked-integration",
+        metadata={"worktree_integration_status": "blocked_dirty_main"},
     )
     await SqlPlanRepository(db_session).save(plan)
     await db_session.commit()

@@ -1006,6 +1006,63 @@ async def test_verifier_routes_deploy_container_name_conflict_to_worker() -> Non
 
 
 @pytest.mark.asyncio
+async def test_verifier_routes_deploy_network_exists_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="deploy retry failed",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#83 finished with status failure; "
+                "failing stage workspace-ci/deploy exited 1; "
+                "+ docker network rm workspace-deploy 2>/dev/null || true\n"
+                "+ docker network create workspace-deploy\n"
+                "Error response from daemon: network with name workspace-deploy already exists"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert "docker network inspect <network>" in judge_result.criterion.spec[
+        "required_next_action"
+    ]
+    assert "docker network rm <network>" in judge_result.criterion.spec[
+        "required_next_action"
+    ]
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-network-already-exists"
+
+
+@pytest.mark.asyncio
 async def test_verifier_routes_postgres_sidecar_env_failure_to_worker() -> None:
     judge = _FakeVerificationJudge(
         WorkspaceVerificationJudgeResult(
