@@ -144,6 +144,15 @@ class CmdCriterionRunner(CriterionRunner):
         self, criterion: AcceptanceCriterion, ctx: VerificationContext
     ) -> CriterionResult:
         cmd = str(criterion.spec.get("cmd", ""))
+        structured_evidence = _structured_success_evidence_for_command(ctx, cmd)
+        if structured_evidence is not None:
+            return CriterionResult(
+                criterion=criterion,
+                passed=True,
+                confidence=0.95,
+                message="structured verification evidence recorded for cmd",
+                evidence=(EvidenceRef(kind="verification", ref=structured_evidence, note=cmd),),
+            )
         run_cmd = _command_for_active_worktree(cmd, ctx)
         max_exit = int(criterion.spec.get("max_exit", 0))
         timeout = int(criterion.spec.get("timeout", self._default_timeout))
@@ -1411,6 +1420,34 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             feedback_items=(unhealthy_container_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
+    docker_build_stage_feedback = _drone_docker_build_stage_failure_feedback(results)
+    if docker_build_stage_feedback is not None:
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone failed in a docker-build stage while building a repository image. "
+                "This requires CI/Dockerfile or application build changes in the worktree, "
+                "not blind pipeline retries. "
+                f"Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_build_stage_failed",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Inspect the failing Drone docker-build stage logs, reproduce the same docker "
+                "build or app build locally in the attempt worktree, and fix the repository build "
+                "path. For frontend stages, run the package build outside Docker when useful, then "
+                "repair Dockerfile/.dockerignore/package scripts or build-time environment. "
+                "Preserve the docker deploy contract for every service, commit, and rerun Drone."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(docker_build_stage_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
     docker_build_feedback = _drone_docker_build_timeout_feedback(results)
     if docker_build_feedback is not None:
         return WorkspaceVerificationJudgeResult(
@@ -2035,6 +2072,71 @@ def _drone_docker_build_timeout_feedback(
     )
 
 
+def _drone_docker_build_stage_failure_feedback(
+    results: list[CriterionResult],
+) -> WorkspaceVerificationFeedbackItem | None:
+    text = "\n".join(result.message for result in results if result.message).lower()
+    if not ("failing stage" in text and "docker-build" in text):
+        return None
+    has_build_failure = any(
+        marker in text
+        for marker in (
+            "finished with status failure",
+            "status failure",
+            "exited 1",
+            "exit code: 1",
+            "failed to solve",
+            "executor failed running",
+        )
+    )
+    if not has_build_failure:
+        return None
+    retryable_external_registry = any(
+        marker in text
+        for marker in (
+            "failed to connect to registry-1.docker.io",
+            "tls handshake timeout",
+            "i/o timeout",
+            "temporary failure",
+            "connection reset by peer",
+        )
+    )
+    app_or_image_build_signal = any(
+        marker in text
+        for marker in (
+            "npm run build",
+            "yarn build",
+            "pnpm build",
+            "next build",
+            "next.js",
+            "failed to compile",
+            "typescript",
+            "dockerfile",
+            "docker build",
+            "failed to solve",
+            "executor failed running",
+        )
+    )
+    if retryable_external_registry and not app_or_image_build_signal:
+        return None
+    return WorkspaceVerificationFeedbackItem(
+        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+        feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+        summary=(
+            "A Drone `docker-build*` stage failed while building a repository image. The worker "
+            "must inspect the stage logs, reproduce the failing Docker/app build, and repair the "
+            "worktree build path instead of rerunning the same pipeline unchanged."
+        ),
+        evidence_refs=(
+            "drone_error:docker_build_stage_failed",
+            "drone_stage:docker-build",
+        ),
+        failure_signature="drone-docker-build-stage-failed",
+    )
+
+
 def _judge_satisfied_required_guard(
     result: WorkspaceVerificationJudgeResult,
     name: str,
@@ -2210,8 +2312,8 @@ def _terminal_worker_report_results(ctx: VerificationContext) -> tuple[Criterion
 def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
     """Require structured evidence for each required harness preflight check."""
 
-    required_check_ids = _required_preflight_check_ids(ctx)
-    if not required_check_ids:
+    required_checks = _required_preflight_checks(ctx)
+    if not required_checks:
         return None
 
     criterion = AcceptanceCriterion(
@@ -2221,11 +2323,19 @@ def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | Non
         description="required preflight checks must be evidenced before durable verification",
     )
     evidence = _structured_verification_evidence(ctx)
-    missing = [
-        check_id
-        for check_id in required_check_ids
-        if not _has_structured_verification_ref(evidence, f"preflight:{check_id}")
-    ]
+    missing: list[str] = []
+    recorded_refs: list[str] = []
+    for check in required_checks:
+        check_id = str(check["check_id"])
+        preflight_ref = f"preflight:{check_id}"
+        if _has_structured_verification_ref(evidence, preflight_ref):
+            recorded_refs.append(preflight_ref)
+            continue
+        command_evidence = _structured_success_evidence_for_preflight_check(ctx, check)
+        if command_evidence is not None:
+            recorded_refs.append(command_evidence)
+            continue
+        missing.append(check_id)
     if missing:
         return CriterionResult(
             criterion=criterion,
@@ -2239,10 +2349,27 @@ def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | Non
         confidence=1.0,
         message="preflight evidence recorded",
         evidence=tuple(
-            EvidenceRef(kind="verification", ref=f"preflight:{check_id}")
-            for check_id in required_check_ids
+            EvidenceRef(kind="verification", ref=ref)
+            for ref in recorded_refs
         ),
     )
+
+
+def _required_preflight_checks(ctx: VerificationContext) -> list[dict[str, object]]:
+    raw_checks = ctx.node.metadata.get("preflight_checks")
+    if not isinstance(raw_checks, list):
+        return []
+    checks: list[dict[str, object]] = []
+    for raw_check in raw_checks:
+        if not isinstance(raw_check, dict):
+            continue
+        check_id = raw_check.get("check_id")
+        if not isinstance(check_id, str) or not check_id:
+            continue
+        if raw_check.get("required", True) is False:
+            continue
+        checks.append(raw_check)
+    return checks
 
 
 def _feature_checkpoint_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
@@ -2808,23 +2935,6 @@ def _required_test_commands(ctx: VerificationContext) -> list[str]:
     return list(dict.fromkeys(commands))
 
 
-def _required_preflight_check_ids(ctx: VerificationContext) -> list[str]:
-    raw_checks = ctx.node.metadata.get("preflight_checks")
-    if not isinstance(raw_checks, list):
-        return []
-    check_ids: list[str] = []
-    for raw_check in raw_checks:
-        if not isinstance(raw_check, dict):
-            continue
-        check_id = raw_check.get("check_id")
-        if not isinstance(check_id, str) or not check_id:
-            continue
-        if raw_check.get("required", True) is False:
-            continue
-        check_ids.append(check_id)
-    return list(dict.fromkeys(check_ids))
-
-
 def _structured_verification_evidence(ctx: VerificationContext) -> set[str]:
     evidence: set[str] = set()
     for key in (
@@ -2837,6 +2947,70 @@ def _structured_verification_evidence(ctx: VerificationContext) -> set[str]:
             continue
         evidence.update(str(value) for value in raw_values if value)
     return evidence
+
+
+def _structured_success_evidence_for_preflight_check(
+    ctx: VerificationContext,
+    check: Mapping[str, object],
+) -> str | None:
+    kind = str(check.get("kind") or "").strip()
+    command = str(check.get("command") or "").strip()
+    if kind == "test_command":
+        return _first_structured_verification_with_prefix(ctx, ("test_run:",))
+    if kind == "init_command":
+        return _structured_success_evidence_for_command(ctx, command)
+    return None
+
+
+def _structured_success_evidence_for_command(
+    ctx: VerificationContext,
+    command: str,
+) -> str | None:
+    prefixes = _structured_success_prefixes_for_command(command)
+    if not prefixes:
+        return None
+    return _first_structured_verification_with_prefix(ctx, prefixes)
+
+
+def _first_structured_verification_with_prefix(
+    ctx: VerificationContext,
+    prefixes: tuple[str, ...],
+) -> str | None:
+    for value in sorted(_structured_verification_evidence(ctx)):
+        if value.startswith(prefixes):
+            return value
+    return None
+
+
+def _structured_success_prefixes_for_command(command: str) -> tuple[str, ...]:
+    normalized = command.strip().casefold()
+    if not normalized:
+        return ()
+    prefixes: list[str] = []
+    if _looks_like_test_command(normalized):
+        prefixes.append("test_run:")
+    if "lint" in normalized:
+        prefixes.append("lint_run:")
+    if "build" in normalized:
+        prefixes.append("build_run:")
+    return tuple(dict.fromkeys(prefixes))
+
+
+def _looks_like_test_command(command: str) -> bool:
+    return any(
+        marker in command
+        for marker in (
+            " test",
+            "test ",
+            "npm test",
+            "yarn test",
+            "pnpm test",
+            "pytest",
+            "jest",
+            "vitest",
+            "playwright test",
+        )
+    )
 
 
 def _pipeline_evidence_values(ctx: VerificationContext) -> set[str]:

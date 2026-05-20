@@ -1276,6 +1276,43 @@ class TestVerifier:
         assert rep.passed
         assert any(result.message == "preflight evidence recorded" for result in rep.results)
 
+    async def test_verifier_accepts_test_run_as_test_command_preflight_evidence(self) -> None:
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            metadata={
+                "preflight_checks": [
+                    {"check_id": "read-progress", "kind": "read_progress", "required": True},
+                    {"check_id": "git-status", "kind": "git_status", "required": True},
+                    {
+                        "check_id": "test-command-1",
+                        "kind": "test_command",
+                        "command": "npm test",
+                        "required": True,
+                    },
+                ]
+            }
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            artifacts={
+                "last_worker_report_type": "completed",
+                "execution_verifications": [
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "test_run:cd backend && jest --no-coverage -> 120 passed",
+                ],
+            },
+        )
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert any(
+            result.message == "preflight evidence recorded"
+            and any(evidence.ref.startswith("test_run:") for evidence in result.evidence)
+            for result in rep.results
+        )
+
     async def test_verifier_accepts_preflight_evidence_with_details(self) -> None:
         verifier = AcceptanceCriterionVerifier()
         node = _leaf_node(
@@ -1301,6 +1338,101 @@ class TestVerifier:
 
         assert rep.passed
         assert any(result.message == "preflight evidence recorded" for result in rep.results)
+
+    async def test_cmd_criterion_accepts_current_structured_test_run_without_rerun(self) -> None:
+        class _Sandbox:
+            calls = 0
+
+            async def run_command(self, command: str, *, timeout: int = 60) -> dict[str, Any]:
+                _ = command, timeout
+                self.calls += 1
+                return {"exit_code": 1, "stdout": "", "stderr": "should not rerun"}
+
+        sandbox = _Sandbox()
+        verifier = AcceptanceCriterionVerifier()
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.CMD,
+                    spec={"cmd": "npm test", "max_exit": 0, "timeout": 180},
+                    required=True,
+                    description="command succeeds: npm test",
+                ),
+            )
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            sandbox=sandbox,
+            artifacts={
+                "execution_verifications": [
+                    "test_run:cd frontend && jest --no-coverage -> 57 passed"
+                ],
+            },
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert rep.passed
+        assert sandbox.calls == 0
+        assert any(
+            result.message == "structured verification evidence recorded for cmd"
+            for result in rep.results
+        )
+
+    async def test_verifier_routes_drone_docker_build_exit_one_to_worker_without_judge(
+        self,
+    ) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="should not be called for deterministic Drone build failures",
+                confidence=0.99,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(
+            criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.CI_PIPELINE,
+                    required=True,
+                    description="Drone pipeline must pass",
+                ),
+            ),
+            metadata={
+                "pipeline_required": True,
+                "pipeline_status": "failed",
+                "pipeline_failure_summary": (
+                    "Drone build s1366560/my-evo#88 finished with status failure; "
+                    "failing stage workspace-ci/docker-build-frontend exited 1; "
+                    "Next.js stack trace: npm run build failed in Dockerfile"
+                ),
+            },
+        )
+        ctx = VerificationContext(
+            workspace_id="ws",
+            node=node,
+            attempt_id="attempt-1",
+            artifacts={"candidate_artifacts": ["commit_ref:abc1234"]},
+        )
+
+        rep = await verifier.verify(ctx)
+
+        assert not rep.passed
+        assert judge.requests == []
+        judge_result = next(
+            result
+            for result in rep.results
+            if result.criterion.spec.get("name") == "workspace_verification_judge"
+        )
+        spec = judge_result.criterion.spec
+        assert spec["judge_verdict"] == "needs_rework"
+        assert "drone_docker_build_stage_failed" in spec["failed_criteria"]
+        assert spec["feedback_items"][0]["target_layer"] == "worker"
+        assert (
+            spec["feedback_items"][0]["failure_signature"]
+            == "drone-docker-build-stage-failed"
+        )
 
     async def test_verifier_accepts_preflight_evidence_with_human_summary_separator(
         self,
