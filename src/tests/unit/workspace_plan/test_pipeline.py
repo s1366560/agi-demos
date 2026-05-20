@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from typing import Any
 
@@ -74,6 +75,23 @@ class _FakeVerificationJudge:
     ) -> WorkspaceVerificationJudgeResult:
         self.requests.append(request)
         return self.result
+
+
+class _SlowVerificationJudge:
+    def __init__(self) -> None:
+        self.requests: list[WorkspaceVerificationJudgeRequest] = []
+
+    async def judge(
+        self,
+        request: WorkspaceVerificationJudgeRequest,
+    ) -> WorkspaceVerificationJudgeResult:
+        self.requests.append(request)
+        await asyncio.sleep(10)
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+            rationale="late success",
+            confidence=1.0,
+        )
 
 
 def _node(*, metadata: dict[str, object]) -> PlanNode:
@@ -429,6 +447,41 @@ async def test_verifier_hides_stale_pipeline_metadata_from_judge() -> None:
     assert judge.requests
     assert "pipeline_status" not in judge.requests[0].task_metadata
     assert "pipeline_last_summary" not in judge.requests[0].task_metadata
+
+
+@pytest.mark.asyncio
+async def test_verifier_times_out_slow_verification_judge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS", "0.01")
+    judge = _SlowVerificationJudge()
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(metadata={"iteration_phase": "implement"})
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-2",
+            stdout="worker completed",
+            artifacts={
+                "candidate_artifacts": ["commit_ref:6490da4"],
+                "candidate_verifications": ["worker_report:completed"],
+            },
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "retryable_infrastructure_failure"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert judge.requests
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "retry_infrastructure"
+    assert "timed out after 0.01s" in (judge_result.message or "")
+    assert feedback["target_layer"] == "runtime"
+    assert feedback["recommended_action"] == "retry_infra"
+    assert feedback["failure_signature"] == "workspace_verification_judge_timeout"
 
 
 @pytest.mark.asyncio

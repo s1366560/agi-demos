@@ -52,6 +52,8 @@ from src.infrastructure.agent.workspace_plan.worktree_manager import is_generate
 
 logger = logging.getLogger(__name__)
 
+_VERIFICATION_JUDGE_TIMEOUT_SECONDS_ENV = "WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS"
+_DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS = 180.0
 _CHANGE_EVIDENCE_PHASES = {"implement", "test", "deploy"}
 _NO_OUTPUT_SENTINELS = {
     "(no output)",
@@ -699,6 +701,55 @@ class AcceptanceCriterionVerifier(VerifierPort):
         )
 
 
+def _verification_judge_timeout_seconds() -> float:
+    raw = os.getenv(_VERIFICATION_JUDGE_TIMEOUT_SECONDS_ENV)
+    if not raw:
+        return _DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning(
+            "invalid %s=%r; using default %.0fs",
+            _VERIFICATION_JUDGE_TIMEOUT_SECONDS_ENV,
+            raw,
+            _DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS,
+        )
+        return _DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS
+    if value <= 0:
+        logger.warning(
+            "invalid %s=%r; using default %.0fs",
+            _VERIFICATION_JUDGE_TIMEOUT_SECONDS_ENV,
+            raw,
+            _DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS,
+        )
+        return _DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS
+    return max(0.01, value)
+
+
+def _verification_judge_runtime_failure_result(
+    *,
+    message: str,
+    failure_signature: str,
+) -> WorkspaceVerificationJudgeResult:
+    return WorkspaceVerificationJudgeResult(
+        verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+        rationale=message,
+        failed_criteria=("workspace_verification_judge",),
+        required_next_action="retry verification judge",
+        feedback_items=(
+            WorkspaceVerificationFeedbackItem(
+                target_layer=WorkspaceVerificationFeedbackTargetLayer.RUNTIME,
+                feedback_kind=WorkspaceVerificationFeedbackKind.RUNTIME_INFRA_FAILURE,
+                severity=WorkspaceVerificationFeedbackSeverity.WARNING,
+                recommended_action=WorkspaceVerificationRecommendedAction.RETRY_INFRA,
+                summary=message,
+                failure_signature=failure_signature,
+            ),
+        ),
+        confidence=0.5,
+    )
+
+
 async def _apply_verification_judge(
     judge: WorkspaceVerificationJudgePort,
     *,
@@ -713,26 +764,22 @@ async def _apply_verification_judge(
         ]
 
     request = _build_judge_request(ctx, results)
+    timeout_seconds = _verification_judge_timeout_seconds()
     try:
-        judge_result = await judge.judge(request)
+        judge_result = await asyncio.wait_for(judge.judge(request), timeout=timeout_seconds)
+    except TimeoutError:
+        message = f"workspace verification judge timed out after {timeout_seconds:g}s"
+        logger.warning(message)
+        judge_result = _verification_judge_runtime_failure_result(
+            message=message,
+            failure_signature="workspace_verification_judge_timeout",
+        )
     except Exception as exc:
-        logger.warning("workspace verification judge failed: %s", exc)
-        judge_result = WorkspaceVerificationJudgeResult(
-            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
-            rationale=f"workspace verification judge failed: {exc}",
-            failed_criteria=("workspace_verification_judge",),
-            required_next_action="retry verification judge",
-            feedback_items=(
-                WorkspaceVerificationFeedbackItem(
-                    target_layer=WorkspaceVerificationFeedbackTargetLayer.RUNTIME,
-                    feedback_kind=WorkspaceVerificationFeedbackKind.RUNTIME_INFRA_FAILURE,
-                    severity=WorkspaceVerificationFeedbackSeverity.WARNING,
-                    recommended_action=WorkspaceVerificationRecommendedAction.RETRY_INFRA,
-                    summary=f"workspace verification judge failed: {exc}",
-                    failure_signature="workspace_verification_judge_failed",
-                ),
-            ),
-            confidence=0.5,
+        message = f"workspace verification judge failed: {exc}"
+        logger.warning(message)
+        judge_result = _verification_judge_runtime_failure_result(
+            message=message,
+            failure_signature="workspace_verification_judge_failed",
         )
     judge_result = _coerce_judge_result_for_required_context(ctx, judge_result, results)
     return [
