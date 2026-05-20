@@ -29,6 +29,7 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlanModel,
     PlanNodeModel,
+    WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
@@ -75,6 +76,10 @@ _ROOT_PLAN_DEDUP_STATUSES = (
     PlanStatus.DRAFT.value,
     PlanStatus.COMPLETED.value,
 )
+_ROOT_PLAN_RESUMABLE_STATUSES = (
+    PlanStatus.ACTIVE.value,
+    PlanStatus.DRAFT.value,
+)
 
 
 def set_orchestrator_singleton_for_testing(orchestrator: WorkspaceOrchestrator | None) -> None:
@@ -119,16 +124,30 @@ async def kickoff_v2_plan(
                 workspace_id=workspace_id,
                 root_task_id=root_task_id,
             )
-            if await _completed_plan_exists_for_root_task(
+            existing_plan = await _root_plan_for_kickoff_dedup(
                 db,
                 workspace_id=workspace_id,
                 root_task_id=root_task_id,
-            ):
+            )
+            if existing_plan is not None:
+                plan_id, plan_status = existing_plan
+                if plan_status in _ROOT_PLAN_RESUMABLE_STATUSES:
+                    _ = await _enqueue_existing_root_plan_supervisor_tick(
+                        db,
+                        plan_id=plan_id,
+                        workspace_id=workspace_id,
+                        root_task_id=root_task_id,
+                        actor_user_id=created_by,
+                        leader_agent_id=leader_agent_id,
+                    )
+                    await db.commit()
                 logger.info(
                     "v2_bridge: skipping duplicate kickoff for existing root plan",
                     extra={
                         "workspace_id": workspace_id,
                         "root_task_id": root_task_id,
+                        "plan_id": plan_id,
+                        "plan_status": plan_status,
                     },
                 )
                 return True
@@ -191,14 +210,14 @@ async def kickoff_v2_plan(
         return False
 
 
-async def _completed_plan_exists_for_root_task(
+async def _root_plan_for_kickoff_dedup(
     db: AsyncSession,
     *,
     workspace_id: str,
     root_task_id: str | None,
-) -> bool:
+) -> tuple[str, str] | None:
     if not root_task_id:
-        return False
+        return None
 
     plan_ids = await _root_task_plan_ids(
         db,
@@ -206,16 +225,55 @@ async def _completed_plan_exists_for_root_task(
         root_task_id=root_task_id,
     )
     if not plan_ids:
-        return False
+        return None
 
     existing_stmt = (
-        select(PlanModel.id)
+        select(PlanModel.id, PlanModel.status)
         .where(PlanModel.workspace_id == workspace_id)
         .where(PlanModel.id.in_(plan_ids))
         .where(PlanModel.status.in_(_ROOT_PLAN_DEDUP_STATUSES))
         .limit(1)
     )
-    return (await db.execute(existing_stmt)).scalar_one_or_none() is not None
+    row = (await db.execute(existing_stmt)).one_or_none()
+    if row is None:
+        return None
+    plan_id, status = row
+    return str(plan_id), str(status)
+
+
+async def _enqueue_existing_root_plan_supervisor_tick(
+    db: AsyncSession,
+    *,
+    plan_id: str,
+    workspace_id: str,
+    root_task_id: str | None,
+    actor_user_id: str,
+    leader_agent_id: str | None,
+) -> bool:
+    pending_stmt = (
+        select(WorkspacePlanOutboxModel.id)
+        .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+        .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+        .where(WorkspacePlanOutboxModel.event_type == SUPERVISOR_TICK_EVENT)
+        .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
+        .limit(1)
+    )
+    if (await db.execute(pending_stmt)).scalar_one_or_none() is not None:
+        return False
+
+    _ = await SqlWorkspacePlanOutboxRepository(db).enqueue(
+        plan_id=plan_id,
+        workspace_id=workspace_id,
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={
+            "workspace_id": workspace_id,
+            "root_task_id": root_task_id,
+            "actor_user_id": actor_user_id,
+            "leader_agent_id": leader_agent_id,
+        },
+        metadata={"source": "v2_bridge", "resume_existing_root_plan": True},
+    )
+    return True
 
 
 async def _root_task_plan_ids(

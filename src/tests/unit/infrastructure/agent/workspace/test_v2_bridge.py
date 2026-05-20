@@ -819,7 +819,19 @@ async def test_kickoff_skips_duplicate_plan_for_active_root(
     )
     assert [existing_plan.id for existing_plan in plans] == [plan.id]
     outbox_items = (await db_session.execute(select(WorkspacePlanOutboxModel))).scalars().all()
-    assert outbox_items == []
+    assert len(outbox_items) == 1
+    assert outbox_items[0].plan_id == plan.id
+    assert outbox_items[0].event_type == SUPERVISOR_TICK_EVENT
+    assert outbox_items[0].payload_json == {
+        "workspace_id": "ws-abc",
+        "root_task_id": "root-bridge-1",
+        "actor_user_id": "bridge-user-1",
+        "leader_agent_id": None,
+    }
+    assert outbox_items[0].metadata_json == {
+        "source": "v2_bridge",
+        "resume_existing_root_plan": True,
+    }
 
 
 async def test_kickoff_uses_workspace_decomposer_to_create_dag(

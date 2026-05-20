@@ -296,6 +296,9 @@ class TestWorkerReportHook:
         kickoff_idx = source.index("kickoff_v2_plan")
         assert auto_complete_idx < kickoff_idx
         assert '"reason": "root_auto_complete_pending"' in source
+        ready_idx = source.index('remediation_status == "ready_for_completion"')
+        durable_gate_idx = source.index("_durable_plan_allows_root_auto_complete", ready_idx)
+        assert ready_idx < durable_gate_idx < kickoff_idx
 
     def test_auto_complete_reconciles_durable_plan_before_commit(self) -> None:
         """Root completion must reconcile the V2 projection before publish/commit."""

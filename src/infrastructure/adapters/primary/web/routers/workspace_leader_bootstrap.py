@@ -745,7 +745,13 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
         if auto_outcome is not None:
             return auto_outcome
 
-    if remediation_status == "ready_for_completion":
+    if (
+        remediation_status == "ready_for_completion"
+        and await _durable_plan_allows_root_auto_complete(
+            db=db,
+            workspace_id=workspace_id,
+        )
+    ):
         await _mark_cooldown(workspace_id, root_task.id)
         return {
             "triggered": False,
