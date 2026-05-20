@@ -454,7 +454,13 @@ async def test_verifier_times_out_slow_verification_judge(monkeypatch: pytest.Mo
     monkeypatch.setenv("WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS", "0.01")
     judge = _SlowVerificationJudge()
     verifier = AcceptanceCriterionVerifier(verification_judge=judge)
-    node = _node(metadata={"iteration_phase": "implement"})
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "source_publish_commit_ref": "6490da4",
+        }
+    )
 
     report = await verifier.verify(
         VerificationContext(
@@ -482,6 +488,7 @@ async def test_verifier_times_out_slow_verification_judge(monkeypatch: pytest.Mo
     assert feedback["target_layer"] == "runtime"
     assert feedback["recommended_action"] == "retry_infra"
     assert feedback["failure_signature"] == "workspace_verification_judge_timeout"
+    assert _should_request_pipeline_from_report(node, report)
 
 
 @pytest.mark.asyncio

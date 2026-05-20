@@ -2286,15 +2286,22 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
         for result in failed_required
         if result.criterion.kind not in _PIPELINE_CRITERION_KINDS
     ]
+    pipeline_missing_evidence = _pipeline_failures_are_missing_evidence(pipeline_failures)
     pipeline_runtime_retryable = _pipeline_failures_are_runtime_retryable(pipeline_failures)
+    pipeline_can_request_run = pipeline_missing_evidence or pipeline_runtime_retryable
     return all(
         _is_pipeline_only_judge_failure(result)
         or _is_pipeline_trigger_infrastructure_failure(result)
-        or (
-            pipeline_runtime_retryable
-            and _is_verification_judge_inconclusive_failure(result)
-        )
+        or (pipeline_can_request_run and _is_verification_judge_inconclusive_failure(result))
         for result in non_pipeline_failures
+    )
+
+
+def _pipeline_failures_are_missing_evidence(results: list[CriterionResult]) -> bool:
+    return any(
+        "missing harness-native ci pipeline evidence" in str(result.message or "").lower()
+        or "missing preview deployment health evidence" in str(result.message or "").lower()
+        for result in results
     )
 
 
@@ -2401,10 +2408,7 @@ def _feedback_items_require_worker_retry(feedback_items: list[object]) -> bool:
             or recommended_action == "retry_worker"
         ):
             has_worker_retry = True
-        if (
-            feedback_kind == "stale_or_invalid_task_target"
-            or recommended_action == "obsolete_node"
-        ):
+        if feedback_kind == "stale_or_invalid_task_target" or recommended_action == "obsolete_node":
             has_stale_or_obsolete_disposition = True
     return has_worker_retry and not has_stale_or_obsolete_disposition
 
