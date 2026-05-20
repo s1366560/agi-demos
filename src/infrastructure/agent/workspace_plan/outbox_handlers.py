@@ -358,6 +358,17 @@ def make_supervisor_tick_handler(
             report = await orchestrator.tick_once(workspace_id)
             if report.errors:
                 raise RuntimeError("; ".join(report.errors))
+            if item.plan_id and await _project_done_idle_accepted_attempts_after_tick(
+                session=session,
+                plan_id=item.plan_id,
+                workspace_id=workspace_id,
+            ):
+                await _enqueue_followup_supervisor_tick_after_terminal_reconcile(
+                    session=session,
+                    item=item,
+                    workspace_id=workspace_id,
+                    payload=payload,
+                )
             return report
 
         _ = await WorkspaceRunController(session).tick(
@@ -370,6 +381,121 @@ def make_supervisor_tick_handler(
         )
 
     return _handle
+
+
+async def _project_done_idle_accepted_attempts_after_tick(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> bool:
+    """Project freshly verified terminal attempts without touching new dispatches."""
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return False
+
+    now = datetime.now(UTC)
+    changed = False
+    for node in list(plan.nodes.values()):
+        if not _node_is_done_idle_with_attempt(node) or not node.current_attempt_id:
+            continue
+        attempt = await _load_plan_attempt(session, node.current_attempt_id)
+        if attempt is None or _attempt_status_value(attempt) != "accepted":
+            continue
+        if not _accepted_attempt_matches_node_expected_commit(node, attempt):
+            continue
+        if (
+            node.metadata.get("terminal_attempt_status") == "accepted"
+            and node.metadata.get("last_verification_attempt_id") == attempt.id
+            and await _accepted_attempt_projection_complete_for_node(
+                session=session,
+                workspace_id=workspace_id,
+                node=node,
+                attempt=attempt,
+            )
+        ):
+            continue
+        summary = str(
+            attempt.leader_feedback or attempt.candidate_summary or "accepted terminal attempt"
+        )
+        integration_metadata = await _project_accepted_terminal_attempt_to_task(
+            session=session,
+            workspace_id=workspace_id,
+            node=node,
+            attempt=attempt,
+            summary=summary,
+            now=now,
+        )
+        plan.replace_node(
+            replace(
+                node,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                current_attempt_id=attempt.id,
+                metadata={
+                    **_terminal_retry_metadata_cleared(node.metadata),
+                    "terminal_attempt_status": "accepted",
+                    "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
+                    "last_verification_summary": summary,
+                    "last_verification_passed": True,
+                    "last_verification_hard_fail": False,
+                    "last_verification_attempt_id": attempt.id,
+                    "last_verification_ran_at": now.isoformat().replace("+00:00", "Z"),
+                    **_accepted_attempt_evidence_metadata(attempt),
+                    **integration_metadata,
+                },
+                updated_at=now,
+            )
+        )
+        changed = True
+
+    if changed:
+        await repo.save(plan)
+    return changed
+
+
+async def _enqueue_followup_supervisor_tick_after_terminal_reconcile(
+    *,
+    session: AsyncSession,
+    item: WorkspacePlanOutboxModel,
+    workspace_id: str,
+    payload: Mapping[str, Any],
+) -> None:
+    if not item.plan_id:
+        return
+    existing = await session.execute(
+        select(WorkspacePlanOutboxModel.id)
+        .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+        .where(WorkspacePlanOutboxModel.plan_id == item.plan_id)
+        .where(WorkspacePlanOutboxModel.event_type == SUPERVISOR_TICK_EVENT)
+        .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
+        .where(WorkspacePlanOutboxModel.id != item.id)
+        .limit(1)
+    )
+    if existing.scalar_one_or_none() is not None:
+        return
+
+    followup_payload: dict[str, Any] = {"workspace_id": workspace_id}
+    for key in ("leader_agent_id", "root_task_id"):
+        value = _payload_string(payload, key)
+        if value:
+            followup_payload[key] = value
+    if _payload_string(payload, "controller_reason"):
+        followup_payload["controller_reason"] = "post_terminal_attempt_reconcile"
+
+    _ = await SqlWorkspacePlanOutboxRepository(session).enqueue(
+        plan_id=item.plan_id,
+        workspace_id=workspace_id,
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload=followup_payload,
+        metadata={
+            "source": "supervisor_tick",
+            "reason": "post_terminal_attempt_reconcile",
+            "previous_outbox_id": item.id,
+        },
+    )
 
 
 async def _run_controller_action(
@@ -4064,9 +4190,7 @@ async def _merge_remote_branch_with_local_preference(
 
 
 def _is_non_fast_forward_push_rejection(result: Mapping[str, object]) -> bool:
-    text = "\n".join(
-        str(result.get(key) or "") for key in ("stdout", "stderr", "reason")
-    ).lower()
+    text = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr", "reason")).lower()
     return (
         "non-fast-forward" in text
         or "fetch first" in text
@@ -4784,7 +4908,9 @@ def _pipeline_commit_ref(
     feature = node.feature_checkpoint
     if feature is not None and feature.commit_ref:
         return feature.commit_ref
-    return _first_prefixed_ref(_merge_string_values(metadata.get("evidence_refs"), []), "commit_ref:")
+    return _first_prefixed_ref(
+        _merge_string_values(metadata.get("evidence_refs"), []), "commit_ref:"
+    )
 
 
 def _current_attempt_candidate_commit_ref(
@@ -4820,7 +4946,11 @@ def _current_attempt_report_commit_ref(
     report_attempt_id = str(metadata.get("last_worker_report_attempt_id") or "").strip()
     if current_attempt_id and report_attempt_id and report_attempt_id != current_attempt_id:
         return None
-    if current_attempt_id and not report_attempt_id and node.execution is not TaskExecution.REPORTED:
+    if (
+        current_attempt_id
+        and not report_attempt_id
+        and node.execution is not TaskExecution.REPORTED
+    ):
         return None
     refs: list[str] = []
     for key in (
@@ -5681,9 +5811,8 @@ def _extract_task_evidence(
         "last_attempt_id"
     )
     report_attempt_id_text = report_attempt_id if isinstance(report_attempt_id, str) else None
-    report_belongs_to_current_attempt = (
-        not current_attempt_id
-        or (report_attempt_id_text is not None and report_attempt_id_text == current_attempt_id)
+    report_belongs_to_current_attempt = not current_attempt_id or (
+        report_attempt_id_text is not None and report_attempt_id_text == current_attempt_id
     )
     summary = metadata.get(LAST_WORKER_REPORT_SUMMARY) if report_belongs_to_current_attempt else ""
     stdout = summary if isinstance(summary, str) else json.dumps(summary or "", ensure_ascii=False)

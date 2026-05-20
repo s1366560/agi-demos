@@ -36,6 +36,7 @@ from src.domain.model.workspace_plan import (
     TaskIntent,
 )
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
+from src.domain.ports.services.workspace_supervisor_port import TickReport
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentDefinitionModel,
     Base,
@@ -2623,7 +2624,9 @@ def test_apply_attempt_worktree_checkpoint_prefers_published_pipeline_ref() -> N
     assert node.feature_checkpoint.base_ref == "a068cb8"
 
 
-def test_apply_attempt_worktree_checkpoint_uses_failed_pipeline_source_without_publish_ref() -> None:
+def test_apply_attempt_worktree_checkpoint_uses_failed_pipeline_source_without_publish_ref() -> (
+    None
+):
     node = PlanNode(
         id="node-1",
         plan_id="plan-1",
@@ -3599,6 +3602,146 @@ async def test_supervisor_tick_reconciles_reported_attempt_before_verification(
     )
     assert "auto_reported_attempt_reconciled" in events
     assert "verification_completed" in events
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_enqueues_followup_after_post_terminal_reconcile(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    plan.add_node(
+        PlanNode(
+            id="dependent-node",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            title="Dependent task",
+            depends_on=frozenset({leaf.node_id}),
+            recommended_capabilities=(Capability(name="codegen"),),
+        )
+    )
+    db_session.add(
+        WorkspaceTaskModel(
+            id="fresh-node-task",
+            workspace_id="workspace-1",
+            title="Fresh verified node",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="fresh-accepted-attempt",
+            workspace_task_id="fresh-node-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="accepted",
+            conversation_id="fresh-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="freshly verified by durable verifier",
+            candidate_verifications_json=[
+                "preflight:read-progress",
+                "preflight:git-status",
+                "commit_ref:abc1234",
+            ],
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1", "root_task_id": "root-task-1"},
+    )
+    await db_session.commit()
+
+    class FreshVerificationOrchestrator:
+        async def tick_once(self, workspace_id: str) -> TickReport:
+            loaded = await SqlPlanRepository(db_session).get(plan.id)
+            assert loaded is not None
+            node = loaded.nodes[leaf.node_id]
+            loaded.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.DONE,
+                    execution=TaskExecution.IDLE,
+                    current_attempt_id="fresh-accepted-attempt",
+                    workspace_task_id="fresh-node-task",
+                    metadata={
+                        **node.metadata,
+                        "last_verification_passed": True,
+                        "last_verification_summary": "verified (fresh)",
+                        "verified_commit_ref": "abc1234",
+                        ACTIVE_EXECUTION_ROOT: (
+                            "/workspace/.memstack/worktrees/fresh-accepted-attempt"
+                        ),
+                    },
+                )
+            )
+            await SqlPlanRepository(db_session).save(loaded)
+            return TickReport(workspace_id=workspace_id, nodes_completed=1)
+
+    monkeypatch.setattr(
+        outbox_handlers,
+        "build_sql_orchestrator",
+        lambda *_args, **_kwargs: FreshVerificationOrchestrator(),
+    )
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return []
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.nodes[leaf.node_id]
+    assert reconciled_leaf.metadata["terminal_attempt_status"] == "accepted"
+    assert reconciled_leaf.metadata["worktree_integration_status"] == "skipped"
+
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        "workspace-1",
+        limit=5,
+    )
+    followups = [
+        item
+        for item in outbox
+        if item.event_type == SUPERVISOR_TICK_EVENT
+        and item.status == "pending"
+        and item.metadata_json.get("reason") == "post_terminal_attempt_reconcile"
+    ]
+    assert len(followups) == 1
+    assert followups[0].payload_json["root_task_id"] == "root-task-1"
 
 
 @pytest.mark.asyncio
