@@ -1220,10 +1220,31 @@ def test_worktree_integration_command_keeps_source_dirty_blocking(
     assert (repo / "src/app.ts").read_text(encoding="utf-8") == "base\n"
 
 
-def test_drone_contract_suppresses_deploy_before_deploy_phase() -> None:
+def test_drone_contract_keeps_required_auto_deploy_before_deploy_phase() -> None:
     contract = PipelineContractSpec(
         provider=DRONE_PROVIDER,
         deploy=PipelineDeploySpec(enabled=True, mode="docker"),
+        provider_config={"repo": "octo/hello"},
+    )
+    node = PlanNode(
+        id="node-implement",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Implement feature",
+        metadata={"iteration_phase": "implement"},
+    )
+
+    scoped = outbox_handlers._pipeline_contract_for_node_phase(contract, node=node)
+
+    assert scoped.deploy is contract.deploy
+    assert "deploy_suppressed_for_phase" not in scoped.provider_config
+
+
+def test_drone_contract_suppresses_optional_deploy_before_deploy_phase() -> None:
+    contract = PipelineContractSpec(
+        provider=DRONE_PROVIDER,
+        deploy=PipelineDeploySpec(enabled=True, mode="docker", required=False),
         provider_config={"repo": "octo/hello"},
     )
     node = PlanNode(

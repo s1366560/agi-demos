@@ -4493,6 +4493,8 @@ def _pipeline_contract_for_node_phase(
 ) -> PipelineContractSpec:
     if contract.provider != DRONE_PROVIDER or contract.deploy is None:
         return contract
+    if contract.auto_deploy and contract.deploy.required:
+        return contract
     phase = _metadata_string(dict(node.metadata or {}).get("iteration_phase"))
     if phase in _DRONE_DEPLOY_PHASES:
         return contract
