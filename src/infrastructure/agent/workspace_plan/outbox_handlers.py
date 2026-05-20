@@ -4447,6 +4447,7 @@ def _pipeline_contract_for_workspace(
     contract = build_pipeline_contract_from_metadata(
         workspace_metadata=workspace_metadata,
         fallback_code_root=code_context.sandbox_code_root,
+        fallback_host_code_root=code_context.host_code_root,
     )
     return _workspace_scoped_pipeline_contract(contract, workspace_id=workspace_id)
 

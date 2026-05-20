@@ -1459,5 +1459,120 @@ def test_drone_contract_inherits_services_for_docker_deploy() -> None:
     assert contract.deploy.docker["deploy_services"][1]["container_port"] == 3000
 
 
+def test_drone_contract_infers_compose_services_when_agent_collapses_service(
+    tmp_path: Any,
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text(
+        """
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evomap-backend
+    ports:
+      - "${PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: evomap-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "services": [
+                    {
+                        "service_id": "my-evo-app",
+                        "name": "my-evo Application",
+                        "start_command": "docker run my-evo",
+                        "internal_port": 8080,
+                        "health_path": "/health",
+                    },
+                ],
+                "drone": {
+                    "repo": "octo/my-evo",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "docker": {"image": "localhost:5001/my-evo"},
+                    },
+                },
+            }
+        },
+        fallback_code_root="/workspace/my-evo",
+        fallback_host_code_root=tmp_path,
+    )
+
+    assert [service.service_id for service in contract.services] == ["backend", "frontend"]
+    assert contract.services[0].internal_port == 3001
+    assert contract.services[0].health_path == "/health"
+    assert contract.services[1].internal_port == 3000
+    assert contract.deploy is not None
+    assert [service["service_id"] for service in contract.deploy.docker["deploy_services"]] == [
+        "backend",
+        "frontend",
+    ]
+
+
+def test_drone_contract_augments_partial_docker_deploy_services() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "services": [
+                    {
+                        "service_id": "backend",
+                        "name": "Backend API",
+                        "start_command": "docker run backend",
+                        "internal_port": 8080,
+                    },
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend Web",
+                        "start_command": "docker run frontend",
+                        "internal_port": 3000,
+                    },
+                ],
+                "drone": {
+                    "repo": "octo/my-evo",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "docker": {
+                            "deploy_services": [
+                                {
+                                    "service_id": "backend",
+                                    "container_name": "evomap-backend",
+                                    "required": True,
+                                }
+                            ]
+                        },
+                    },
+                },
+            }
+        },
+        fallback_code_root="/workspace/my-evo",
+    )
+
+    assert contract.deploy is not None
+    assert [service["service_id"] for service in contract.deploy.docker["deploy_services"]] == [
+        "backend",
+        "frontend",
+    ]
+
+
 async def _noop() -> None:
     return None

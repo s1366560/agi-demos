@@ -13,7 +13,11 @@ import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
+
+import yaml
 
 SANDBOX_NATIVE_PROVIDER = "sandbox_native"
 SANDBOX_NATIVE_PROVIDER_ALIASES = frozenset({SANDBOX_NATIVE_PROVIDER, "memstack-sandbox"})
@@ -188,6 +192,7 @@ def build_pipeline_contract_from_metadata(
     *,
     workspace_metadata: dict[str, Any],
     fallback_code_root: str | None,
+    fallback_host_code_root: str | Path | None = None,
 ) -> PipelineContractSpec:
     """Normalize workspace metadata into a bounded sandbox-native contract."""
 
@@ -214,12 +219,14 @@ def build_pipeline_contract_from_metadata(
         "agent_proposal" if isinstance(config.get("agent_proposal"), dict) else "metadata"
     )
     contract_confidence = _confidence(config.get("contract_confidence"), fallback=1.0)
+    readable_code_root = _readable_code_root(fallback_host_code_root, code_root)
     services = _configured_service_specs(
         config,
         preview_port=preview_port,
         deploy_command=deploy_command,
         health_url=health_url,
         health_command=health_command,
+        code_root=readable_code_root,
     )
     provider_config = _provider_config(config, provider)
     deploy = _configured_deploy_spec(config, provider_config, services=services)
@@ -340,14 +347,41 @@ def _docker_deploy_config_with_services(
     *,
     services: list[PipelineServiceSpec],
 ) -> dict[str, Any]:
-    if docker.get("deploy_services") or docker.get("services") or not services:
+    if not services:
         return docker
     deploy_services = [
         _docker_deploy_service_from_pipeline_service(service)
         for service in services
         if _is_application_deploy_service(service)
     ]
-    if deploy_services:
+    if not deploy_services:
+        return docker
+
+    existing_key = "deploy_services" if isinstance(docker.get("deploy_services"), list) else None
+    if existing_key is None and isinstance(docker.get("services"), list):
+        existing_key = "services"
+    if existing_key is not None:
+        existing = [
+            dict(item) for item in docker.get(existing_key, []) if isinstance(item, Mapping)
+        ]
+        existing_ids = {
+            _safe_service_id(
+                _string(item.get("service_id") or item.get("id") or item.get("name"))
+                or f"service-{index}"
+            )
+            for index, item in enumerate(existing, start=1)
+        }
+        for service in deploy_services:
+            service_id = _safe_service_id(
+                _string(service.get("service_id") or service.get("id") or service.get("name")) or ""
+            )
+            if service_id and service_id not in existing_ids:
+                existing.append(service)
+                existing_ids.add(service_id)
+        docker[existing_key] = existing
+        return docker
+
+    if not docker.get("services"):
         docker["deploy_services"] = deploy_services
     return docker
 
@@ -540,6 +574,7 @@ def _configured_service_specs(
     deploy_command: str | None,
     health_url: str | None,
     health_command: str | None,
+    code_root: Path | None = None,
 ) -> list[PipelineServiceSpec]:
     raw_services = config.get("services")
     services: list[PipelineServiceSpec] = []
@@ -550,6 +585,9 @@ def _configured_service_specs(
             service = _service_spec_from_mapping(item, index=index)
             if service is not None:
                 services.append(service)
+    compose_services = _compose_application_service_specs(code_root)
+    if _should_prefer_compose_services(services, compose_services):
+        return _dedupe_services(compose_services)
     if services:
         return _dedupe_services(services)
 
@@ -568,6 +606,166 @@ def _configured_service_specs(
             )
         ]
     return []
+
+
+_COMPOSE_FILE_NAMES = (
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+)
+_INFRA_COMPOSE_SERVICE_IDS = frozenset(
+    {
+        "adminer",
+        "cache",
+        "database",
+        "db",
+        "drone",
+        "drone-ci",
+        "drone-runner",
+        "mailhog",
+        "minio",
+        "neo4j",
+        "nginx",
+        "pgadmin",
+        "postgres",
+        "postgresql",
+        "proxy",
+        "redis",
+    }
+)
+
+
+def _readable_code_root(*candidates: str | Path | None) -> Path | None:
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        path = Path(candidate)
+        if path.is_dir():
+            return path
+    return None
+
+
+def _compose_application_service_specs(code_root: Path | None) -> list[PipelineServiceSpec]:
+    if code_root is None:
+        return []
+    for file_name in _COMPOSE_FILE_NAMES:
+        compose_path = code_root / file_name
+        if not compose_path.is_file():
+            continue
+        try:
+            parsed = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return []
+        if not isinstance(parsed, Mapping):
+            return []
+        raw_services = parsed.get("services")
+        if not isinstance(raw_services, Mapping):
+            return []
+        services: list[PipelineServiceSpec] = []
+        for index, (service_id, raw_service) in enumerate(raw_services.items(), start=1):
+            if not isinstance(service_id, str) or not isinstance(raw_service, Mapping):
+                continue
+            service = _compose_service_spec(service_id, raw_service, index=index)
+            if service is not None:
+                services.append(service)
+        return services
+    return []
+
+
+def _compose_service_spec(
+    service_id: str,
+    raw_service: Mapping[str, Any],
+    *,
+    index: int,
+) -> PipelineServiceSpec | None:
+    safe_id = _safe_service_id(service_id)
+    if not _is_application_compose_service(safe_id, raw_service):
+        return None
+    port = _compose_internal_port(raw_service)
+    if port <= 0:
+        return None
+    return PipelineServiceSpec(
+        service_id=safe_id or f"service-{index}",
+        name=_string(raw_service.get("container_name")) or safe_id or f"service-{index}",
+        start_command=f"docker compose up -d {shlex.quote(service_id)}",
+        internal_port=port,
+        health_path=_compose_health_path(raw_service),
+        required=True,
+        auto_open=True,
+    )
+
+
+def _is_application_compose_service(
+    service_id: str,
+    raw_service: Mapping[str, Any],
+) -> bool:
+    normalized = service_id.lower()
+    if normalized in _INFRA_COMPOSE_SERVICE_IDS or normalized.startswith("drone-"):
+        return False
+    if normalized.endswith(("-db", "-redis", "-postgres", "-nginx", "-proxy")):
+        return False
+    return raw_service.get("build") is not None
+
+
+def _compose_internal_port(raw_service: Mapping[str, Any]) -> int:
+    raw_ports = raw_service.get("ports")
+    if isinstance(raw_ports, list):
+        for item in raw_ports:
+            port = _compose_port_target(item)
+            if port > 0:
+                return port
+    raw_expose = raw_service.get("expose")
+    if isinstance(raw_expose, list):
+        for item in raw_expose:
+            port = _positive_int(item, 0)
+            if port > 0:
+                return port
+    return 0
+
+
+def _compose_port_target(value: object) -> int:
+    if isinstance(value, Mapping):
+        target = _positive_int(value.get("target"), 0)
+        return target or _positive_int(value.get("published"), 0)
+    if isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        return 0
+    without_protocol = value.split("/", 1)[0]
+    target = without_protocol.rsplit(":", 1)[-1]
+    return _positive_int(target, 0)
+
+
+def _compose_health_path(raw_service: Mapping[str, Any]) -> str:
+    raw_healthcheck = raw_service.get("healthcheck")
+    if not isinstance(raw_healthcheck, Mapping):
+        return "/"
+    raw_test = raw_healthcheck.get("test")
+    if isinstance(raw_test, list):
+        command = " ".join(str(part) for part in raw_test)
+    elif isinstance(raw_test, str):
+        command = raw_test
+    else:
+        return "/"
+    match = re.search(r"https?://[^\s'\"<>]+", command)
+    if not match:
+        return "/"
+    path = urlsplit(match.group(0)).path
+    return _normalize_path(path or "/")
+
+
+def _should_prefer_compose_services(
+    services: list[PipelineServiceSpec],
+    compose_services: list[PipelineServiceSpec],
+) -> bool:
+    if not compose_services:
+        return False
+    if not services:
+        return True
+    if len(compose_services) <= len(services):
+        return False
+    return len(compose_services) > 1
 
 
 def _service_spec_from_mapping(
