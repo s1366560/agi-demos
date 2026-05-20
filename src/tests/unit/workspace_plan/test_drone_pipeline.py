@@ -1405,5 +1405,59 @@ def test_drone_contract_parses_deploy_config_from_drone_metadata() -> None:
     }
 
 
+def test_drone_contract_inherits_services_for_docker_deploy() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "auto_deploy": True,
+                "services": [
+                    {
+                        "service_id": "drone-ci",
+                        "name": "Drone CI",
+                        "start_command": "drone server",
+                        "internal_port": 8080,
+                        "health_path": "/healthz",
+                    },
+                    {
+                        "service_id": "backend",
+                        "name": "Backend API",
+                        "start_command": "docker run backend",
+                        "internal_port": 8080,
+                        "health_path": "/health",
+                    },
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend Web",
+                        "start_command": "docker run frontend",
+                        "internal_port": 3000,
+                        "health_path": "/",
+                    },
+                ],
+                "drone": {
+                    "repo": "octo/my-evo",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "docker": {
+                            "image": "localhost:5001/my-evo",
+                        },
+                    },
+                },
+            }
+        },
+        fallback_code_root="/workspace/my-evo",
+    )
+
+    assert contract.provider == DRONE_PROVIDER
+    assert contract.deploy is not None
+    assert contract.deploy.mode == "docker"
+    assert [service["service_id"] for service in contract.deploy.docker["deploy_services"]] == [
+        "backend",
+        "frontend",
+    ]
+    assert contract.deploy.docker["deploy_services"][1]["container_port"] == 3000
+
+
 async def _noop() -> None:
     return None

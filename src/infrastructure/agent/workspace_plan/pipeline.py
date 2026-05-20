@@ -214,8 +214,6 @@ def build_pipeline_contract_from_metadata(
         "agent_proposal" if isinstance(config.get("agent_proposal"), dict) else "metadata"
     )
     contract_confidence = _confidence(config.get("contract_confidence"), fallback=1.0)
-    provider_config = _provider_config(config, provider)
-    deploy = _configured_deploy_spec(config, provider_config)
     services = _configured_service_specs(
         config,
         preview_port=preview_port,
@@ -223,6 +221,8 @@ def build_pipeline_contract_from_metadata(
         health_url=health_url,
         health_command=health_command,
     )
+    provider_config = _provider_config(config, provider)
+    deploy = _configured_deploy_spec(config, provider_config, services=services)
 
     stages = _configured_stage_specs(config, timeout_seconds)
     if provider == SANDBOX_NATIVE_PROVIDER and not stages:
@@ -299,6 +299,8 @@ def _provider_config(config: dict[str, Any], provider: str) -> dict[str, Any]:
 def _configured_deploy_spec(
     config: dict[str, Any],
     provider_config: dict[str, Any],
+    *,
+    services: list[PipelineServiceSpec],
 ) -> PipelineDeploySpec | None:
     raw = config.get("deploy")
     if not isinstance(raw, Mapping):
@@ -324,9 +326,61 @@ def _configured_deploy_spec(
         stage=stage,
         required=_bool(raw_deploy.get("required"), default=True),
         target=target,
-        docker=_json_mapping(raw_deploy.get("docker")),
+        docker=_docker_deploy_config_with_services(
+            _json_mapping(raw_deploy.get("docker")),
+            services=services,
+        ),
         kubernetes=_json_mapping(raw_deploy.get("kubernetes")),
         cli=_json_mapping(raw_deploy.get("cli")),
+    )
+
+
+def _docker_deploy_config_with_services(
+    docker: dict[str, Any],
+    *,
+    services: list[PipelineServiceSpec],
+) -> dict[str, Any]:
+    if docker.get("deploy_services") or docker.get("services") or not services:
+        return docker
+    deploy_services = [
+        _docker_deploy_service_from_pipeline_service(service)
+        for service in services
+        if _is_application_deploy_service(service)
+    ]
+    if deploy_services:
+        docker["deploy_services"] = deploy_services
+    return docker
+
+
+def _docker_deploy_service_from_pipeline_service(
+    service: PipelineServiceSpec,
+) -> dict[str, Any]:
+    return {
+        "service_id": service.service_id,
+        "name": service.name,
+        "container_name": _safe_service_id(service.service_id),
+        "container_port": service.internal_port,
+        "internal_port": service.internal_port,
+        "internal_scheme": service.internal_scheme,
+        "path_prefix": service.path_prefix,
+        "health_path": service.health_path,
+        "health_command": service.health_command,
+        "required": service.required,
+        "auto_open": service.auto_open,
+        "start_command": service.start_command,
+    }
+
+
+def _is_application_deploy_service(service: PipelineServiceSpec) -> bool:
+    service_id = service.service_id.lower()
+    name = service.name.lower()
+    start_command = service.start_command.lower()
+    if service_id in {"drone-ci", "drone-runner"} or service_id.startswith("drone-"):
+        return False
+    return not (
+        name.startswith("drone ")
+        or "drone server" in start_command
+        or "drone-runner" in start_command
     )
 
 
