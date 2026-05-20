@@ -133,6 +133,7 @@ def _make_service(
     schedule_tick: MagicMock | None = None,
     enqueue_resume: AsyncMock | None = None,
     cancel_conversation: AsyncMock | None = None,
+    cleanup_attempt_runtime: AsyncMock | None = None,
     liveness_lookup: Any = None,
     task_lookup: dict[str, str] | None = None,
     task_status_lookup: dict[str, Any] | None = None,
@@ -144,6 +145,7 @@ def _make_service(
     schedule_tick = schedule_tick or MagicMock()
     enqueue_resume = enqueue_resume or AsyncMock()
     cancel_conversation = cancel_conversation or AsyncMock(return_value=False)
+    cleanup_attempt_runtime = cleanup_attempt_runtime or AsyncMock(return_value=0)
     lookup = task_lookup if task_lookup is not None else {"task-1": "user-1"}
     from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 
@@ -210,6 +212,7 @@ def _make_service(
         schedule_tick=schedule_tick,
         enqueue_resume=enqueue_resume,
         cancel_conversation=cancel_conversation,
+        cleanup_attempt_runtime=cleanup_attempt_runtime,
         liveness_lookup=liveness_lookup or (list),
         stale_seconds=60,
         startup_grace_seconds=5,
@@ -391,6 +394,7 @@ class TestStartupSweep:
     async def test_recovery_cancels_plan_linked_local_runtime_before_resume(self) -> None:
         enqueue_resume = AsyncMock()
         cancel_conversation = AsyncMock(return_value=True)
+        cleanup_attempt_runtime = AsyncMock(return_value=2)
         att = _make_attempt(
             attempt_id="att-plan-cancel",
             workspace_task_id="task-1",
@@ -400,6 +404,7 @@ class TestStartupSweep:
             stale_attempts=[att],
             enqueue_resume=enqueue_resume,
             cancel_conversation=cancel_conversation,
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
             task_lookup={"task-1": "user-1"},
             task_metadata_lookup={
                 "task-1": {
@@ -418,6 +423,43 @@ class TestStartupSweep:
 
         assert recovered == 1
         cancel_conversation.assert_awaited_once_with("conv-orphan")
+        cleanup_attempt_runtime.assert_awaited_once_with(att)
+        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
+
+    @pytest.mark.asyncio
+    async def test_recovery_cleans_attempt_runtime_without_conversation_id(self) -> None:
+        enqueue_resume = AsyncMock()
+        cancel_conversation = AsyncMock(return_value=False)
+        cleanup_attempt_runtime = AsyncMock(return_value=1)
+        att = _make_attempt(
+            attempt_id="att-no-conv",
+            workspace_task_id="task-1",
+            conversation_id=None,
+        )
+        service, _apply_report, _schedule_tick = _make_service(
+            stale_attempts=[att],
+            enqueue_resume=enqueue_resume,
+            cancel_conversation=cancel_conversation,
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        cancel_conversation.assert_not_awaited()
+        cleanup_attempt_runtime.assert_awaited_once_with(att)
         enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
 
     @pytest.mark.asyncio

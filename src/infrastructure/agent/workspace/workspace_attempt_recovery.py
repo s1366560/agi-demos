@@ -214,6 +214,7 @@ LivenessLookup = Callable[[], Iterable[str]]
 ScheduleTickCallable = Callable[[str, str], None]
 EnqueueResumeCallable = Callable[[WorkspaceTaskSessionAttempt, str, str], Awaitable[None]]
 CancelConversationCallable = Callable[[str], Awaitable[bool]]
+CleanupAttemptRuntimeCallable = Callable[[WorkspaceTaskSessionAttempt], Awaitable[int]]
 
 
 class WorkspaceAttemptRecoveryService:
@@ -227,6 +228,7 @@ class WorkspaceAttemptRecoveryService:
         schedule_tick: ScheduleTickCallable,
         enqueue_resume: EnqueueResumeCallable | None = None,
         cancel_conversation: CancelConversationCallable | None = None,
+        cleanup_attempt_runtime: CleanupAttemptRuntimeCallable | None = None,
         liveness_lookup: LivenessLookup | None = None,
         stale_seconds: int = DEFAULT_STALE_SECONDS,
         startup_grace_seconds: int = DEFAULT_STARTUP_GRACE_SECONDS,
@@ -255,6 +257,7 @@ class WorkspaceAttemptRecoveryService:
         self._schedule_tick = schedule_tick
         self._enqueue_resume = enqueue_resume
         self._cancel_conversation = cancel_conversation
+        self._cleanup_attempt_runtime = cleanup_attempt_runtime
         self._liveness_lookup: LivenessLookup = liveness_lookup or (lambda: ())
         self._stale_seconds = stale_seconds
         self._startup_grace_seconds = startup_grace_seconds
@@ -1024,26 +1027,27 @@ class WorkspaceAttemptRecoveryService:
         *,
         reason: str,
     ) -> None:
-        if self._cancel_conversation is None:
-            return
         conversation_id = attempt.conversation_id
-        if not isinstance(conversation_id, str) or not conversation_id:
-            return
-        try:
-            cancelled = await self._cancel_conversation(conversation_id)
-        except Exception:
-            logger.warning(
-                "workspace_attempt_recovery.cancel_runtime_failed",
-                exc_info=True,
-                extra={
-                    "event": "workspace_attempt_recovery.cancel_runtime_failed",
-                    "attempt_id": attempt.id,
-                    "workspace_id": attempt.workspace_id,
-                    "conversation_id": conversation_id,
-                    "reason": reason,
-                },
-            )
-            return
+        cancelled = False
+        if (
+            self._cancel_conversation is not None
+            and isinstance(conversation_id, str)
+            and conversation_id
+        ):
+            try:
+                cancelled = await self._cancel_conversation(conversation_id)
+            except Exception:
+                logger.warning(
+                    "workspace_attempt_recovery.cancel_runtime_failed",
+                    exc_info=True,
+                    extra={
+                        "event": "workspace_attempt_recovery.cancel_runtime_failed",
+                        "attempt_id": attempt.id,
+                        "workspace_id": attempt.workspace_id,
+                        "conversation_id": conversation_id,
+                        "reason": reason,
+                    },
+                )
         if cancelled:
             logger.warning(
                 "workspace_attempt_recovery.cancelled_attempt_runtime",
@@ -1052,6 +1056,35 @@ class WorkspaceAttemptRecoveryService:
                     "attempt_id": attempt.id,
                     "workspace_id": attempt.workspace_id,
                     "conversation_id": conversation_id,
+                    "reason": reason,
+                },
+            )
+        if self._cleanup_attempt_runtime is None:
+            return
+        try:
+            cleaned = await self._cleanup_attempt_runtime(attempt)
+        except Exception:
+            logger.warning(
+                "workspace_attempt_recovery.cleanup_runtime_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_attempt_recovery.cleanup_runtime_failed",
+                    "attempt_id": attempt.id,
+                    "workspace_id": attempt.workspace_id,
+                    "conversation_id": conversation_id,
+                    "reason": reason,
+                },
+            )
+            return
+        if cleaned > 0:
+            logger.warning(
+                "workspace_attempt_recovery.cleaned_attempt_runtime",
+                extra={
+                    "event": "workspace_attempt_recovery.cleaned_attempt_runtime",
+                    "attempt_id": attempt.id,
+                    "workspace_id": attempt.workspace_id,
+                    "conversation_id": conversation_id,
+                    "process_count": cleaned,
                     "reason": reason,
                 },
             )

@@ -10,11 +10,16 @@ Disable only for tests / emergencies via
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
+import re
+import shlex
 import time
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, cast
 
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 if TYPE_CHECKING:
@@ -33,6 +38,7 @@ _INTERVAL_ENV = "WORKSPACE_ATTEMPT_RECOVERY_INTERVAL_SECONDS"
 _GRACE_ENV = "WORKSPACE_ATTEMPT_RECOVERY_STARTUP_GRACE_SECONDS"
 _MAX_ATTEMPTS_ENV = "WORKSPACE_ATTEMPT_RECOVERY_MAX_ATTEMPTS_PER_SWEEP"
 _ERROR_EVENT_GRACE_ENV = "WORKSPACE_ATTEMPT_RECOVERY_ERROR_EVENT_GRACE_SECONDS"
+_ATTEMPT_CLEANUP_COUNT_RE = re.compile(r"\bmatched=(?P<count>\d+)\b")
 
 _recovery: WorkspaceAttemptRecoveryService | None = None
 
@@ -118,6 +124,141 @@ async def _enqueue_handoff_resume(
         await db.commit()
 
 
+def _attempt_runtime_cleanup_command(attempt_id: str) -> str:
+    attempt_marker = shlex.quote(f"/.memstack/worktrees/{attempt_id}")
+    quoted_attempt_id = shlex.quote(attempt_id)
+    return "\n".join(
+        [
+            f"attempt_id={quoted_attempt_id}",
+            f"attempt_marker={attempt_marker}",
+            "cleanup_pgid=$(awk '/^NSpgid:/{print $2; exit}' /proc/$$/status 2>/dev/null || true)",
+            "matched=0",
+            "group_count=0",
+            'groups=""',
+            "for status_path in /proc/[0-9]*/status; do",
+            '  [ -e "$status_path" ] || continue',
+            "  proc_dir=${status_path%/status}",
+            "  pid=${proc_dir##*/}",
+            '  case "$pid" in ""|1|$$) continue ;; esac',
+            '  cwd=$(readlink "$proc_dir/cwd" 2>/dev/null || true)',
+            '  case "$cwd" in',
+            '    *"$attempt_marker"|*"$attempt_marker"/*)',
+            "      matched=$((matched + 1))",
+            "      pgid=$(awk '/^NSpgid:/{print $2; exit}' \"$status_path\" 2>/dev/null || true)",
+            '      if [ -n "$pgid" ] && [ "$pgid" != "1" ] && [ "$pgid" != "$cleanup_pgid" ]; then',
+            '        case " $groups " in',
+            '          *" $pgid "*) ;;',
+            "          *)",
+            '            groups="$groups $pgid"',
+            "            group_count=$((group_count + 1))",
+            '            kill -TERM "-$pgid" 2>/dev/null || true',
+            "            ;;",
+            "        esac",
+            "      else",
+            '        kill -TERM "$pid" 2>/dev/null || true',
+            "      fi",
+            "      ;;",
+            "  esac",
+            "done",
+            "sleep 1",
+            'for pgid in $groups; do kill -KILL "-$pgid" 2>/dev/null || true; done',
+            "remaining=0",
+            "for status_path in /proc/[0-9]*/status; do",
+            '  [ -e "$status_path" ] || continue',
+            "  proc_dir=${status_path%/status}",
+            "  pid=${proc_dir##*/}",
+            '  case "$pid" in ""|1|$$) continue ;; esac',
+            '  cwd=$(readlink "$proc_dir/cwd" 2>/dev/null || true)',
+            '  case "$cwd" in',
+            '    *"$attempt_marker"|*"$attempt_marker"/*)',
+            "      remaining=$((remaining + 1))",
+            '      kill -KILL "$pid" 2>/dev/null || true',
+            "      ;;",
+            "  esac",
+            "done",
+            (
+                'printf "[workspace_attempt_cleanup] attempt_id=%s matched=%s '
+                + 'groups=%s remaining=%s\\n" "$attempt_id" "$matched" "$group_count" '
+                + '"$remaining"'
+            ),
+        ]
+    )
+
+
+def _tool_result_text(raw: object) -> str:
+    if not isinstance(raw, Mapping):
+        return ""
+    mapping = cast(Mapping[str, object], raw)
+    content = mapping.get("content")
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in cast(list[object], content):
+            if isinstance(item, Mapping):
+                item_mapping = cast(Mapping[str, object], item)
+                text = item_mapping.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif item is not None:
+                parts.append(str(item))
+        return "\n".join(parts)
+    for key in ("text", "stdout", "stderr"):
+        value = mapping.get(key)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _attempt_cleanup_count(raw: object) -> int:
+    match = _ATTEMPT_CLEANUP_COUNT_RE.search(_tool_result_text(raw))
+    if match is None:
+        return 0
+    return int(match.group("count"))
+
+
+async def _cleanup_attempt_runtime_processes(attempt: WorkspaceTaskSessionAttempt) -> int:
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
+        ensure_sandbox_sync,
+        get_sandbox_adapter,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        ProjectSandbox,
+        WorkspaceModel,
+    )
+
+    async with async_session_factory() as db:
+        sandbox_id = (
+            await db.execute(
+                refresh_select_statement(
+                    select(ProjectSandbox.sandbox_id)
+                    .join(WorkspaceModel, WorkspaceModel.project_id == ProjectSandbox.project_id)
+                    .where(
+                        WorkspaceModel.id == attempt.workspace_id,
+                        ProjectSandbox.tenant_id == WorkspaceModel.tenant_id,
+                    )
+                )
+            )
+        ).scalar_one_or_none()
+    if not sandbox_id:
+        return 0
+
+    adapter = get_sandbox_adapter()
+    with contextlib.suppress(Exception):
+        await ensure_sandbox_sync()
+
+    raw = await adapter.call_tool(
+        sandbox_id,
+        "bash",
+        {
+            "command": _attempt_runtime_cleanup_command(attempt.id),
+            "timeout": 20,
+        },
+        timeout=25.0,
+    )
+    return _attempt_cleanup_count(raw)
+
+
 async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | None:
     global _recovery
 
@@ -181,6 +322,7 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             schedule_tick=schedule_autonomy_tick,
             enqueue_resume=_enqueue_handoff_resume,
             cancel_conversation=AgentRuntimeBootstrapper.cancel_local_chat,
+            cleanup_attempt_runtime=_cleanup_attempt_runtime_processes,
             liveness_lookup=_liveness_lookup,
             stale_seconds=stale_seconds,
             startup_grace_seconds=startup_grace_seconds,

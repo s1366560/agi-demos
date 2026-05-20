@@ -37,6 +37,8 @@ WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS = 6_000
 WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS = 12_000
 WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS = 64_000
 WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS = 600
+_BASH_TIMEOUT_KILL_AFTER_SECONDS = 5
+_BASH_TIMEOUT_TRANSPORT_GRACE_SECONDS = 15
 
 _WORKSPACE_CODE_ROOT_DEFAULT_WORKDIR_TOOLS = frozenset(
     {
@@ -1202,13 +1204,12 @@ def _with_bash_timeout_guard(
         return kwargs
 
     timeout_seconds = max(1, int(configured_timeout_s))
-    kill_after_seconds = 5
     guarded = dict(kwargs)
     quoted_command = shlex.quote(command)
     guarded["command"] = (
         "if command -v timeout >/dev/null 2>&1; then "
         "set +e; "
-        f"timeout --kill-after={kill_after_seconds}s {timeout_seconds}s "
+        f"timeout --kill-after={_BASH_TIMEOUT_KILL_AFTER_SECONDS}s {timeout_seconds}s "
         f"bash -lc {quoted_command}; "
         "status=$?; "
         'case "$status" in '
@@ -1398,7 +1399,11 @@ async def _execute_with_retry(
         try:
             call_kwargs: dict[str, Any] = {}
             if configured_timeout_s is not None:
-                call_kwargs["timeout"] = configured_timeout_s + 5.0
+                call_kwargs["timeout"] = (
+                    configured_timeout_s
+                    + _BASH_TIMEOUT_KILL_AFTER_SECONDS
+                    + _BASH_TIMEOUT_TRANSPORT_GRACE_SECONDS
+                )
 
             result = await sandbox_port.call_tool(
                 sandbox_id,

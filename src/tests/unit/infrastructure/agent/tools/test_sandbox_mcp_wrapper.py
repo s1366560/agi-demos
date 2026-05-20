@@ -601,8 +601,8 @@ class TestSandboxMCPToolExecute:
         assert "edit.old_string exceeds" in result.output
         assert adapter.call_count == 0
 
-    async def test_bash_tool_uses_short_transport_timeout_grace(self):
-        """Transport timeout should only slightly exceed command timeout."""
+    async def test_bash_tool_allows_timeout_cleanup_transport_grace(self):
+        """Transport timeout should outlive the process-tree cleanup window."""
         adapter = MockSandboxAdapter()
         tool = create_sandbox_mcp_tool(
             sandbox_id="test123",
@@ -625,7 +625,7 @@ class TestSandboxMCPToolExecute:
         result = await tool.execute(_make_ctx(), command="echo ok", timeout=10)
 
         assert result.is_error is False
-        assert adapter.last_call_options["timeout"] == 15.0
+        assert adapter.last_call_options["timeout"] == 30.0
 
     async def test_bash_tool_wraps_command_with_process_tree_timeout_guard(self):
         """Sandbox bash timeout should kill the foreground command tree, not just transport."""
@@ -665,7 +665,7 @@ class TestSandboxMCPToolExecute:
         assert "ready" in adapter.last_kwargs["command"]
         assert "sleep 600" in adapter.last_kwargs["command"]
         assert adapter.last_kwargs["timeout"] == 20
-        assert adapter.last_call_options["timeout"] == 25.0
+        assert adapter.last_call_options["timeout"] == 40.0
 
     async def test_workspace_worker_bash_defaults_to_configured_code_root(self):
         """Worker sandbox bash calls should inherit the workspace code root as cwd."""
