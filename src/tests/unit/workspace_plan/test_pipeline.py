@@ -1170,6 +1170,64 @@ async def test_verifier_routes_deploy_runtime_env_failure_to_worker() -> None:
 
 
 @pytest.mark.asyncio
+async def test_verifier_preserves_exact_missing_runtime_config_field() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="deploy container exited",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#79 finished with status failure; "
+                "failing stage workspace-ci/deploy exited 1; "
+                "+ docker run -d --name my-evo -p 18080:3001 "
+                "-e ENABLE_TRACING=false my-evo:drone-docker-e2e; "
+                "wget: can't connect to remote host (192.168.65.254): Connection refused; "
+                "Failed to deserialize constructor options. "
+                "Error { status: InvalidArg, reason: \"missing field `enableTracing`\" }"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    required_action = judge_result.criterion.spec["required_next_action"]
+    feedback_summary = feedback["summary"]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert feedback["failure_signature"] == "drone-docker-deploy-missing-runtime-env"
+    assert "`enableTracing`" in required_action
+    assert "`-e enableTracing=false`" in required_action
+    assert "uppercase underscore variable" in required_action
+    assert "`enableTracing`" in feedback_summary
+
+
+@pytest.mark.asyncio
 async def test_verifier_routes_host_socket_dind_timeout_to_worker() -> None:
     judge = _FakeVerificationJudge(
         WorkspaceVerificationJudgeResult(

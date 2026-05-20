@@ -1239,6 +1239,41 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             feedback_items=(missing_build_artifact_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
+    runtime_env_feedback = _drone_docker_deploy_runtime_env_failure_feedback(results)
+    if runtime_env_feedback is not None:
+        runtime_field_guidance = _runtime_config_field_guidance(
+            _missing_runtime_config_fields(results)
+        )
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone docker-deploy started the container, but application startup failed "
+                "because required runtime environment or dependent services were missing. "
+                f"Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_deploy_missing_runtime_env",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Fix .drone.yml docker-deploy so docker run or docker compose supplies the "
+                "runtime environment and dependencies required by the image. Inspect "
+                "Dockerfile, docker-compose, .env.example, and app startup code; pass required "
+                "values such as DATABASE_URL, REDIS_URL, NODE_SECRET, and SESSION_SECRET. "
+                f"{runtime_field_guidance}"
+                "Do not point database/cache URLs at host.docker.internal:<port> unless a "
+                "reachable external service is explicitly declared; otherwise use docker "
+                "compose or sidecar containers on a named Docker network to start the required "
+                "database/cache services. "
+                "Keep the health probe fail-fast and print docker logs on failure."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(runtime_env_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
     unhealthy_container_feedback = _drone_docker_deploy_unhealthy_container_feedback(results)
     if unhealthy_container_feedback is not None:
         return WorkspaceVerificationJudgeResult(
@@ -1272,37 +1307,6 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
             feedback_items=(unhealthy_container_feedback, *result.feedback_items),
-            confidence=max(result.confidence, 0.9),
-        )
-    runtime_env_feedback = _drone_docker_deploy_runtime_env_failure_feedback(results)
-    if runtime_env_feedback is not None:
-        return WorkspaceVerificationJudgeResult(
-            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
-            rationale=(
-                "Drone docker-deploy started the container, but application startup failed "
-                "because required runtime environment or dependent services were missing. "
-                f"Judge rationale: {result.rationale}"
-            ),
-            failed_criteria=(
-                "ci_pipeline",
-                "drone_docker_deploy_missing_runtime_env",
-                *result.failed_criteria,
-            ),
-            satisfied_guard_failures=result.satisfied_guard_failures,
-            required_next_action=(
-                "Fix .drone.yml docker-deploy so docker run or docker compose supplies the "
-                "runtime environment and dependencies required by the image. Inspect "
-                "Dockerfile, docker-compose, .env.example, and app startup code; pass required "
-                "values such as DATABASE_URL, REDIS_URL, NODE_SECRET, and SESSION_SECRET. Do not "
-                "point database/cache URLs at host.docker.internal:<port> unless a reachable "
-                "external service is explicitly declared; otherwise use docker compose or "
-                "sidecar containers on a named Docker network to start the required "
-                "database/cache services. "
-                "Keep the health probe fail-fast and print docker logs on failure."
-            ),
-            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
-            repair_brief=result.repair_brief,
-            feedback_items=(runtime_env_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
     docker_build_feedback = _drone_docker_build_timeout_feedback(results)
@@ -1797,22 +1801,25 @@ def _drone_docker_deploy_missing_build_artifact_feedback(
 def _drone_docker_deploy_runtime_env_failure_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
+    missing_fields = _missing_runtime_config_fields(results)
+    runtime_field_guidance = _runtime_config_field_guidance(missing_fields)
     text = "\n".join(result.message for result in results if result.message).lower()
     has_runtime_env_failure = any(
         marker in text
         for marker in (
             "environment variable not found",
-            "database_url",
             "node_secret is required",
             "session_secret is required",
-            "redis_url",
             "prisma schema validation",
             "error code: p1012",
             "error: p1001",
             "can't reach database server",
             "cannot reach database server",
+            "failed to deserialize constructor options",
+            "constructoroptions",
+            "missing field",
         )
-    )
+    ) or bool(missing_fields)
     if not ("failing stage" in text and "deploy" in text and has_runtime_env_failure):
         return None
     return WorkspaceVerificationFeedbackItem(
@@ -1824,13 +1831,36 @@ def _drone_docker_deploy_runtime_env_failure_feedback(
             "The deployed container starts without required runtime environment or dependent "
             "services. Inspect Dockerfile, compose files, .env examples, and startup logs; "
             "pass required environment variables and use docker compose or sidecar containers "
-            "to start dependencies when no external service is configured."
+            "to start dependencies when no external service is configured. "
+            f"{runtime_field_guidance}"
         ),
         evidence_refs=(
             "drone_error:deploy_runtime_env_missing",
             "drone_deploy:container_startup",
         ),
         failure_signature="drone-docker-deploy-missing-runtime-env",
+    )
+
+
+def _missing_runtime_config_fields(results: list[CriterionResult]) -> tuple[str, ...]:
+    text = "\n".join(result.message for result in results if result.message)
+    matches = re.findall(r"missing field [`'\"]?([A-Za-z_][A-Za-z0-9_]*)[`'\"]?", text)
+    return tuple(dict.fromkeys(matches))
+
+
+def _runtime_config_field_guidance(fields: tuple[str, ...]) -> str:
+    if not fields:
+        return ""
+    quoted = ", ".join(f"`{field}`" for field in fields)
+    examples = []
+    if "enableTracing" in fields:
+        examples.append("`-e enableTracing=false`")
+    example_text = f" For example, pass {', '.join(examples)}." if examples else ""
+    return (
+        f"Startup logs named required config field(s) {quoted}; preserve the exact spelling "
+        "when passing config into the container or update startup/config code to map the "
+        "environment variable before constructing the client. Do not assume an uppercase "
+        f"underscore variable satisfies a camelCase field unless code explicitly maps it.{example_text} "
     )
 
 
