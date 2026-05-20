@@ -277,6 +277,27 @@ class TestLLMGoalPlanner:
         assert len(leaves) == 1
         assert leaves[0].acceptance_criteria  # has at least LLM judge
 
+    async def test_software_workspace_goal_requests_next_iteration(self) -> None:
+        from src.domain.ports.services.goal_planner_port import PlanningContext
+
+        planner = LLMGoalPlanner(decomposer=None)
+        plan = await planner.plan(
+            _goal("build a product"),
+            PlanningContext(
+                max_subtasks=4,
+                max_depth=2,
+                conversation_context="Software workspace planning contract: current sprint only.",
+            ),
+        )
+
+        loop = plan.goal_node.metadata["iteration_loop"]
+        assert loop["mode"] == "auto"
+        assert loop["loop_status"] == "active"
+        assert loop["current_iteration"] == 1
+        assert loop["current_sprint_goal"] == "build a product"
+        assert loop["operator_action"]["action"] == "operator_iteration_next_requested"
+        assert loop["operator_action"]["source"] == "software_workspace_planning_contract"
+
     async def test_preserves_target_subagent_and_deps(self) -> None:
         sub = [
             _FakeSubTask(id="s1", description="research", target_subagent="researcher"),

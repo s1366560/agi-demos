@@ -118,6 +118,7 @@ class LLMGoalPlanner(GoalPlannerPort):
             kind=PlanNodeKind.GOAL,
             title=goal.title,
             description=goal.description,
+            metadata=_initial_goal_metadata(goal, ctx),
         )
         plan.add_node(goal_node)
 
@@ -724,6 +725,34 @@ def _goal_planning_metadata(metadata: dict[str, object]) -> dict[str, object]:
     if isinstance(planning_contract, dict):
         output["planning_contract"] = planning_contract
     return output
+
+
+def _initial_goal_metadata(goal: GoalSpec, ctx: PlanningContext) -> dict[str, object]:
+    if not _software_iteration_contract_active(ctx):
+        return {}
+    return {
+        "iteration_loop": {
+            "mode": "auto",
+            "current_iteration": 1,
+            "loop_status": "active",
+            "current_sprint_goal": goal.title,
+            "operator_action": {
+                "action": "operator_iteration_next_requested",
+                "source": "software_workspace_planning_contract",
+                "reason": (
+                    "Software workspace plans execute bounded Scrum iterations; "
+                    "after each completed sprint, plan the next iteration unless "
+                    "the loop is paused, max_iterations is reached, or human "
+                    "review is required."
+                ),
+            },
+        }
+    }
+
+
+def _software_iteration_contract_active(ctx: PlanningContext) -> bool:
+    context = ctx.conversation_context or ""
+    return "Software workspace planning contract:" in context
 
 
 def _iteration_phase_for_sequence(sequence: int | None) -> str:
