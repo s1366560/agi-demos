@@ -290,7 +290,9 @@ async def test_verifier_ignores_stale_failed_pipeline_for_new_worker_commit() ->
         result for result in report.results if result.criterion.kind is CriterionKind.CI_PIPELINE
     ]
     assert pipeline_results
-    assert all("previous pipeline evidence belongs to e63e1104" in r.message for r in pipeline_results)
+    assert all(
+        "previous pipeline evidence belongs to e63e1104" in r.message for r in pipeline_results
+    )
     assert all("docker-build exited 137" not in r.message for r in pipeline_results)
 
 
@@ -335,7 +337,9 @@ async def test_verifier_accepts_pipeline_result_for_source_commit_after_merge_pu
     ]
     assert pipeline_results
     assert any("workspace-ci/deploy" in result.message for result in pipeline_results)
-    assert all("previous pipeline evidence belongs" not in result.message for result in pipeline_results)
+    assert all(
+        "previous pipeline evidence belongs" not in result.message for result in pipeline_results
+    )
 
 
 @pytest.mark.asyncio
@@ -377,7 +381,9 @@ async def test_verifier_uses_latest_attempt_commit_when_report_contains_history(
         result for result in report.results if result.criterion.kind is CriterionKind.CI_PIPELINE
     ]
     assert pipeline_results
-    assert all("previous pipeline evidence belongs" not in result.message for result in pipeline_results)
+    assert all(
+        "previous pipeline evidence belongs" not in result.message for result in pipeline_results
+    )
 
 
 @pytest.mark.asyncio
@@ -557,9 +563,10 @@ async def test_verifier_routes_drone_socket_mount_failure_to_worker() -> None:
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
-    assert "path to mount docker-sock at /var/run/docker.sock" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert (
+        "path to mount docker-sock at /var/run/docker.sock"
+        in judge_result.criterion.spec["required_next_action"]
+    )
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-socket-mounted-to-var-run"
 
@@ -610,14 +617,65 @@ async def test_verifier_routes_drone_yaml_unmarshal_failure_to_worker() -> None:
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
     assert "quote shell commands" in judge_result.criterion.spec["required_next_action"]
-    assert "commands[]` item is a string" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
-    assert "preserve the docker deploy contract" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert "commands[]` item is a string" in judge_result.criterion.spec["required_next_action"]
+    assert (
+        "preserve the docker deploy contract" in judge_result.criterion.spec["required_next_action"]
+    )
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-yaml-configuration-unmarshal-into-string"
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_drone_multi_service_deploy_coverage_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="pipeline config failed before build",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build .drone.yml preflight failed; docker deploy stage deploy "
+                "does not cover required services: my-evo-frontend. The deploy step must "
+                "start or update every service declared in "
+                "delivery_cicd.drone.deploy.docker.deploy_services."
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert (
+        "do not deploy only the backend API" in judge_result.criterion.spec["required_next_action"]
+    )
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-missing-required-service"
 
 
 @pytest.mark.asyncio
@@ -719,9 +777,10 @@ async def test_verifier_routes_localhost_registry_timeout_to_worker() -> None:
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
-    assert "host.docker.internal:<port> or localhost:<port>" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert (
+        "host.docker.internal:<port> or localhost:<port>"
+        in judge_result.criterion.spec["required_next_action"]
+    )
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-host-socket-localhost-registry-unreachable"
 
@@ -826,9 +885,9 @@ async def test_verifier_routes_missing_deploy_probe_tool_to_worker() -> None:
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
-    assert "docker.deploy_health_check_command" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert (
+        "docker.deploy_health_check_command" in judge_result.criterion.spec["required_next_action"]
+    )
     assert "docker logs <container>" in judge_result.criterion.spec["required_next_action"]
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-missing-health-probe-tool"
@@ -918,7 +977,7 @@ async def test_verifier_routes_deploy_health_signal_before_log_tail_to_worker() 
                 "wget: can't connect to remote host (192.168.65.254): Connection refused\\n"
                 "my-evo Exited (0) 9 seconds ago\\n"
                 "No migration found in prisma/migrations; "
-                "Datasource \"db\": PostgreSQL database \"evomap\"; "
+                'Datasource "db": PostgreSQL database "evomap"; '
                 "No pending migrations to apply."
             ),
         }
@@ -942,12 +1001,8 @@ async def test_verifier_routes_deploy_health_signal_before_log_tail_to_worker() 
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge.requests == []
-    assert "long-lived server entrypoint" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
-    assert "Preserve existing deploy fixes" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert "long-lived server entrypoint" in judge_result.criterion.spec["required_next_action"]
+    assert "Preserve existing deploy fixes" in judge_result.criterion.spec["required_next_action"]
     assert feedback["failure_signature"] == "drone-docker-deploy-unhealthy-container"
 
 
@@ -975,7 +1030,7 @@ async def test_verifier_routes_deploy_container_name_conflict_to_worker() -> Non
                 "failing stage workspace-ci/deploy exited 125; "
                 "+ docker run -d --name my-evo-postgres --network workspace-deploy "
                 "postgres:16-alpine; docker: Error response from daemon: Conflict. "
-                "The container name \"/my-evo-postgres\" is already in use. "
+                'The container name "/my-evo-postgres" is already in use. '
                 "You have to remove (or rename) that container to be able to reuse that name."
             ),
         }
@@ -1052,12 +1107,8 @@ async def test_verifier_routes_deploy_network_exists_to_worker() -> None:
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
-    assert "docker network inspect <network>" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
-    assert "docker network rm <network>" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert "docker network inspect <network>" in judge_result.criterion.spec["required_next_action"]
+    assert "docker network rm <network>" in judge_result.criterion.spec["required_next_action"]
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-network-already-exists"
 
@@ -1111,8 +1162,9 @@ async def test_verifier_routes_postgres_sidecar_env_failure_to_worker() -> None:
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
     assert "-e POSTGRES_PASSWORD=postgres" in judge_result.criterion.spec["required_next_action"]
-    assert "Do not use `postgres:16-alpine -c POSTGRES_PASSWORD=...`" in (
-        judge_result.criterion.spec["required_next_action"]
+    assert (
+        "Do not use `postgres:16-alpine -c POSTGRES_PASSWORD=...`"
+        in (judge_result.criterion.spec["required_next_action"])
     )
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-postgres-sidecar-env"
@@ -1164,12 +1216,10 @@ async def test_verifier_routes_missing_build_artifact_to_worker() -> None:
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
-    assert "npm install && npm run build" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
-    assert "Preserve the existing deploy fixes" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert "npm install && npm run build" in judge_result.criterion.spec["required_next_action"]
+    assert (
+        "Preserve the existing deploy fixes" in judge_result.criterion.spec["required_next_action"]
+    )
     assert judge.requests == []
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-missing-build-artifact"
@@ -1252,7 +1302,7 @@ async def test_verifier_preserves_exact_missing_runtime_config_field() -> None:
                 "-e ENABLE_TRACING=false my-evo:drone-docker-e2e; "
                 "wget: can't connect to remote host (192.168.65.254): Connection refused; "
                 "Failed to deserialize constructor options. "
-                "Error { status: InvalidArg, reason: \"missing field `enableTracing`\" }"
+                'Error { status: InvalidArg, reason: "missing field `enableTracing`" }'
             ),
         }
     )
@@ -1328,9 +1378,9 @@ async def test_verifier_routes_host_socket_dind_timeout_to_worker() -> None:
     assert not report.passed
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
-    assert "removing the `docker:dind` service" in judge_result.criterion.spec[
-        "required_next_action"
-    ]
+    assert (
+        "removing the `docker:dind` service" in judge_result.criterion.spec["required_next_action"]
+    )
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-host-socket-dind-service-timeout"
 

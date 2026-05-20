@@ -1197,27 +1197,23 @@ def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRun
     except yaml.YAMLError as exc:
         return _configuration_failure(f"Drone build .drone.yml preflight failed; yaml: {exc}")
     command_issue = _first_non_string_drone_command(parsed)
-    if command_issue is None:
-        return None
-    step_name, command_index, tag, preview = command_issue
-    return _configuration_failure(
-        "Drone build .drone.yml preflight failed; yaml: unmarshal errors: "
-        f"step {step_name} commands[{command_index}] cannot unmarshal {tag} into string; "
-        f"value={preview}"
-    )
+    if command_issue is not None:
+        step_name, command_index, tag, preview = command_issue
+        return _configuration_failure(
+            "Drone build .drone.yml preflight failed; yaml: unmarshal errors: "
+            f"step {step_name} commands[{command_index}] cannot unmarshal {tag} into string; "
+            f"value={preview}"
+        )
+    deploy_issue = _docker_deploy_yaml_coverage_issue(parsed, contract.deploy)
+    if deploy_issue is not None:
+        return _configuration_failure(deploy_issue)
+    return None
 
 
 def _first_non_string_drone_command(
     parsed: object,
 ) -> tuple[str, int, str, str] | None:
-    if not isinstance(parsed, Mapping):
-        return None
-    steps = parsed.get("steps")
-    if not isinstance(steps, list):
-        return None
-    for step_number, step in enumerate(steps, 1):
-        if not isinstance(step, Mapping):
-            continue
+    for step_number, step in enumerate(_drone_step_mappings(parsed), 1):
         step_name = _string(step.get("name")) or f"step-{step_number}"
         commands = step.get("commands")
         if not isinstance(commands, list):
@@ -1231,6 +1227,70 @@ def _first_non_string_drone_command(
                     _compact(str(command), limit=300),
                 )
     return None
+
+
+def _docker_deploy_yaml_coverage_issue(
+    parsed: object,
+    deploy: PipelineDeploySpec | None,
+) -> str | None:
+    if deploy is None or deploy.mode != "docker" or not deploy.required:
+        return None
+    requirements = _docker_deploy_service_requirements(deploy)
+    if not requirements:
+        return None
+
+    deploy_output = _drone_deploy_commands_text(parsed, deploy=deploy)
+    if not deploy_output:
+        return (
+            "Drone build .drone.yml preflight failed; docker deploy stage "
+            f"{deploy.stage} is required but no matching deploy commands were found"
+        )
+
+    missing = [
+        _service_requirement_label(markers)
+        for markers in requirements
+        if not any(marker in deploy_output for marker in markers)
+    ]
+    if not missing:
+        return None
+    missing_services = ", ".join(missing)
+    return (
+        "Drone build .drone.yml preflight failed; docker deploy stage "
+        f"{deploy.stage} does not cover required services: {missing_services}. "
+        "The deploy step must start or update every service declared in "
+        "delivery_cicd.drone.deploy.docker.deploy_services."
+    )
+
+
+def _drone_deploy_commands_text(parsed: object, *, deploy: PipelineDeploySpec) -> str:
+    commands: list[str] = []
+    for step_number, step in enumerate(_drone_step_mappings(parsed), 1):
+        step_name = _string(step.get("name")) or f"step-{step_number}"
+        if not _is_deploy_label(step_name, deploy=deploy):
+            continue
+        raw_commands = step.get("commands")
+        if not isinstance(raw_commands, list):
+            continue
+        commands.extend(command.lower() for command in raw_commands if isinstance(command, str))
+    return "\n".join(commands)
+
+
+def _drone_step_mappings(parsed: object) -> list[Mapping[str, Any]]:
+    if isinstance(parsed, Mapping):
+        steps = parsed.get("steps")
+        if isinstance(steps, list):
+            return [step for step in steps if isinstance(step, Mapping)]
+        return []
+    if isinstance(parsed, list):
+        output: list[Mapping[str, Any]] = []
+        for document in parsed:
+            output.extend(_drone_step_mappings(document))
+        return output
+    return []
+
+
+def _service_requirement_label(markers: tuple[str, ...]) -> str:
+    return markers[0] if markers else "unknown"
 
 
 def _yaml_type_tag(value: object) -> str:

@@ -269,6 +269,68 @@ steps:
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_preflights_multi_service_deploy_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    (tmp_path / ".drone.yml").write_text(
+        """
+kind: pipeline
+type: docker
+name: workspace-ci
+steps:
+  - name: docker-build
+    image: docker:27-cli
+    commands:
+      - docker build -t my-evo-backend:drone-docker-e2e backend
+      - docker build -t my-evo-frontend:drone-docker-e2e frontend
+  - name: deploy
+    image: docker:27-cli
+    commands:
+      - docker run -d --name my-evo-backend my-evo-backend:drone-docker-e2e
+""".lstrip(),
+        encoding="utf-8",
+    )
+    client = _FakeDroneClient({"number": 42, "status": "success"})
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            code_root=str(tmp_path),
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "deploy_services": [
+                        {
+                            "service_id": "backend",
+                            "container_name": "my-evo-backend",
+                            "image_deploy_local": "my-evo-backend:drone-docker-e2e",
+                            "required": True,
+                        },
+                        {
+                            "service_id": "frontend",
+                            "container_name": "my-evo-frontend",
+                            "image_deploy_local": "my-evo-frontend:drone-docker-e2e",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    assert "does not cover required services: my-evo-frontend" in result.reason
+    assert "drone:configuration_failed" in result.evidence_refs
+    assert result.stage_results[0].stage == "drone_config"
+    assert client.created == []
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_stops_timed_out_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

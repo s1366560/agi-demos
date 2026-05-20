@@ -968,7 +968,7 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
                 "quote shell commands that contain `: `, `{}`, or other YAML mapping syntax, "
                 "or use a block scalar command. A syntax-only YAML parser is not enough; "
                 "after parsing `.drone.yml`, verify every `steps[].commands[]` item is a "
-                "string, especially lines like `echo \"label: value\"`. Commit, rerun Drone, "
+                'string, especially lines like `echo "label: value"`. Commit, rerun Drone, '
                 "and preserve the docker deploy contract: no daemon-side pull/run from "
                 "host.docker.internal or localhost registry, keep the deploy-local docker "
                 "build tag, stale container cleanup, dependency sidecars, runtime env, and "
@@ -977,6 +977,34 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
             feedback_items=(yaml_config_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
+    deploy_coverage_feedback = _drone_docker_deploy_missing_service_feedback(results)
+    if deploy_coverage_feedback is not None:
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone preflight rejected `.drone.yml` because the docker deploy step does "
+                "not cover every service in the workspace delivery contract. This is a CI "
+                f"configuration defect in the worktree. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_deploy_service_coverage",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Fix `.drone.yml` docker deploy so it starts or updates every service from "
+                "delivery_cicd.drone.deploy.docker.deploy_services. For multi-service "
+                "workspaces, do not deploy only the backend API when frontend/backend images "
+                "were both built. Preserve deploy-local image tags, stale container cleanup, "
+                "port mappings, runtime env, dependency sidecars, and health-log diagnostics. "
+                "Commit and rerun Drone."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(deploy_coverage_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
     external_registry_feedback = _drone_external_registry_transient_failure_feedback(results)
@@ -1021,9 +1049,7 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
                     "to /var/run instead of /var/run/docker.sock. "
                 )
             )
-            + (
-                f"Judge rationale: {result.rationale}"
-            ),
+            + (f"Judge rationale: {result.rationale}"),
             failed_criteria=(
                 "ci_pipeline",
                 (
@@ -1238,9 +1264,7 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             feedback_items=(postgres_sidecar_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
-    missing_build_artifact_feedback = _drone_docker_deploy_missing_build_artifact_feedback(
-        results
-    )
+    missing_build_artifact_feedback = _drone_docker_deploy_missing_build_artifact_feedback(results)
     if missing_build_artifact_feedback is not None:
         return WorkspaceVerificationJudgeResult(
             verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
@@ -1432,10 +1456,7 @@ def _drone_yaml_configuration_failure_feedback(
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
     if not (
-        "drone build" in text
-        and "yaml:" in text
-        and "unmarshal" in text
-        and "into string" in text
+        "drone build" in text and "yaml:" in text and "unmarshal" in text and "into string" in text
     ):
         return None
     return WorkspaceVerificationFeedbackItem(
@@ -1446,7 +1467,7 @@ def _drone_yaml_configuration_failure_feedback(
         summary=(
             "Drone could not parse `.drone.yml` because a field that must be a string was "
             "written as a YAML mapping. This commonly happens when a command contains an "
-            "unquoted colon, such as `echo \"label: value\"`; generic YAML syntax validation "
+            'unquoted colon, such as `echo "label: value"`; generic YAML syntax validation '
             "can still pass, so the parsed command item types must be checked."
         ),
         evidence_refs=(
@@ -1454,6 +1475,35 @@ def _drone_yaml_configuration_failure_feedback(
             "drone_config:.drone.yml",
         ),
         failure_signature="drone-yaml-configuration-unmarshal-into-string",
+    )
+
+
+def _drone_docker_deploy_missing_service_feedback(
+    results: list[CriterionResult],
+) -> WorkspaceVerificationFeedbackItem | None:
+    text = "\n".join(result.message for result in results if result.message).lower()
+    if not (
+        "drone build .drone.yml preflight failed" in text
+        and "docker deploy stage" in text
+        and "does not cover required services" in text
+    ):
+        return None
+    return WorkspaceVerificationFeedbackItem(
+        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+        feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+        summary=(
+            "The workspace delivery contract declares multiple docker deploy services, but "
+            "the `.drone.yml` deploy step only covers a subset. The deploy stage must start "
+            "or update every required service, including frontend services when frontend "
+            "images were built."
+        ),
+        evidence_refs=(
+            "drone_config:.drone.yml",
+            "drone_error:docker_deploy_missing_required_service",
+        ),
+        failure_signature="drone-docker-deploy-missing-required-service",
     )
 
 
@@ -1535,10 +1585,7 @@ def _drone_host_socket_dind_service_timeout_feedback(
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
     if not (
-        "timed out" in text
-        and "failing stage" in text
-        and "/docker" in text
-        and "exited 0" in text
+        "timed out" in text and "failing stage" in text and "/docker" in text and "exited 0" in text
     ):
         return None
     return WorkspaceVerificationFeedbackItem(
@@ -1703,10 +1750,7 @@ def _drone_docker_deploy_unhealthy_container_feedback(
         or "no route to host" in text
     )
     has_health_probe = (
-        "wget" in text
-        or "curl" in text
-        or "health" in text
-        or "deployment_health:failed" in text
+        "wget" in text or "curl" in text or "health" in text or "deployment_health:failed" in text
     )
     if not (
         "failing stage" in text
@@ -1739,13 +1783,10 @@ def _drone_docker_deploy_container_name_conflict_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
-    has_container_conflict = (
-        "container name" in text
-        and (
-            "already in use" in text
-            or "you have to remove (or rename)" in text
-            or "conflict. the container name" in text
-        )
+    has_container_conflict = "container name" in text and (
+        "already in use" in text
+        or "you have to remove (or rename)" in text
+        or "conflict. the container name" in text
     )
     if not ("failing stage" in text and "deploy" in text and has_container_conflict):
         return None
@@ -1771,9 +1812,7 @@ def _drone_docker_deploy_network_exists_feedback(
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
     has_network_exists = (
-        "docker network create" in text
-        and "network with name" in text
-        and "already exists" in text
+        "docker network create" in text and "network with name" in text and "already exists" in text
     )
     if not ("failing stage" in text and "deploy" in text and has_network_exists):
         return None
@@ -1799,13 +1838,10 @@ def _drone_docker_deploy_postgres_sidecar_env_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
-    postgres_env_failure = (
-        "postgres_password" in text
-        and (
-            "superuser password is not specified" in text
-            or "must specify postgres_password" in text
-            or "postgres:16-alpine -c postgres_password" in text
-        )
+    postgres_env_failure = "postgres_password" in text and (
+        "superuser password is not specified" in text
+        or "must specify postgres_password" in text
+        or "postgres:16-alpine -c postgres_password" in text
     )
     if not ("failing stage" in text and "deploy" in text and postgres_env_failure):
         return None
@@ -1830,13 +1866,8 @@ def _drone_docker_deploy_missing_build_artifact_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
-    missing_node_artifact = (
-        "cannot find module" in text
-        and (
-            "/app/dist/" in text
-            or "dist/index.js" in text
-            or "module_not_found" in text
-        )
+    missing_node_artifact = "cannot find module" in text and (
+        "/app/dist/" in text or "dist/index.js" in text or "module_not_found" in text
     )
     if not ("failing stage" in text and "deploy" in text and missing_node_artifact):
         return None
@@ -1929,9 +1960,7 @@ def _drone_docker_build_timeout_feedback(
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
     stopped_by_timeout_or_kill = (
-        "timed out" in text
-        or "finished with status killed" in text
-        or "status killed" in text
+        "timed out" in text or "finished with status killed" in text or "status killed" in text
     )
     if not (
         stopped_by_timeout_or_kill
