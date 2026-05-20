@@ -1191,7 +1191,7 @@ def _with_workspace_package_manager_cache(
 
     scoped = dict(kwargs)
     scoped["command"] = (
-        ': "${NPM_CONFIG_CACHE:=node_modules/.cache/npm}"; '
+        ': "${NPM_CONFIG_CACHE:=/tmp/memstack-npm-cache}"; '
         "export NPM_CONFIG_CACHE; "
         ': "${npm_config_cache:=$NPM_CONFIG_CACHE}"; '
         "export npm_config_cache; "

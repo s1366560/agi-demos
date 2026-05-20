@@ -1038,9 +1038,10 @@ class TestSandboxMCPToolExecute:
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
         command = adapter.last_kwargs["command"]
-        assert "NPM_CONFIG_CACHE:=node_modules/.cache/npm" in command
+        assert "NPM_CONFIG_CACHE:=/tmp/memstack-npm-cache" in command
         assert "export npm_config_cache" in command
         assert "cd backend && npm ci" in command
+        assert "node_modules/.cache/npm" not in command
         assert "/workspace/.npm" not in command
 
     async def test_workspace_worker_bash_rejects_heredoc_when_worktree_override_active(self):
