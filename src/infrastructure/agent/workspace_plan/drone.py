@@ -1087,7 +1087,7 @@ def _docker_build_tag_images(output: str) -> list[str]:
             continue
         for match in _DOCKER_BUILD_TAG_ARG_RE.finditer(line):
             image = match.group("image").strip().strip("'\"")
-            if image:
+            if image and _docker_image_ref_is_named_artifact(image):
                 images.append(image)
     return images
 
@@ -1116,6 +1116,19 @@ def _docker_image_marker_candidates(image: str) -> list[str]:
 
 def _docker_image_first_part_is_registry(value: str) -> bool:
     return "." in value or ":" in value or value == "localhost"
+
+
+def _docker_image_ref_is_named_artifact(image: str) -> bool:
+    normalized = image.strip().strip("'\",")
+    if not normalized:
+        return False
+    without_digest = normalized.split("@", 1)[0]
+    basename = without_digest.rsplit("/", 1)[-1]
+    return (
+        "/" in without_digest
+        or ":" in basename
+        or any(separator in basename for separator in ("-", "_", "."))
+    )
 
 
 def _docker_deploy_uses_forbidden_local_registry_pull(output: str) -> bool:
