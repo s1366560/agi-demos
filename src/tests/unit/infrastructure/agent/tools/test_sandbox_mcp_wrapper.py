@@ -717,6 +717,40 @@ class TestSandboxMCPToolExecute:
         assert adapter.last_kwargs["timeout"] == 20
         assert adapter.last_call_options["timeout"] == 40.0
 
+    async def test_bash_tool_wraps_long_command_with_idle_heartbeat(self):
+        """Long sandbox bash commands should emit output before transport idle disconnects."""
+        adapter = MockSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="test123",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "number"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+
+        result = await tool.execute(
+            _make_ctx(),
+            command="npm ci 2>&1 | tail -30",
+            timeout=120,
+        )
+
+        assert result.is_error is False
+        command = adapter.last_kwargs["command"]
+        assert "[workspace_harness_heartbeat] bash command still running" in command
+        assert "while sleep 25" in command
+        assert "npm ci 2>&1 | tail -30" in command
+        assert 'exit "$__workspace_harness_status"' in command
+
     async def test_workspace_worker_bash_defaults_to_configured_code_root(self):
         """Worker sandbox bash calls should inherit the workspace code root as cwd."""
         adapter = MockSandboxAdapter()

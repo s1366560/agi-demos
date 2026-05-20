@@ -40,6 +40,8 @@ WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS = 64_000
 WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS = 600
 _BASH_TIMEOUT_KILL_AFTER_SECONDS = 5
 _BASH_TIMEOUT_TRANSPORT_GRACE_SECONDS = 15
+_BASH_HEARTBEAT_INTERVAL_SECONDS = 25
+_BASH_HEARTBEAT_MIN_TIMEOUT_SECONDS = 60
 _WORKSPACE_BASH_EXECUTION_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
 _WORKSPACE_BASH_EXECUTION_LOCKS_GUARD = Lock()
 
@@ -1213,7 +1215,7 @@ def _with_bash_timeout_guard(
 
     timeout_seconds = max(1, int(configured_timeout_s))
     guarded = dict(kwargs)
-    quoted_command = shlex.quote(command)
+    quoted_command = shlex.quote(_with_bash_idle_heartbeat(command, timeout_seconds))
     timeout_cleanup = ""
     workspace_root = kwargs.get("_workspace_dir")
     if isinstance(workspace_root, str) and workspace_root.strip():
@@ -1239,6 +1241,26 @@ def _with_bash_timeout_guard(
         "fi"
     )
     return guarded
+
+
+def _with_bash_idle_heartbeat(command: str, timeout_seconds: int) -> str:
+    if timeout_seconds < _BASH_HEARTBEAT_MIN_TIMEOUT_SECONDS:
+        return command
+
+    quoted_command = shlex.quote(command)
+    return (
+        "__workspace_harness_status=0; "
+        f"(while sleep {_BASH_HEARTBEAT_INTERVAL_SECONDS}; do "
+        "printf '\\n[workspace_harness_heartbeat] bash command still running\\n' >&2; "
+        "done) & "
+        "__workspace_harness_heartbeat_pid=$!; "
+        "trap 'kill \"$__workspace_harness_heartbeat_pid\" 2>/dev/null || true' EXIT; "
+        f"bash -lc {quoted_command}; "
+        "__workspace_harness_status=$?; "
+        "kill \"$__workspace_harness_heartbeat_pid\" 2>/dev/null || true; "
+        "wait \"$__workspace_harness_heartbeat_pid\" 2>/dev/null || true; "
+        "exit \"$__workspace_harness_status\""
+    )
 
 
 def _workspace_bash_execution_lock(
