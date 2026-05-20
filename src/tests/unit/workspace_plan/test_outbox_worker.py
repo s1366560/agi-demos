@@ -4238,6 +4238,109 @@ async def test_supervisor_tick_rejects_stale_parent_done_accepted_attempt(
 
 
 @pytest.mark.asyncio
+async def test_terminal_reconcile_accepts_attempt_when_expected_commit_is_later_ref(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="multi-ref-task",
+            workspace_id="workspace-1",
+            title="Accepted projection",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "accepted-multi-ref",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="accepted-multi-ref",
+            workspace_task_id="multi-ref-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="accepted",
+            conversation_id="multi-ref-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="accepted after verifier repair",
+            candidate_artifacts_json=[
+                "commit_ref:1111111",
+                "changed_file:frontend/src/app/(app)/swarm/page.tsx",
+                "commit_ref:2222222",
+            ],
+            candidate_verifications_json=["test_run:tsc --noEmit"],
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.BLOCKED,
+            execution=TaskExecution.IDLE,
+            current_attempt_id=None,
+            workspace_task_id="multi-ref-task",
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-multi-ref",
+                sequence=1,
+                title="Implement routes",
+                base_ref="HEAD",
+                commit_ref="2222222",
+            ),
+            metadata={
+                **dict(leaf.metadata or {}),
+                "last_verification_attempt_id": "accepted-multi-ref",
+                "last_verification_passed": True,
+                "terminal_attempt_retry_reason": "accepted_attempt_commit_mismatch",
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    changed = await outbox_handlers._reconcile_plan_nodes_with_terminal_attempts(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed is True
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.leaf_tasks()[0]
+    assert reconciled_leaf.intent is TaskIntent.DONE
+    assert reconciled_leaf.execution is TaskExecution.IDLE
+    assert reconciled_leaf.current_attempt_id == "accepted-multi-ref"
+    assert reconciled_leaf.metadata["terminal_attempt_status"] == "accepted"
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == "accepted-multi-ref"
+    assert reconciled_leaf.metadata["candidate_artifacts"] == [
+        "commit_ref:1111111",
+        "changed_file:frontend/src/app/(app)/swarm/page.tsx",
+        "commit_ref:2222222",
+    ]
+    assert "terminal_attempt_retry_reason" not in reconciled_leaf.metadata
+
+
+@pytest.mark.asyncio
 async def test_supervisor_tick_releases_blocked_node_with_terminal_attempt(
     db_session: AsyncSession,
 ) -> None:

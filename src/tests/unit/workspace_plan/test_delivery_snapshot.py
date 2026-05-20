@@ -108,6 +108,44 @@ def test_phase_contract_projection_marks_done_implement_missing_recovery_boundar
     assert phase.missing_artifacts == ["commit or recovery ref"]
 
 
+def test_phase_contract_projection_accepts_worker_evidence_refs() -> None:
+    node = PlanNode(
+        id="node-implement",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id="goal-1",
+        title="Implement bounded feature",
+        intent=TaskIntent.DONE,
+        metadata={
+            "iteration_phase": "implement",
+            "verification_evidence_refs": [
+                "changed_file:web/src/App.tsx",
+                "commit_ref:abc1234",
+            ],
+        },
+        acceptance_criteria=(
+            AcceptanceCriterion(
+                kind=CriterionKind.REGEX,
+                spec={"pattern": "ok", "source": "stdout"},
+                required=True,
+            ),
+        ),
+    )
+
+    metadata = _node_response_metadata(node)
+    evidence = _node_evidence_bundle_response(node, metadata)
+    gate = _node_gate_status_response(
+        node,
+        phase_id="implement",
+        metadata=metadata,
+        evidence_bundle=evidence,
+    )
+
+    assert evidence.changed_files == ["web/src/App.tsx"]
+    assert gate.status == "passed"
+    assert gate.missing == []
+
+
 def test_delivery_run_assessment_requires_all_required_services_healthy() -> None:
     now = datetime.now(UTC)
     run = WorkspacePipelineRunResponse(

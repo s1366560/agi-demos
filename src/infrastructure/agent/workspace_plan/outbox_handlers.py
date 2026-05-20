@@ -467,21 +467,33 @@ def _software_iteration_task_budget() -> int:
     return max(1, min(value, _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS))
 
 
-def _node_has_recoverable_attempt_pointer(node: PlanNode) -> bool:
+def _node_recoverable_attempt_id(node: PlanNode) -> str | None:
     if not node.current_attempt_id:
-        return False
+        metadata = dict(node.metadata or {})
+        verified_attempt_id = metadata.get("last_verification_attempt_id")
+        if (
+            isinstance(verified_attempt_id, str)
+            and verified_attempt_id
+            and metadata.get("last_verification_passed") is True
+            and node.execution is TaskExecution.IDLE
+            and node.intent in {TaskIntent.BLOCKED, TaskIntent.DONE}
+        ):
+            return verified_attempt_id
+        return None
     if node.execution in {
         TaskExecution.DISPATCHED,
         TaskExecution.RUNNING,
         TaskExecution.REPORTED,
         TaskExecution.VERIFYING,
     }:
-        return True
-    return node.execution is TaskExecution.IDLE and node.intent in {
+        return node.current_attempt_id
+    if node.execution is TaskExecution.IDLE and node.intent in {
         TaskIntent.IN_PROGRESS,
         TaskIntent.BLOCKED,
         TaskIntent.DONE,
-    }
+    }:
+        return node.current_attempt_id
+    return None
 
 
 def _node_is_done_idle_with_attempt(node: PlanNode) -> bool:
@@ -490,6 +502,14 @@ def _node_is_done_idle_with_attempt(node: PlanNode) -> bool:
         and node.execution is TaskExecution.IDLE
         and bool(node.current_attempt_id)
     )
+
+
+def _terminal_retry_metadata_cleared(metadata: Mapping[str, object]) -> dict[str, object]:
+    cleaned = dict(metadata or {})
+    cleaned.pop("terminal_attempt_retry_count", None)
+    cleaned.pop("terminal_attempt_retry_reason", None)
+    cleaned.pop("retry_not_before", None)
+    return cleaned
 
 
 async def _reconcile_plan_nodes_with_terminal_attempts(
@@ -508,11 +528,10 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     now = datetime.now(UTC)
     changed = False
     for node in list(plan.nodes.values()):
-        if not _node_has_recoverable_attempt_pointer(node):
+        attempt_id = _node_recoverable_attempt_id(node)
+        if attempt_id is None:
             continue
         recoverable_done_idle = _node_is_done_idle_with_attempt(node)
-        attempt_id = node.current_attempt_id
-        assert attempt_id is not None
         attempt = await _load_plan_attempt(session, attempt_id)
         if attempt is None:
             plan.replace_node(
@@ -566,8 +585,9 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                     node,
                     intent=TaskIntent.DONE,
                     execution=TaskExecution.IDLE,
+                    current_attempt_id=attempt.id,
                     metadata={
-                        **dict(node.metadata or {}),
+                        **_terminal_retry_metadata_cleared(node.metadata),
                         "terminal_attempt_status": status,
                         "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
                         "last_verification_summary": summary,
@@ -611,7 +631,7 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                         execution=TaskExecution.IDLE,
                         current_attempt_id=accepted_attempt.id,
                         metadata={
-                            **dict(node.metadata or {}),
+                            **_terminal_retry_metadata_cleared(node.metadata),
                             "terminal_attempt_status": "accepted",
                             "terminal_attempt_reconciled_at": now.isoformat().replace(
                                 "+00:00",
@@ -1392,10 +1412,30 @@ def _accepted_attempt_matches_node_expected_commit(
     expected = _node_expected_commit_ref(node)
     if not expected:
         return True
-    actual = _first_prefixed_ref(_accepted_attempt_evidence_refs(attempt), "commit_ref:")
-    if not actual:
+    actual_refs = _attempt_commit_refs(attempt)
+    if not actual_refs:
         return False
-    return _git_commit_refs_match(expected, actual)
+    return any(_git_commit_refs_match(expected, actual) for actual in actual_refs)
+
+
+def _attempt_commit_refs(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> tuple[str, ...]:
+    refs: list[str] = []
+    for ref in _accepted_attempt_evidence_refs(attempt):
+        value = _prefixed_ref(ref, "commit_ref:")
+        if value:
+            refs.append(value)
+    return tuple(dict.fromkeys(refs))
+
+
+def _prefixed_ref(ref: str, prefix: str) -> str | None:
+    if ref.startswith(prefix):
+        return ref.removeprefix(prefix)
+    artifact_prefix = f"artifact:{prefix}"
+    if ref.startswith(artifact_prefix):
+        return ref.removeprefix(artifact_prefix)
+    return None
 
 
 def _node_expected_commit_ref(node: PlanNode) -> str | None:

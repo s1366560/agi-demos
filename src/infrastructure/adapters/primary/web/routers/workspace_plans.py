@@ -842,10 +842,30 @@ def _node_changed_files(node: PlanNode, metadata: Mapping[str, Any]) -> list[str
         metadata.get("changed_files"),
         metadata.get("git_changed_files"),
     )
+    evidence_refs = _metadata_string_values(
+        metadata.get("pipeline_evidence_refs"),
+        metadata.get("evidence_refs"),
+        metadata.get("execution_verifications"),
+        metadata.get("verification_evidence_refs"),
+        metadata.get("candidate_artifacts"),
+        metadata.get("last_worker_report_artifacts"),
+    )
+    values.extend(_changed_files_from_refs(evidence_refs))
     checkpoint = node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else {}
     if isinstance(checkpoint, dict):
         values.extend(_metadata_string_values(checkpoint.get("changed_files")))
     return list(dict.fromkeys(values))[:16]
+
+
+def _changed_files_from_refs(refs: list[str]) -> list[str]:
+    files: list[str] = []
+    for ref in refs:
+        value = ref.removeprefix("artifact:")
+        if value.startswith("changed_file:"):
+            path = value.removeprefix("changed_file:").strip()
+            if path:
+                files.append(path)
+    return files
 
 
 def _first_metadata_string(metadata: Mapping[str, Any], *keys: str) -> str:
@@ -972,10 +992,17 @@ def _missing_implement_evidence(
     missing: list[str] = []
     if not evidence_bundle.changed_files:
         missing.append("changed files")
+    refs = evidence_bundle.evidence_refs
     has_recovery_ref = (
         _metadata_string(metadata.get("commit_ref"))
         or _metadata_string(metadata.get("local_recovery_ref"))
         or _metadata_string(metadata.get("git_diff_summary"))
+        or _metadata_string(metadata.get("verified_commit_ref"))
+        or _metadata_string(metadata.get("verified_git_diff_summary"))
+        or any(
+            ref.startswith(("commit_ref:", "git_diff_summary:", "local_recovery_ref:"))
+            for ref in refs
+        )
     )
     if not has_recovery_ref:
         missing.append("commit or recovery ref")
