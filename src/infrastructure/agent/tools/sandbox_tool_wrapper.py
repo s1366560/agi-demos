@@ -1214,6 +1214,12 @@ def _with_bash_timeout_guard(
     timeout_seconds = max(1, int(configured_timeout_s))
     guarded = dict(kwargs)
     quoted_command = shlex.quote(command)
+    timeout_cleanup = ""
+    workspace_root = kwargs.get("_workspace_dir")
+    if isinstance(workspace_root, str) and workspace_root.strip():
+        normalized_root = posixpath.normpath(workspace_root.strip().rstrip("/"))
+        if normalized_root != "/workspace" and normalized_root.startswith("/workspace/"):
+            timeout_cleanup = _workspace_bash_runtime_cleanup_command(normalized_root) + "\n"
     guarded["command"] = (
         "if command -v timeout >/dev/null 2>&1; then "
         "set +e; "
@@ -1222,6 +1228,7 @@ def _with_bash_timeout_guard(
         "status=$?; "
         'case "$status" in '
         "124|137|143) "
+        f"{timeout_cleanup}"
         "printf '\\n[workspace_harness_timeout] bash command exceeded "
         f'{timeout_seconds}s and was terminated (exit=%s)\\n\' "$status" >&2; '
         ";; "
@@ -1349,6 +1356,22 @@ def _workspace_bash_needs_dependency_setup_preclean(tool_name: str, kwargs: dict
     return isinstance(command, str) and _workspace_bash_runs_immutable_dependency_setup(command)
 
 
+def _with_workspace_bash_preclean(
+    kwargs: dict[str, Any],
+    workspace_root: str,
+) -> dict[str, Any]:
+    command = kwargs.get("command")
+    if not isinstance(command, str) or not command.strip():
+        return kwargs
+
+    scoped = dict(kwargs)
+    scoped["command"] = (
+        f"{_workspace_bash_runtime_cleanup_command(workspace_root)}\n"
+        f"{command}"
+    )
+    return scoped
+
+
 async def _cleanup_workspace_bash_runtime(
     *,
     sandbox_id: str,
@@ -1398,19 +1421,18 @@ async def _execute_workspace_sandbox_tool(
         raise RuntimeError(_workspace_concurrent_bash_error(workspace_root))
 
     async with lock:
+        execution_kwargs = (
+            _with_workspace_bash_preclean(kwargs, workspace_root)
+            if preclean_dependency_setup
+            else kwargs
+        )
         try:
-            if preclean_dependency_setup:
-                await _cleanup_workspace_bash_runtime(
-                    sandbox_id=sandbox_id,
-                    sandbox_port=sandbox_port,
-                    workspace_root=workspace_root,
-                )
             return await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,
                 sandbox_port=sandbox_port,
                 retry_config=retry_config,
-                kwargs=kwargs,
+                kwargs=execution_kwargs,
             )
         except RuntimeError as exc:
             if _workspace_bash_error_needs_process_cleanup(str(exc)):
