@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -1031,6 +1032,112 @@ class TestBuildBrief:
             "every required service in docker.deploy_services is deployed",
         ):
             assert expected in brief
+
+    def test_drone_docker_delivery_context_infers_collapsed_services_from_host_compose(
+        self, tmp_path: Any
+    ) -> None:
+        (tmp_path / "docker-compose.yml").write_text(
+            """
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evomap-backend
+    ports:
+      - "${PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: evomap-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+""".strip(),
+            encoding="utf-8",
+        )
+        task = _make_task()
+        workspace_metadata = {
+            "sandbox_code_root": "/workspace/my-evo",
+            "delivery_cicd": {
+                "provider": "drone",
+                "code_root": "/workspace/my-evo",
+                "auto_deploy": True,
+                "services": [
+                    {
+                        "service_id": "my-evo-app",
+                        "name": "my-evo Application",
+                        "start_command": "docker run my-evo",
+                        "internal_port": 8080,
+                        "health_path": "/health",
+                    }
+                ],
+                "drone": {
+                    "repo": "s1366560/my-evo",
+                    "branch": "main",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "stage": "deploy",
+                        "docker": {
+                            "image": "localhost:5001/my-evo",
+                            "registry": "localhost:5001",
+                            "dockerfile": "Dockerfile",
+                            "tags": ["drone-docker-e2e"],
+                        },
+                    },
+                },
+            },
+        }
+        code_context = WorkspaceCodeContext(
+            sandbox_code_root="/workspace/my-evo",
+            host_code_root=tmp_path,
+        )
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-3",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "deploy"},
+            code_context=code_context,
+        )
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-3",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "deploy"},
+            code_context=code_context,
+        )
+
+        delivery = system_context["delivery_cicd"]
+        docker_context = delivery["deploy"]["docker"]
+        assert [service["service_id"] for service in delivery["services"]] == [
+            "backend",
+            "frontend",
+        ]
+        assert docker_context["deploy_service_count"] == 2
+        assert docker_context["deploy_required_service_ids"] == ["backend", "frontend"]
+        assert [service["service_id"] for service in docker_context["deploy_services"]] == [
+            "backend",
+            "frontend",
+        ]
+        assert docker_context["deploy_services"][0]["deploy_port_mapping"] == "18080:3001"
+        assert docker_context["deploy_services"][1]["deploy_port_mapping"] == "18081:3000"
+        assert "backend (evomap-backend)" in brief
+        assert "frontend (evomap-frontend)" in brief
+        assert "docker compose up -d backend" in brief
+        assert "docker compose up -d frontend" in brief
+        assert "Use docker.deploy_services as the required Docker deploy inventory" in brief
 
     def test_docker_run_image_parser_ignores_non_docker_run_commands(self) -> None:
         assert wl._docker_run_image_from_command("npm run start:backend") is None

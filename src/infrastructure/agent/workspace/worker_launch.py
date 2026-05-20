@@ -40,6 +40,7 @@ import shlex
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -549,6 +550,9 @@ def _render_visible_handoff_interpretation_gate(
 def _workspace_delivery_cicd_context(  # noqa: C901, PLR0915
     workspace_metadata: Mapping[str, Any] | None,
     plan_node_metadata: Mapping[str, Any] | None = None,
+    *,
+    fallback_code_root: str | None = None,
+    fallback_host_code_root: str | Path | None = None,
 ) -> dict[str, Any] | None:
     """Render workspace-owned CI/CD settings into safe worker-facing context."""
     if not isinstance(workspace_metadata, Mapping):
@@ -560,7 +564,9 @@ def _workspace_delivery_cicd_context(  # noqa: C901, PLR0915
     try:
         contract = build_pipeline_contract_from_metadata(
             workspace_metadata=dict(workspace_metadata),
-            fallback_code_root=_metadata_text(workspace_metadata.get("sandbox_code_root")),
+            fallback_code_root=fallback_code_root
+            or _metadata_text(workspace_metadata.get("sandbox_code_root")),
+            fallback_host_code_root=fallback_host_code_root,
         )
     except Exception:
         logger.debug("workspace_worker_launch.delivery_cicd_context_failed", exc_info=True)
@@ -1905,6 +1911,8 @@ def _build_worker_system_context(
     delivery_cicd = _workspace_delivery_cicd_context(
         workspace_metadata,
         plan_node_metadata,
+        fallback_code_root=code_context.sandbox_code_root if code_context is not None else None,
+        fallback_host_code_root=code_context.host_code_root if code_context is not None else None,
     )
     if delivery_cicd is not None:
         context["delivery_cicd"] = delivery_cicd
@@ -2238,6 +2246,8 @@ def _build_worker_brief(
     delivery_cicd = _workspace_delivery_cicd_context(
         workspace_metadata,
         plan_node_metadata,
+        fallback_code_root=code_context.sandbox_code_root if code_context is not None else None,
+        fallback_host_code_root=code_context.host_code_root if code_context is not None else None,
     )
     if delivery_cicd is not None:
         sections.append(_render_delivery_cicd_brief(delivery_cicd))
