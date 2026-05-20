@@ -331,6 +331,59 @@ steps:
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_preflights_host_checkout_when_code_root_is_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    (tmp_path / ".drone.yml").write_text(
+        """
+kind: pipeline
+type: docker
+name: workspace-ci
+steps:
+  - name: deploy
+    image: docker:27-cli
+    commands:
+      - docker run -d --name my-evo-backend my-evo-backend:drone-docker-e2e
+""".lstrip(),
+        encoding="utf-8",
+    )
+    client = _FakeDroneClient({"number": 42, "status": "success"})
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            code_root="/workspace/my-evo",
+            provider_config={
+                "repo": "octo/hello",
+                "branch": "main",
+                "preflight_code_root": str(tmp_path),
+            },
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "deploy_services": [
+                        {"service_id": "backend", "container_name": "backend", "required": True},
+                        {
+                            "service_id": "frontend",
+                            "container_name": "frontend",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    assert "does not cover required services: frontend" in result.reason
+    assert client.created == []
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_stops_timed_out_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1429,6 +1482,25 @@ def test_drone_contract_uses_provider_config_without_preview_requirement() -> No
     assert contract.stages == ()
     assert not _needs_agent_managed_pipeline_proposal(contract)
     assert not _requires_preview_deployment(contract)
+
+
+def test_drone_contract_records_host_preflight_code_root(tmp_path: Any) -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "drone": {
+                    "repo": "octo/hello",
+                    "branch": "main",
+                },
+            }
+        },
+        fallback_code_root="/workspace/hello",
+        fallback_host_code_root=tmp_path,
+    )
+
+    assert contract.code_root == "/workspace/hello"
+    assert contract.provider_config["preflight_code_root"] == str(tmp_path)
 
 
 def test_drone_contract_parses_deploy_config_from_drone_metadata() -> None:

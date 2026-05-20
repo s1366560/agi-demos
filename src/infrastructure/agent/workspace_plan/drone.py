@@ -1187,9 +1187,10 @@ def _result_output(result: PipelineStageResult) -> str:
 
 
 def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRunResult | None:
-    if not contract.code_root:
+    code_root = _drone_preflight_code_root(contract)
+    if code_root is None:
         return None
-    drone_path = Path(contract.code_root) / ".drone.yml"
+    drone_path = code_root / ".drone.yml"
     if not drone_path.is_file():
         return None
     try:
@@ -1207,6 +1208,20 @@ def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRun
     deploy_issue = _docker_deploy_yaml_coverage_issue(parsed, contract.deploy)
     if deploy_issue is not None:
         return _configuration_failure(deploy_issue)
+    return None
+
+
+def _drone_preflight_code_root(contract: PipelineContractSpec) -> Path | None:
+    for value in (
+        contract.provider_config.get("preflight_code_root"),
+        contract.provider_config.get("host_code_root"),
+        contract.code_root,
+    ):
+        if not isinstance(value, str) or not value.strip():
+            continue
+        path = Path(value.strip())
+        if path.is_dir():
+            return path
     return None
 
 

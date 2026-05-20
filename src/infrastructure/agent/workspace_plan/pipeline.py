@@ -229,6 +229,8 @@ def build_pipeline_contract_from_metadata(
         code_root=readable_code_root,
     )
     provider_config = _provider_config(config, provider)
+    if provider == DRONE_PROVIDER and readable_code_root is not None:
+        provider_config.setdefault("preflight_code_root", str(readable_code_root))
     deploy = _configured_deploy_spec(config, provider_config, services=services)
 
     stages = _configured_stage_specs(config, timeout_seconds)
