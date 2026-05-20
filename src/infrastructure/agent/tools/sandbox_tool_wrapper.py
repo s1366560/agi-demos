@@ -11,6 +11,7 @@ import posixpath
 import re
 import shlex
 from collections.abc import Mapping
+from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -39,6 +40,8 @@ WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS = 64_000
 WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS = 600
 _BASH_TIMEOUT_KILL_AFTER_SECONDS = 5
 _BASH_TIMEOUT_TRANSPORT_GRACE_SECONDS = 15
+_WORKSPACE_BASH_EXECUTION_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
+_WORKSPACE_BASH_EXECUTION_LOCKS_GUARD = Lock()
 
 _WORKSPACE_CODE_ROOT_DEFAULT_WORKDIR_TOOLS = frozenset(
     {
@@ -1226,6 +1229,180 @@ def _with_bash_timeout_guard(
     return guarded
 
 
+def _workspace_bash_execution_lock(
+    sandbox_id: str,
+    tool_name: str,
+    kwargs: dict[str, Any],
+) -> tuple[str, asyncio.Lock] | None:
+    if tool_name != "bash":
+        return None
+
+    workspace_dir = kwargs.get("_workspace_dir")
+    if not isinstance(workspace_dir, str) or not workspace_dir.strip():
+        return None
+
+    normalized_root = posixpath.normpath(workspace_dir.strip().rstrip("/"))
+    if normalized_root == "/workspace" or not normalized_root.startswith("/workspace/"):
+        return None
+
+    key = (sandbox_id, normalized_root)
+    with _WORKSPACE_BASH_EXECUTION_LOCKS_GUARD:
+        lock = _WORKSPACE_BASH_EXECUTION_LOCKS.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _WORKSPACE_BASH_EXECUTION_LOCKS[key] = lock
+    return normalized_root, lock
+
+
+def _workspace_concurrent_bash_error(workspace_root: str) -> str:
+    return (
+        "Another workspace bash command is already running for active worktree "
+        f"{workspace_root}. Retry after it completes. Do not run package manager, "
+        "build, test, or deploy commands in parallel against the same worktree."
+    )
+
+
+def _workspace_bash_runtime_cleanup_command(workspace_root: str) -> str:
+    quoted_root = shlex.quote(posixpath.normpath(workspace_root.rstrip("/")))
+    return "\n".join(
+        [
+            f"workspace_root={quoted_root}",
+            "cleanup_pgid=$(awk '/^NSpgid:/{print $2; exit}' /proc/$$/status 2>/dev/null || true)",
+            "matched=0",
+            "group_count=0",
+            'groups=""',
+            "for status_path in /proc/[0-9]*/status; do",
+            '  [ -e "$status_path" ] || continue',
+            "  proc_dir=${status_path%/status}",
+            "  pid=${proc_dir##*/}",
+            '  case "$pid" in ""|1|$$) continue ;; esac',
+            '  cwd=$(readlink "$proc_dir/cwd" 2>/dev/null || true)',
+            '  case "$cwd" in',
+            '    "$workspace_root"|"$workspace_root"/*)',
+            "      matched=$((matched + 1))",
+            "      pgid=$(awk '/^NSpgid:/{print $2; exit}' \"$status_path\" 2>/dev/null || true)",
+            '      if [ -n "$pgid" ] && [ "$pgid" != "1" ] && [ "$pgid" != "$cleanup_pgid" ]; then',
+            '        case " $groups " in',
+            '          *" $pgid "*) ;;',
+            "          *)",
+            '            groups="$groups $pgid"',
+            "            group_count=$((group_count + 1))",
+            '            kill -TERM "-$pgid" 2>/dev/null || true',
+            "            ;;",
+            "        esac",
+            "      else",
+            '        kill -TERM "$pid" 2>/dev/null || true',
+            "      fi",
+            "      ;;",
+            "  esac",
+            "done",
+            "sleep 1",
+            'for pgid in $groups; do kill -KILL "-$pgid" 2>/dev/null || true; done',
+            "remaining=0",
+            "for status_path in /proc/[0-9]*/status; do",
+            '  [ -e "$status_path" ] || continue',
+            "  proc_dir=${status_path%/status}",
+            "  pid=${proc_dir##*/}",
+            '  case "$pid" in ""|1|$$) continue ;; esac',
+            '  cwd=$(readlink "$proc_dir/cwd" 2>/dev/null || true)',
+            '  case "$cwd" in',
+            '    "$workspace_root"|"$workspace_root"/*)',
+            "      remaining=$((remaining + 1))",
+            '      kill -KILL "$pid" 2>/dev/null || true',
+            "      ;;",
+            "  esac",
+            "done",
+            (
+                'printf "[workspace_bash_cleanup] root=%s matched=%s groups=%s '
+                + 'remaining=%s\\n" "$workspace_root" "$matched" "$group_count" "$remaining"'
+            ),
+        ]
+    )
+
+
+def _workspace_bash_error_needs_process_cleanup(error_message: str) -> bool:
+    normalized = error_message.lower()
+    return any(
+        token in normalized
+        for token in (
+            "timed out",
+            "timeout",
+            "transport",
+            "connection reset",
+            "connection closed",
+            "cancelled",
+            "terminated",
+            "exit code -15",
+        )
+    )
+
+
+async def _cleanup_workspace_bash_runtime(
+    *,
+    sandbox_id: str,
+    sandbox_port: SandboxPort,
+    workspace_root: str,
+) -> None:
+    try:
+        await sandbox_port.call_tool(
+            sandbox_id,
+            "bash",
+            {
+                "command": _workspace_bash_runtime_cleanup_command(workspace_root),
+                "timeout": 20,
+                "_workspace_dir": workspace_root,
+            },
+            timeout=25.0,
+        )
+    except Exception:
+        logger.warning(
+            "workspace_bash_cleanup.failed",
+            exc_info=True,
+            extra={"sandbox_id": sandbox_id, "workspace_root": workspace_root},
+        )
+
+
+async def _execute_workspace_sandbox_tool(
+    *,
+    sandbox_id: str,
+    tool_name: str,
+    sandbox_port: SandboxPort,
+    retry_config: RetryConfig,
+    kwargs: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None]:
+    execution_lock = _workspace_bash_execution_lock(sandbox_id, tool_name, kwargs)
+    if execution_lock is None:
+        return await _execute_with_retry(
+            sandbox_id=sandbox_id,
+            tool_name=tool_name,
+            sandbox_port=sandbox_port,
+            retry_config=retry_config,
+            kwargs=kwargs,
+        )
+
+    workspace_root, lock = execution_lock
+    if lock.locked():
+        raise RuntimeError(_workspace_concurrent_bash_error(workspace_root))
+
+    async with lock:
+        try:
+            return await _execute_with_retry(
+                sandbox_id=sandbox_id,
+                tool_name=tool_name,
+                sandbox_port=sandbox_port,
+                retry_config=retry_config,
+                kwargs=kwargs,
+            )
+        except RuntimeError as exc:
+            if _workspace_bash_error_needs_process_cleanup(str(exc)):
+                await _cleanup_workspace_bash_runtime(
+                    sandbox_id=sandbox_id,
+                    sandbox_port=sandbox_port,
+                    workspace_root=workspace_root,
+                )
+            raise
+
+
 def _workspace_harness_argument_error(
     tool_name: str,
     kwargs: dict[str, Any],
@@ -1551,7 +1728,7 @@ def create_sandbox_mcp_tool(
                 normalized_kwargs,
                 root_override,
             )
-            output, raw_result = await _execute_with_retry(
+            output, raw_result = await _execute_workspace_sandbox_tool(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,
                 sandbox_port=sandbox_port,

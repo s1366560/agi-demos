@@ -3,6 +3,8 @@
 TDD: Tests written first (RED phase).
 """
 
+import asyncio
+
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.mcp_errors import RetryConfig
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import (
@@ -114,6 +116,54 @@ class ScriptInspectSandboxAdapter(MockSandboxAdapter):
             }
         return {
             "content": [{"text": f"Mock result from {tool_name}"}],
+            "is_error": False,
+        }
+
+
+class SlowSandboxAdapter(MockSandboxAdapter):
+    """Mock sandbox adapter that exposes overlapping tool executions."""
+
+    def __init__(self, delay: float = 0.05) -> None:
+        super().__init__()
+        self.delay = delay
+        self.active_calls = 0
+        self.max_active_calls = 0
+
+    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
+        self.call_count += 1
+        self.last_kwargs = kwargs
+        self.last_call_options = kw
+        self.active_calls += 1
+        self.max_active_calls = max(self.max_active_calls, self.active_calls)
+        try:
+            await asyncio.sleep(self.delay)
+            return {
+                "content": [{"text": f"Mock result from {tool_name}"}],
+                "is_error": False,
+            }
+        finally:
+            self.active_calls -= 1
+
+
+class FailingThenCleanupSandboxAdapter(MockSandboxAdapter):
+    """Mock sandbox adapter that fails the command and records cleanup."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[tuple[str, dict]] = []
+
+    async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict, **kw):
+        self.call_count += 1
+        self.last_kwargs = kwargs
+        self.last_call_options = kw
+        self.calls.append((tool_name, kwargs))
+        if self.call_count == 1:
+            return {
+                "content": [{"text": "Command execution timed out after 600s limit"}],
+                "is_error": True,
+            }
+        return {
+            "content": [{"text": "[workspace_bash_cleanup] root=/workspace/.memstack/worktrees/att-timeout matched=1 groups=1 remaining=0"}],
             "is_error": False,
         }
 
@@ -730,6 +780,80 @@ class TestSandboxMCPToolExecute:
 
         assert result.is_error is False
         assert adapter.last_kwargs["_workspace_dir"] == "/workspace/.memstack/worktrees/att-1"
+
+    async def test_workspace_worker_bash_rejects_concurrent_same_worktree_command(self):
+        """A single attempt worktree must not run overlapping foreground bash commands."""
+        adapter = SlowSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="concurrent-bash-test",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "number"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+        ctx = _make_ctx(
+            runtime_context={
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                "active_execution_root": "/workspace/.memstack/worktrees/att-concurrent",
+            }
+        )
+
+        first, second = await asyncio.gather(
+            tool.execute(ctx, command="npm ci", timeout=600),
+            tool.execute(ctx, command="npm test", timeout=600),
+        )
+
+        results = (first, second)
+        assert sum(result.is_error is False for result in results) == 1
+        assert sum("Another workspace bash command is already running" in result.output for result in results) == 1
+        assert adapter.call_count == 1
+        assert adapter.max_active_calls == 1
+
+    async def test_workspace_worker_bash_cleans_worktree_processes_after_failure(self):
+        """Failed workspace bash commands should trigger a worktree process cleanup pass."""
+        adapter = FailingThenCleanupSandboxAdapter()
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="timeout-cleanup-test",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "number"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+            retry_config=RetryConfig(max_retries=0),
+        )
+        ctx = _make_ctx(
+            runtime_context={
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                "active_execution_root": "/workspace/.memstack/worktrees/att-timeout",
+            }
+        )
+
+        result = await tool.execute(ctx, command="npm ci", timeout=600)
+
+        assert result.is_error is True
+        assert adapter.call_count == 2
+        assert "npm ci" in adapter.calls[0][1]["command"]
+        assert "[workspace_bash_cleanup]" in adapter.calls[1][1]["command"]
+        assert "workspace_root=/workspace/.memstack/worktrees/att-timeout" in adapter.calls[1][1]["command"]
 
     async def test_workspace_worker_bash_uses_structured_active_execution_root(self):
         """Structured runtime root should win without parsing prompt text."""
