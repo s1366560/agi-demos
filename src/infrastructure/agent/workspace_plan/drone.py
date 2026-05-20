@@ -99,7 +99,9 @@ class DroneClientProtocol(Protocol):
 
     async def get_build(self, *, owner: str, repo: str, build_number: int) -> Mapping[str, Any]: ...
 
-    async def stop_build(self, *, owner: str, repo: str, build_number: int) -> Mapping[str, Any]: ...
+    async def stop_build(
+        self, *, owner: str, repo: str, build_number: int
+    ) -> Mapping[str, Any]: ...
 
     async def get_logs(
         self,
@@ -749,7 +751,7 @@ def _compact_failure_preview(value: str, *, limit: int = 4000) -> str:
     signal_prefix = f"failure_signals:\n{signal_preview}\n" if signal_preview else ""
     remaining = limit - len(signal_prefix) - len(marker)
     if remaining <= 20:
-        return f"{signal_prefix}{compacted[-max(1, limit - len(signal_prefix)):]}"[:limit]
+        return f"{signal_prefix}{compacted[-max(1, limit - len(signal_prefix)) :]}"[:limit]
     head_size = max(1, remaining // 2)
     tail_size = max(1, remaining - head_size)
     return f"{signal_prefix}{compacted[:head_size]}{marker}{compacted[-tail_size:]}"
@@ -917,17 +919,23 @@ def _deploy_result_matches_mode(
     deploy: PipelineDeploySpec,
 ) -> bool:
     if deploy.mode == "docker":
-        return _docker_deploy_evidence(result)
+        return _docker_deploy_evidence(result, deploy=deploy)
     if deploy.mode == "kubernetes":
         return _kubernetes_deploy_evidence(result)
     return deploy.mode == "cli"
 
 
-def _docker_deploy_evidence(result: PipelineStageResult) -> bool:
+def _docker_deploy_evidence(
+    result: PipelineStageResult,
+    *,
+    deploy: PipelineDeploySpec,
+) -> bool:
     output = _result_output(result).lower()
     if _docker_deploy_output_masks_failure(output):
         return False
     if _docker_deploy_uses_forbidden_local_registry_pull(output):
+        return False
+    if not _docker_deploy_covers_required_services(output, deploy=deploy):
         return False
     return any(
         marker in output
@@ -941,6 +949,46 @@ def _docker_deploy_evidence(result: PipelineStageResult) -> bool:
             "docker service update",
         )
     )
+
+
+def _docker_deploy_covers_required_services(
+    output: str,
+    *,
+    deploy: PipelineDeploySpec,
+) -> bool:
+    requirements = _docker_deploy_service_requirements(deploy)
+    if not requirements:
+        return True
+    return all(any(marker in output for marker in markers) for markers in requirements)
+
+
+def _docker_deploy_service_requirements(deploy: PipelineDeploySpec) -> list[tuple[str, ...]]:
+    raw = deploy.docker.get("deploy_services")
+    if not isinstance(raw, list):
+        raw = deploy.docker.get("services")
+    if not isinstance(raw, list):
+        return []
+
+    requirements: list[tuple[str, ...]] = []
+    for item in raw:
+        if not isinstance(item, Mapping) or item.get("required") is False:
+            continue
+        markers = tuple(
+            dict.fromkeys(
+                marker.lower()
+                for marker in (
+                    _string(item.get("container_name")),
+                    _string(item.get("image_deploy_local")),
+                    _string(item.get("image_host_docker")),
+                    _string(item.get("image")),
+                    _string(item.get("service_id") or item.get("id")),
+                )
+                if marker
+            )
+        )
+        if markers:
+            requirements.append(markers)
+    return requirements
 
 
 def _docker_deploy_uses_forbidden_local_registry_pull(output: str) -> bool:
@@ -995,11 +1043,7 @@ def _kubernetes_deploy_evidence(result: PipelineStageResult) -> bool:
 
 
 def _result_output(result: PipelineStageResult) -> str:
-    return "\n".join(
-        value
-        for value in (result.stdout_preview, result.stderr_preview)
-        if value
-    )
+    return "\n".join(value for value in (result.stdout_preview, result.stderr_preview) if value)
 
 
 def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRunResult | None:
@@ -1011,9 +1055,7 @@ def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRun
     try:
         parsed = yaml.safe_load(drone_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        return _configuration_failure(
-            f"Drone build .drone.yml preflight failed; yaml: {exc}"
-        )
+        return _configuration_failure(f"Drone build .drone.yml preflight failed; yaml: {exc}")
     command_issue = _first_non_string_drone_command(parsed)
     if command_issue is None:
         return None

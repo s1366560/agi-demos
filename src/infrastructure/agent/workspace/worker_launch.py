@@ -36,6 +36,7 @@ import logging
 import os
 import posixpath
 import re
+import shlex
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime
@@ -122,9 +123,7 @@ _DEFAULT_DOCKER_DEPLOY_POSTGRES_READY_COMMAND = (
 _DEFAULT_DOCKER_DEPLOY_REDIS_COMMAND = (
     "docker run -d --name <redis-container> --network workspace-deploy redis:7-alpine"
 )
-_DEFAULT_DOCKER_DEPLOY_REDIS_CLEANUP_COMMAND = (
-    "docker rm -f <redis-container> 2>/dev/null || true"
-)
+_DEFAULT_DOCKER_DEPLOY_REDIS_CLEANUP_COMMAND = "docker rm -f <redis-container> 2>/dev/null || true"
 _PLATFORM_RESERVED_DOCKER_HOST_PORTS = (
     3000,  # frontend dev server
     3001,  # Drone runner / common app internal port
@@ -547,7 +546,7 @@ def _render_visible_handoff_interpretation_gate(
     )
 
 
-def _workspace_delivery_cicd_context(  # noqa: PLR0915
+def _workspace_delivery_cicd_context(  # noqa: C901, PLR0915
     workspace_metadata: Mapping[str, Any] | None,
     plan_node_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
@@ -598,7 +597,9 @@ def _workspace_delivery_cicd_context(  # noqa: PLR0915
     if contract.provider == DRONE_PROVIDER:
         provider_config = dict(contract.provider_config)
         drone_context: dict[str, Any] = {
-            "repo": _metadata_text(provider_config.get("repo") or provider_config.get("repository")),
+            "repo": _metadata_text(
+                provider_config.get("repo") or provider_config.get("repository")
+            ),
             "branch": _metadata_text(provider_config.get("branch")),
             "target": _metadata_text(provider_config.get("target")),
             "server_url_env": _metadata_text(provider_config.get("server_url_env")),
@@ -643,7 +644,7 @@ def _workspace_delivery_cicd_context(  # noqa: PLR0915
                 (
                     "Before committing `.drone.yml`, parse it and verify every "
                     "`steps[].commands[]` item is a string. YAML can parse commands such as "
-                    "`echo \"label: value\"` as a mapping even when syntax validation passes; "
+                    '`echo "label: value"` as a mapping even when syntax validation passes; '
                     "quote those commands or use block scalars."
                 ),
                 (
@@ -700,6 +701,24 @@ def _workspace_delivery_cicd_context(  # noqa: PLR0915
                 "docker compose up, docker stack deploy, or docker service update, and should include "
                 "a health check when a workspace service health path is known."
             )
+            context["instructions"].append(
+                "Docker deploy coverage must match application image coverage. If `.drone.yml` "
+                "builds or pushes separate frontend, backend, API, worker, or other application "
+                "service images, the deploy stage must run or compose every corresponding required "
+                "runtime service and health-check each service with a known health path. A deploy "
+                "stage that only starts the backend/API container is incomplete when a frontend "
+                "or other required application image was also built."
+            )
+            docker_context = deploy.get("docker")
+            if isinstance(docker_context, Mapping) and docker_context.get("deploy_service_count"):
+                context["instructions"].append(
+                    "Use docker.deploy_services as the required Docker deploy inventory. For each "
+                    "required service, add or preserve a deploy-local build/load or compose path, "
+                    "start the service with a distinct container name and host port, and keep its "
+                    "health check in the deploy stage. Do not report Drone deploy complete until "
+                    "every required service in docker.deploy_services is deployed or explicitly "
+                    "covered by docker compose."
+                )
             context["instructions"].append(
                 "Docker deploy commands must fail fast when pull, run, compose, stack, service, "
                 "or health-check commands fail. Do not mask deployment failures with `|| true`, "
@@ -841,6 +860,12 @@ def _deploy_context_with_runner_hints(
     _add_docker_image_hints(docker_context, registry, registry_internal, image)
     _add_docker_deploy_strategy_hints(docker_context, registry, image)
     _add_docker_deploy_port_hints(docker_context, services=services)
+    _add_docker_deploy_service_hints(
+        docker_context,
+        services=services,
+        registry=registry,
+        registry_internal=registry_internal,
+    )
     _add_docker_deploy_dependency_hints(docker_context)
     docker_context.setdefault("runner_docker_socket", "/var/run/docker.sock")
     docker_context.setdefault("runner_docker_socket_volume", "docker-sock")
@@ -980,7 +1005,304 @@ def _add_docker_deploy_dependency_hints(docker_context: dict[str, Any]) -> None:
     )
     docker_context.setdefault("deploy_redis_sidecar_image", _DEFAULT_DOCKER_DEPLOY_REDIS_IMAGE)
     docker_context.setdefault("deploy_redis_sidecar_command", _DEFAULT_DOCKER_DEPLOY_REDIS_COMMAND)
-    docker_context.setdefault("deploy_redis_cleanup_command", _DEFAULT_DOCKER_DEPLOY_REDIS_CLEANUP_COMMAND)
+    docker_context.setdefault(
+        "deploy_redis_cleanup_command", _DEFAULT_DOCKER_DEPLOY_REDIS_CLEANUP_COMMAND
+    )
+
+
+def _add_docker_deploy_service_hints(
+    docker_context: dict[str, Any],
+    *,
+    services: Iterable[Mapping[str, Any]],
+    registry: str | None,
+    registry_internal: str | None,
+) -> None:
+    rows = _docker_deploy_service_rows(docker_context, services=services)
+    if not rows:
+        return
+
+    base_host_port = (
+        _positive_int_metadata(docker_context.get("deploy_host_port"))
+        or _DEFAULT_DOCKER_DEPLOY_HOST_PORT
+    )
+    strategy = _metadata_text(docker_context.get("deploy_strategy")) or ""
+    used_host_ports: set[int] = set()
+    deploy_services: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        deploy_service = _docker_deploy_service_hint(
+            row,
+            docker_context=docker_context,
+            registry=registry,
+            registry_internal=registry_internal,
+            base_host_port=base_host_port,
+            service_index=index,
+            used_host_ports=used_host_ports,
+            multiple_services=len(rows) > 1,
+            local_build=strategy == _LOCAL_DOCKER_DEPLOY_STRATEGY,
+        )
+        if deploy_service:
+            deploy_services.append(deploy_service)
+
+    if not deploy_services:
+        return
+    docker_context["deploy_services"] = deploy_services
+    docker_context["deploy_service_count"] = len(deploy_services)
+    docker_context["deploy_required_service_ids"] = [
+        service["service_id"] for service in deploy_services if service.get("required") is not False
+    ]
+    local_build_commands = [
+        str(service["deploy_local_build_command"])
+        for service in deploy_services
+        if service.get("deploy_local_build_command")
+    ]
+    if local_build_commands:
+        docker_context["deploy_local_build_commands"] = local_build_commands
+
+
+def _docker_deploy_service_rows(
+    docker_context: Mapping[str, Any],
+    *,
+    services: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    configured = _configured_docker_deploy_services(docker_context)
+    candidates = [
+        dict(service)
+        for service in services
+        if isinstance(service, Mapping) and _is_docker_deploy_candidate_service(service)
+    ]
+    if not configured:
+        return candidates
+
+    candidates_by_id = {
+        service_id: service
+        for service in candidates
+        if (service_id := _metadata_text(service.get("service_id")))
+    }
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in configured:
+        service_id = _metadata_text(item.get("service_id") or item.get("id"))
+        merged = dict(candidates_by_id.get(service_id or "", {}))
+        merged.update(item)
+        rows.append(merged)
+        if service_id:
+            seen.add(service_id)
+    for service in candidates:
+        service_id = _metadata_text(service.get("service_id"))
+        if service_id and service_id not in seen:
+            rows.append(dict(service))
+    return rows
+
+
+def _configured_docker_deploy_services(docker_context: Mapping[str, Any]) -> list[dict[str, Any]]:
+    raw = docker_context.get("deploy_services")
+    if not isinstance(raw, list):
+        raw = docker_context.get("services")
+    if not isinstance(raw, list):
+        return []
+    return [dict(item) for item in raw if isinstance(item, Mapping)]
+
+
+def _is_docker_deploy_candidate_service(service: Mapping[str, Any]) -> bool:
+    service_id = (_metadata_text(service.get("service_id")) or "").lower()
+    name = (_metadata_text(service.get("name")) or "").lower()
+    start_command = (_metadata_text(service.get("start_command")) or "").lower()
+    if service_id in {"drone-ci", "drone-runner"} or service_id.startswith("drone-"):
+        return False
+    return not (
+        name.startswith("drone ")
+        or "drone server" in start_command
+        or "drone-runner" in start_command
+    )
+
+
+def _docker_deploy_service_hint(
+    row: Mapping[str, Any],
+    *,
+    docker_context: Mapping[str, Any],
+    registry: str | None,
+    registry_internal: str | None,
+    base_host_port: int,
+    service_index: int,
+    used_host_ports: set[int],
+    multiple_services: bool,
+    local_build: bool,
+) -> dict[str, Any]:
+    service_id = (
+        _metadata_text(row.get("service_id") or row.get("id")) or f"service-{service_index + 1}"
+    )
+    name = _metadata_text(row.get("name")) or service_id
+    container_port = _positive_int_metadata(
+        row.get("container_port") or row.get("internal_port") or row.get("port")
+    ) or (
+        _positive_int_metadata(
+            docker_context.get("container_port") or docker_context.get("internal_port")
+        )
+        if not multiple_services
+        else None
+    )
+    deploy_host_port = _positive_int_metadata(row.get("deploy_host_port") or row.get("host_port"))
+    if deploy_host_port is None or deploy_host_port in _PLATFORM_RESERVED_DOCKER_HOST_PORTS:
+        deploy_host_port = _next_docker_deploy_host_port(
+            base_host_port + service_index,
+            used_host_ports=used_host_ports,
+        )
+    used_host_ports.add(deploy_host_port)
+
+    entry: dict[str, Any] = {
+        "service_id": service_id,
+        "name": name,
+        "required": row.get("required") is not False,
+        "container_name": _metadata_text(row.get("container_name"))
+        or _safe_docker_container_name(service_id),
+        "deploy_host_port": deploy_host_port,
+    }
+    start_command = _metadata_text(row.get("start_command"))
+    if start_command:
+        entry["start_command"] = start_command
+    if container_port is not None:
+        entry["container_port"] = container_port
+        entry["deploy_port_mapping"] = f"{deploy_host_port}:{container_port}"
+
+    image = (
+        _metadata_text(row.get("image") or row.get("image_host_docker"))
+        or _docker_run_image_from_command(start_command)
+        or (_metadata_text(docker_context.get("image")) if not multiple_services else None)
+    )
+    if image:
+        _add_docker_service_image_hints(
+            entry,
+            docker_context=docker_context,
+            registry=registry,
+            registry_internal=registry_internal,
+            image=image,
+        )
+
+    dockerfile = _metadata_text(row.get("dockerfile")) or (
+        _metadata_text(docker_context.get("dockerfile")) if not multiple_services else None
+    )
+    context_path = _metadata_text(row.get("context") or row.get("build_context")) or (
+        _metadata_text(docker_context.get("context")) if not multiple_services else None
+    )
+    if dockerfile:
+        entry["dockerfile"] = dockerfile
+    if context_path:
+        entry["context"] = context_path
+    deploy_local_image = _metadata_text(entry.get("image_deploy_local"))
+    if local_build and deploy_local_image and dockerfile and context_path:
+        entry["deploy_local_build_command"] = (
+            f"docker build -t {deploy_local_image} -f {dockerfile} {context_path}"
+        )
+
+    health_path = _metadata_text(row.get("health_path"))
+    if health_path:
+        entry["health_path"] = health_path
+        health_url = _docker_deploy_health_url(health_path, host_port=deploy_host_port)
+        entry["deploy_health_url"] = health_url
+        entry["deploy_health_check_command"] = _docker_deploy_health_check_command(health_url)
+    health_command = _metadata_text(row.get("health_command"))
+    if health_command:
+        entry["health_command"] = health_command
+    return entry
+
+
+def _add_docker_service_image_hints(
+    entry: dict[str, Any],
+    *,
+    docker_context: Mapping[str, Any],
+    registry: str | None,
+    registry_internal: str | None,
+    image: str,
+) -> None:
+    entry["image"] = image
+    entry.setdefault("image_host_docker", image)
+    if registry and registry_internal and image.startswith(f"{registry}/"):
+        image_without_registry = image.removeprefix(f"{registry}/")
+        entry.setdefault("image_internal", f"{registry_internal}/{image_without_registry}")
+        entry.setdefault(
+            "image_deploy_local",
+            _docker_image_with_primary_tag(image_without_registry, docker_context),
+        )
+        return
+    entry.setdefault("image_deploy_local", _docker_image_with_primary_tag(image, docker_context))
+
+
+def _next_docker_deploy_host_port(start: int, *, used_host_ports: set[int]) -> int:
+    port = max(1, start)
+    while port in used_host_ports or port in _PLATFORM_RESERVED_DOCKER_HOST_PORTS:
+        port += 1
+    return port
+
+
+def _safe_docker_container_name(value: str) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return normalized or "workspace-service"
+
+
+def _docker_run_image_from_command(command: str | None) -> str | None:
+    if not command:
+        return None
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return None
+    run_index = _docker_run_index(parts)
+    if run_index is None:
+        return None
+    options_with_value = {
+        "--add-host",
+        "--cidfile",
+        "--env",
+        "--env-file",
+        "--expose",
+        "--hostname",
+        "--label",
+        "--mount",
+        "--name",
+        "--network",
+        "--publish",
+        "--user",
+        "--volume",
+        "--workdir",
+        "-e",
+        "-h",
+        "-l",
+        "-m",
+        "-p",
+        "-u",
+        "-v",
+        "-w",
+    }
+    index = run_index + 1
+    while index < len(parts):
+        token = parts[index]
+        if token == "--":
+            index += 1
+            break
+        if token.startswith("-"):
+            if "=" in token:
+                index += 1
+            elif token in options_with_value:
+                index += 2
+            else:
+                index += 1
+            continue
+        return token
+    if index < len(parts):
+        return parts[index]
+    return None
+
+
+def _docker_run_index(parts: list[str]) -> int | None:
+    for index, token in enumerate(parts):
+        command = token.rsplit("/", 1)[-1]
+        if command != "docker":
+            continue
+        if index + 1 < len(parts) and parts[index + 1] == "run":
+            return index + 1
+        if index + 2 < len(parts) and parts[index + 1] == "container" and parts[index + 2] == "run":
+            return index + 2
+    return None
 
 
 def _positive_int_metadata(value: Any) -> int | None:  # noqa: ANN401
@@ -1169,6 +1491,41 @@ def _append_delivery_docker_lines(lines: list[str], docker: object) -> None:
         safe_tags = [str(tag) for tag in tags if str(tag).strip()]
         if safe_tags:
             lines.append(f"Docker tags: {', '.join(safe_tags)}")
+    _append_delivery_docker_service_lines(lines, docker)
+
+
+def _append_delivery_docker_service_lines(lines: list[str], docker: Mapping[str, Any]) -> None:
+    deploy_services = docker.get("deploy_services")
+    if not isinstance(deploy_services, list) or not deploy_services:
+        return
+    rendered: list[str] = []
+    for service in deploy_services:
+        if not isinstance(service, Mapping):
+            continue
+        service_id = _metadata_text(service.get("service_id")) or "service"
+        name = _metadata_text(service.get("name")) or service_id
+        parts = [f"- {service_id} ({name})"]
+        for key, label in (
+            ("container_name", "container"),
+            ("image", "image"),
+            ("image_internal", "runner image"),
+            ("image_deploy_local", "deploy image"),
+            ("dockerfile", "dockerfile"),
+            ("context", "context"),
+            ("deploy_local_build_command", "local build"),
+            ("deploy_port_mapping", "port"),
+            ("deploy_health_url", "health"),
+            ("deploy_health_check_command", "health command"),
+        ):
+            value = _metadata_display_value(service.get(key))
+            if value:
+                parts.append(f"{label}: `{value}`")
+        if service.get("required") is False:
+            parts.append("required: `false`")
+        rendered.append("; ".join(parts))
+    if rendered:
+        lines.append("Docker deploy services:")
+        lines.extend(rendered)
 
 
 def _append_delivery_service_lines(lines: list[str], services: object) -> None:

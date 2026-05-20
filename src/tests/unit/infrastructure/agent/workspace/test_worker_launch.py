@@ -731,6 +731,10 @@ class TestBuildBrief:
             "Docker registry (host Docker deploy): `localhost:5001`",
             "Drone Docker socket: `/var/run/docker.sock`",
             "Drone Docker socket volume: `docker-sock`",
+            "Docker deploy services:",
+            "container: `my-evo-app`",
+            "deploy image: `my-evo:drone-docker-e2e`",
+            "port: `18080:8080`",
             "plugins/docker or docker build/push alone is image publication",
             "distinct deploy step/stage named by deploy.stage",
             "Deployment services:",
@@ -742,7 +746,7 @@ class TestBuildBrief:
             "sandbox worker may not have DRONE_TOKEN",
             "platform harness can trigger and verify Drone",
             "verify every `steps[].commands[]` item is a string",
-            "echo \"label: value\"",
+            'echo "label: value"',
             "Keep host.docker.internal:<port> for plugins/docker build/push settings",
             "deploy-local image path",
             "docker.allow_daemon_registry_pull is false",
@@ -784,6 +788,9 @@ class TestBuildBrief:
             "docker.deploy_health_url",
             "inspect the project Dockerfile and application routes",
             "container-side port and health path must match",
+            "Docker deploy coverage must match application image coverage",
+            "only starts the backend/API container is incomplete",
+            "Use docker.deploy_services as the required Docker deploy inventory",
         ):
             assert expected in brief
         assert system_context["delivery_cicd"]["provider"] == "drone"
@@ -805,8 +812,7 @@ class TestBuildBrief:
             == "my-evo:drone-docker-e2e"
         )
         assert (
-            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_strategy"]
-            == "local_build"
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_strategy"] == "local_build"
         )
         assert (
             system_context["delivery_cicd"]["deploy"]["docker"]["allow_daemon_registry_pull"]
@@ -888,13 +894,11 @@ class TestBuildBrief:
             == "docker-sock"
         )
         assert system_context["delivery_cicd"]["drone"]["repo"] == "s1366560/my-evo"
-        assert (
-            "Do not replace the configured deployment mode with a CLI smoke check"
-            in " ".join(system_context["delivery_cicd"]["instructions"])
+        assert "Do not replace the configured deployment mode with a CLI smoke check" in " ".join(
+            system_context["delivery_cicd"]["instructions"]
         )
-        assert (
-            "plugins/docker or docker build/push alone is image publication"
-            in " ".join(system_context["delivery_cicd"]["instructions"])
+        assert "plugins/docker or docker build/push alone is image publication" in " ".join(
+            system_context["delivery_cicd"]["instructions"]
         )
         assert "Do not mask deployment failures" in " ".join(
             system_context["delivery_cicd"]["instructions"]
@@ -906,8 +910,135 @@ class TestBuildBrief:
             system_context["delivery_cicd"]["instructions"]
         )
         assert system_context["delivery_cicd"]["services"][0]["service_id"] == "my-evo-app"
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_services"][0]["service_id"]
+            == "my-evo-app"
+        )
+        assert (
+            system_context["delivery_cicd"]["deploy"]["docker"]["deploy_services"][0][
+                "deploy_port_mapping"
+            ]
+            == "18080:8080"
+        )
         assert "sandbox worker may not have DRONE_TOKEN" in " ".join(
             system_context["delivery_cicd"]["instructions"]
+        )
+
+    def test_drone_docker_delivery_contract_expands_multi_service_deploy(self) -> None:
+        task = _make_task()
+        workspace_metadata = {
+            "sandbox_code_root": "/workspace/my-evo",
+            "delivery_cicd": {
+                "provider": "drone",
+                "code_root": "/workspace/my-evo",
+                "auto_deploy": True,
+                "services": [
+                    {
+                        "service_id": "backend",
+                        "name": "Backend API",
+                        "start_command": "npm run start:backend",
+                        "internal_port": 3001,
+                        "health_path": "/health",
+                        "required": True,
+                    },
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend Web",
+                        "start_command": "npm run start:frontend",
+                        "internal_port": 3000,
+                        "health_path": "/",
+                        "required": True,
+                    },
+                ],
+                "drone": {
+                    "repo": "s1366560/my-evo",
+                    "branch": "main",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "stage": "deploy",
+                        "docker": {
+                            "image": "localhost:5001/my-evo-backend",
+                            "registry": "localhost:5001",
+                            "tags": ["drone-docker-e2e"],
+                            "services": [
+                                {
+                                    "service_id": "backend",
+                                    "image": "localhost:5001/my-evo-backend",
+                                    "context": ".",
+                                    "dockerfile": "Dockerfile",
+                                    "container_port": 3001,
+                                    "deploy_host_port": 18080,
+                                    "health_path": "/health",
+                                },
+                                {
+                                    "service_id": "frontend",
+                                    "image": "localhost:5001/my-evo-frontend",
+                                    "context": "frontend",
+                                    "dockerfile": "frontend/Dockerfile",
+                                    "container_port": 3000,
+                                    "deploy_host_port": 18081,
+                                    "health_path": "/",
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        }
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "deploy"},
+        )
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "deploy"},
+        )
+
+        docker_context = system_context["delivery_cicd"]["deploy"]["docker"]
+        assert docker_context["deploy_service_count"] == 2
+        assert docker_context["deploy_required_service_ids"] == ["backend", "frontend"]
+        assert docker_context["deploy_local_build_commands"] == [
+            "docker build -t my-evo-backend:drone-docker-e2e -f Dockerfile .",
+            "docker build -t my-evo-frontend:drone-docker-e2e -f frontend/Dockerfile frontend",
+        ]
+        assert [service["service_id"] for service in docker_context["deploy_services"]] == [
+            "backend",
+            "frontend",
+        ]
+        assert docker_context["deploy_services"][1]["deploy_port_mapping"] == "18081:3000"
+        for expected in (
+            "Docker deploy services:",
+            "backend (Backend API)",
+            "frontend (Frontend Web)",
+            "deploy image: `my-evo-backend:drone-docker-e2e`",
+            "deploy image: `my-evo-frontend:drone-docker-e2e`",
+            "local build: "
+            "`docker build -t my-evo-frontend:drone-docker-e2e -f frontend/Dockerfile frontend`",
+            "port: `18081:3000`",
+            "Docker deploy coverage must match application image coverage",
+            "only starts the backend/API container is incomplete",
+            "Use docker.deploy_services as the required Docker deploy inventory",
+            "every required service in docker.deploy_services is deployed",
+        ):
+            assert expected in brief
+
+    def test_docker_run_image_parser_ignores_non_docker_run_commands(self) -> None:
+        assert wl._docker_run_image_from_command("npm run start:backend") is None
+        assert (
+            wl._docker_run_image_from_command(
+                "docker run -d --name app -p 18080:3000 localhost:5001/my-evo"
+            )
+            == "localhost:5001/my-evo"
         )
 
     def test_system_context_includes_harness_preflight_contract(self) -> None:

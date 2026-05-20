@@ -354,8 +354,7 @@ async def test_drone_pipeline_provider_records_successful_deploy_stage(
                 {"out": "docker pull registry.example.test/octo/hello:staging\n"},
                 {
                     "out": (
-                        "docker run -d --name hello "
-                        "registry.example.test/octo/hello:staging\n"
+                        "docker run -d --name hello registry.example.test/octo/hello:staging\n"
                     ),
                 },
             ],
@@ -402,6 +401,81 @@ async def test_drone_pipeline_provider_records_successful_deploy_stage(
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_rejects_multi_service_deploy_missing_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "success",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "success",
+                    "steps": [
+                        {"name": "docker-build-backend", "status": "success", "exit_code": 0},
+                        {"name": "docker-build-frontend", "status": "success", "exit_code": 0},
+                        {
+                            "name": "deploy",
+                            "status": "success",
+                            "exit_code": 0,
+                            "image": "docker:27-cli",
+                        },
+                    ],
+                }
+            ],
+        },
+        logs={
+            ("workspace-ci", "deploy"): [
+                {
+                    "out": (
+                        "docker run -d --name my-evo-backend my-evo-backend:drone-docker-e2e\n"
+                    ),
+                },
+            ],
+        },
+    )
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "deploy_services": [
+                        {
+                            "service_id": "backend",
+                            "container_name": "my-evo-backend",
+                            "image_deploy_local": "my-evo-backend:drone-docker-e2e",
+                            "required": True,
+                        },
+                        {
+                            "service_id": "frontend",
+                            "container_name": "my-evo-frontend",
+                            "image_deploy_local": "my-evo-frontend:drone-docker-e2e",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    assert result.deployment_status == "invalid"
+    assert result.reason == (
+        "Drone build octo/hello#42 deploy stage deploy did not implement "
+        "docker deployment semantics"
+    )
+    assert "deployment:invalid:docker" in result.evidence_refs
+    assert "deploy_validation" not in result.metadata
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_preserves_failure_signal_lines_in_long_deploy_logs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -433,8 +507,7 @@ async def test_drone_pipeline_provider_preserves_failure_signal_lines_in_long_de
                 {"out": f"{long_build_output}\n"},
                 {
                     "out": (
-                        "wget: can't connect to remote host "
-                        "(192.168.65.254): Connection refused\n"
+                        "wget: can't connect to remote host (192.168.65.254): Connection refused\n"
                     )
                 },
                 {
@@ -601,9 +674,9 @@ async def test_drone_pipeline_provider_rejects_masked_docker_deploy_failures(
             ("workspace-ci", "deploy"): [
                 {
                     "out": (
-                        "docker run -d hello || echo \"Container start skipped\"\n"
+                        'docker run -d hello || echo "Container start skipped"\n'
                         "wget http://host.docker.internal:8080/api/health "
-                        "|| echo \"Health check skipped\"\n"
+                        '|| echo "Health check skipped"\n'
                     ),
                 },
             ],
@@ -682,7 +755,9 @@ async def test_drone_pipeline_provider_includes_step_error_in_failed_stage(
         )
     )
 
-    failed_stage = next(stage for stage in result.stage_results if stage.stage == "workspace-ci/deploy")
+    failed_stage = next(
+        stage for stage in result.stage_results if stage.stage == "workspace-ci/deploy"
+    )
     assert result.status == "failed"
     assert result.deployment_status == "failed"
     assert failed_stage.metadata["drone_error"] == mount_error
@@ -728,7 +803,9 @@ async def test_drone_pipeline_provider_preserves_failed_log_tail(
         )
     )
 
-    failed_stage = next(stage for stage in result.stage_results if stage.stage == "workspace-ci/deploy")
+    failed_stage = next(
+        stage for stage in result.stage_results if stage.stage == "workspace-ci/deploy"
+    )
     assert result.status == "failed"
     assert "# cached build line 0" in failed_stage.stderr_preview
     assert "POSTGRES_PASSWORD" in failed_stage.stderr_preview
