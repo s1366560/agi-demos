@@ -39,6 +39,12 @@ _DOCKER_LOCAL_REGISTRY_PULL_OR_RUN_RE = re.compile(
     r"(?:host\.docker\.internal|localhost|127\.0\.0\.1|\[?::1\]?)(?::\d+)?/",
     re.I,
 )
+_DOCKER_BUILD_COMMAND_RE = re.compile(r"\bdocker\s+(?:build|buildx\s+build)\b", re.I)
+_DOCKER_BUILD_TAG_ARG_RE = re.compile(r"(?:^|\s)(?:-t|--tag)\s+(?P<image>[^\s\\]+)", re.I)
+_DOCKER_BUILD_STEP_SERVICE_RE = re.compile(
+    r"(?:^|[-_/])docker[-_]?build[-_/](?P<service>[a-z0-9][a-z0-9_.-]*)$",
+    re.I,
+)
 _FAILURE_SIGNAL_MARKERS = (
     "http: server gave http response to https client",
     "connection refused",
@@ -840,7 +846,10 @@ def _deploy_state(
         return "missing"
     if not all(result.passed for result in deploy_results):
         return "failed"
-    if not any(_deploy_result_matches_mode(result, deploy=deploy) for result in deploy_results):
+    if not any(
+        _deploy_result_matches_mode(result, deploy=deploy, stage_results=stage_results)
+        for result in deploy_results
+    ):
         return "invalid"
     return "passed"
 
@@ -917,9 +926,10 @@ def _deploy_result_matches_mode(
     result: PipelineStageResult,
     *,
     deploy: PipelineDeploySpec,
+    stage_results: list[PipelineStageResult],
 ) -> bool:
     if deploy.mode == "docker":
-        return _docker_deploy_evidence(result, deploy=deploy)
+        return _docker_deploy_evidence(result, deploy=deploy, stage_results=stage_results)
     if deploy.mode == "kubernetes":
         return _kubernetes_deploy_evidence(result)
     return deploy.mode == "cli"
@@ -929,6 +939,7 @@ def _docker_deploy_evidence(
     result: PipelineStageResult,
     *,
     deploy: PipelineDeploySpec,
+    stage_results: list[PipelineStageResult],
 ) -> bool:
     output = _result_output(result).lower()
     if _docker_deploy_output_masks_failure(output):
@@ -936,6 +947,8 @@ def _docker_deploy_evidence(
     if _docker_deploy_uses_forbidden_local_registry_pull(output):
         return False
     if not _docker_deploy_covers_required_services(output, deploy=deploy):
+        return False
+    if not _docker_deploy_covers_built_images(output, deploy=deploy, stage_results=stage_results):
         return False
     return any(
         marker in output
@@ -957,6 +970,18 @@ def _docker_deploy_covers_required_services(
     deploy: PipelineDeploySpec,
 ) -> bool:
     requirements = _docker_deploy_service_requirements(deploy)
+    if not requirements:
+        return True
+    return all(any(marker in output for marker in markers) for markers in requirements)
+
+
+def _docker_deploy_covers_built_images(
+    output: str,
+    *,
+    deploy: PipelineDeploySpec,
+    stage_results: list[PipelineStageResult],
+) -> bool:
+    requirements = _docker_build_service_requirements(stage_results, deploy=deploy)
     if not requirements:
         return True
     return all(any(marker in output for marker in markers) for markers in requirements)
@@ -989,6 +1014,108 @@ def _docker_deploy_service_requirements(deploy: PipelineDeploySpec) -> list[tupl
         if markers:
             requirements.append(markers)
     return requirements
+
+
+def _docker_build_service_requirements(
+    stage_results: list[PipelineStageResult],
+    *,
+    deploy: PipelineDeploySpec,
+) -> list[tuple[str, ...]]:
+    requirements: list[tuple[str, ...]] = []
+    seen: set[tuple[str, ...]] = set()
+    for result in stage_results:
+        if result.metadata.get("drone_step_kind") == "deploy" or _is_deploy_label(
+            result.stage,
+            deploy=deploy,
+        ):
+            continue
+        for markers in _docker_build_requirement_markers(result):
+            if markers in seen:
+                continue
+            seen.add(markers)
+            requirements.append(markers)
+    return requirements
+
+
+def _docker_build_requirement_markers(result: PipelineStageResult) -> list[tuple[str, ...]]:
+    output = _result_output(result)
+    identity = _docker_build_identity_text(result)
+    service = _docker_build_service_name(identity)
+    image_marker_groups = [
+        _docker_image_marker_candidates(image) for image in _docker_build_tag_images(output)
+    ]
+
+    if not service and not image_marker_groups:
+        return []
+    if service is None and not _DOCKER_BUILD_COMMAND_RE.search(output):
+        return []
+
+    if service:
+        markers = [service]
+        for image_markers in image_marker_groups:
+            markers.extend(image_markers)
+        return [tuple(dict.fromkeys(marker.lower() for marker in markers if marker))]
+    return [
+        tuple(dict.fromkeys(marker.lower() for marker in image_markers if marker))
+        for image_markers in image_marker_groups
+        if image_markers
+    ]
+
+
+def _docker_build_identity_text(result: PipelineStageResult) -> str:
+    values = [
+        result.stage,
+        result.command,
+        _string(result.metadata.get("drone_stage")),
+        _string(result.metadata.get("drone_step")),
+    ]
+    return "\n".join(value for value in values if value)
+
+
+def _docker_build_service_name(value: str) -> str | None:
+    for part in re.split(r"[\s:]+", value):
+        match = _DOCKER_BUILD_STEP_SERVICE_RE.search(part)
+        if match:
+            return match.group("service").strip().lower() or None
+    return None
+
+
+def _docker_build_tag_images(output: str) -> list[str]:
+    images: list[str] = []
+    for line in output.splitlines():
+        if not _DOCKER_BUILD_COMMAND_RE.search(line):
+            continue
+        for match in _DOCKER_BUILD_TAG_ARG_RE.finditer(line):
+            image = match.group("image").strip().strip("'\"")
+            if image:
+                images.append(image)
+    return images
+
+
+def _docker_image_marker_candidates(image: str) -> list[str]:
+    normalized = image.strip().strip("'\",")
+    if not normalized:
+        return []
+    without_digest = normalized.split("@", 1)[0]
+    path_parts = without_digest.split("/")
+    if len(path_parts) > 1 and _docker_image_first_part_is_registry(path_parts[0]):
+        without_registry = "/".join(path_parts[1:])
+    else:
+        without_registry = without_digest
+    repository = without_registry
+    last_part = repository.rsplit("/", 1)[-1]
+    if ":" in last_part:
+        repository = repository.rsplit(":", 1)[0]
+    basename = repository.rsplit("/", 1)[-1]
+    markers = [normalized, repository, basename]
+    for separator in ("-", "_", "."):
+        if separator in basename:
+            markers.append(basename.rsplit(separator, 1)[-1])
+    return list(dict.fromkeys(marker for marker in markers if marker))
+
+
+def _docker_image_first_part_is_registry(value: str) -> bool:
+    return "." in value or ":" in value or value == "localhost"
 
 
 def _docker_deploy_uses_forbidden_local_registry_pull(output: str) -> bool:

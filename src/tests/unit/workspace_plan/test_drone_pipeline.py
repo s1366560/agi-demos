@@ -476,6 +476,69 @@ async def test_drone_pipeline_provider_rejects_multi_service_deploy_missing_serv
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_rejects_deploy_missing_built_image_without_inventory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "success",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "success",
+                    "steps": [
+                        {"name": "docker-build", "status": "success", "exit_code": 0},
+                        {
+                            "name": "deploy",
+                            "status": "success",
+                            "exit_code": 0,
+                            "image": "docker:27-cli",
+                        },
+                    ],
+                }
+            ],
+        },
+        logs={
+            ("workspace-ci", "docker-build"): [
+                {
+                    "out": (
+                        "docker build -t my-evo-backend:drone-docker-e2e -f Dockerfile .\n"
+                        "docker build -t my-evo-frontend:drone-docker-e2e "
+                        "-f frontend/Dockerfile frontend\n"
+                    ),
+                },
+            ],
+            ("workspace-ci", "deploy"): [
+                {
+                    "out": (
+                        "docker run -d --name my-evo-backend my-evo-backend:drone-docker-e2e\n"
+                    ),
+                },
+            ],
+        },
+    )
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(enabled=True, mode="docker"),
+        )
+    )
+
+    assert result.status == "failed"
+    assert result.deployment_status == "invalid"
+    assert result.reason == (
+        "Drone build octo/hello#42 deploy stage deploy did not implement "
+        "docker deployment semantics"
+    )
+    assert "deployment:invalid:docker" in result.evidence_refs
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_preserves_failure_signal_lines_in_long_deploy_logs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
