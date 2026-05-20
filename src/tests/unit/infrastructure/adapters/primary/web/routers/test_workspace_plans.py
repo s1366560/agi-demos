@@ -2030,6 +2030,91 @@ async def test_snapshot_recovery_enqueues_tick_for_blocked_node_with_accepted_at
 
 
 @pytest.mark.asyncio
+async def test_snapshot_recovery_enqueues_tick_for_blocked_verified_node_without_current_attempt(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-blocked-verified-orphan"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-blocked-verified-orphan",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-blocked-verified-orphan",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-accepted-blocked-verified-orphan",
+                workspace_task_id="workspace-task-blocked-verified-orphan",
+                root_goal_task_id="root-api-blocked-verified-orphan",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-blocked-verified-orphan",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.BLOCKED,
+        execution=TaskExecution.IDLE,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-blocked-verified-orphan",
+        current_attempt_id=None,
+        metadata={
+            "last_verification_attempt_id": "attempt-accepted-blocked-verified-orphan",
+            "last_verification_passed": True,
+            "terminal_attempt_retry_reason": "accepted_attempt_commit_mismatch",
+        },
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
+    assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
+
+    duplicate = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert duplicate is False
+
+
+@pytest.mark.asyncio
 async def test_snapshot_recovery_enqueues_tick_for_done_node_with_blocked_integration(
     db_session: AsyncSession,
 ) -> None:
@@ -2099,6 +2184,76 @@ async def test_snapshot_recovery_enqueues_tick_for_done_node_with_blocked_integr
     assert outbox[0].event_type == "supervisor_tick"
     assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
     assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_resumes_blocked_recovery_node_without_attempt(
+    db_session: AsyncSession,
+) -> None:
+    workspace_id = "workspace-plan-api-blocked-recovery-node"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-blocked-recovery",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-blocked-recovery",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="blocked",
+                metadata_json={},
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-blocked-recovery",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.BLOCKED,
+        execution=TaskExecution.IDLE,
+        workspace_task_id="workspace-task-blocked-recovery",
+        assignee_agent_id="agent-api",
+        current_attempt_id=None,
+        metadata={"terminal_attempt_retry_reason": "terminal_attempt_cancelled"},
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "handoff_resume"
+    assert outbox[0].payload_json["node_id"] == "task-api"
+    assert outbox[0].payload_json["previous_attempt_id"] is None
+    assert outbox[0].payload_json["reason"] == "retry"
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(
+        plan.id,
+        limit=5,
+    )
+    assert events[0].event_type == "auto_stale_node_recovery_queued"
 
 
 @pytest.mark.asyncio

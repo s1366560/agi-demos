@@ -1415,7 +1415,13 @@ def _accepted_attempt_matches_node_expected_commit(
     actual_refs = _attempt_commit_refs(attempt)
     if not actual_refs:
         return False
-    return any(_git_commit_refs_match(expected, actual) for actual in actual_refs)
+    if any(_git_commit_refs_match(expected, actual) for actual in actual_refs):
+        return True
+    return _last_verified_attempt_contains_attempt_commit(
+        node=node,
+        attempt=attempt,
+        actual_refs=actual_refs,
+    )
 
 
 def _attempt_commit_refs(
@@ -1426,6 +1432,42 @@ def _attempt_commit_refs(
         value = _prefixed_ref(ref, "commit_ref:")
         if value:
             refs.append(value)
+    return tuple(dict.fromkeys(refs))
+
+
+def _last_verified_attempt_contains_attempt_commit(
+    *,
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+    actual_refs: tuple[str, ...],
+) -> bool:
+    metadata = dict(node.metadata or {})
+    if metadata.get("last_verification_passed") is not True:
+        return False
+    if metadata.get("last_verification_attempt_id") != getattr(attempt, "id", None):
+        return False
+    metadata_refs = _node_metadata_commit_refs(metadata)
+    return any(
+        _git_commit_refs_match(metadata_ref, actual_ref)
+        for metadata_ref in metadata_refs
+        for actual_ref in actual_refs
+    )
+
+
+def _node_metadata_commit_refs(metadata: Mapping[str, Any]) -> tuple[str, ...]:
+    refs: list[str] = []
+    for key in (
+        "verification_evidence_refs",
+        "candidate_artifacts",
+        "candidate_verifications",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "execution_verifications",
+    ):
+        for ref in _metadata_string_values(metadata, key):
+            value = _prefixed_ref(ref, "commit_ref:")
+            if value:
+                refs.append(value)
     return tuple(dict.fromkeys(refs))
 
 

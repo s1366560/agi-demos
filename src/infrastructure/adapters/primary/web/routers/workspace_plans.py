@@ -3480,6 +3480,31 @@ def _stale_running_nodes(plan: Plan) -> list[PlanNode]:
     return stale_nodes
 
 
+def _blocked_recovery_nodes_without_attempt(plan: Plan) -> list[PlanNode]:
+    nodes: list[PlanNode] = []
+    for node in plan.nodes.values():
+        if (
+            node.intent is not TaskIntent.BLOCKED
+            or node.execution is not TaskExecution.IDLE
+            or node.current_attempt_id
+            or not node.workspace_task_id
+            or not node.assignee_agent_id
+        ):
+            continue
+        metadata = dict(node.metadata or {})
+        if _node_human_intervention_required(metadata):
+            continue
+        retry_reason = _metadata_string(metadata.get("terminal_attempt_retry_reason"))
+        pipeline_status = _metadata_string(metadata.get("pipeline_status"))
+        if (
+            retry_reason
+            or metadata.get("last_verification_passed") is False
+            or pipeline_status == "failed"
+        ):
+            nodes.append(node)
+    return nodes
+
+
 def _exclude_live_attempt_nodes(
     nodes: list[PlanNode],
     live_attempt_ids: set[str],
@@ -3771,11 +3796,23 @@ async def _active_nodes_with_terminal_attempts(
     session: AsyncSession,
     plan: Plan,
 ) -> list[PlanNode]:
-    attempt_ids = [
-        node.current_attempt_id
-        for node in plan.nodes.values()
-        if node.current_attempt_id
-        and (
+    attempt_ids_by_node_id: dict[str, str] = {}
+    for node in plan.nodes.values():
+        attempt_id = node.current_attempt_id
+        if not attempt_id:
+            metadata = dict(node.metadata or {})
+            verified_attempt_id = metadata.get("last_verification_attempt_id")
+            if (
+                isinstance(verified_attempt_id, str)
+                and verified_attempt_id
+                and metadata.get("last_verification_passed") is True
+                and node.execution is TaskExecution.IDLE
+                and node.intent in {TaskIntent.BLOCKED, TaskIntent.DONE}
+            ):
+                attempt_id = verified_attempt_id
+        if not attempt_id:
+            continue
+        if (
             node.execution
             in {
                 TaskExecution.DISPATCHED,
@@ -3790,16 +3827,16 @@ async def _active_nodes_with_terminal_attempts(
                 and node.execution is TaskExecution.IDLE
                 and node.metadata.get("worktree_integration_status") == "blocked_dirty_main"
             )
-        )
-    ]
-    if not attempt_ids:
+        ):
+            attempt_ids_by_node_id[node.id] = attempt_id
+    if not attempt_ids_by_node_id:
         return []
     result = await session.execute(
         refresh_select_statement(
             select(
                 WorkspaceTaskSessionAttemptModel.id,
                 WorkspaceTaskSessionAttemptModel.status,
-            ).where(WorkspaceTaskSessionAttemptModel.id.in_(attempt_ids))
+            ).where(WorkspaceTaskSessionAttemptModel.id.in_(attempt_ids_by_node_id.values()))
         )
     )
     terminal_attempt_ids = {
@@ -3812,7 +3849,7 @@ async def _active_nodes_with_terminal_attempts(
     return [
         node
         for node in plan.nodes.values()
-        if node.current_attempt_id and node.current_attempt_id in terminal_attempt_ids
+        if attempt_ids_by_node_id.get(node.id) in terminal_attempt_ids
     ]
 
 
@@ -4103,7 +4140,7 @@ async def _enqueue_stale_plan_node_recovery(
     return enqueued
 
 
-async def _recover_stale_attempts_for_snapshot(
+async def _recover_stale_attempts_for_snapshot(  # noqa: PLR0911
     *,
     session: AsyncSession,
     workspace_id: str,
@@ -4133,6 +4170,19 @@ async def _recover_stale_attempts_for_snapshot(
                 workspace_id=workspace_id,
                 plan=plan,
                 nodes=reported_nodes,
+                actor_id=actor_id,
+            )
+            > 0
+        )
+
+    blocked_recovery_nodes = _blocked_recovery_nodes_without_attempt(plan)
+    if blocked_recovery_nodes:
+        return (
+            await _enqueue_stale_plan_node_recovery(
+                session=session,
+                workspace_id=workspace_id,
+                plan=plan,
+                nodes=blocked_recovery_nodes,
                 actor_id=actor_id,
             )
             > 0
