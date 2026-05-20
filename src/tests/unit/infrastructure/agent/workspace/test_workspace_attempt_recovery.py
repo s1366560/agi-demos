@@ -132,6 +132,7 @@ def _make_service(
     apply_report: AsyncMock | None = None,
     schedule_tick: MagicMock | None = None,
     enqueue_resume: AsyncMock | None = None,
+    cancel_conversation: AsyncMock | None = None,
     liveness_lookup: Any = None,
     task_lookup: dict[str, str] | None = None,
     task_status_lookup: dict[str, Any] | None = None,
@@ -142,6 +143,7 @@ def _make_service(
     apply_report = apply_report or AsyncMock(return_value=MagicMock())
     schedule_tick = schedule_tick or MagicMock()
     enqueue_resume = enqueue_resume or AsyncMock()
+    cancel_conversation = cancel_conversation or AsyncMock(return_value=False)
     lookup = task_lookup if task_lookup is not None else {"task-1": "user-1"}
     from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 
@@ -207,6 +209,7 @@ def _make_service(
         apply_report=apply_report,
         schedule_tick=schedule_tick,
         enqueue_resume=enqueue_resume,
+        cancel_conversation=cancel_conversation,
         liveness_lookup=liveness_lookup or (list),
         stale_seconds=60,
         startup_grace_seconds=5,
@@ -321,9 +324,7 @@ class TestStartupSweep:
             p.start()
         try:
             repo = service._repo_instance  # type: ignore[attr-defined]
-            repo.find_stale_non_terminal = AsyncMock(
-                side_effect=[attempts[:3], attempts[3:], []]
-            )
+            repo.find_stale_non_terminal = AsyncMock(side_effect=[attempts[:3], attempts[3:], []])
             recovered = await service.startup_sweep()
         finally:
             for p in service._patches:  # type: ignore[attr-defined]
@@ -385,6 +386,39 @@ class TestStartupSweep:
         assert len(saves) == 1
         assert saves[0].status == WorkspaceTaskSessionAttemptStatus.BLOCKED
         assert saves[0].adjudication_reason == f"recovery:{RECOVERY_SUMMARY_RESTART}"
+
+    @pytest.mark.asyncio
+    async def test_recovery_cancels_plan_linked_local_runtime_before_resume(self) -> None:
+        enqueue_resume = AsyncMock()
+        cancel_conversation = AsyncMock(return_value=True)
+        att = _make_attempt(
+            attempt_id="att-plan-cancel",
+            workspace_task_id="task-1",
+            conversation_id="conv-orphan",
+        )
+        service, _apply_report, _schedule_tick = _make_service(
+            stale_attempts=[att],
+            enqueue_resume=enqueue_resume,
+            cancel_conversation=cancel_conversation,
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        cancel_conversation.assert_awaited_once_with("conv-orphan")
+        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
 
     @pytest.mark.asyncio
     async def test_paused_plan_linked_attempt_does_not_enqueue_resume_or_tick(self) -> None:

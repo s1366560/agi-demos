@@ -132,6 +132,7 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
         return None
 
     try:
+        from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
         from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
             schedule_autonomy_tick,
         )
@@ -153,9 +154,7 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
         stale_seconds = _int_env(_STALE_ENV, DEFAULT_STALE_SECONDS)
         check_interval_seconds = _int_env(_INTERVAL_ENV, DEFAULT_CHECK_INTERVAL_SECONDS)
         startup_grace_seconds = _int_env(_GRACE_ENV, DEFAULT_STARTUP_GRACE_SECONDS)
-        max_attempts_per_sweep = _int_env(
-            _MAX_ATTEMPTS_ENV, DEFAULT_MAX_ATTEMPTS_PER_SWEEP
-        )
+        max_attempts_per_sweep = _int_env(_MAX_ATTEMPTS_ENV, DEFAULT_MAX_ATTEMPTS_PER_SWEEP)
         error_event_grace_seconds = _int_env(
             _ERROR_EVENT_GRACE_ENV, DEFAULT_ERROR_EVENT_GRACE_SECONDS
         )
@@ -181,6 +180,7 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             apply_report=apply_workspace_worker_report,
             schedule_tick=schedule_autonomy_tick,
             enqueue_resume=_enqueue_handoff_resume,
+            cancel_conversation=AgentRuntimeBootstrapper.cancel_local_chat,
             liveness_lookup=_liveness_lookup,
             stale_seconds=stale_seconds,
             startup_grace_seconds=startup_grace_seconds,

@@ -213,18 +213,20 @@ ApplyReportCallable = Callable[..., Awaitable[object]]
 LivenessLookup = Callable[[], Iterable[str]]
 ScheduleTickCallable = Callable[[str, str], None]
 EnqueueResumeCallable = Callable[[WorkspaceTaskSessionAttempt, str, str], Awaitable[None]]
+CancelConversationCallable = Callable[[str], Awaitable[bool]]
 
 
 class WorkspaceAttemptRecoveryService:
     """Detect and recover orphaned workspace task session attempts."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         session_factory: Callable[[], AsyncSession],
         apply_report: ApplyReportCallable,
         schedule_tick: ScheduleTickCallable,
         enqueue_resume: EnqueueResumeCallable | None = None,
+        cancel_conversation: CancelConversationCallable | None = None,
         liveness_lookup: LivenessLookup | None = None,
         stale_seconds: int = DEFAULT_STALE_SECONDS,
         startup_grace_seconds: int = DEFAULT_STARTUP_GRACE_SECONDS,
@@ -252,6 +254,7 @@ class WorkspaceAttemptRecoveryService:
         self._apply_report = apply_report
         self._schedule_tick = schedule_tick
         self._enqueue_resume = enqueue_resume
+        self._cancel_conversation = cancel_conversation
         self._liveness_lookup: LivenessLookup = liveness_lookup or (lambda: ())
         self._stale_seconds = stale_seconds
         self._startup_grace_seconds = startup_grace_seconds
@@ -704,6 +707,7 @@ class WorkspaceAttemptRecoveryService:
                 )
                 # Parent task was deleted -- mark the orphan attempt terminal
                 # directly so we stop re-discovering it.
+                await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
                 await self._quiet_finalize_attempt(
                     attempt,
                     reason="parent_task_missing",
@@ -743,6 +747,7 @@ class WorkspaceAttemptRecoveryService:
                         "parent_status": parent_status.value,
                     },
                 )
+                await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
                 await self._quiet_finalize_attempt(
                     attempt,
                     reason=f"parent_{parent_status.value}",
@@ -759,6 +764,7 @@ class WorkspaceAttemptRecoveryService:
                 )
                 continue
             try:
+                await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
                 result = await self._apply_report(
                     workspace_id=attempt.workspace_id,
                     root_goal_task_id=attempt.root_goal_task_id,
@@ -849,6 +855,7 @@ class WorkspaceAttemptRecoveryService:
         if attempt.status is not WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION:
             return None
         if parent_status in terminal_parent_statuses:
+            await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
             await self._quiet_finalize_attempt(
                 attempt,
                 reason=f"parent_{parent_status.value}",
@@ -869,6 +876,7 @@ class WorkspaceAttemptRecoveryService:
             )
             return 0
         if self._awaiting_verification_retry_needs_worker_resume(attempt, parent_metadata):
+            await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
             await self._quiet_finalize_attempt(
                 attempt,
                 reason="verification_retry_scheduled",
@@ -927,6 +935,7 @@ class WorkspaceAttemptRecoveryService:
         plan_recovery_suppressed: bool,
         scheduled_roots: set[tuple[str, str]],
     ) -> int:
+        await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
         await self._quiet_finalize_attempt(
             attempt,
             reason=attempt_summary,
@@ -1008,6 +1017,44 @@ class WorkspaceAttemptRecoveryService:
                 if str(loop_status or "").lower() in SUPPRESSED_LOOP_STATUSES:
                     return True
         return False
+
+    async def _cancel_attempt_runtime(
+        self,
+        attempt: WorkspaceTaskSessionAttempt,
+        *,
+        reason: str,
+    ) -> None:
+        if self._cancel_conversation is None:
+            return
+        conversation_id = attempt.conversation_id
+        if not isinstance(conversation_id, str) or not conversation_id:
+            return
+        try:
+            cancelled = await self._cancel_conversation(conversation_id)
+        except Exception:
+            logger.warning(
+                "workspace_attempt_recovery.cancel_runtime_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_attempt_recovery.cancel_runtime_failed",
+                    "attempt_id": attempt.id,
+                    "workspace_id": attempt.workspace_id,
+                    "conversation_id": conversation_id,
+                    "reason": reason,
+                },
+            )
+            return
+        if cancelled:
+            logger.warning(
+                "workspace_attempt_recovery.cancelled_attempt_runtime",
+                extra={
+                    "event": "workspace_attempt_recovery.cancelled_attempt_runtime",
+                    "attempt_id": attempt.id,
+                    "workspace_id": attempt.workspace_id,
+                    "conversation_id": conversation_id,
+                    "reason": reason,
+                },
+            )
 
     async def _enqueue_resume_if_configured(
         self,

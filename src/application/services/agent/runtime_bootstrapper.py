@@ -7,6 +7,8 @@ import contextlib
 import json
 import logging
 import os
+import signal
+import subprocess
 import sys
 import uuid
 from dataclasses import asdict
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[Any]] = set()
 _LOCAL_SUBPROCESS_REQUEST_DIR = "MEMSTACK_LOCAL_AGENT_REQUEST_DIR"
+_LOCAL_CHAT_WORKER_MODULE = "src.infrastructure.agent.actor.local_chat_worker"
 
 
 def _safe_request_file_name(value: str) -> str:
@@ -456,9 +459,115 @@ class AgentRuntimeBootstrapper:
         """Return True when a detached local workspace worker is still alive."""
         async with cls._local_chat_lock:
             process = cls._local_subprocesses.get(conversation_id)
-            if process is None:
-                return False
-            return getattr(process, "returncode", None) is None
+            if process is not None and getattr(process, "returncode", None) is None:
+                return True
+        return bool(
+            await asyncio.to_thread(cls._find_orphan_local_subprocess_pids, conversation_id)
+        )
+
+    @staticmethod
+    def _find_orphan_local_subprocess_pids(conversation_id: str) -> list[int]:
+        """Find detached local worker processes lost from in-memory tracking."""
+        safe_conversation_id = _safe_request_file_name(conversation_id)
+        if not safe_conversation_id:
+            return []
+        request_name_marker = f"{safe_conversation_id}-"
+        try:
+            result = subprocess.run(
+                ["ps", "-eo", "pid=,command="],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+        except Exception:
+            logger.debug(
+                "[AgentService] Failed to scan local subprocess table",
+                exc_info=True,
+            )
+            return []
+        if result.returncode != 0:
+            return []
+        current_pid = os.getpid()
+        pids: list[int] = []
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            pid_text, _separator, command = stripped.partition(" ")
+            try:
+                pid = int(pid_text)
+            except ValueError:
+                continue
+            if pid == current_pid:
+                continue
+            if _LOCAL_CHAT_WORKER_MODULE not in command:
+                continue
+            if request_name_marker not in command:
+                continue
+            pids.append(pid)
+        return pids
+
+    @staticmethod
+    def _signal_process_group(pid: int, sig: int) -> None:
+        try:
+            os.killpg(pid, sig)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            logger.warning(
+                "[AgentService] Permission denied signalling local subprocess: pid=%s signal=%s",
+                pid,
+                sig,
+            )
+        except OSError:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, sig)
+
+    @staticmethod
+    def _remove_local_subprocess_request_files(conversation_id: str) -> None:
+        safe_conversation_id = _safe_request_file_name(conversation_id)
+        if not safe_conversation_id:
+            return
+        request_dir = Path(os.getenv(_LOCAL_SUBPROCESS_REQUEST_DIR, "/tmp/memstack-agent-requests"))
+        if not request_dir.exists():
+            return
+        for request_path in request_dir.glob(f"{safe_conversation_id}-*.json"):
+            with contextlib.suppress(OSError):
+                request_path.unlink()
+
+    @classmethod
+    async def _terminate_orphaned_local_subprocesses_locked(
+        cls,
+        conversation_id: str,
+        *,
+        reason: str,
+    ) -> bool:
+        pids = await asyncio.to_thread(cls._find_orphan_local_subprocess_pids, conversation_id)
+        if not pids:
+            await asyncio.to_thread(cls._remove_local_subprocess_request_files, conversation_id)
+            return False
+        logger.warning(
+            "[AgentService] Terminating orphaned local subprocesses: conversation=%s pids=%s reason=%s",
+            conversation_id,
+            pids,
+            reason,
+        )
+        for pid in pids:
+            await asyncio.to_thread(cls._signal_process_group, pid, signal.SIGTERM)
+        await asyncio.sleep(0.5)
+        remaining = await asyncio.to_thread(cls._find_orphan_local_subprocess_pids, conversation_id)
+        if remaining:
+            logger.warning(
+                "[AgentService] Killing unresponsive orphaned local subprocesses: "
+                "conversation=%s pids=%s",
+                conversation_id,
+                remaining,
+            )
+            for pid in remaining:
+                await asyncio.to_thread(cls._signal_process_group, pid, signal.SIGKILL)
+        await asyncio.to_thread(cls._remove_local_subprocess_request_files, conversation_id)
+        return True
 
     @staticmethod
     def _write_local_subprocess_request(
@@ -496,7 +605,10 @@ class AgentRuntimeBootstrapper:
         if process is None:
             if request_path is not None:
                 request_path.unlink(missing_ok=True)
-            return False
+            return await cls._terminate_orphaned_local_subprocesses_locked(
+                conversation_id,
+                reason=reason,
+            )
 
         pid = getattr(process, "pid", None)
         returncode = getattr(process, "returncode", None)
@@ -525,6 +637,10 @@ class AgentRuntimeBootstrapper:
 
         if request_path is not None:
             request_path.unlink(missing_ok=True)
+        _ = await cls._terminate_orphaned_local_subprocesses_locked(
+            conversation_id,
+            reason=reason,
+        )
         return True
 
     async def _monitor_local_subprocess_chat(

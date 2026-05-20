@@ -1,6 +1,7 @@
 """Unit tests for AgentRuntimeBootstrapper runtime mode behavior."""
 
 import asyncio
+import signal
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -700,6 +701,40 @@ async def test_cancel_local_chat_terminates_subprocess(tmp_path) -> None:
     assert process.terminate_called is True
     assert "conv-1" not in AgentRuntimeBootstrapper._local_subprocesses
     assert not request_path.exists()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cancel_local_chat_terminates_orphaned_subprocess(monkeypatch) -> None:
+    """cancel_local_chat should stop detached workers lost across API restarts."""
+    scans = iter([[444], []])
+    signals: list[tuple[int, int]] = []
+
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_find_orphan_local_subprocess_pids",
+        staticmethod(lambda _conversation_id: next(scans)),
+    )
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_signal_process_group",
+        staticmethod(lambda pid, sig: signals.append((pid, sig))),
+    )
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_remove_local_subprocess_request_files",
+        staticmethod(lambda _conversation_id: None),
+    )
+
+    async def _no_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+    cancelled = await AgentRuntimeBootstrapper.cancel_local_chat("conv-1")
+
+    assert cancelled is True
+    assert signals == [(444, signal.SIGTERM)]
 
 
 @pytest.mark.unit
