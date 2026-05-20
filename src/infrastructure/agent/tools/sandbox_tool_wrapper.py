@@ -36,6 +36,7 @@ WORKSPACE_HARNESS_MAX_SINGLE_WRITE_CHARS = 64_000
 WORKSPACE_HARNESS_MAX_BASH_COMMAND_CHARS = 6_000
 WORKSPACE_HARNESS_MAX_EDIT_OLD_STRING_CHARS = 12_000
 WORKSPACE_HARNESS_MAX_EDIT_NEW_STRING_CHARS = 64_000
+WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS = 600
 
 _WORKSPACE_CODE_ROOT_DEFAULT_WORKDIR_TOOLS = frozenset(
     {
@@ -821,6 +822,44 @@ def _workspace_verification_bash_dependency_install_error(command: str) -> str |
     return None
 
 
+def _workspace_verification_bash_dependency_setup_timeout_error(
+    command: str,
+    configured_timeout: object,
+) -> str | None:
+    if not isinstance(configured_timeout, int | float):
+        return None
+    timeout_seconds = float(configured_timeout)
+    if timeout_seconds >= WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS:
+        return None
+
+    tokens = _command_tokens(command)
+    normalized = tuple(posixpath.basename(token).lower() for token in tokens)
+    for index, token in enumerate(normalized):
+        if not _is_shell_command_token(tokens, index):
+            continue
+        next_token = normalized[index + 1] if index + 1 < len(normalized) else ""
+        tail = tuple(item.lower() for item in _command_tail_until_separator(tokens, index + 2))
+        is_immutable_setup = (
+            (token == "npm" and next_token == "ci")
+            or (token == "pnpm" and next_token in {"install", "i"} and "--frozen-lockfile" in tail)
+            or (
+                token == "yarn"
+                and next_token in {"", "install"}
+                and ("--immutable" in tail or "--frozen-lockfile" in tail)
+            )
+            or (token == "bun" and next_token == "install" and "--frozen-lockfile" in tail)
+        )
+        if is_immutable_setup:
+            min_timeout = WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS
+            return (
+                "bash.command runs dependency setup in a protected workspace test/review node "
+                f"with timeout={timeout_seconds:.0f}s. Use timeout >= {min_timeout}s for "
+                "immutable dependency setup such as 'npm ci' so large frontend installs are "
+                "not killed mid-install and left with partial node_modules."
+            )
+    return None
+
+
 def _workspace_verification_dependency_install_error(
     tool_name: str,
     kwargs: dict[str, Any],
@@ -841,7 +880,13 @@ def _workspace_verification_dependency_install_error(
     command = kwargs.get("command")
     if not isinstance(command, str) or not command.strip():
         return None
-    return _workspace_verification_bash_dependency_install_error(command)
+    install_error = _workspace_verification_bash_dependency_install_error(command)
+    if install_error:
+        return install_error
+    return _workspace_verification_bash_dependency_setup_timeout_error(
+        command,
+        kwargs.get("timeout"),
+    )
 
 
 def _workspace_bash_escape_error(command: str, root_override: str | None) -> str | None:
