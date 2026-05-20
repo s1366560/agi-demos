@@ -816,7 +816,7 @@ class TestSandboxMCPToolExecute:
         results = (first, second)
         assert sum(result.is_error is False for result in results) == 1
         assert sum("Another workspace bash command is already running" in result.output for result in results) == 1
-        assert adapter.call_count == 1
+        assert adapter.call_count == 2
         assert adapter.max_active_calls == 1
 
     async def test_workspace_worker_bash_cleans_worktree_processes_after_failure(self):
@@ -847,13 +847,48 @@ class TestSandboxMCPToolExecute:
             }
         )
 
-        result = await tool.execute(ctx, command="npm ci", timeout=600)
+        result = await tool.execute(ctx, command="sleep 600", timeout=600)
 
         assert result.is_error is True
         assert adapter.call_count == 2
-        assert "npm ci" in adapter.calls[0][1]["command"]
+        assert "sleep 600" in adapter.calls[0][1]["command"]
         assert "[workspace_bash_cleanup]" in adapter.calls[1][1]["command"]
         assert "workspace_root=/workspace/.memstack/worktrees/att-timeout" in adapter.calls[1][1]["command"]
+
+    async def test_workspace_worker_bash_precleans_before_dependency_setup(self):
+        """Dependency setup should clear stale worktree processes before starting."""
+        adapter = ScriptInspectSandboxAdapter("")
+        tool = create_sandbox_mcp_tool(
+            sandbox_id="dependency-preclean-test",
+            tool_name="bash",
+            tool_schema={
+                "name": "bash",
+                "description": "Execute bash",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "timeout": {"type": "number"},
+                    },
+                    "required": ["command"],
+                },
+            },
+            sandbox_port=adapter,
+        )
+        ctx = _make_ctx(
+            runtime_context={
+                "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+                "active_execution_root": "/workspace/.memstack/worktrees/att-preclean",
+            }
+        )
+
+        result = await tool.execute(ctx, command="npm ci", timeout=600)
+
+        assert result.is_error is False
+        assert adapter.call_count == 2
+        assert "[workspace_bash_cleanup]" in adapter.calls[0][1]["command"]
+        assert "workspace_root=/workspace/.memstack/worktrees/att-preclean" in adapter.calls[0][1]["command"]
+        assert "npm ci" in adapter.calls[1][1]["command"]
 
     async def test_workspace_worker_bash_uses_structured_active_execution_root(self):
         """Structured runtime root should win without parsing prompt text."""
@@ -2540,7 +2575,7 @@ class TestSandboxMCPToolExecute:
         )
 
         assert result.is_error is False
-        assert adapter.call_count == 1
+        assert adapter.call_count == 2
 
     async def test_workspace_verification_phase_rejects_short_npm_ci_timeout(self):
         """Dependency setup should not be killed mid-install by too-small verification timeouts."""

@@ -827,6 +827,28 @@ def _workspace_verification_bash_dependency_install_error(command: str) -> str |
     return None
 
 
+def _workspace_bash_runs_immutable_dependency_setup(command: str) -> bool:
+    tokens = _command_tokens(command)
+    normalized = tuple(posixpath.basename(token).lower() for token in tokens)
+    for index, token in enumerate(normalized):
+        if not _is_shell_command_token(tokens, index):
+            continue
+        next_token = normalized[index + 1] if index + 1 < len(normalized) else ""
+        tail = tuple(item.lower() for item in _command_tail_until_separator(tokens, index + 2))
+        if (
+            (token == "npm" and next_token == "ci")
+            or (token == "pnpm" and next_token in {"install", "i"} and "--frozen-lockfile" in tail)
+            or (
+                token == "yarn"
+                and next_token in {"", "install"}
+                and ("--immutable" in tail or "--frozen-lockfile" in tail)
+            )
+            or (token == "bun" and next_token == "install" and "--frozen-lockfile" in tail)
+        ):
+            return True
+    return False
+
+
 def _workspace_verification_bash_dependency_setup_timeout_error(
     command: str,
     configured_timeout: object,
@@ -837,31 +859,14 @@ def _workspace_verification_bash_dependency_setup_timeout_error(
     if timeout_seconds >= WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS:
         return None
 
-    tokens = _command_tokens(command)
-    normalized = tuple(posixpath.basename(token).lower() for token in tokens)
-    for index, token in enumerate(normalized):
-        if not _is_shell_command_token(tokens, index):
-            continue
-        next_token = normalized[index + 1] if index + 1 < len(normalized) else ""
-        tail = tuple(item.lower() for item in _command_tail_until_separator(tokens, index + 2))
-        is_immutable_setup = (
-            (token == "npm" and next_token == "ci")
-            or (token == "pnpm" and next_token in {"install", "i"} and "--frozen-lockfile" in tail)
-            or (
-                token == "yarn"
-                and next_token in {"", "install"}
-                and ("--immutable" in tail or "--frozen-lockfile" in tail)
-            )
-            or (token == "bun" and next_token == "install" and "--frozen-lockfile" in tail)
+    if _workspace_bash_runs_immutable_dependency_setup(command):
+        min_timeout = WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS
+        return (
+            "bash.command runs dependency setup in a protected workspace test/review node "
+            f"with timeout={timeout_seconds:.0f}s. Use timeout >= {min_timeout}s for "
+            "immutable dependency setup such as 'npm ci' so large frontend installs are "
+            "not killed mid-install and left with partial node_modules."
         )
-        if is_immutable_setup:
-            min_timeout = WORKSPACE_VERIFICATION_MIN_DEPENDENCY_SETUP_TIMEOUT_SECONDS
-            return (
-                "bash.command runs dependency setup in a protected workspace test/review node "
-                f"with timeout={timeout_seconds:.0f}s. Use timeout >= {min_timeout}s for "
-                "immutable dependency setup such as 'npm ci' so large frontend installs are "
-                "not killed mid-install and left with partial node_modules."
-            )
     return None
 
 
@@ -1337,6 +1342,13 @@ def _workspace_bash_error_needs_process_cleanup(error_message: str) -> bool:
     )
 
 
+def _workspace_bash_needs_dependency_setup_preclean(tool_name: str, kwargs: dict[str, Any]) -> bool:
+    if tool_name != "bash":
+        return False
+    command = kwargs.get("command")
+    return isinstance(command, str) and _workspace_bash_runs_immutable_dependency_setup(command)
+
+
 async def _cleanup_workspace_bash_runtime(
     *,
     sandbox_id: str,
@@ -1369,6 +1381,7 @@ async def _execute_workspace_sandbox_tool(
     sandbox_port: SandboxPort,
     retry_config: RetryConfig,
     kwargs: dict[str, Any],
+    preclean_dependency_setup: bool = False,
 ) -> tuple[str, dict[str, Any] | None]:
     execution_lock = _workspace_bash_execution_lock(sandbox_id, tool_name, kwargs)
     if execution_lock is None:
@@ -1386,6 +1399,12 @@ async def _execute_workspace_sandbox_tool(
 
     async with lock:
         try:
+            if preclean_dependency_setup:
+                await _cleanup_workspace_bash_runtime(
+                    sandbox_id=sandbox_id,
+                    sandbox_port=sandbox_port,
+                    workspace_root=workspace_root,
+                )
             return await _execute_with_retry(
                 sandbox_id=sandbox_id,
                 tool_name=tool_name,
@@ -1723,6 +1742,10 @@ def create_sandbox_mcp_tool(
                 root_override=root_override,
             ):
                 return ToolResult(output=argument_error, is_error=True)
+            preclean_dependency_setup = _workspace_bash_needs_dependency_setup_preclean(
+                tool_name,
+                normalized_kwargs,
+            )
             normalized_kwargs = _with_workspace_package_manager_cache(
                 tool_name,
                 normalized_kwargs,
@@ -1734,6 +1757,7 @@ def create_sandbox_mcp_tool(
                 sandbox_port=sandbox_port,
                 retry_config=cfg,
                 kwargs=normalized_kwargs,
+                preclean_dependency_setup=preclean_dependency_setup,
             )
             if tool_name == "bash":
                 if artifact_error := _workspace_output_artifact_escape_error(
