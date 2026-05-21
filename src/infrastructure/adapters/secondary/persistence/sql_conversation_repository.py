@@ -23,7 +23,7 @@ Key Features:
 
 import logging
 
-from sqlalchemy import BigInteger, delete, desc, func, select
+from sqlalchemy import BigInteger, delete, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -349,7 +349,12 @@ class SqlConversationRepository(
         offset: int = 0,
     ) -> list[Conversation]:
         """List conversations linked to a workspace (Phase-5 G6)."""
-        query = select(DBConversation).where(DBConversation.workspace_id == workspace_id)
+        query = select(DBConversation).where(
+            or_(
+                DBConversation.workspace_id == workspace_id,
+                DBConversation.meta["workspace_id"].as_string() == workspace_id,
+            )
+        )
         if mode is not None:
             query = query.where(DBConversation.conversation_mode == mode.value)
         if status is not None:
@@ -377,6 +382,28 @@ class SqlConversationRepository(
         if db_conversation is None:
             return None
 
+        metadata = dict(db_conversation.meta or {})
+        agent_config = dict(db_conversation.agent_config or {})
+
+        workspace_id = self._text_or_none(getattr(db_conversation, "workspace_id", None))
+        if workspace_id is None:
+            workspace_id = self._text_or_none(metadata.get("workspace_id"))
+
+        linked_workspace_task_id = self._text_or_none(
+            getattr(db_conversation, "linked_workspace_task_id", None)
+        )
+        if linked_workspace_task_id is None:
+            linked_workspace_task_id = self._text_or_none(
+                metadata.get("linked_workspace_task_id")
+            ) or self._text_or_none(metadata.get("workspace_task_id"))
+
+        if not self._text_or_none(agent_config.get("selected_agent_id")):
+            selected_agent_id = self._text_or_none(
+                metadata.get("selected_agent_id")
+            ) or self._text_or_none(metadata.get("agent_id"))
+            if selected_agent_id:
+                agent_config["selected_agent_id"] = selected_agent_id
+
         # Multi-agent (Track B) — safe decode with defaults for legacy rows.
         mode_raw = getattr(db_conversation, "conversation_mode", None)
         conv_mode = ConversationMode(mode_raw) if mode_raw else None
@@ -389,8 +416,8 @@ class SqlConversationRepository(
             user_id=db_conversation.user_id,
             title=db_conversation.title,
             status=ConversationStatus(db_conversation.status),
-            agent_config=db_conversation.agent_config or {},
-            metadata=db_conversation.meta or {},
+            agent_config=agent_config,
+            metadata=metadata,
             message_count=db_conversation.message_count,
             created_at=db_conversation.created_at,
             updated_at=db_conversation.updated_at,
@@ -411,9 +438,17 @@ class SqlConversationRepository(
             coordinator_agent_id=getattr(db_conversation, "coordinator_agent_id", None),
             focused_agent_id=getattr(db_conversation, "focused_agent_id", None),
             # Workspace linkage (Track G2)
-            workspace_id=getattr(db_conversation, "workspace_id", None),
-            linked_workspace_task_id=getattr(db_conversation, "linked_workspace_task_id", None),
+            workspace_id=workspace_id,
+            linked_workspace_task_id=linked_workspace_task_id,
         )
+
+    @staticmethod
+    def _text_or_none(value: object) -> str | None:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        return None
 
     def _to_db(self, domain_entity: Conversation) -> DBConversation:
         """

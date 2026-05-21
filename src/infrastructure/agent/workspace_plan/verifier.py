@@ -838,6 +838,7 @@ def _build_judge_request(
         attempt_id=ctx.attempt_id,
         node_title=ctx.node.title,
         node_description=ctx.node.description,
+        linked_workspace_task_id=ctx.node.workspace_task_id,
         acceptance_criteria=tuple(
             {
                 "kind": criterion.kind.value,

@@ -924,6 +924,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'context_status':
     case 'context_summary_generated':
     case 'title_generated':
+    case 'thought_start':
     case 'thought_delta':
     case 'mcp_app_result':
     case 'mcp_app_registered':

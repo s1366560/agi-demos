@@ -106,7 +106,7 @@ class AgentExecutionEvent(Entity):
         event_type_str = (
             self.event_type.value if hasattr(self.event_type, "value") else str(self.event_type)
         )
-        return event_type_str in ("text_delta", "thought_delta")
+        return event_type_str in ("text_delta", "thought_start", "thought_delta")
 
     @staticmethod
     def filter_for_replay(
@@ -114,9 +114,9 @@ class AgentExecutionEvent(Entity):
     ) -> list["AgentExecutionEvent"]:
         """Filter events for replay, excluding delta events.
 
-        Delta events (text_delta, thought_delta) are transient streaming events
-        that should not be replayed. Their final content is captured in
-        text_end and thought events respectively.
+        Delta/control events (text_delta, thought_start, thought_delta) are
+        transient streaming events that should not be replayed. Their final
+        content is captured in text_end and thought events respectively.
 
         Args:
             events: Full list of events from storage

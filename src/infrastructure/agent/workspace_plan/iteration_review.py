@@ -51,6 +51,7 @@ class WorkspaceIterationReviewAgentTurnRunner(Protocol):
         workspace_id: str,
         plan_id: str,
         iteration_index: int,
+        linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None: ...
 
 
@@ -84,6 +85,7 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
         workspace_id: str,
         plan_id: str,
         iteration_index: int,
+        linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None:
         from src.infrastructure.agent.core.project_react_agent import (
             ProjectAgentConfig,
@@ -92,6 +94,9 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
         from src.infrastructure.agent.workspace.runtime_role_contract import (
             WORKSPACE_ROLE_WORKER,
             WORKSPACE_SESSION_ROLE_KEY,
+        )
+        from src.infrastructure.agent.workspace.session_conversations import (
+            ensure_workspace_llm_conversation,
         )
 
         turn_id = uuid.uuid4().hex
@@ -102,6 +107,22 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
             "observed_tools": [],
             "review_submitted": False,
         }
+        diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
+            conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            workspace_id=workspace_id,
+            linked_workspace_task_id=linked_workspace_task_id,
+            agent_id=reviewer_agent.id,
+            title=f"Workspace Iteration Review - {iteration_index}",
+            stage="iteration_review",
+            metadata={
+                "plan_id": plan_id,
+                "iteration_index": iteration_index,
+                "linked_workspace_task_id": linked_workspace_task_id or "",
+                "conversation_scope": f"review:{plan_id}:{iteration_index}",
+            },
+        )
         agent = ProjectReActAgent(
             ProjectAgentConfig(
                 tenant_id=self._tenant_id,
@@ -128,6 +149,7 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
                         WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
                         "workspace_binding": {
                             "workspace_id": workspace_id,
+                            "linked_workspace_task_id": linked_workspace_task_id or "",
                             "plan_id": plan_id,
                             "iteration_index": iteration_index,
                         },
@@ -171,11 +193,13 @@ class WorkspaceIterationReviewAgentProvider:
         *,
         tenant_id: str,
         project_id: str,
+        linked_workspace_task_id: str | None = None,
         max_next_tasks: int = 6,
         turn_runner: WorkspaceIterationReviewAgentTurnRunner | None = None,
     ) -> None:
         super().__init__()
         self._max_next_tasks = max(1, max_next_tasks)
+        self._linked_workspace_task_id = linked_workspace_task_id
         self._reviewer_agent = build_builtin_workspace_iteration_reviewer_agent(
             tenant_id=tenant_id,
             project_id=project_id,
@@ -186,13 +210,21 @@ class WorkspaceIterationReviewAgentProvider:
         )
 
     async def review(self, context: IterationReviewContext) -> IterationReviewVerdict:
-        prompt = _build_agent_user_prompt(context, max_next_tasks=self._max_next_tasks)
+        linked_workspace_task_id = (
+            context.linked_workspace_task_id or self._linked_workspace_task_id
+        )
+        prompt = _build_agent_user_prompt(
+            context,
+            max_next_tasks=self._max_next_tasks,
+            linked_workspace_task_id=linked_workspace_task_id,
+        )
         payload = await self._turn_runner.run_review_turn(
             reviewer_agent=self._reviewer_agent,
             user_prompt=prompt,
             workspace_id=context.workspace_id,
             plan_id=context.plan_id,
             iteration_index=context.iteration_index,
+            linked_workspace_task_id=linked_workspace_task_id,
         )
         if not payload:
             diagnostics = getattr(self._turn_runner, "last_diagnostics", {})
@@ -225,10 +257,15 @@ class UnavailableIterationReviewProvider:
         return _needs_human_review(self._reason)
 
 
-def _build_agent_user_prompt(context: IterationReviewContext, *, max_next_tasks: int) -> str:
+def _build_agent_user_prompt(
+    context: IterationReviewContext,
+    *,
+    max_next_tasks: int,
+    linked_workspace_task_id: str | None = None,
+) -> str:
     return (
         "Review this completed workspace iteration using the builtin iteration review contract.\n\n"
-        f"{_user_payload(context)}\n\n"
+        f"{_user_payload(context, linked_workspace_task_id=linked_workspace_task_id)}\n\n"
         f"Maximum next sprint tasks: {max_next_tasks}\n"
         "You are in read-only review mode. Do not implement, edit files, mutate workspace "
         "state, or finish in prose. Your final action must be exactly one "
@@ -236,11 +273,16 @@ def _build_agent_user_prompt(context: IterationReviewContext, *, max_next_tasks:
     )
 
 
-def _user_payload(context: IterationReviewContext) -> str:
+def _user_payload(
+    context: IterationReviewContext,
+    *,
+    linked_workspace_task_id: str | None = None,
+) -> str:
     payload = {
         "workspace_id": context.workspace_id,
         "plan_id": context.plan_id,
         "iteration_index": context.iteration_index,
+        "linked_workspace_task_id": linked_workspace_task_id or "",
         "goal": {
             "title": context.goal_title,
             "description": context.goal_description,

@@ -16,6 +16,7 @@ from src.domain.events.agent_events import (
     AgentEventType,
     AgentObserveEvent,
     AgentThoughtEvent,
+    AgentThoughtStartEvent,
 )
 from src.infrastructure.agent.events.converter import (
     EventConverter,
@@ -63,6 +64,16 @@ class TestEventConverterBasic:
         assert result["type"] == AgentEventType.THOUGHT.value
         assert result["data"]["thought"] == "Analyzing the user request..."
         assert result["data"]["thought_level"] == "work"
+
+    def test_convert_thought_start_event(self, converter):
+        """Test converting AgentThoughtStartEvent."""
+        event = AgentThoughtStartEvent(thought_level="reasoning", timestamp=time.time())
+
+        result = converter.convert(event)
+
+        assert result is not None
+        assert result["type"] == AgentEventType.THOUGHT_START.value
+        assert result["data"]["thought_level"] == "reasoning"
 
     def test_convert_act_event(self, converter):
         """Test converting AgentActEvent."""

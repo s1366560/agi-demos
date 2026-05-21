@@ -11,6 +11,7 @@ import {
   Filter,
   GitBranch,
   History,
+  ListTodo,
   Loader2,
   PackageCheck,
   Pause,
@@ -36,6 +37,11 @@ import {
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { confirmAction } from '@/utils/confirmAction';
 
+import { ExecutionDagGraph } from '@/components/executionDag/ExecutionDagGraph';
+import {
+  buildWorkspaceExecutionDag,
+  workspaceDagDimmedNodeIds,
+} from '@/components/executionDag/workspaceExecutionDagModel';
 import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
 
 import { EmptyState } from '../EmptyState';
@@ -101,6 +107,7 @@ const OPERATOR_REASON_LIMIT = 500;
 const DEFAULT_NODE_ACTION_REASON = 'operator action from central blackboard';
 const DEFAULT_RETRY_ACTION_REASON = 'operator retry from central blackboard';
 type DetailTabId = 'story' | 'evidence' | 'runs' | 'review' | 'blocker';
+type DagViewMode = 'graph' | 'list';
 
 const DETAIL_TABS: Array<{ id: DetailTabId; label: string }> = [
   { id: 'story', label: 'Story' },
@@ -784,6 +791,7 @@ export function PlanRunSnapshotSection({
   const [snapshot, setSnapshot] = useState<WorkspacePlanSnapshot | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedDetailTab, setSelectedDetailTab] = useState<DetailTabId>('story');
+  const [dagViewMode, setDagViewMode] = useState<DagViewMode>('graph');
   const [filter, setFilter] = useState<NodeFilter>('all');
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -910,6 +918,14 @@ export function PlanRunSnapshotSection({
             .includes(normalizedQuery);
         }),
     [filter, normalizedQuery, runnableNodes]
+  );
+  const executionDagModel = useMemo(
+    () => buildWorkspaceExecutionDag(snapshot, agents),
+    [agents, snapshot]
+  );
+  const dimmedDagNodeIds = useMemo(
+    () => workspaceDagDimmedNodeIds(executionDagModel, snapshot, filter, query),
+    [executionDagModel, filter, query, snapshot]
   );
   const selectedNode = useMemo(() => {
     return nodes.find((node) => node.id === selectedNodeId) ?? filteredNodes[0] ?? nodes[0] ?? null;
@@ -1682,9 +1698,41 @@ export function PlanRunSnapshotSection({
           <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
             <div className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-t-0">
               <div className="border-b border-border-separator px-4 py-3 dark:border-border-dark">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-                  <Split className="h-4 w-4" aria-hidden />
-                  {t('blackboard.planRunNodesTitle', 'Execution DAG')}
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+                    <Split className="h-4 w-4" aria-hidden />
+                    {t('blackboard.planRunNodesTitle', 'Execution DAG')}
+                  </div>
+                  <div className="inline-flex w-fit rounded-md border border-border-light bg-surface-muted p-0.5 dark:border-border-dark dark:bg-background-dark/35">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDagViewMode('graph');
+                      }}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors ${
+                        dagViewMode === 'graph'
+                          ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
+                          : 'text-text-secondary hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse'
+                      }`}
+                    >
+                      <GitBranch className="h-3.5 w-3.5" aria-hidden />
+                      {t('blackboard.planRunGraphView', 'Graph')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDagViewMode('list');
+                      }}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors ${
+                        dagViewMode === 'list'
+                          ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
+                          : 'text-text-secondary hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse'
+                      }`}
+                    >
+                      <ListTodo className="h-3.5 w-3.5" aria-hidden />
+                      {t('blackboard.planRunListView', 'List')}
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-3 flex min-w-0 flex-col gap-2 md:flex-row md:items-start">
                   <label className="relative min-w-0 md:w-56 md:shrink-0">
@@ -1729,7 +1777,19 @@ export function PlanRunSnapshotSection({
                 </div>
               </div>
 
-              {filteredNodes.length > 0 ? (
+              {dagViewMode === 'graph' && executionDagModel ? (
+                <div className="p-3">
+                  <ExecutionDagGraph
+                    model={executionDagModel}
+                    selectedNodeId={selectedNode?.id ?? null}
+                    dimmedNodeIds={dimmedDagNodeIds}
+                    onNodeSelect={(nodeId) => {
+                      setSelectedNodeId(nodeId);
+                    }}
+                    minHeight={520}
+                  />
+                </div>
+              ) : filteredNodes.length > 0 ? (
                 <div className="divide-y-0">
                   {filteredNodes.map((node) => (
                     <NodeRow

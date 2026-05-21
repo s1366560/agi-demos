@@ -1012,6 +1012,24 @@ describe('streamEventHandlers', () => {
     });
   });
 
+  it('should handle onThoughtStart without adding a timeline event', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    mockState.streamingThought = 'old thought';
+
+    handlers.onThoughtStart!({
+      type: 'thought_start',
+      data: { thought_level: 'reasoning' },
+    } as any);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(conversationId, {
+      streamingThought: '',
+      isThinkingStreaming: true,
+      agentState: 'thinking',
+    });
+    expect(mockDeps.queueTimelineEvent).not.toHaveBeenCalled();
+    expect(mockState.timeline).toEqual([]);
+  });
+
   it('should clear stale thinking residue after thought delta goes idle', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
     handlers.onThoughtDelta!({

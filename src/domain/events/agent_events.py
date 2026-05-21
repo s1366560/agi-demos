@@ -55,6 +55,7 @@ __all__ = [
     "AgentSuggestionsEvent",
     "AgentTaskAssignedEvent",
     "AgentTaskRefusedEvent",
+    "AgentThoughtStartEvent",
     "BlackboardFileCreatedEvent",
     "BlackboardFileDeletedEvent",
     "BlackboardPostCreatedEvent",
@@ -184,6 +185,12 @@ class AgentErrorEvent(AgentDomainEvent):
 
 
 # === Thinking Events ===
+
+
+class AgentThoughtStartEvent(AgentDomainEvent):
+    event_type: AgentEventType = AgentEventType.THOUGHT_START
+    thought_level: str = "reasoning"
+    step_index: int | None = None
 
 
 class AgentThoughtEvent(AgentDomainEvent):
@@ -1998,6 +2005,7 @@ def get_event_type_docstring() -> str:
         AgentStartEvent,
         AgentCompleteEvent,
         AgentErrorEvent,
+        AgentThoughtStartEvent,
         AgentThoughtEvent,
         AgentThoughtDeltaEvent,
         AgentActEvent,

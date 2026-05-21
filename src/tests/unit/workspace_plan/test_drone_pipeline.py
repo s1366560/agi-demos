@@ -8,7 +8,11 @@ from typing import Any, cast
 
 import pytest
 
-from src.infrastructure.agent.workspace_plan.drone import DronePipelineConfig, DronePipelineProvider
+from src.infrastructure.agent.workspace_plan.drone import (
+    DronePipelineConfig,
+    DronePipelineProvider,
+    DroneRepositoryNotFoundError,
+)
 from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     _can_reflect_existing_pipeline_run,
     _needs_agent_managed_pipeline_proposal,
@@ -33,7 +37,8 @@ class _FakeDroneClient:
         self.build = build
         self.builds = list(builds or [])
         self.logs = dict(logs or {})
-        self.repo: dict[str, Any] = {"trusted": True}
+        self.repo: dict[str, Any] | None = {"active": True, "trusted": True}
+        self.enabled_repos: list[dict[str, str]] = []
         self.created: list[dict[str, Any]] = []
         self.repo_updates: list[dict[str, Any]] = []
         self.list_requests: list[dict[str, Any]] = []
@@ -43,6 +48,17 @@ class _FakeDroneClient:
     async def get_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]:
         assert owner == "octo"
         assert repo == "hello"
+        if self.repo is None:
+            raise DroneRepositoryNotFoundError(f"Drone repo {owner}/{repo} is not enabled")
+        return dict(self.repo)
+
+    async def enable_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]:
+        assert owner == "octo"
+        assert repo == "hello"
+        self.enabled_repos.append({"owner": owner, "repo": repo})
+        if self.repo is None:
+            self.repo = {"trusted": False}
+        self.repo["active"] = True
         return dict(self.repo)
 
     async def update_repo(
@@ -55,6 +71,7 @@ class _FakeDroneClient:
         assert owner == "octo"
         assert repo == "hello"
         self.repo_updates.append({"trusted": trusted})
+        assert self.repo is not None
         if trusted is not None:
             self.repo["trusted"] = trusted
         return dict(self.repo)
@@ -829,6 +846,91 @@ async def test_drone_pipeline_provider_marks_docker_deploy_repo_trusted(
 
     assert result.status == "success"
     assert client.repo_updates == [{"trusted": True}]
+    assert client.created
+
+
+@pytest.mark.asyncio
+async def test_drone_pipeline_provider_enables_missing_repo_before_docker_deploy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "success",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "success",
+                    "steps": [
+                        {
+                            "name": "deploy",
+                            "status": "success",
+                            "exit_code": 0,
+                            "image": "docker:27-cli",
+                        },
+                    ],
+                }
+            ],
+        },
+        logs={
+            ("workspace-ci", "deploy"): [
+                {"out": "docker run -d registry.example.test/octo/hello:latest\n"},
+            ],
+        },
+    )
+    client.repo = None
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={"image": "registry.example.test/octo/hello"},
+            ),
+        )
+    )
+
+    assert result.status == "success"
+    assert client.enabled_repos == [{"owner": "octo", "repo": "hello"}]
+    assert client.repo_updates == [{"trusted": True}]
+    assert client.created
+
+
+@pytest.mark.asyncio
+async def test_drone_pipeline_provider_reenables_inactive_repo_before_trigger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "success",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "success",
+                    "steps": [{"name": "test", "status": "success", "exit_code": 0}],
+                }
+            ],
+        },
+    )
+    assert client.repo is not None
+    client.repo["active"] = False
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+        )
+    )
+
+    assert result.status == "success"
+    assert client.enabled_repos == [{"owner": "octo", "repo": "hello"}]
     assert client.created
 
 

@@ -26,6 +26,7 @@ import {
   Bot,
   FolderOpen,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -33,7 +34,12 @@ import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useIsLoadingHistory } from '@/stores/agent/timelineStore';
 import { useAgentV3Store } from '@/stores/agentV3';
 import { useProjectStore } from '@/stores/project';
-import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
+import {
+  useCurrentWorkspace,
+  useWorkspaceActions,
+  useWorkspaceTasks,
+  useWorkspaces,
+} from '@/stores/workspace';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
@@ -42,13 +48,7 @@ import {
   getContextualTopNavItems,
   isContextualTopNavItemActive,
 } from '@/components/layout/TenantHeader';
-import {
-  LazyButton,
-  LazyBadge,
-  LazyDropdown,
-  LazySelect,
-  LazyInput,
-} from '@/components/ui/lazyAntd';
+import { LazyButton, LazyDropdown, LazySelect, LazyInput } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
 
@@ -59,16 +59,27 @@ import type { MenuProps } from 'antd';
 interface ConversationWithProject extends Conversation {
   projectId: string;
   projectName: string;
+  workspaceTaskTitle?: string | null | undefined;
+  workspaceName?: string | null | undefined;
 }
 
 interface ConversationItemProps {
   conversation: ConversationWithProject;
+  grouped?: boolean | undefined;
   isActive: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onRename?: ((e: React.MouseEvent) => void) | undefined;
-  compact?: boolean | undefined;
 }
+
+type ConversationListSection =
+  | { type: 'conversation'; conversation: ConversationWithProject }
+  | {
+      type: 'workspace';
+      id: string;
+      workspaceTitle: string;
+      conversations: ConversationWithProject[];
+    };
 
 // Constants for resize constraints
 const SIDEBAR_MIN_WIDTH = 200;
@@ -77,9 +88,195 @@ const SIDEBAR_DEFAULT_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
 
+function readMetadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function workspaceIdFromConversation(conversation: Conversation): string | null {
+  if (conversation.workspace_id) {
+    return conversation.workspace_id;
+  }
+  const metadataWorkspaceId = readMetadataString(conversation.metadata, 'workspace_id');
+  if (metadataWorkspaceId) {
+    return metadataWorkspaceId;
+  }
+  if (!conversation.id.startsWith('workspace-')) {
+    return null;
+  }
+  const [, workspaceId] = conversation.id.split(':');
+  return workspaceId && workspaceId.length > 0 ? workspaceId : null;
+}
+
+function workspaceNodeIdFromConversation(conversation: Conversation): string | null {
+  if (conversation.linked_workspace_task_id) {
+    return conversation.linked_workspace_task_id;
+  }
+  const metadataTaskId =
+    readMetadataString(conversation.metadata, 'workspace_task_id') ??
+    readMetadataString(conversation.metadata, 'linked_workspace_task_id');
+  if (metadataTaskId) {
+    return metadataTaskId;
+  }
+  if (!conversation.id.startsWith('workspace-')) {
+    return null;
+  }
+  const [, , nodeId] = conversation.id.split(':');
+  return nodeId && nodeId.length > 0 ? nodeId : null;
+}
+
+function cleanWorkspaceTitle(title: string): string {
+  return title
+    .replace(/^Workspace Worker\s*-\s*/i, '')
+    .replace(/^Workspace Verification Gate\s*-\s*/i, '')
+    .replace(/^Workspace Chat\s*-\s*/i, '')
+    .replace(/^Workspace\s+/i, '')
+    .trim();
+}
+
+function isOpaqueTaskTitle(title: string): boolean {
+  return (
+    /^node-[a-z0-9._-]+$/i.test(title) ||
+    /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(title) ||
+    /^(worker|verifier|architect|builder|chat|workspace)$/i.test(title)
+  );
+}
+
+function workspaceTitleForConversation(
+  conversation: ConversationWithProject,
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  return (
+    conversation.workspaceName ??
+    t('agent.sidebar.unknownWorkspace', {
+      defaultValue: 'Unknown workspace',
+    })
+  );
+}
+
+function workspaceTaskTitleForConversation(
+  conversation: ConversationWithProject,
+  rawTitle: string,
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  const explicitTitle =
+    conversation.workspaceTaskTitle ??
+    readMetadataString(conversation.metadata, 'workspace_task_title') ??
+    readMetadataString(conversation.metadata, 'linked_workspace_task_title') ??
+    readMetadataString(conversation.metadata, 'task_title');
+  const cleanedExplicitTitle = explicitTitle ? cleanWorkspaceTitle(explicitTitle) : null;
+  if (cleanedExplicitTitle && !isOpaqueTaskTitle(cleanedExplicitTitle)) {
+    return cleanedExplicitTitle;
+  }
+
+  const cleanedRawTitle = cleanWorkspaceTitle(rawTitle);
+  if (cleanedRawTitle && !isOpaqueTaskTitle(cleanedRawTitle)) {
+    return cleanedRawTitle;
+  }
+
+  return t('agent.sidebar.workspaceTaskTitleFallback', 'Workspace task');
+}
+
+function workspaceRoleLabel(
+  conversation: Conversation,
+  title: string,
+  t: ReturnType<typeof useTranslation>['t']
+): string | null {
+  const id = conversation.id.toLowerCase();
+  if (/^workspace worker\s*-/i.test(title) || id.startsWith('workspace-worker:')) {
+    return t('agent.sidebar.workspaceRole.worker', 'Worker');
+  }
+  if (/^workspace verification gate\s*-/i.test(title) || id.startsWith('workspace-verifier:')) {
+    return t('agent.sidebar.workspaceRole.verifier', 'Verifier');
+  }
+  if (id.startsWith('workspace-architect:') || /architect/i.test(title)) {
+    return t('agent.sidebar.workspaceRole.architect', 'Architect');
+  }
+  if (id.startsWith('workspace-builder:') || /builder/i.test(title)) {
+    return t('agent.sidebar.workspaceRole.builder', 'Builder');
+  }
+  if (/^workspace chat\s*-/i.test(title) || id.startsWith('workspace-chat:')) {
+    return t('agent.sidebar.workspaceRole.chat', 'Chat');
+  }
+  if (conversation.workspace_id || id.startsWith('workspace-')) {
+    return t('agent.sidebar.workspaceRole.workspace', 'Workspace');
+  }
+  return null;
+}
+
+function buildConversationDisplay(
+  conversation: ConversationWithProject,
+  t: ReturnType<typeof useTranslation>['t'],
+  timeAgo: string
+) {
+  const fallbackTitle = t('agent.sidebar.untitled', 'Untitled Conversation');
+  const rawTitle = conversation.title || fallbackTitle;
+  const roleLabel = workspaceRoleLabel(conversation, rawTitle, t);
+  const isWorkspaceConversation = Boolean(roleLabel || workspaceIdFromConversation(conversation));
+  const taskTitle = isWorkspaceConversation
+    ? workspaceTaskTitleForConversation(conversation, rawTitle, t)
+    : rawTitle;
+  const displayTitle = isWorkspaceConversation
+    ? taskTitle || t('agent.sidebar.workspaceTaskTitleFallback', 'Workspace task')
+    : rawTitle;
+  const contextLabel = isWorkspaceConversation
+    ? workspaceTitleForConversation(conversation, t)
+    : conversation.projectName;
+
+  return {
+    contextLabel,
+    displayTitle,
+    isWorkspaceConversation,
+    roleLabel,
+    taskTitle,
+    timeAgo,
+  };
+}
+
+function buildConversationSections(
+  conversations: ConversationWithProject[],
+  t: ReturnType<typeof useTranslation>['t']
+): ConversationListSection[] {
+  const sections: ConversationListSection[] = [];
+  const workspaceSectionIndex = new Map<string, number>();
+
+  for (const conversation of conversations) {
+    const display = buildConversationDisplay(conversation, t, '');
+    if (!display.isWorkspaceConversation) {
+      sections.push({ type: 'conversation', conversation });
+      continue;
+    }
+
+    const workspaceKey = workspaceIdFromConversation(conversation) ?? display.contextLabel;
+    const sectionId = `workspace:${workspaceKey}`;
+    const existingIndex = workspaceSectionIndex.get(sectionId);
+
+    if (existingIndex !== undefined) {
+      const section = sections[existingIndex];
+      if (section?.type === 'workspace') {
+        section.conversations.push(conversation);
+      }
+      continue;
+    }
+
+    workspaceSectionIndex.set(sectionId, sections.length);
+    sections.push({
+      type: 'workspace',
+      id: sectionId,
+      workspaceTitle: display.contextLabel,
+      conversations: [conversation],
+    });
+  }
+
+  return sections;
+}
+
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
 const ConversationItem: React.FC<ConversationItemProps> = memo(
-  ({ conversation, isActive, onSelect, onDelete, onRename, compact = false }) => {
+  ({ conversation, grouped = false, isActive, onSelect, onDelete, onRename }) => {
     const { t } = useTranslation();
     const timeAgo = React.useMemo(() => {
       try {
@@ -117,31 +314,15 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
       ],
       [onDelete, onRename, t]
     );
-
-    if (compact) {
-      return (
-        <Tooltip title={conversation.title || t('agent.sidebar.untitled', 'Untitled')}>
-          <button
-            type="button"
-            onClick={onSelect}
-            className={`
-            w-10 h-10 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1
-            flex items-center justify-center relative mx-auto
-            ${
-              isActive
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
-                : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60'
-            }
-          `}
-          >
-            <MessageSquare size={20} />
-            {isActive && (
-              <span className="absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full" />
-            )}
-          </button>
-        </Tooltip>
-      );
-    }
+    const display = React.useMemo(
+      () => buildConversationDisplay(conversation, t, timeAgo),
+      [conversation, t, timeAgo]
+    );
+    const primaryTitle = display.displayTitle;
+    const contextParts =
+      grouped && display.isWorkspaceConversation
+        ? [display.roleLabel].filter((part): part is string => Boolean(part))
+        : [display.roleLabel, display.contextLabel].filter((part): part is string => Boolean(part));
 
     return (
       <div
@@ -164,34 +345,40 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
         }
       `}
       >
-        <div className="flex items-start gap-3">
-          {/* Icon */}
-          <div
-            className={`
-          w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
-          ${
-            isActive
-              ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-          }
-        `}
-          >
-            <MessageSquare size={18} />
-          </div>
-
+        <div className="flex items-start gap-2">
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <p className="font-medium text-sm truncate">
-                {conversation.title || 'Untitled Conversation'}
+              <p className="font-medium text-sm truncate" title={primaryTitle}>
+                {primaryTitle}
               </p>
-              {conversation.status === 'active' && (
-                <LazyBadge status="processing" className="flex-shrink-0" />
-              )}
+              <div className="flex shrink-0 items-center gap-1 text-xs text-slate-400">
+                {conversation.status === 'active' ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                ) : null}
+                <span>{display.timeAgo}</span>
+              </div>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5 truncate">
-              {conversation.projectName} · {timeAgo}
-            </p>
+            {contextParts.length > 0 ? (
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-slate-400">
+                {contextParts.map((part, index) => (
+                  <React.Fragment key={`${part}-${index.toString()}`}>
+                    {index > 0 ? (
+                      <span className="shrink-0 text-slate-300 dark:text-slate-600">·</span>
+                    ) : null}
+                    <span
+                      className={
+                        index === 0 && display.roleLabel === part
+                          ? 'shrink-0 font-medium uppercase'
+                          : 'truncate'
+                      }
+                    >
+                      {part}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {/* Actions */}
@@ -216,6 +403,41 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
   }
 );
 ConversationItem.displayName = 'ConversationItem';
+
+const ConversationGroupHeader: React.FC<{
+  collapsed: boolean;
+  conversationCount: number;
+  onToggle: () => void;
+  workspaceTitle: string;
+}> = memo(({ collapsed, conversationCount, onToggle, workspaceTitle }) => (
+  <div className="mb-1 mt-3 first:mt-1">
+    <button
+      type="button"
+      aria-expanded={!collapsed}
+      onClick={onToggle}
+      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:bg-slate-800/40"
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
+        {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className="block truncate text-[12px] font-medium leading-5 text-slate-700 dark:text-slate-300"
+          title={workspaceTitle}
+        >
+          {workspaceTitle}
+        </span>
+      </span>
+      <span
+        className="shrink-0 rounded-full bg-slate-100 px-1.5 text-[10px] leading-4 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+        aria-label={`${conversationCount.toString()} conversations`}
+      >
+        {conversationCount}
+      </span>
+    </button>
+  </div>
+));
+ConversationGroupHeader.displayName = 'ConversationGroupHeader';
 
 // Simple Tooltip component for collapsed state
 const Tooltip: React.FC<{ children: React.ReactNode; title: string }> = ({ children, title }) => (
@@ -288,7 +510,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
   const isLoadingHistory = useIsLoadingHistory();
   const currentWorkspace = useCurrentWorkspace();
+  const workspaceTasks = useWorkspaceTasks();
   const workspaces = useWorkspaces();
+  const { loadWorkspaceSurface } = useWorkspaceActions();
 
   const { conversations, hasMoreConversations } = useConversationsStore(
     useShallow((state) => ({
@@ -306,6 +530,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     () => new URLSearchParams(location.search).get('projectId'),
     [location.search]
   );
+  const workspaceIdFromQuery = useMemo(() => {
+    if (!location.search) return null;
+    return new URLSearchParams(location.search).get('workspaceId');
+  }, [location.search]);
   const isProjectScopedPath = location.pathname.includes('/project/');
   const contextualProjectId = isProjectScopedPath ? currentProject?.id : undefined;
   const contextualProjectBasePath = contextualProjectId
@@ -385,6 +613,42 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     // ONLY depend on selectedProjectId, NOT loadConversations
   }, [selectedProjectId]);
 
+  const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tenantId || !selectedProjectId || !workspaceIdFromQuery) {
+      return;
+    }
+
+    const hasWorkspaceTitle =
+      currentWorkspace?.id === workspaceIdFromQuery ||
+      workspaces.some((workspace) => workspace.id === workspaceIdFromQuery);
+    const hasTaskTitles = workspaceTasks.some((task) => task.workspace_id === workspaceIdFromQuery);
+    if (hasWorkspaceTitle && hasTaskTitles) {
+      return;
+    }
+
+    const loadKey = `${tenantId}:${selectedProjectId}:${workspaceIdFromQuery}`;
+    if (loadedSidebarWorkspaceSurfaceRef.current === loadKey) {
+      return;
+    }
+    loadedSidebarWorkspaceSurfaceRef.current = loadKey;
+
+    void Promise.resolve(
+      loadWorkspaceSurface(tenantId, selectedProjectId, workspaceIdFromQuery)
+    ).catch((error: unknown) => {
+      loadedSidebarWorkspaceSurfaceRef.current = null;
+      console.error('Failed to load workspace context for conversations:', error);
+    });
+  }, [
+    currentWorkspace?.id,
+    loadWorkspaceSurface,
+    selectedProjectId,
+    tenantId,
+    workspaceIdFromQuery,
+    workspaceTasks,
+    workspaces,
+  ]);
+
   // Enrich conversations with project info
   const selectedProjectName = useMemo(
     () => projects.find((project) => project.id === selectedProjectId)?.name || 'Unknown Project',
@@ -392,20 +656,66 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
 
   const enrichedConversations: ConversationWithProject[] = useMemo(() => {
+    const workspaceNameById = new Map(
+      workspaces.map((workspace) => [workspace.id, workspace.name])
+    );
+    if (currentWorkspace) {
+      workspaceNameById.set(currentWorkspace.id, currentWorkspace.name);
+    }
+    const workspaceTaskTitleById = new Map(workspaceTasks.map((task) => [task.id, task.title]));
     return conversations.map((conv) => ({
       ...conv,
       projectId: selectedProjectId || '',
       projectName: selectedProjectName,
+      workspaceTaskTitle: (() => {
+        const taskId = workspaceNodeIdFromConversation(conv);
+        return taskId ? (workspaceTaskTitleById.get(taskId) ?? null) : null;
+      })(),
+      workspaceName: (() => {
+        const workspaceId = workspaceIdFromConversation(conv);
+        return workspaceId ? (workspaceNameById.get(workspaceId) ?? null) : null;
+      })(),
     }));
-  }, [conversations, selectedProjectId, selectedProjectName]);
+  }, [
+    conversations,
+    currentWorkspace,
+    selectedProjectId,
+    selectedProjectName,
+    workspaceTasks,
+    workspaces,
+  ]);
+  const conversationSections = useMemo(
+    () => buildConversationSections(enrichedConversations, t),
+    [enrichedConversations, t]
+  );
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setCollapsedGroupIds((current) => {
+      const validGroupIds = new Set(
+        conversationSections
+          .filter((section) => section.type === 'workspace')
+          .map((section) => section.id)
+      );
+      const next = new Set(Array.from(current).filter((groupId) => validGroupIds.has(groupId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [conversationSections]);
+
+  const toggleConversationGroup = useCallback((groupId: string) => {
+    setCollapsedGroupIds((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }, []);
 
   const isLoadingMoreRef = useRef(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const workspaceIdFromQuery = useMemo(() => {
-    if (!location.search) return null;
-    return new URLSearchParams(location.search).get('workspaceId');
-  }, [location.search]);
-
   const loadMore = useCallback(async () => {
     if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
 
@@ -747,52 +1057,86 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         className="flex-1 overflow-y-auto custom-scrollbar"
         onScroll={handleConversationScroll}
       >
-        <div className={collapsed ? 'px-2' : 'px-3'}>
-          {isLoadingHistory ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
-            </div>
-          ) : (
-            <>
-              {enrichedConversations.length === 0 ? (
-                <div
-                  className={`
-                  text-center py-8 text-slate-400
-                  ${collapsed ? 'hidden' : 'block'}
-                `}
-                >
-                  <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-xs">
-                    {t('agent.sidebar.noConversations', 'No conversations yet')}
-                  </p>
-                </div>
-              ) : (
-                enrichedConversations.map((conv) => (
-                  <ConversationItem
-                    key={conv.id}
-                    conversation={conv}
-                    isActive={conv.id === activeConversationId}
-                    onSelect={() => {
-                      handleSelectConversation(conv.id, conv.projectId);
-                    }}
-                    onDelete={(e) => {
-                      handleDeleteConversation(conv.id, e);
-                    }}
-                    onRename={(e) => {
-                      handleRenameClick(conv, e);
-                    }}
-                    compact={collapsed}
-                  />
-                ))
-              )}
-              {isLoadingMore && !collapsed && (
-                <div className="flex items-center justify-center py-3">
-                  <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        {!collapsed && (
+          <div className="px-3">
+            {isLoadingHistory ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
+              </div>
+            ) : (
+              <>
+                {enrichedConversations.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-xs">
+                      {t('agent.sidebar.noConversations', 'No conversations yet')}
+                    </p>
+                  </div>
+                ) : (
+                  conversationSections.map((section) => {
+                    if (section.type === 'conversation') {
+                      const conv = section.conversation;
+                      return (
+                        <ConversationItem
+                          key={conv.id}
+                          conversation={conv}
+                          isActive={conv.id === activeConversationId}
+                          onSelect={() => {
+                            handleSelectConversation(conv.id, conv.projectId);
+                          }}
+                          onDelete={(e) => {
+                            handleDeleteConversation(conv.id, e);
+                          }}
+                          onRename={(e) => {
+                            handleRenameClick(conv, e);
+                          }}
+                        />
+                      );
+                    }
+
+                    const groupCollapsed = collapsedGroupIds.has(section.id);
+                    return (
+                      <section key={section.id} aria-label={section.workspaceTitle}>
+                        <ConversationGroupHeader
+                          collapsed={groupCollapsed}
+                          conversationCount={section.conversations.length}
+                          onToggle={() => {
+                            toggleConversationGroup(section.id);
+                          }}
+                          workspaceTitle={section.workspaceTitle}
+                        />
+                        {!groupCollapsed
+                          ? section.conversations.map((conv) => (
+                              <ConversationItem
+                                key={conv.id}
+                                conversation={conv}
+                                grouped
+                                isActive={conv.id === activeConversationId}
+                                onSelect={() => {
+                                  handleSelectConversation(conv.id, conv.projectId);
+                                }}
+                                onDelete={(e) => {
+                                  handleDeleteConversation(conv.id, e);
+                                }}
+                                onRename={(e) => {
+                                  handleRenameClick(conv, e);
+                                }}
+                              />
+                            ))
+                          : null}
+                      </section>
+                    );
+                  })
+                )}
+                {isLoadingMore && (
+                  <div className="flex items-center justify-center py-3">
+                    <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Mobile Navigation Links - shown only in mobile drawer */}

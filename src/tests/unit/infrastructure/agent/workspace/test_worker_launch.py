@@ -131,8 +131,12 @@ class TestWorkerConversationLinkage:
 
         assert kwargs["workspace_id"] == task.workspace_id
         assert kwargs["linked_workspace_task_id"] == task.id
+        assert kwargs["agent_config"]["selected_agent_id"] == "agent-1"
         assert kwargs["metadata"]["workspace_id"] == task.workspace_id
         assert kwargs["metadata"]["workspace_task_id"] == task.id
+        assert kwargs["metadata"]["linked_workspace_task_id"] == task.id
+        assert kwargs["metadata"]["source"] == "workspace_worker_launch"
+        assert kwargs["metadata"]["workspace_llm_stage"] == "worker_launch"
         assert kwargs["metadata"]["preferred_language"] == "zh-CN"
 
     def test_worker_conversation_linkage_backfills_empty_existing_row(self) -> None:
@@ -140,6 +144,7 @@ class TestWorkerConversationLinkage:
             def __init__(self) -> None:
                 self.workspace_id = None
                 self.linked_workspace_task_id = None
+                self.agent_config: dict = {}
                 self.metadata: dict = {}
                 self.updated_at = None
 
@@ -154,14 +159,19 @@ class TestWorkerConversationLinkage:
             conversation,
             workspace_id="workspace-link-1",
             task_id="task-link-1",
+            worker_agent_id="agent-1",
         )
 
         assert conflict is None
         assert changed is True
         assert conversation.workspace_id == "workspace-link-1"
         assert conversation.linked_workspace_task_id == "task-link-1"
+        assert conversation.agent_config["selected_agent_id"] == "agent-1"
         assert conversation.metadata["workspace_id"] == "workspace-link-1"
         assert conversation.metadata["workspace_task_id"] == "task-link-1"
+        assert conversation.metadata["linked_workspace_task_id"] == "task-link-1"
+        assert conversation.metadata["source"] == "workspace_worker_launch"
+        assert conversation.metadata["workspace_llm_stage"] == "worker_launch"
         assert conversation.updated_at is not None
 
     def test_worker_conversation_linkage_reports_conflict_without_overwrite(self) -> None:
@@ -169,6 +179,7 @@ class TestWorkerConversationLinkage:
             def __init__(self) -> None:
                 self.workspace_id = "other-workspace"
                 self.linked_workspace_task_id = "task-link-1"
+                self.agent_config: dict = {}
                 self.metadata: dict = {}
                 self.updated_at = None
 

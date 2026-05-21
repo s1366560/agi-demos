@@ -664,10 +664,18 @@ class TestWorkspaceGoalRuntime:
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.get_redis_client",
                 AsyncMock(return_value=object()),
             ),
-            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"),
-            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"),
-            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"),
-            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceAgentRepository"
+            ),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceTaskRepository"
+            ),
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.WorkspaceTaskService"
             ) as task_service_cls,
@@ -869,7 +877,9 @@ class TestWorkspaceGoalRuntime:
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.async_session_factory",
                 fake_session_factory,
             ),
-            patch("src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"),
+            patch(
+                "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceRepository"
+            ),
             patch(
                 "src.infrastructure.agent.workspace.workspace_goal_runtime.SqlWorkspaceMemberRepository"
             ),
@@ -1179,6 +1189,8 @@ class TestWorkspaceGoalRuntime:
         assert saved_conversation.metadata["attempt_id"] == "attempt-9"
         assert saved_conversation.metadata["workspace_task_id"] == "child-1"
         assert saved_conversation.metadata["retry_launch"] is True
+        assert saved_conversation.workspace_id == "ws-1"
+        assert saved_conversation.linked_workspace_task_id == "child-1"
         assert captured["conversation_id"] == expected_conversation_id
         assert captured["project_id"] == "project-1"
         assert captured["tenant_id"] == "tenant-1"
@@ -1649,8 +1661,9 @@ class TestWorkspaceGoalRuntime:
 
         assert result is not None
         saved_root = task_repo.save.await_args.args[0]
-        assert "child_report_not_completed:legacy-child" not in (
-            saved_root.metadata["goal_evidence"]["verifications"]
+        assert (
+            "child_report_not_completed:legacy-child"
+            not in (saved_root.metadata["goal_evidence"]["verifications"])
         )
         command_service.complete_task.assert_awaited_once()
 
@@ -1710,6 +1723,6 @@ class TestWorkspaceGoalRuntime:
         saved_root = task_repo.save.await_args.args[0]
         assert saved_root.metadata["goal_evidence"]["verification_grade"] == "fail"
         assert saved_root.metadata["remediation_status"] == "ready_for_completion"
-        assert "verification_grade must be at least pass" in saved_root.metadata[
-            "remediation_summary"
-        ]
+        assert (
+            "verification_grade must be at least pass" in saved_root.metadata["remediation_summary"]
+        )

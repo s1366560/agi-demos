@@ -252,6 +252,26 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "summary": "done node reopened because required pipeline failed",
                 },
             )
+        reopened_worktree_nodes = _reopen_done_nodes_with_failed_worktree_integration(plan)
+        for node in reopened_worktree_nodes:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                node,
+                "worktree_integration_failed_done_node_reopened",
+                {
+                    "previous_attempt_id": node.metadata.get(
+                        "worktree_integration_failed_previous_attempt_id"
+                    ),
+                    "previous_commit_ref": node.metadata.get(
+                        "worktree_integration_failed_previous_commit_ref"
+                    ),
+                    "summary": "done node reopened because accepted worktree integration failed",
+                    "worktree_integration_summary": node.metadata.get(
+                        "worktree_integration_failed_previous_summary"
+                    ),
+                },
+            )
 
         # --- 1. verify any REPORTED nodes ------------------------------
         reported = [n for n in plan.nodes.values() if n.execution is TaskExecution.REPORTED]
@@ -601,6 +621,23 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             except Exception as exc:
                 errors.append(f"verify({node.id}): {exc}")
 
+        accepted_via_repair = _accept_ready_nodes_with_completed_repair_alternatives(plan)
+        for accepted_node, repair_alternative in accepted_via_repair:
+            await self._emit_event(
+                errors,
+                workspace_id,
+                accepted_node,
+                "verification_feedback_disposition",
+                {
+                    "attempt_id": accepted_node.current_attempt_id,
+                    "disposition": "accepted_via_repair_alternative",
+                    "repair_node_id": repair_alternative.id,
+                    "feedback_items": [],
+                    "summary": accepted_node.metadata.get("last_verification_summary"),
+                },
+            )
+        nodes_done += len(accepted_via_repair)
+
         invalidated_dependents = _invalidate_nodes_with_unmet_dependencies(plan)
         for invalidated_node in invalidated_dependents:
             await self._emit_event(
@@ -639,22 +676,6 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "node_count": repaired_phase_barriers,
                 },
             )
-        accepted_via_repair = _accept_ready_nodes_with_completed_repair_alternatives(plan)
-        for accepted_node, repair_alternative in accepted_via_repair:
-            await self._emit_event(
-                errors,
-                workspace_id,
-                accepted_node,
-                "verification_feedback_disposition",
-                {
-                    "attempt_id": accepted_node.current_attempt_id,
-                    "disposition": "accepted_via_repair_alternative",
-                    "repair_node_id": repair_alternative.id,
-                    "feedback_items": [],
-                    "summary": accepted_node.metadata.get("last_verification_summary"),
-                },
-            )
-        nodes_done += len(accepted_via_repair)
         ready_candidates = _ready_nodes_due(plan.ready_nodes(), now=datetime.now(UTC))
         ready_candidates, deferred_by_dependency_projection = (
             _select_ready_nodes_with_integrated_dependencies(ready_candidates, plan)
@@ -1193,6 +1214,7 @@ def _iteration_review_context(
         iteration_index=iteration_index,
         goal_title=plan.goal_node.title,
         goal_description=plan.goal_node.description,
+        linked_workspace_task_id=plan.goal_node.workspace_task_id,
         completed_tasks=tuple(_completed_task_payload(node) for node in nodes),
         deliverables=tuple(_iteration_deliverables(nodes)),
         feedback_items=tuple(_iteration_feedback_items(nodes)),
@@ -1739,6 +1761,63 @@ def _reopen_done_nodes_with_failed_pipeline(plan: Plan) -> list[PlanNode]:
     return reopened
 
 
+def _reopen_done_nodes_with_failed_worktree_integration(plan: Plan) -> list[PlanNode]:
+    reopened: list[PlanNode] = []
+    now = datetime.now(UTC)
+    for node in list(plan.nodes.values()):
+        if node.intent is not TaskIntent.DONE or node.execution is not TaskExecution.IDLE:
+            continue
+        if not _done_node_needs_worktree_integration_retry(node):
+            continue
+        previous_metadata = dict(node.metadata or {})
+        previous_attempt_id = (
+            _metadata_text(previous_metadata.get("worktree_integration_attempt_id"))
+            or node.current_attempt_id
+        )
+        previous_commit_ref = _node_verified_commit_ref(node)
+        previous_summary = (
+            _metadata_text(previous_metadata.get("worktree_integration_summary"))
+            or "accepted worktree integration failed"
+        )
+        metadata = _clear_stale_attempt_metadata(previous_metadata)
+        metadata.update(
+            {
+                "last_verification_passed": False,
+                "last_verification_summary": (
+                    "accepted worktree integration failed after verification: "
+                    f"{previous_summary}"
+                ),
+                "terminal_attempt_retry_reason": "worktree_integration_failed",
+                "worktree_integration_failed_done_reopened_at": now.isoformat().replace(
+                    "+00:00", "Z"
+                ),
+                "worktree_integration_failed_previous_attempt_id": previous_attempt_id,
+                "worktree_integration_failed_previous_commit_ref": previous_commit_ref,
+                "worktree_integration_failed_previous_summary": previous_summary,
+            }
+        )
+        updated = replace(
+            node,
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            assignee_agent_id=None,
+            current_attempt_id=None,
+            feature_checkpoint=_reset_stale_feature_checkpoint(node.feature_checkpoint),
+            metadata=metadata,
+            updated_at=now,
+            completed_at=None,
+        )
+        plan.replace_node(updated)
+        reopened.append(updated)
+    return reopened
+
+
+def _done_node_needs_worktree_integration_retry(node: PlanNode) -> bool:
+    if _metadata_text(node.metadata.get("worktree_integration_status")) != "failed":
+        return False
+    return _dependency_commit_needs_integration(node)
+
+
 _SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES = frozenset({"merged", "already_merged", "skipped"})
 
 
@@ -1892,6 +1971,12 @@ _STALE_ATTEMPT_METADATA_KEYS = frozenset(
         "obsolete_by_verifier_feedback",
         "obsolete_feedback_items",
         "current_repair_turn",
+        "dependency_invalidated_at",
+        "dependency_invalidated_missing_ids",
+        "dependency_invalidated_reason",
+        "dependency_invalidated_previous_attempt_id",
+        "dependency_invalidated_previous_intent",
+        "dependency_invalidated_previous_execution",
         "pipeline_finished_at",
         "pipeline_request_count",
         "pipeline_requested_at",
@@ -2128,7 +2213,9 @@ def _accept_ready_nodes_with_completed_repair_alternatives(
     for node in list(plan.nodes.values()):
         if node.kind not in {PlanNodeKind.TASK, PlanNodeKind.VERIFY}:
             continue
-        if node.intent is not TaskIntent.TODO or node.execution is not TaskExecution.IDLE:
+        if node.intent not in {TaskIntent.TODO, TaskIntent.BLOCKED}:
+            continue
+        if node.execution is not TaskExecution.IDLE:
             continue
         if node.current_attempt_id:
             continue
@@ -2888,9 +2975,15 @@ def _node_with_repair_alternative_disposition(
             "accepted_repair_evidence_refs": _node_protocol_evidence_refs(repair_node)[:24],
         }
     )
+    _apply_repair_alternative_attempt_metadata(metadata, repair_node)
     metadata.pop("retry_not_before", None)
     metadata.pop("retry_last_reason", None)
-    return replace(evidenced, metadata=metadata, updated_at=datetime.now(UTC))
+    return replace(
+        evidenced,
+        feature_checkpoint=_reset_stale_feature_checkpoint(evidenced.feature_checkpoint),
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
 
 
 def _node_with_repair_alternative_disposition_from_metadata(
@@ -2916,15 +3009,81 @@ def _node_with_repair_alternative_disposition_from_metadata(
             "accepted_repair_evidence_refs": _node_protocol_evidence_refs(repair_node)[:24],
         }
     )
+    _apply_repair_alternative_attempt_metadata(metadata, repair_node)
     metadata.pop("retry_not_before", None)
     metadata.pop("retry_last_reason", None)
     return replace(
         node,
         assignee_agent_id=None,
         current_attempt_id=None,
+        feature_checkpoint=_reset_stale_feature_checkpoint(node.feature_checkpoint),
         metadata=metadata,
         updated_at=datetime.now(UTC),
     )
+
+
+def _apply_repair_alternative_attempt_metadata(
+    metadata: dict[str, Any],
+    repair_node: PlanNode,
+) -> None:
+    """Replace stale original-attempt integration facts with repair-node facts."""
+
+    repair_metadata = dict(repair_node.metadata or {})
+    copied_keys = (
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "worktree_integration_attempt_id",
+        "worktree_integration_commit_ref",
+        "worktree_integration_dirty_signature",
+        "worktree_integration_ran_at",
+        "worktree_integration_status",
+        "worktree_integration_summary",
+        "worktree_integration_worktree_path",
+        "pipeline_status",
+        "pipeline_gate_status",
+        "pipeline_run_id",
+        "pipeline_evidence_refs",
+        "pipeline_last_summary",
+        "source_publish_status",
+        "source_publish_commit_ref",
+        "source_publish_source_commit_ref",
+        "source_publish_branch",
+        "source_publish_provider",
+        "source_publish_reason",
+    )
+    for key in copied_keys:
+        metadata.pop(key, None)
+        if key in repair_metadata:
+            metadata[key] = repair_metadata[key]
+
+    if "verified_commit_ref" not in metadata and repair_node.feature_checkpoint is not None:
+        commit_ref = _metadata_text(repair_node.feature_checkpoint.commit_ref)
+        if commit_ref:
+            metadata["verified_commit_ref"] = commit_ref
+
+    for key in (
+        "active_execution_root",
+        "worktree_path",
+        "dependency_invalidated_at",
+        "dependency_invalidated_missing_ids",
+        "dependency_invalidated_reason",
+        "dependency_invalidated_previous_attempt_id",
+        "dependency_invalidated_previous_intent",
+        "dependency_invalidated_previous_execution",
+        "last_verification_attempt_id",
+        "last_verification_ran_at",
+        "reported_attempt_reconciled_at",
+        "reported_attempt_status",
+        "terminal_attempt_status",
+        "terminal_attempt_reconciled_at",
+        "terminal_attempt_retry_count",
+        "terminal_attempt_retry_reason",
+        "terminal_attempt_superseded_attempt_id",
+        "terminal_attempt_superseded_reason",
+        "terminal_attempt_superseded_status",
+    ):
+        metadata.pop(key, None)
 
 
 def _report_evidence_refs(report: VerificationReport) -> list[str]:

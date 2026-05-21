@@ -378,6 +378,48 @@ class TestSqlConversationRepositoryList:
         assert len(conversations) == 1
         assert conversations[0].project_id == "proj-A"
 
+    @pytest.mark.asyncio
+    async def test_list_by_workspace_includes_legacy_metadata_linkage(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
+        """Legacy workspace worker rows stored linkage in meta before top-level columns."""
+        legacy = Conversation(
+            id="conv-legacy-workspace-meta",
+            project_id="proj-legacy-workspace",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Legacy workspace worker",
+            status=ConversationStatus.ACTIVE,
+            agent_config={"selected_agent_id": "agent-legacy"},
+            metadata={"workspace_id": "ws-legacy", "workspace_task_id": "task-legacy"},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+        )
+        unrelated = Conversation(
+            id="conv-legacy-workspace-other",
+            project_id="proj-legacy-workspace",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Other workspace worker",
+            status=ConversationStatus.ACTIVE,
+            agent_config={"selected_agent_id": "agent-other"},
+            metadata={"workspace_id": "ws-other", "workspace_task_id": "task-other"},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+        )
+        await v2_conversation_repo.save(legacy)
+        await v2_conversation_repo.save(unrelated)
+
+        conversations = await v2_conversation_repo.list_by_workspace("ws-legacy")
+
+        assert [c.id for c in conversations] == ["conv-legacy-workspace-meta"]
+        assert conversations[0].workspace_id == "ws-legacy"
+        assert conversations[0].linked_workspace_task_id == "task-legacy"
+
 
 class TestSqlConversationRepositoryDelete:
     """Tests for deleting conversations."""
@@ -484,6 +526,38 @@ class TestSqlConversationRepositoryToDomain:
         """Test that _to_domain returns None for None input."""
         result = v2_conversation_repo._to_domain(None)
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_to_domain_backfills_legacy_workspace_linkage_from_metadata(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
+        """Project conversation lists expose legacy workspace rows to client filters."""
+        conversation = Conversation(
+            id="conv-domain-legacy-workspace",
+            project_id="proj-legacy-domain",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Legacy Domain Workspace",
+            status=ConversationStatus.ACTIVE,
+            agent_config={},
+            metadata={
+                "workspace_id": "ws-domain",
+                "workspace_task_id": "task-domain",
+                "agent_id": "agent-domain",
+            },
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+        )
+        await v2_conversation_repo.save(conversation)
+
+        retrieved = await v2_conversation_repo.find_by_id("conv-domain-legacy-workspace")
+
+        assert retrieved is not None
+        assert retrieved.workspace_id == "ws-domain"
+        assert retrieved.linked_workspace_task_id == "task-domain"
+        assert retrieved.agent_config["selected_agent_id"] == "agent-domain"
 
 
 class TestSqlConversationRepositoryToDb:

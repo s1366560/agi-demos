@@ -125,7 +125,11 @@ class TestRouterNoMentions:
             ),
         ):
             await router.route_mentions(
-                workspace_id="ws-1", message=msg, tenant_id="t-1", project_id="p-1", user_id="user-1"
+                workspace_id="ws-1",
+                message=msg,
+                tenant_id="t-1",
+                project_id="p-1",
+                user_id="user-1",
             )
         mocks["agent_repo"].find_by_workspace.assert_not_called()
 
@@ -158,6 +162,9 @@ class TestRouterTriggerAgent:
         )
 
         mocks["conversation_repo"].save.assert_called_once()
+        saved = mocks["conversation_repo"].save.await_args.args[0]
+        assert saved.workspace_id == "ws-1"
+        assert saved.agent_config["selected_agent_id"] == "agent-1"
         mocks["message_service"].send_message.assert_called_once()
         call_kwargs = mocks["message_service"].send_message.call_args.kwargs
         assert call_kwargs["sender_id"] == "agent-1"
@@ -173,6 +180,9 @@ class TestRouterTriggerAgent:
     ) -> None:
         mock_create_llm.return_value = MagicMock()
         existing_conv = MagicMock()
+        existing_conv.workspace_id = "ws-1"
+        existing_conv.agent_config = {"selected_agent_id": "agent-1"}
+        existing_conv.metadata = {"workspace_id": "ws-1"}
         agent = _make_agent("agent-1", "Bot")
         router, mocks = _build_router(agents=[agent], existing_conversation=existing_conv)
         msg = _make_message(mentions=["agent-1"])
@@ -182,6 +192,31 @@ class TestRouterTriggerAgent:
         )
 
         mocks["conversation_repo"].save.assert_not_called()
+
+    @patch(
+        "src.configuration.factories.create_llm_client",
+        new_callable=AsyncMock,
+    )
+    async def test_trigger_agent_backfills_workspace_linkage_on_existing_conversation(
+        self, mock_create_llm: AsyncMock
+    ) -> None:
+        mock_create_llm.return_value = MagicMock()
+        existing_conv = MagicMock()
+        existing_conv.workspace_id = None
+        existing_conv.agent_config = {}
+        existing_conv.metadata = {}
+        agent = _make_agent("agent-1", "Bot")
+        router, mocks = _build_router(agents=[agent], existing_conversation=existing_conv)
+        msg = _make_message(mentions=["agent-1"])
+
+        await router.route_mentions(
+            workspace_id="ws-1", message=msg, tenant_id="t-1", project_id="p-1", user_id="user-1"
+        )
+
+        mocks["conversation_repo"].save.assert_awaited_once_with(existing_conv)
+        assert existing_conv.workspace_id == "ws-1"
+        assert existing_conv.agent_config["selected_agent_id"] == "agent-1"
+        assert existing_conv.metadata["workspace_id"] == "ws-1"
 
     @patch(
         "src.configuration.factories.create_llm_client",
@@ -263,7 +298,11 @@ class TestRouterTriggerAgent:
             ),
         ):
             await router.route_mentions(
-                workspace_id="ws-1", message=msg, tenant_id="t-1", project_id="p-1", user_id="user-1"
+                workspace_id="ws-1",
+                message=msg,
+                tenant_id="t-1",
+                project_id="p-1",
+                user_id="user-1",
             )
 
         assert captured["conversation_id"] == WorkspaceMentionRouter.workspace_conversation_id(
@@ -271,11 +310,20 @@ class TestRouterTriggerAgent:
             "agent-1",
             conversation_scope="objective:obj-1",
         )
+        saved = mocks["conversation_repo"].save.await_args.args[0]
+        assert saved.linked_workspace_task_id == "root-1"
+        assert saved.metadata["workspace_task_id"] == "root-1"
+        assert saved.metadata["linked_workspace_task_id"] == "root-1"
+        assert saved.metadata["source"] == "workspace_leader_mention"
+        assert saved.metadata["workspace_llm_stage"] == "leader_mention"
         # Agent-First refactor: activation gate no longer parses text.
         # The structural assertion is that a binding marker would activate it.
-        assert should_activate_workspace_authority(
-            captured["user_message"], has_workspace_binding=True
-        ) is True
+        assert (
+            should_activate_workspace_authority(
+                captured["user_message"], has_workspace_binding=True
+            )
+            is True
+        )
 
 
 @pytest.mark.unit
@@ -284,7 +332,9 @@ class TestFireAndForget:
         router, _ = _build_router()
         msg = _make_message(mentions=[])
 
-        router.fire_and_forget(workspace_id="ws-1", message=msg, tenant_id="t-1", project_id="p-1", user_id="user-1")
+        router.fire_and_forget(
+            workspace_id="ws-1", message=msg, tenant_id="t-1", project_id="p-1", user_id="user-1"
+        )
 
         # Give the background task time to complete (no-op since no mentions)
         await asyncio.sleep(0.05)
@@ -333,7 +383,6 @@ class TestMultipleAgentMentions:
 
         assert mocks["message_service"].send_message.call_count == 2
 
-
     @patch(
         "src.configuration.factories.create_llm_client",
         new_callable=AsyncMock,
@@ -380,6 +429,52 @@ class TestMultipleAgentMentions:
             "root_goal_task_id": "root-1",
             "task_authority": "workspace",
         }
+
+    @patch(
+        "src.configuration.factories.create_llm_client",
+        new_callable=AsyncMock,
+    )
+    async def test_trigger_agent_backfills_scoped_leader_mention_linkage(
+        self, mock_create_llm: AsyncMock
+    ) -> None:
+        mock_create_llm.return_value = MagicMock()
+        existing_conv = MagicMock()
+        existing_conv.workspace_id = "ws-1"
+        existing_conv.linked_workspace_task_id = None
+        existing_conv.agent_config = {"selected_agent_id": "agent-1"}
+        existing_conv.metadata = {"workspace_id": "ws-1"}
+        agent = _make_agent("agent-1", "Leader Agent")
+        router, mocks = _build_router(agents=[agent], existing_conversation=existing_conv)
+        msg = _make_message(
+            mentions=["agent-1"],
+            content='@"Leader Agent" continue objective execution',
+        )
+        msg.metadata["conversation_scope"] = "objective:obj-1"
+
+        with patch(
+            "src.application.services.workspace_mention_router._resolve_workspace_authority_context",
+            new=AsyncMock(
+                return_value={
+                    "workspace_id": "ws-1",
+                    "root_goal_task_id": "root-1",
+                    "task_authority": "workspace",
+                }
+            ),
+        ):
+            await router.route_mentions(
+                workspace_id="ws-1",
+                message=msg,
+                tenant_id="t-1",
+                project_id="p-1",
+                user_id="user-1",
+            )
+
+        mocks["conversation_repo"].save.assert_awaited_once_with(existing_conv)
+        assert existing_conv.linked_workspace_task_id == "root-1"
+        assert existing_conv.metadata["workspace_task_id"] == "root-1"
+        assert existing_conv.metadata["linked_workspace_task_id"] == "root-1"
+        assert existing_conv.metadata["source"] == "workspace_leader_mention"
+        assert existing_conv.metadata["workspace_llm_stage"] == "leader_mention"
 
     @patch(
         "src.configuration.factories.create_llm_client",

@@ -105,6 +105,7 @@ class WorkspaceVerificationJudgeRequest:
     attempt_id: str | None
     node_title: str
     node_description: str
+    linked_workspace_task_id: str | None = None
     acceptance_criteria: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     worker_summary: str = ""
     candidate_artifacts: tuple[str, ...] = field(default_factory=tuple)

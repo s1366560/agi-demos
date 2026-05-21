@@ -31,6 +31,7 @@ from src.domain.events.agent_events import (
     AgentTextStartEvent,
     AgentThoughtDeltaEvent,
     AgentThoughtEvent,
+    AgentThoughtStartEvent,
 )
 from src.infrastructure.agent.core.message import ToolState
 
@@ -583,7 +584,7 @@ class LLMInvoker:
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
         if event.type == StreamEventType.REASONING_START:
-            yield AgentThoughtEvent(content="", thought_level="reasoning")
+            yield AgentThoughtStartEvent()
         elif event.type == StreamEventType.REASONING_DELTA:
             delta = event.data.get("delta", "")
             result.reasoning += delta

@@ -74,8 +74,14 @@ class DroneConfigurationError(ValueError):
     """Raised when a workspace Drone contract is missing required configuration."""
 
 
+class DroneRepositoryNotFoundError(DroneConfigurationError):
+    """Raised when Drone has not registered the configured repository yet."""
+
+
 class DroneClientProtocol(Protocol):
     async def get_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]: ...
+
+    async def enable_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]: ...
 
     async def update_repo(
         self,
@@ -212,10 +218,23 @@ class HttpDroneClient:
         self._timeout_seconds = timeout_seconds
 
     async def get_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]:
-        raw = await self._request("GET", _build_path(owner, repo))
+        try:
+            raw = await self._request("GET", _build_path(owner, repo))
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise DroneRepositoryNotFoundError(
+                    f"Drone repo {owner}/{repo} is not enabled"
+                ) from exc
+            raise
         if isinstance(raw, Mapping):
             return raw
         raise DroneConfigurationError("Drone repo response was not an object")
+
+    async def enable_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]:
+        raw = await self._request("POST", _build_path(owner, repo))
+        if isinstance(raw, Mapping):
+            return raw
+        raise DroneConfigurationError("Drone repo enable response was not an object")
 
     async def update_repo(
         self,
@@ -339,6 +358,7 @@ class DronePipelineProvider:
 
         client = self._client or HttpDroneClient(server_url=config.server_url, token=config.token)
         try:
+            await _ensure_repo_enabled(client=client, config=config)
             await _ensure_docker_deploy_repo_trusted(client=client, config=config)
             running_build = await _running_build_for_commit(client=client, config=config)
             if running_build is None:
@@ -396,6 +416,20 @@ class DronePipelineProvider:
         if cleanup:
             timeout_build["drone_cleanup"] = dict(cleanup)
         return {**timeout_build, "status": "timeout"}
+
+
+async def _ensure_repo_enabled(
+    *,
+    client: DroneClientProtocol,
+    config: DronePipelineConfig,
+) -> None:
+    try:
+        repo = await client.get_repo(owner=config.owner, repo=config.repo)
+    except DroneRepositoryNotFoundError:
+        _ = await client.enable_repo(owner=config.owner, repo=config.repo)
+        return
+    if repo.get("active") is False:
+        _ = await client.enable_repo(owner=config.owner, repo=config.repo)
 
 
 async def _ensure_docker_deploy_repo_trusted(
@@ -1493,5 +1527,6 @@ __all__ = [
     "DroneConfigurationError",
     "DronePipelineConfig",
     "DronePipelineProvider",
+    "DroneRepositoryNotFoundError",
     "HttpDroneClient",
 ]

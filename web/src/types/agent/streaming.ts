@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   MessageEventData,
+  ThoughtStartEventData,
   ThoughtEventData,
   ThoughtDeltaEventData,
   WorkPlanEventData,
@@ -96,6 +97,7 @@ import type {
  */
 export interface AgentStreamHandler {
   onMessage?: ((event: AgentEvent<MessageEventData>) => void) | undefined;
+  onThoughtStart?: ((event: AgentEvent<ThoughtStartEventData>) => void) | undefined;
   onThought?: ((event: AgentEvent<ThoughtEventData>) => void) | undefined;
   onThoughtDelta?: ((event: AgentEvent<ThoughtDeltaEventData>) => void) | undefined; // Streaming thought
   onWorkPlan?: ((event: AgentEvent<WorkPlanEventData>) => void) | undefined;

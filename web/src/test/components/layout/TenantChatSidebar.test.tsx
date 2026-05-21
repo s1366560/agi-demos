@@ -6,7 +6,8 @@ import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
-const { modalConfirm } = vi.hoisted(() => ({
+const { loadWorkspaceSurfaceMock, modalConfirm } = vi.hoisted(() => ({
+  loadWorkspaceSurfaceMock: vi.fn(),
   modalConfirm: vi.fn(),
 }));
 
@@ -63,8 +64,21 @@ vi.mock('@/stores/project', () => ({
 }));
 
 vi.mock('@/stores/workspace', () => ({
-  useCurrentWorkspace: () => ({ id: 'ws-current' }),
-  useWorkspaces: () => [{ id: 'ws-current' }],
+  useCurrentWorkspace: () => ({ id: 'ws-current', name: 'Workspace Alpha' }),
+  useWorkspaceActions: () => ({
+    loadWorkspaceSurface: loadWorkspaceSurfaceMock,
+  }),
+  useWorkspaceTasks: () => [
+    {
+      id: 'node-b2768f4c07e7',
+      workspace_id: 'ws-current',
+      title: 'Fix Drone deploy pipeline',
+      status: 'in_progress',
+      metadata: {},
+      created_at: '2026-04-17T00:00:00.000Z',
+    },
+  ],
+  useWorkspaces: () => [{ id: 'ws-current', name: 'Workspace Alpha' }],
 }));
 
 vi.mock('@/utils/agentWorkspacePath', () => ({
@@ -143,6 +157,15 @@ describe('TenantChatSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     agentState.createNewConversation.mockResolvedValue('conv-new');
+    conversationsState.conversations = [
+      {
+        id: 'conv-1',
+        title: 'Conversation One',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+      },
+    ];
+    conversationsState.hasMoreConversations = false;
     projectState.projects = [
       { id: 'project-1', name: 'Project One' },
       { id: 'project-2', name: 'Project Two' },
@@ -206,6 +229,15 @@ describe('TenantChatSidebar', () => {
     ).toBeTruthy();
   });
 
+  it('does not render conversation icons or tooltips when collapsed', () => {
+    render(<TenantChatSidebar tenantId="tenant-1" collapsed />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Conversation One/ })).not.toBeInTheDocument();
+  });
+
   it('uses the URL project id when creating a new conversation', async () => {
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
       route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
@@ -225,5 +257,54 @@ describe('TenantChatSidebar', () => {
       id: 'project-2',
       name: 'Project Two',
     });
+  });
+
+  it('groups workspace conversations by workspace only with collapsible sections', () => {
+    conversationsState.conversations = [
+      {
+        id: 'workspace-verifier:ws-current:node-b2768f4c07e7:agent-1:attempt-1',
+        title: 'Workspace Verification Gate - node-b2768f4c07e7',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-current',
+        linked_workspace_task_id: 'node-b2768f4c07e7',
+      },
+      {
+        id: 'workspace-chat:ws-current:agent-1',
+        title: 'Workspace Chat - Verifier',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+        workspace_id: 'ws-current',
+      },
+    ];
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1&workspaceId=ws-current',
+    });
+
+    expect(screen.getByRole('button', { name: /Workspace Alpha/ })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(screen.getAllByText('Workspace Alpha')).toHaveLength(1);
+    expect(screen.getAllByText('Fix Drone deploy pipeline')).toHaveLength(1);
+    expect(screen.getByText('Workspace task')).toBeInTheDocument();
+    expect(screen.getByText('Verifier')).toBeInTheDocument();
+    expect(screen.getByText('Chat')).toBeInTheDocument();
+    expect(screen.getAllByText('just now')).toHaveLength(2);
+    expect(
+      screen.queryByText('Workspace Verification Gate - node-b2768f4c07e7')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('node-b2768f4c07e7')).not.toBeInTheDocument();
+
+    const groupButton = screen.getByRole('button', { name: /Workspace Alpha/ });
+    expect(groupButton).not.toBeNull();
+    fireEvent.click(groupButton as HTMLElement);
+
+    expect(groupButton).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Fix Drone deploy pipeline')).not.toBeInTheDocument();
+    expect(screen.queryByText('Workspace task')).not.toBeInTheDocument();
+    expect(screen.queryByText('Verifier')).not.toBeInTheDocument();
+    expect(screen.queryByText('Chat')).not.toBeInTheDocument();
   });
 });

@@ -40,6 +40,7 @@ import { useSandboxStore } from '@/stores/sandbox';
 import { useTenantStore } from '@/stores/tenant';
 import { useWorkspaceStore } from '@/stores/workspace';
 
+import { agentService } from '@/services/agentService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
@@ -74,6 +75,7 @@ import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 import type {
   AgentTask,
+  Conversation,
   ExecutionNarrativeEntry,
   ExecutionPathDecidedEventData,
   PolicyFilteredEventData,
@@ -98,6 +100,34 @@ interface AgentChatContentProps {
 const INPUT_MIN_HEIGHT = 140;
 const INPUT_MAX_HEIGHT = 560;
 const INPUT_DEFAULT_HEIGHT = 180;
+
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function workspaceNodeIdFromConversationId(
+  conversationId: string | null | undefined
+): string | null {
+  if (!conversationId?.startsWith('workspace-')) {
+    return null;
+  }
+  const [, , nodeId] = conversationId.split(':');
+  return nodeId?.startsWith('node-') ? nodeId : null;
+}
+
+function resolveCurrentWorkspaceTaskId(
+  conversation: Conversation | null,
+  conversationId: string | null | undefined
+): string | null {
+  return (
+    conversation?.linked_workspace_task_id ??
+    metadataString(conversation?.metadata, 'workspace_task_id') ??
+    metadataString(conversation?.metadata, 'linked_workspace_task_id') ??
+    workspaceNodeIdFromConversationId(conversation?.id ?? conversationId) ??
+    null
+  );
+}
 
 const CanvasPanel = lazy(() =>
   import('./canvas/CanvasPanel').then((module) => ({ default: module.CanvasPanel }))
@@ -431,6 +461,29 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       if (projectId) void loadConversations(projectId);
     }, [projectId, loadConversations]);
 
+    useEffect(() => {
+      if (!projectId || !conversationId) {
+        return;
+      }
+      let active = true;
+      agentService
+        .getConversation(conversationId, projectId)
+        .then((conversation) => {
+          if (!active || !conversation) {
+            return;
+          }
+          if (useAgentV3Store.getState().activeConversationId === conversationId) {
+            useConversationsStore.getState().setCurrentConversation(conversation);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('AgentChatContent: failed to load active conversation', error);
+        });
+      return () => {
+        active = false;
+      };
+    }, [conversationId, projectId]);
+
     // Handle URL changes
     useEffect(() => {
       if (projectId && conversationId) {
@@ -630,6 +683,13 @@ ${content}`;
     const taskProgress = useMemo(
       () => deriveTaskProgress(tasks, isStreaming),
       [tasks, isStreaming]
+    );
+    const routeConversation =
+      currentConversation?.id === activeConversationId ? currentConversation : null;
+    const activeWorkspaceId = routeConversation?.workspace_id ?? effectiveWorkspaceId ?? null;
+    const activeWorkspaceTaskId = resolveCurrentWorkspaceTaskId(
+      routeConversation,
+      activeConversationId
     );
 
     // Split mode drag handler
@@ -992,7 +1052,10 @@ ${content}`;
             <Suspense fallback={<AgentPanelFallback />}>
               <RightPanel
                 tasks={tasks}
+                conversationId={activeConversationId}
                 sandboxId={activeSandboxId}
+                workspaceId={activeWorkspaceId}
+                currentWorkspaceTaskId={activeWorkspaceTaskId}
                 executionPathDecision={executionPathDecision}
                 selectionTrace={selectionTrace}
                 policyFiltered={policyFiltered}

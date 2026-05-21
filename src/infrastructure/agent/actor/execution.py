@@ -153,6 +153,7 @@ _PERSIST_INTERVAL_SECONDS = 30
 _TTL_REFRESH_INTERVAL_SECONDS = 60
 
 _SKIP_PERSIST_EVENT_TYPES = {
+    "thought_start",
     "thought_delta",
     "text_delta",
     "text_start",

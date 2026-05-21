@@ -70,6 +70,7 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
     _accept_ready_nodes_with_completed_repair_alternatives,
     _node_with_verification_evidence,
     _reopen_done_nodes_with_failed_pipeline,
+    _reopen_done_nodes_with_failed_worktree_integration,
 )
 from src.infrastructure.agent.workspace_plan.verification_judge import (
     _request_payload,
@@ -3620,6 +3621,62 @@ def test_reopen_done_nodes_with_failed_required_pipeline() -> None:
     assert updated.metadata["pipeline_failed_done_reopened_at"].endswith("Z")
 
 
+def test_reopen_done_nodes_with_failed_worktree_integration() -> None:
+    plan = _plan_with_two_tasks()
+    node = plan.nodes[PlanNodeId("a")]
+    plan.replace_node(
+        replace(
+            node,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="attempt-a",
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-a",
+                sequence=1,
+                title="task a",
+                worktree_path="/workspace/.memstack/worktrees/attempt-a",
+                branch_name="workspace/a-attempt-a",
+                base_ref="old-base",
+                commit_ref="abc1234",
+            ),
+            metadata={
+                "terminal_attempt_status": "accepted",
+                "verified_commit_ref": "abc1234",
+                "worktree_integration_attempt_id": "attempt-a",
+                "worktree_integration_status": "failed",
+                "worktree_integration_worktree_path": (
+                    "/workspace/.memstack/worktrees/attempt-a"
+                ),
+                "worktree_integration_dirty_signature": None,
+                "worktree_integration_summary": (
+                    "Exit code: 128\n"
+                    "status=failed\n"
+                    "reason=merge_failed_aborted\n"
+                    "fatal: refusing to merge unrelated histories"
+                ),
+            },
+        )
+    )
+
+    reopened = _reopen_done_nodes_with_failed_worktree_integration(plan)
+
+    assert [node.id for node in reopened] == ["a"]
+    updated = plan.nodes[PlanNodeId("a")]
+    assert updated.intent is TaskIntent.TODO
+    assert updated.execution is TaskExecution.IDLE
+    assert updated.current_attempt_id is None
+    assert updated.feature_checkpoint is not None
+    assert updated.feature_checkpoint.worktree_path is None
+    assert updated.feature_checkpoint.branch_name is None
+    assert updated.feature_checkpoint.base_ref == "HEAD"
+    assert updated.feature_checkpoint.commit_ref is None
+    assert updated.metadata["last_verification_passed"] is False
+    assert updated.metadata["terminal_attempt_retry_reason"] == "worktree_integration_failed"
+    assert updated.metadata["worktree_integration_failed_previous_attempt_id"] == "attempt-a"
+    assert updated.metadata["worktree_integration_failed_previous_commit_ref"] == "abc1234"
+    assert "worktree_integration_status" not in updated.metadata
+
+
 def test_node_with_verification_evidence_uses_worker_artifact_commit_refs() -> None:
     node = _leaf_node()
     report = VerificationReport(node_id=node.id, attempt_id="attempt-1", results=())
@@ -3956,6 +4013,104 @@ class TestSupervisorTick:
             )
         ]
 
+    async def test_tick_retries_done_node_when_worktree_integration_failed(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                current_attempt_id="attempt-a",
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-a",
+                    sequence=1,
+                    title="task a",
+                    worktree_path="/workspace/.memstack/worktrees/attempt-a",
+                    branch_name="workspace/a-attempt-a",
+                    base_ref="old-base",
+                    commit_ref="abc1234",
+                ),
+                metadata={
+                    "terminal_attempt_status": "accepted",
+                    "verified_commit_ref": "abc1234",
+                    "worktree_integration_attempt_id": "attempt-a",
+                    "worktree_integration_status": "failed",
+                    "worktree_integration_worktree_path": (
+                        "/workspace/.memstack/worktrees/attempt-a"
+                    ),
+                    "worktree_integration_dirty_signature": None,
+                    "worktree_integration_summary": (
+                        "Exit code: 128\n"
+                        "status=failed\n"
+                        "reason=merge_failed_aborted\n"
+                        "fatal: refusing to merge unrelated histories"
+                    ),
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            return f"retry-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert dispatched == ["a"]
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        retried = reloaded.nodes[PlanNodeId("a")]
+        assert retried.intent is TaskIntent.IN_PROGRESS
+        assert retried.execution is TaskExecution.DISPATCHED
+        assert retried.current_attempt_id == "retry-a"
+        assert retried.metadata["terminal_attempt_retry_reason"] == (
+            "worktree_integration_failed"
+        )
+        assert "worktree_integration_status" not in retried.metadata
+        assert [
+            (event_type, node_id)
+            for event_type, node_id, _payload in events
+        ] == [("worktree_integration_failed_done_node_reopened", "a")]
+
     async def test_tick_preserves_repair_dependency_when_phase_barriers_repaired(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -3995,6 +4150,20 @@ class TestSupervisorTick:
                     "iteration_index": 2,
                     "iteration_phase": "test",
                     "repair_for_node_id": "a",
+                },
+            )
+        )
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                b,
+                metadata={
+                    "dependency_invalidated_at": "2026-05-21T02:43:51Z",
+                    "dependency_invalidated_missing_ids": ["a"],
+                    "dependency_invalidated_reason": "dependencies_not_done_or_not_integrated",
+                    "dependency_invalidated_previous_attempt_id": "stale-attempt",
+                    "dependency_invalidated_previous_intent": "in_progress",
+                    "dependency_invalidated_previous_execution": "running",
                 },
             )
         )
@@ -4123,6 +4292,19 @@ class TestSupervisorTick:
 
         assert report.allocations_made == 1
         assert dispatched == ["b"]
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        dispatched_node = reloaded.nodes[PlanNodeId("b")]
+        assert dispatched_node.current_attempt_id == "attempt-b"
+        for stale_key in (
+            "dependency_invalidated_at",
+            "dependency_invalidated_missing_ids",
+            "dependency_invalidated_reason",
+            "dependency_invalidated_previous_attempt_id",
+            "dependency_invalidated_previous_intent",
+            "dependency_invalidated_previous_execution",
+        ):
+            assert stale_key not in dispatched_node.metadata
         assert not [
             event for event in events if event[0] == "dispatch_deferred_dependency_projection"
         ]
@@ -4261,6 +4443,139 @@ class TestSupervisorTick:
                 },
             )
         ]
+
+    async def test_tick_accepts_repair_alternative_before_invalidating_dependents(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        b = plan.nodes[PlanNodeId("b")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.BLOCKED,
+                execution=TaskExecution.IDLE,
+                current_attempt_id=None,
+                depends_on=frozenset({PlanNodeId("repair-a")}),
+                metadata={
+                    "blocked_by_repair_node_id": "repair-a",
+                    "last_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_attempt_id": "stale-attempt-a",
+                    "terminal_attempt_status": "rejected",
+                    "terminal_attempt_retry_count": 12,
+                    "verified_commit_ref": "stale-a",
+                    "worktree_integration_status": "pending",
+                    "worktree_integration_worktree_path": (
+                        "/workspace/.memstack/worktrees/stale-a"
+                    ),
+                },
+            )
+        )
+        plan.replace_node(
+            replace(
+                b,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.RUNNING,
+                current_attempt_id="attempt-b",
+                assignee_agent_id="ag-code",
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_passed": True,
+                    "last_verification_judge_verdict": "accepted",
+                    "last_verification_summary": "verified corrected target",
+                    "verified_commit_ref": "f9264bf",
+                    "worktree_integration_commit_ref": "f9264bf",
+                    "worktree_integration_status": "merged",
+                    "worktree_integration_worktree_path": (
+                        "/workspace/.memstack/worktrees/repair-a"
+                    ),
+                    "verification_evidence_refs": [
+                        "preflight:read-progress",
+                        "commit_ref:f9264bf",
+                        "worker_report:completed",
+                    ],
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            return None
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.nodes_completed == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        accepted = reloaded.nodes[PlanNodeId("a")]
+        downstream = reloaded.nodes[PlanNodeId("b")]
+        assert accepted.intent is TaskIntent.DONE
+        assert accepted.metadata["verified_commit_ref"] == "f9264bf"
+        assert "last_verification_attempt_id" not in accepted.metadata
+        assert "terminal_attempt_status" not in accepted.metadata
+        assert "terminal_attempt_retry_count" not in accepted.metadata
+        assert downstream.intent is TaskIntent.IN_PROGRESS
+        assert downstream.execution is TaskExecution.RUNNING
+        assert downstream.current_attempt_id == "attempt-b"
+        assert [
+            event for event in events if event[0] == "verification_feedback_disposition"
+        ] == [
+            (
+                "verification_feedback_disposition",
+                "a",
+                {
+                    "attempt_id": None,
+                    "disposition": "accepted_via_repair_alternative",
+                    "repair_node_id": "repair-a",
+                    "feedback_items": [],
+                    "summary": accepted.metadata.get("last_verification_summary"),
+                },
+            )
+        ]
+        assert not [event for event in events if event[0] == "dependency_invalidated"]
 
     async def test_tick_invalidates_active_downstream_node_when_dependency_not_integrated(
         self,
@@ -5457,6 +5772,100 @@ class TestSupervisorTick:
 
         assert [(node.id, repair.id) for node, repair in accepted] == [("a", "repair-a")]
         assert plan.nodes[PlanNodeId("a")].intent is TaskIntent.DONE
+
+    def test_blocked_node_accepts_completed_repair_alternative_when_dependencies_clear(
+        self,
+    ) -> None:
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.BLOCKED,
+                execution=TaskExecution.IDLE,
+                depends_on=frozenset({PlanNodeId("repair-a")}),
+                current_attempt_id=None,
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="a",
+                    worktree_path="/tmp/.memstack/worktrees/stale-a",
+                    branch_name="workspace/a-stale",
+                    base_ref="2e83bccd",
+                    commit_ref="fa20cab",
+                ),
+                metadata={
+                    "blocked_by_repair_node_id": "repair-a",
+                    "verification_feedback_disposition": "accepted_via_repair_alternative",
+                    "accepted_repair_node_id": "repair-a",
+                    "verified_commit_ref": "fa20cab",
+                    "worktree_integration_worktree_path": "/tmp/.memstack/worktrees/stale-a",
+                    "worktree_integration_status": "pending",
+                    "dependency_invalidated_missing_ids": ["repair-a"],
+                    "last_verification_attempt_id": "stale-attempt-a",
+                    "terminal_attempt_status": "rejected",
+                    "terminal_attempt_retry_count": 12,
+                    "active_execution_root": "/tmp/.memstack/worktrees/stale-a",
+                    "worktree_path": "/tmp/.memstack/worktrees/stale-a",
+                    "last_verification_passed": True,
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=PlanNodeId("goal-1"),
+                kind=PlanNodeKind.TASK,
+                title="accepted stale target repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_passed": True,
+                    "last_verification_judge_verdict": "accepted",
+                    "last_verification_summary": "verified corrected target",
+                    "verified_commit_ref": "f9264bf",
+                    "worktree_integration_commit_ref": "f9264bf",
+                    "worktree_integration_status": "merged",
+                    "worktree_integration_worktree_path": "/tmp/.memstack/worktrees/repair-a",
+                    "verification_evidence_refs": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:e2e-screenshot-journey.mjs - 18 pages, 0 errors",
+                        "commit_ref:852a59fe",
+                        "worker_report:completed",
+                    ],
+                },
+            )
+        )
+
+        accepted = _accept_ready_nodes_with_completed_repair_alternatives(plan)
+
+        assert [(node.id, repair.id) for node, repair in accepted] == [("a", "repair-a")]
+        accepted_node = plan.nodes[PlanNodeId("a")]
+        assert accepted_node.intent is TaskIntent.DONE
+        assert accepted_node.execution is TaskExecution.IDLE
+        assert accepted_node.current_attempt_id is None
+        assert accepted_node.metadata["accepted_repair_node_id"] == "repair-a"
+        assert accepted_node.metadata["verified_commit_ref"] == "f9264bf"
+        assert accepted_node.metadata["worktree_integration_commit_ref"] == "f9264bf"
+        assert accepted_node.metadata["worktree_integration_status"] == "merged"
+        assert accepted_node.metadata["worktree_integration_worktree_path"] == (
+            "/tmp/.memstack/worktrees/repair-a"
+        )
+        assert "dependency_invalidated_missing_ids" not in accepted_node.metadata
+        assert "last_verification_attempt_id" not in accepted_node.metadata
+        assert "terminal_attempt_status" not in accepted_node.metadata
+        assert "terminal_attempt_retry_count" not in accepted_node.metadata
+        assert "active_execution_root" not in accepted_node.metadata
+        assert "worktree_path" not in accepted_node.metadata
+        assert accepted_node.feature_checkpoint is not None
+        assert accepted_node.feature_checkpoint.worktree_path is None
+        assert accepted_node.feature_checkpoint.branch_name is None
+        assert accepted_node.feature_checkpoint.base_ref == "HEAD"
+        assert accepted_node.feature_checkpoint.commit_ref is None
 
     async def test_clean_stale_commit_integration_failure_does_not_block_dependencies(
         self,

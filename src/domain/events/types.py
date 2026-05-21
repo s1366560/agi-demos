@@ -5,7 +5,7 @@ All event type definitions should be imported from this module to ensure consist
 
 Event Naming Convention:
 - Status events: status, start, complete, error
-- Thinking events: thought, thought_delta
+- Thinking events: thought_start, thought, thought_delta
 - Tool events: act, observe
 - Text events: text_start, text_delta, text_end
 - Plan events: plan_*, step_*
@@ -48,6 +48,7 @@ class AgentEventType(str, Enum):
     # =========================================================================
     # Thinking events
     # =========================================================================
+    THOUGHT_START = "thought_start"
     THOUGHT = "thought"
     THOUGHT_DELTA = "thought_delta"
 
@@ -351,6 +352,7 @@ INTERNAL_EVENT_TYPES: set[AgentEventType] = {
 
 # Delta events that are not persisted to database (streaming fragments)
 DELTA_EVENT_TYPES: set[AgentEventType] = {
+    AgentEventType.THOUGHT_START,
     AgentEventType.THOUGHT_DELTA,
     AgentEventType.TEXT_DELTA,
     AgentEventType.TEXT_START,
@@ -382,6 +384,7 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.START: EventCategory.AGENT,
     AgentEventType.COMPLETE: EventCategory.AGENT,
     AgentEventType.ERROR: EventCategory.AGENT,
+    AgentEventType.THOUGHT_START: EventCategory.AGENT,
     AgentEventType.THOUGHT: EventCategory.AGENT,
     AgentEventType.THOUGHT_DELTA: EventCategory.AGENT,
     AgentEventType.ACT: EventCategory.AGENT,

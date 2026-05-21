@@ -6,6 +6,7 @@ import type {
   AgentEventType,
   AgentStreamHandler,
   MessageEventData,
+  ThoughtStartEventData,
   ThoughtEventData,
   ThoughtDeltaEventData,
   WorkPlanEventData,
@@ -199,6 +200,9 @@ export function routeToHandler(
       break;
     case 'thought':
       handler.onThought?.(event as AgentEvent<ThoughtEventData>);
+      break;
+    case 'thought_start':
+      handler.onThoughtStart?.(event as AgentEvent<ThoughtStartEventData>);
       break;
     case 'thought_delta':
       // Route thought_delta to onThoughtDelta handler for incremental thought updates

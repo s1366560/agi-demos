@@ -1,6 +1,6 @@
 /**
  * Auto-generated event types from Python.
- * Generated at: 2026-05-13T01:54:13.192586Z
+ * Generated at: 2026-05-21T09:28:20.386359Z
  *
  * DO NOT EDIT MANUALLY - run `make generate-event-types` to regenerate.
  */
@@ -14,6 +14,7 @@ export type AgentEventType =
   | 'start'
   | 'complete'
   | 'error'
+  | 'thought_start'
   | 'thought'
   | 'thought_delta'
   | 'act'
@@ -139,7 +140,9 @@ export type AgentEventType =
   | 'blackboard_reply_updated'
   | 'blackboard_reply_deleted'
   | 'blackboard_file_created'
+  | 'blackboard_file_updated'
   | 'blackboard_file_deleted'
+  | 'blackboard_directory_deleted'
   | 'workspace_updated'
   | 'workspace_deleted'
   | 'workspace_member_left'
@@ -172,24 +175,25 @@ export type AgentEventType =
 
 // Delta events (not persisted)
 export const DELTA_EVENT_TYPES: AgentEventType[] = [
-  'thought_delta',
-  'act_delta',
-  'text_start',
   'text_delta',
   'text_end',
+  'thought_delta',
+  'text_start',
+  'thought_start',
+  'act_delta',
 ];
 
 // Terminal events (stream completion)
-export const TERMINAL_EVENT_TYPES: AgentEventType[] = ['error', 'complete', 'cancelled'];
+export const TERMINAL_EVENT_TYPES: AgentEventType[] = ['cancelled', 'error', 'complete'];
 
 // HITL events (require user response)
 export const HITL_EVENT_TYPES: AgentEventType[] = [
   'a2ui_action_asked',
   'permission_asked',
   'decision_asked',
+  'elicitation_asked',
   'clarification_asked',
   'env_var_requested',
-  'elicitation_asked',
 ];
 
 // Helper functions
@@ -211,6 +215,7 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   start: 'agent',
   complete: 'agent',
   error: 'agent',
+  thought_start: 'agent',
   thought: 'agent',
   thought_delta: 'agent',
   act: 'agent',
@@ -336,7 +341,9 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   blackboard_reply_updated: 'agent',
   blackboard_reply_deleted: 'agent',
   blackboard_file_created: 'agent',
+  blackboard_file_updated: 'agent',
   blackboard_file_deleted: 'agent',
+  blackboard_directory_deleted: 'agent',
   workspace_updated: 'agent',
   workspace_deleted: 'agent',
   workspace_member_left: 'agent',
@@ -369,7 +376,7 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
 };
 
 export function getEventCategory(eventType: AgentEventType): EventCategory {
-  return EVENT_CATEGORIES[eventType];
+  return EVENT_CATEGORIES[eventType] || 'agent';
 }
 
 // All event types (for iteration)
@@ -378,6 +385,7 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'start',
   'complete',
   'error',
+  'thought_start',
   'thought',
   'thought_delta',
   'act',
@@ -503,7 +511,9 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'blackboard_reply_updated',
   'blackboard_reply_deleted',
   'blackboard_file_created',
+  'blackboard_file_updated',
   'blackboard_file_deleted',
+  'blackboard_directory_deleted',
   'workspace_updated',
   'workspace_deleted',
   'workspace_member_left',

@@ -50,6 +50,23 @@ vi.mock('@/stores/sandbox', () => ({
   })),
 }));
 
+vi.mock('@/services/agent/graph/agentGraphApi', () => ({
+  agentGraphApi: {
+    getGraph: vi.fn(),
+  },
+}));
+
+vi.mock('@/services/workspaceService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/workspaceService')>();
+  return {
+    ...actual,
+    workspacePlanService: {
+      ...actual.workspacePlanService,
+      getSnapshot: vi.fn(),
+    },
+  };
+});
+
 // Mock SandboxSection to avoid complex dependencies
 vi.mock('@/components/agent/SandboxSection', () => ({
   SandboxSection: ({ sandboxId, toolExecutions, currentTool }: any) => (
@@ -63,12 +80,56 @@ vi.mock('@/components/agent/SandboxSection', () => ({
 
 // Import components after mocking
 // eslint-disable-next-line no-restricted-imports
+import { agentGraphApi } from '@/services/agent/graph/agentGraphApi';
+// eslint-disable-next-line no-restricted-imports
+import { workspacePlanService } from '@/services/workspaceService';
+// eslint-disable-next-line no-restricted-imports
+import { useGraphStore } from '@/stores/graphStore';
+// eslint-disable-next-line no-restricted-imports
 import { RightPanel } from '@/components/agent/RightPanel';
 // eslint-disable-next-line no-restricted-imports
 import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
 
 function renderRightPanel(ui: ReactElement) {
   return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
+function mockWorkspaceSnapshot() {
+  return {
+    workspace_id: 'ws-1',
+    plan: {
+      id: 'plan-1',
+      workspace_id: 'ws-1',
+      goal_id: 'goal-1',
+      status: 'active',
+      created_at: '2026-05-01T00:00:00Z',
+      counts: {},
+      nodes: [
+        {
+          id: 'task-1',
+          parent_id: 'goal-1',
+          kind: 'task',
+          title: 'Workspace deploy task',
+          description: 'Deploy through Drone.',
+          depends_on: [],
+          acceptance_criteria: [],
+          recommended_capabilities: [],
+          intent: 'in_progress',
+          execution: 'running',
+          progress: { percent: 50, confidence: 0.8, note: '' },
+          assignee_agent_id: null,
+          current_attempt_id: 'attempt-1',
+          workspace_task_id: 'workspace-task-1',
+          priority: 1,
+          metadata: {},
+          created_at: '2026-05-01T00:00:00Z',
+        },
+      ],
+    },
+    blackboard: [],
+    outbox: [],
+    events: [],
+  };
 }
 
 describe('ResizeHandle (Extracted Component)', () => {
@@ -157,6 +218,33 @@ describe('ResizeHandle (Extracted Component)', () => {
 describe('RightPanel (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useGraphStore.getState().clearAll();
+    vi.mocked(workspacePlanService.getSnapshot).mockResolvedValue(mockWorkspaceSnapshot() as any);
+    vi.mocked(agentGraphApi.getGraph).mockResolvedValue({
+      id: 'graph-1',
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      name: 'Execution graph',
+      description: '',
+      pattern: 'pipeline',
+      nodes: [
+        {
+          node_id: 'planner',
+          agent_definition_id: 'planner-agent',
+          label: 'Planner',
+          instruction: '',
+          config: {},
+          is_entry: true,
+          is_terminal: false,
+        },
+      ],
+      edges: [],
+      shared_context_keys: [],
+      max_total_steps: 10,
+      metadata: {},
+      is_active: true,
+      created_at: '2026-05-01T00:00:00Z',
+    });
   });
 
   it('should not render when collapsed', () => {
@@ -242,5 +330,64 @@ describe('RightPanel (Refactored)', () => {
     expect(screen.getByText('Execution Narrative')).toBeInTheDocument();
     expect(screen.getByText(/demo-plugin/)).toBeInTheDocument();
     expect(screen.getByText(/refresh: success/)).toBeInTheDocument();
+  });
+
+  it('should disable graph tab when no graph run is active', () => {
+    renderRightPanel(<RightPanel tasks={[]} />);
+
+    expect(screen.getByText('Graph').closest('button')).toBeDisabled();
+  });
+
+  it('should render workspace execution graph when the current conversation is workspace-active', async () => {
+    useGraphStore
+      .getState()
+      .runStarted('run-other', 'graph-1', 'Stale graph', 'pipeline', ['planner'], 'other-conv');
+
+    renderRightPanel(
+      <RightPanel
+        tasks={[]}
+        conversationId="conv-1"
+        workspaceId="ws-1"
+        currentWorkspaceTaskId="workspace-task-1"
+      />
+    );
+
+    expect(screen.getByText('Graph').closest('button')).not.toBeDisabled();
+    expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
+    expect(screen.getAllByText('Workspace deploy task').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId('execution-dag-node-task-1')).toHaveAttribute(
+      'data-current-session-node',
+      'true'
+    );
+    expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
+      outboxLimit: 20,
+      eventLimit: 80,
+    });
+    expect(agentGraphApi.getGraph).not.toHaveBeenCalled();
+  });
+
+  it('should ignore graph runs from a different conversation', () => {
+    useGraphStore
+      .getState()
+      .runStarted('run-other', 'graph-1', 'Other graph', 'pipeline', ['planner'], 'other-conv');
+
+    renderRightPanel(<RightPanel tasks={[]} conversationId="conv-1" />);
+
+    expect(screen.getByText('Graph').closest('button')).toBeDisabled();
+  });
+
+  it('should render graph tab when a graph run is active', async () => {
+    useGraphStore
+      .getState()
+      .runStarted('run-1', 'graph-1', 'Execution graph', 'pipeline', ['planner'], 'conv-1');
+    useGraphStore
+      .getState()
+      .nodeStarted('run-1', 'planner', 'Planner', 'planner-agent', 'session-1');
+
+    renderRightPanel(<RightPanel tasks={[]} conversationId="conv-1" />);
+
+    expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
+    expect(screen.getByText('Planner')).toBeInTheDocument();
+    expect(agentGraphApi.getGraph).toHaveBeenCalledWith('graph-1');
   });
 });

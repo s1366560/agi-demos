@@ -11,12 +11,15 @@ import { useCallback, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Filter, ListTodo, Route, X } from 'lucide-react';
+import { Filter, GitBranch, ListTodo, Route, X } from 'lucide-react';
+
+import { useActiveGraphRunForConversation } from '@/stores/graphStore';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
 
 import { useUrlState } from '../../hooks/useUrlState';
 
+import { AgentGraphView } from './AgentGraphView';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { ResizeHandle } from './RightPanelComponents';
 import { TaskList } from './TaskList';
@@ -35,7 +38,10 @@ import type { TFunction } from 'i18next';
 
 export interface RightPanelProps {
   tasks?: AgentTask[] | undefined;
+  conversationId?: string | null | undefined;
   sandboxId?: string | null | undefined;
+  workspaceId?: string | null | undefined;
+  currentWorkspaceTaskId?: string | null | undefined;
   executionPathDecision?: ExecutionPathDecidedEventData | null | undefined;
   selectionTrace?: SelectionTraceEventData | null | undefined;
   policyFiltered?: PolicyFilteredEventData | null | undefined;
@@ -51,7 +57,7 @@ export interface RightPanelProps {
   maxWidth?: number | undefined;
 }
 
-type PanelTab = 'tasks' | 'insights' | 'agents';
+type PanelTab = 'tasks' | 'insights' | 'agents' | 'graph';
 
 function tFallback(t: TFunction, key: string, fallback: string): string {
   const translated = t(key, fallback);
@@ -255,6 +261,9 @@ ExecutionInsights.displayName = 'ExecutionInsights';
 export const RightPanel = memo<RightPanelProps>(
   ({
     tasks = [],
+    conversationId,
+    workspaceId,
+    currentWorkspaceTaskId,
     executionPathDecision,
     selectionTrace,
     policyFiltered,
@@ -277,9 +286,17 @@ export const RightPanel = memo<RightPanelProps>(
       (executionNarrative && executionNarrative.length > 0)
     );
     const hasAgents = Boolean(agentNodes && agentNodes.size > 0);
-    const initialTab: PanelTab = hasInsights && tasks.length === 0 ? 'insights' : 'tasks';
+    const activeGraphRun = useActiveGraphRunForConversation(conversationId);
+    const isWorkspaceActive = Boolean(workspaceId);
+    const hasGraph = Boolean(activeGraphRun) || isWorkspaceActive;
+    const initialTab: PanelTab =
+      hasGraph && tasks.length === 0
+        ? 'graph'
+        : hasInsights && tasks.length === 0
+          ? 'insights'
+          : 'tasks';
     const [preferredTab, setPreferredTab] = useUrlState<PanelTab>('panel', initialTab, {
-      allowed: ['tasks', 'insights', 'agents'],
+      allowed: ['tasks', 'insights', 'agents', 'graph'],
     });
     const [taskView, setTaskView] = useUrlState<'flat' | 'lanes'>('tasks', 'flat', {
       allowed: ['flat', 'lanes'],
@@ -289,7 +306,9 @@ export const RightPanel = memo<RightPanelProps>(
         ? 'tasks'
         : preferredTab === 'agents' && !hasAgents
           ? 'tasks'
-          : preferredTab;
+          : preferredTab === 'graph' && !hasGraph
+            ? 'tasks'
+            : preferredTab;
 
     const handleResize = useCallback(
       (delta: number) => {
@@ -399,6 +418,25 @@ export const RightPanel = memo<RightPanelProps>(
                 >
                   {tFallback(t, 'agent.rightPanel.tabs.agents', 'Agents')}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasGraph) {
+                      setPreferredTab('graph');
+                    }
+                  }}
+                  disabled={!hasGraph}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    activeTab === 'graph'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
+                      : 'text-slate-500 dark:text-slate-400'
+                  } ${!hasGraph ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <GitBranch size={12} aria-hidden />
+                    {tFallback(t, 'agent.rightPanel.tabs.graph', 'Graph')}
+                  </span>
+                </button>
               </div>
 
               <div className="flex items-center gap-1">
@@ -429,6 +467,14 @@ export const RightPanel = memo<RightPanelProps>(
           ) : activeTab === 'agents' ? (
             <div className="flex-1 overflow-y-auto">
               <MultiAgentPanel agentNodes={agentNodes} />
+            </div>
+          ) : activeTab === 'graph' ? (
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <AgentGraphView
+                conversationId={conversationId}
+                workspaceId={workspaceId}
+                currentWorkspaceTaskId={currentWorkspaceTaskId}
+              />
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">

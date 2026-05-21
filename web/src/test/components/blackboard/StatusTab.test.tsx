@@ -462,6 +462,10 @@ describe('StatusTab', () => {
     );
 
     expect((await screen.findAllByText('Ship autonomous plan'))[0]).toBeInTheDocument();
+    expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'blackboard.planRunListView' }));
+    expect(screen.queryByTestId('execution-dag-graph')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'blackboard.planRunGraphView' })).toBeInTheDocument();
     expect(screen.getByText('blackboard.iterationLedgerTitle')).toBeInTheDocument();
     expect(screen.getByText('blackboard.iterationTasksTitle')).toBeInTheDocument();
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
@@ -645,7 +649,7 @@ describe('StatusTab', () => {
         planId: 'plan-old',
       });
     });
-    expect(await screen.findByText('Original sprint goal')).toBeInTheDocument();
+    expect((await screen.findAllByText('Original sprint goal')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('blackboard.planRunHistoryReadOnly')).toBeInTheDocument();
   });
 

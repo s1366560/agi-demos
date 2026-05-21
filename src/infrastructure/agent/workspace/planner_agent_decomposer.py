@@ -88,6 +88,9 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
             WORKSPACE_ROLE_WORKER,
             WORKSPACE_SESSION_ROLE_KEY,
         )
+        from src.infrastructure.agent.workspace.session_conversations import (
+            ensure_workspace_llm_conversation,
+        )
 
         turn_id = uuid.uuid4().hex
         conversation_id = f"workspace-planner:{workspace_id}:{turn_id}"
@@ -99,6 +102,22 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
             "evidence_summaries": [],
             "contract_submitted": False,
         }
+        diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
+            conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            workspace_id=workspace_id,
+            agent_id=planner_agent.id,
+            title="Workspace Planner",
+            stage="planner",
+            actor_user_id=actor_user_id,
+            linked_workspace_task_id=root_task_id,
+            metadata={
+                "root_goal_task_id": root_task_id or "",
+                "contract_only": contract_only,
+                "conversation_scope": f"planning:{root_task_id or 'root'}:{turn_id}",
+            },
+        )
         agent = ProjectReActAgent(
             ProjectAgentConfig(
                 tenant_id=self._tenant_id,
@@ -207,7 +226,9 @@ class WorkspacePlannerAgentDecomposer:
         conversation_context: str | None = None,
     ) -> DecompositionResult:
         if self._turn_runner is None:
-            return self._fallback(query, "No agent turn runner available for builtin workspace planner")
+            return self._fallback(
+                query, "No agent turn runner available for builtin workspace planner"
+            )
 
         await self._ensure_resolved_language()
 
@@ -352,9 +373,7 @@ class WorkspacePlannerAgentDecomposer:
                 "Language: 使用简体中文撰写本次规划中所有子任务的 title 与 description"
                 "（technical_concept / evidence_refs 中的英文标识符可以保留原文）。\n\n"
             )
-        return (
-            "Language: write every subtask title and description in English (en-US).\n\n"
-        )
+        return "Language: write every subtask title and description in English (en-US).\n\n"
 
     async def _ensure_resolved_language(self) -> None:
         """Resolve and cache the preferred_language for this planning run.
@@ -409,10 +428,14 @@ class WorkspacePlannerAgentDecomposer:
             sort_keys=True,
         )
 
-    def _result_from_contract(self, payload: dict[str, Any], original_query: str) -> DecompositionResult:
+    def _result_from_contract(
+        self, payload: dict[str, Any], original_query: str
+    ) -> DecompositionResult:
         raw_tasks = list(payload["task_graph"].get("subtasks") or [])[: self._max_subtasks]
         if not raw_tasks:
-            return self._fallback(original_query, payload.get("reasoning") or "No subtasks produced")
+            return self._fallback(
+                original_query, payload.get("reasoning") or "No subtasks produced"
+            )
         subtasks = tuple(
             SubTask(
                 id=str(task.get("id") or f"t{index}"),

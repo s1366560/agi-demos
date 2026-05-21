@@ -80,6 +80,8 @@ WORKER_STREAM_FINISH_POLL_SECONDS = int(
 WORKER_STREAM_ORPHAN_GRACE_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_STREAM_ORPHAN_GRACE_SECONDS", "900")
 )
+WORKER_LAUNCH_CONVERSATION_SOURCE = "workspace_worker_launch"
+WORKER_LAUNCH_CONVERSATION_STAGE = "worker_launch"
 WORKER_MAX_SINGLE_WRITE_CHARS = 900
 WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 700
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 900
@@ -210,6 +212,7 @@ class _WorkspaceProjection(Protocol):
 class _WorkerConversationProjection(Protocol):
     workspace_id: str | None
     linked_workspace_task_id: str | None
+    agent_config: dict[str, object]
     metadata: dict[str, object]
     updated_at: datetime | None
 
@@ -265,10 +268,12 @@ def _worker_conversation_kwargs(
         "agent_id": worker_agent_id,
         "workspace_agent_binding_id": worker_binding_id,
         "workspace_task_id": task.id,
+        "linked_workspace_task_id": task.id,
         ROOT_GOAL_TASK_ID: root_goal_task_id,
         "attempt_id": attempt_id,
         "conversation_scope": _conversation_scope_for_task(task.id, attempt_id),
-        "source": "workspace_worker_launch",
+        "source": WORKER_LAUNCH_CONVERSATION_SOURCE,
+        "workspace_llm_stage": WORKER_LAUNCH_CONVERSATION_STAGE,
         "created_at": created_at.isoformat(),
     }
     if preferred_language:
@@ -316,6 +321,7 @@ def _patch_worker_conversation_linkage(
     *,
     workspace_id: str,
     task_id: str,
+    worker_agent_id: str,
 ) -> bool:
     changed = False
     if _non_empty_text(conversation.workspace_id) != workspace_id:
@@ -324,6 +330,11 @@ def _patch_worker_conversation_linkage(
     if _non_empty_text(conversation.linked_workspace_task_id) != task_id:
         conversation.linked_workspace_task_id = task_id
         changed = True
+    agent_config = dict(conversation.agent_config or {})
+    if agent_config.get("selected_agent_id") != worker_agent_id:
+        agent_config["selected_agent_id"] = worker_agent_id
+        conversation.agent_config = agent_config
+        changed = True
     metadata = dict(conversation.metadata or {})
     metadata_changed = False
     if not metadata.get("workspace_id"):
@@ -331,6 +342,15 @@ def _patch_worker_conversation_linkage(
         metadata_changed = True
     if not metadata.get("workspace_task_id"):
         metadata["workspace_task_id"] = task_id
+        metadata_changed = True
+    if not metadata.get("linked_workspace_task_id"):
+        metadata["linked_workspace_task_id"] = task_id
+        metadata_changed = True
+    if metadata.get("source") != WORKER_LAUNCH_CONVERSATION_SOURCE:
+        metadata["source"] = WORKER_LAUNCH_CONVERSATION_SOURCE
+        metadata_changed = True
+    if metadata.get("workspace_llm_stage") != WORKER_LAUNCH_CONVERSATION_STAGE:
+        metadata["workspace_llm_stage"] = WORKER_LAUNCH_CONVERSATION_STAGE
         metadata_changed = True
     if metadata_changed:
         conversation.metadata = metadata
@@ -3120,6 +3140,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     existing,
                     workspace_id=workspace_id,
                     task_id=task.id,
+                    worker_agent_id=worker_agent_id,
                 ):
                     await conversation_repo.save(existing)
 

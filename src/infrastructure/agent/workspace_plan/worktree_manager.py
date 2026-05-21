@@ -462,8 +462,19 @@ def worktree_integration_command(
             "  exit 66",
             "fi",
             "set +e",
-            f"git merge --no-edit {commit}",
+            f'merge_output="$(git merge --no-edit {commit} 2>&1)"',
             'merge_status="$?"',
+            'printf "%s\\n" "$merge_output"',
+            'if [ "$merge_status" -ne 0 ] && '
+            + 'printf "%s\\n" "$merge_output" | '
+            + 'grep -qi "refusing to merge unrelated histories"; then',
+            "  git merge --abort >/dev/null 2>&1 || true",
+            '  echo "unrelated_history_retry=true"',
+            'merge_output="$(git merge --no-edit --allow-unrelated-histories '
+            + f'-X theirs {commit} 2>&1)"',
+            '  merge_status="$?"',
+            '  printf "%s\\n" "$merge_output"',
+            "fi",
             "set -e",
             'if [ "$merge_status" -ne 0 ]; then',
             '  echo "status=failed"',

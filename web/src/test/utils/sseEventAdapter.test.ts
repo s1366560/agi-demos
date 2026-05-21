@@ -478,6 +478,7 @@ describe('SSE Event Adapter', () => {
         { type: 'cost_update', data: {} },
         { type: 'error', data: { message: 'Error occurred' } },
         { type: 'title_generated', data: { title: 'New Title' } },
+        { type: 'thought_start', data: { thought_level: 'reasoning' } },
       ] as const;
 
       unsupportedEvents.forEach((event) => {

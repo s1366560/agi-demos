@@ -313,6 +313,18 @@ export function createStreamEventHandlers(
       }
     },
 
+    onThoughtStart: () => {
+      clearThoughtIdleResetTimer();
+      consumePendingThoughtDelta();
+      const { updateConversationState } = get();
+
+      updateConversationState(handlerConversationId, {
+        streamingThought: '',
+        isThinkingStreaming: true,
+        agentState: 'thinking',
+      });
+    },
+
     onThoughtDelta: (event) => {
       const delta = event.data.delta;
       if (!delta) return;
@@ -2045,7 +2057,14 @@ export function createStreamEventHandlers(
       const d = event.data;
       useGraphStore
         .getState()
-        .runStarted(d.graph_run_id, d.graph_id, d.graph_name, d.pattern, d.entry_node_ids);
+        .runStarted(
+          d.graph_run_id,
+          d.graph_id,
+          d.graph_name,
+          d.pattern,
+          d.entry_node_ids,
+          handlerConversationId
+        );
       updateConversationState(handlerConversationId, { timeline: updatedTimeline });
     },
 

@@ -47,6 +47,7 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttemptStatus,
 )
 from src.domain.model.workspace_plan import (
+    FeatureCheckpoint,
     HandoffPackage,
     HandoffReason,
     Plan,
@@ -434,8 +435,12 @@ async def _project_done_idle_accepted_attempts_after_tick(
                 intent=TaskIntent.DONE,
                 execution=TaskExecution.IDLE,
                 current_attempt_id=attempt.id,
+                feature_checkpoint=_accepted_attempt_projection_feature_checkpoint(
+                    node,
+                    attempt,
+                ),
                 metadata={
-                    **_terminal_retry_metadata_cleared(node.metadata),
+                    **_accepted_attempt_projection_base_metadata(node, attempt),
                     "terminal_attempt_status": "accepted",
                     "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
                     "last_verification_summary": summary,
@@ -541,6 +546,7 @@ async def _make_sql_iteration_reviewer(
         return WorkspaceIterationReviewAgentProvider(
             tenant_id=workspace.tenant_id,
             project_id=workspace.project_id,
+            linked_workspace_task_id=root_task_id,
             max_next_tasks=_software_iteration_task_budget(),
         )
     except Exception:
@@ -572,6 +578,7 @@ async def _make_sql_verification_judge(
         return WorkspaceVerifierAgentJudge(
             tenant_id=workspace.tenant_id,
             project_id=workspace.project_id,
+            linked_workspace_task_id=root_task_id,
         )
     except Exception:
         logger.warning(
@@ -638,6 +645,66 @@ def _terminal_retry_metadata_cleared(metadata: Mapping[str, object]) -> dict[str
     return cleaned
 
 
+_NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS = frozenset(
+    {
+        "candidate_artifacts",
+        "candidate_verifications",
+        "execution_verifications",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "pipeline_evidence_refs",
+        "pipeline_gate_status",
+        "pipeline_last_summary",
+        "pipeline_run_id",
+        "pipeline_status",
+        "source_publish_branch",
+        "source_publish_commit_ref",
+        "source_publish_provider",
+        "source_publish_reason",
+        "source_publish_source_commit_ref",
+        "source_publish_status",
+        "verification_evidence_refs",
+        "verified_commit_ref",
+        "verified_git_diff_summary",
+        "verified_test_commands",
+        "worktree_integration_attempt_id",
+        "worktree_integration_commit_ref",
+        "worktree_integration_dirty_signature",
+        "worktree_integration_ran_at",
+        "worktree_integration_status",
+        "worktree_integration_summary",
+        "worktree_integration_worktree_path",
+    }
+)
+
+
+def _accepted_attempt_projection_base_metadata(
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> dict[str, object]:
+    metadata = _terminal_retry_metadata_cleared(node.metadata)
+    if _attempt_commit_refs(attempt):
+        return metadata
+    for key in _NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS:
+        metadata.pop(key, None)
+    return metadata
+
+
+def _accepted_attempt_projection_feature_checkpoint(
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> FeatureCheckpoint | None:
+    if _attempt_commit_refs(attempt) or node.feature_checkpoint is None:
+        return node.feature_checkpoint
+    return replace(
+        node.feature_checkpoint,
+        worktree_path=None,
+        branch_name=None,
+        base_ref="HEAD",
+        commit_ref=None,
+    )
+
+
 async def _reconcile_plan_nodes_with_terminal_attempts(
     *,
     session: AsyncSession,
@@ -673,11 +740,25 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
         if _reported_node_has_pipeline_result_pending_verification(node, status):
             continue
         if status == "accepted":
-            if not _accepted_attempt_matches_node_expected_commit(node, attempt):
+            stale_parent_done_output = (
+                await _accepted_projection_was_superseded_by_parent_done_output_attempt(
+                    session=session,
+                    node=node,
+                )
+            )
+            if stale_parent_done_output or not _accepted_attempt_matches_node_expected_commit(
+                node,
+                attempt,
+            ):
+                reason = (
+                    "superseded_parent_done_attempt_has_output"
+                    if stale_parent_done_output
+                    else "accepted_attempt_commit_mismatch"
+                )
                 plan.replace_node(
                     _plan_node_released_for_retry(
                         node,
-                        reason="accepted_attempt_commit_mismatch",
+                        reason=reason,
                         now=now,
                     )
                 )
@@ -700,8 +781,8 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
             )
             integration_metadata = await _project_accepted_terminal_attempt_to_task(
                 session=session,
-                workspace_id=workspace_id,
                 node=node,
+                workspace_id=workspace_id,
                 attempt=attempt,
                 summary=summary,
                 now=now,
@@ -712,8 +793,12 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                     intent=TaskIntent.DONE,
                     execution=TaskExecution.IDLE,
                     current_attempt_id=attempt.id,
+                    feature_checkpoint=_accepted_attempt_projection_feature_checkpoint(
+                        node,
+                        attempt,
+                    ),
                     metadata={
-                        **_terminal_retry_metadata_cleared(node.metadata),
+                        **_accepted_attempt_projection_base_metadata(node, attempt),
                         "terminal_attempt_status": status,
                         "terminal_attempt_reconciled_at": now.isoformat().replace("+00:00", "Z"),
                         "last_verification_summary": summary,
@@ -756,8 +841,15 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
                         intent=TaskIntent.DONE,
                         execution=TaskExecution.IDLE,
                         current_attempt_id=accepted_attempt.id,
+                        feature_checkpoint=_accepted_attempt_projection_feature_checkpoint(
+                            node,
+                            accepted_attempt,
+                        ),
                         metadata={
-                            **_terminal_retry_metadata_cleared(node.metadata),
+                            **_accepted_attempt_projection_base_metadata(
+                                node,
+                                accepted_attempt,
+                            ),
                             "terminal_attempt_status": "accepted",
                             "terminal_attempt_reconciled_at": now.isoformat().replace(
                                 "+00:00",
@@ -913,9 +1005,12 @@ async def _project_accepted_terminal_attempt_to_task(
     if task is None or task.workspace_id != workspace_id:
         return {}
     evidence_refs = _accepted_attempt_evidence_refs(attempt)
-    commit_ref = _first_prefixed_ref(
-        evidence_refs, "commit_ref:"
-    ) or _feature_checkpoint_commit_ref(node)
+    commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:")
+    if (
+        not commit_ref
+        and not _accepted_attempt_has_same_verified_no_output_projection(node, attempt)
+    ):
+        commit_ref = _feature_checkpoint_commit_ref(node)
     git_diff_summary = _first_prefixed_ref(evidence_refs, "git_diff_summary:")
     test_commands = [
         ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
@@ -1514,11 +1609,37 @@ async def _load_reconciling_accepted_attempt_for_task(
         and _accepted_attempt_matches_node_expected_commit(node, accepted_attempt)
         and (
             accepted_attempt.attempt_number > terminal_attempt.attempt_number
-            or _attempt_cancelled_because_parent_done(terminal_attempt)
+            or _attempt_cancelled_because_parent_done_without_output(terminal_attempt)
         )
     ):
         return accepted_attempt
     return None
+
+
+async def _accepted_projection_was_superseded_by_parent_done_output_attempt(
+    *,
+    session: AsyncSession,
+    node: PlanNode,
+) -> bool:
+    if not _node_is_done_idle_with_attempt(node):
+        return False
+    metadata = dict(node.metadata or {})
+    if metadata.get("terminal_attempt_status") != "accepted":
+        return False
+    if metadata.get("terminal_attempt_superseded_status") != "cancelled":
+        return False
+    superseded_reason = str(metadata.get("terminal_attempt_superseded_reason") or "")
+    if superseded_reason != "recovery:parent_done":
+        return False
+    superseded_attempt_id = str(metadata.get("terminal_attempt_superseded_attempt_id") or "")
+    if not superseded_attempt_id:
+        return False
+    superseded_attempt = await _load_plan_attempt(session, superseded_attempt_id)
+    return (
+        superseded_attempt is not None
+        and _attempt_cancelled_because_parent_done(superseded_attempt)
+        and _attempt_has_candidate_output(superseded_attempt)
+    )
 
 
 def _attempt_cancelled_because_parent_done(
@@ -1531,6 +1652,14 @@ def _attempt_cancelled_because_parent_done(
     return "recovery:parent_done" in {reason, feedback}
 
 
+def _attempt_cancelled_because_parent_done_without_output(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    return _attempt_cancelled_because_parent_done(attempt) and not _attempt_has_candidate_output(
+        attempt
+    )
+
+
 def _accepted_attempt_matches_node_expected_commit(
     node: PlanNode,
     attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
@@ -1540,13 +1669,56 @@ def _accepted_attempt_matches_node_expected_commit(
         return True
     actual_refs = _attempt_commit_refs(attempt)
     if not actual_refs:
-        return False
+        return _last_verified_attempt_matches_expected_commit(
+            node=node,
+            attempt=attempt,
+            expected=expected,
+        )
     if any(_git_commit_refs_match(expected, actual) for actual in actual_refs):
         return True
     return _last_verified_attempt_contains_attempt_commit(
         node=node,
         attempt=attempt,
         actual_refs=actual_refs,
+    )
+
+
+def _accepted_attempt_has_same_verified_no_output_projection(
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        not _attempt_commit_refs(attempt)
+        and metadata.get("last_verification_passed") is True
+        and metadata.get("last_verification_attempt_id") == getattr(attempt, "id", None)
+    )
+
+
+def _last_verified_attempt_matches_expected_commit(
+    *,
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+    expected: str,
+) -> bool:
+    metadata = dict(node.metadata or {})
+    if metadata.get("last_verification_passed") is not True:
+        return False
+    if metadata.get("last_verification_attempt_id") != getattr(attempt, "id", None):
+        return False
+    metadata_refs = _node_metadata_commit_refs(metadata)
+    direct_refs = [
+        _commit_ref_token(metadata.get(key))
+        for key in (
+            "source_publish_source_commit_ref",
+            "source_publish_commit_ref",
+            "verified_commit_ref",
+            "worktree_integration_commit_ref",
+        )
+    ]
+    return any(
+        _git_commit_refs_match(expected, metadata_ref)
+        for metadata_ref in (*metadata_refs, *(ref for ref in direct_refs if ref))
     )
 
 

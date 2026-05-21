@@ -129,6 +129,7 @@ export interface ExecutionNarrativeEntry {
  */
 export type AgentEventType =
   | 'message' // User/assistant message
+  | 'thought_start' // Thought streaming started
   | 'thought' // Agent's reasoning (work or task level)
   | 'thought_delta' // Incremental thought update
   | 'work_plan' // Work-level plan generated
@@ -330,6 +331,14 @@ export interface MessageEventData {
  */
 export interface ThoughtEventData {
   thought: string;
+  thought_level?: ThoughtLevel | undefined;
+  step_number?: number | undefined;
+}
+
+/**
+ * Thought start event data (streaming thought)
+ */
+export interface ThoughtStartEventData {
   thought_level?: ThoughtLevel | undefined;
   step_number?: number | undefined;
 }

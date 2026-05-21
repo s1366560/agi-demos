@@ -52,6 +52,7 @@ from src.domain.events.agent_events import (
     AgentTextStartEvent,
     AgentThoughtDeltaEvent,
     AgentThoughtEvent,
+    AgentThoughtStartEvent,
 )
 
 if TYPE_CHECKING:
@@ -2228,10 +2229,7 @@ class SessionProcessor:
                         yield AgentTextEndEvent(full_text=full_text)
 
                     elif event.type == StreamEventType.REASONING_START:
-                        # Only track state internally - don't emit an empty thought event.
-                        # The subsequent REASONING_DELTA events handle streaming display,
-                        # and REASONING_END emits the full thought content.
-                        pass
+                        yield AgentThoughtStartEvent()
 
                     elif event.type == StreamEventType.REASONING_DELTA:
                         delta = event.data.get("delta", "")

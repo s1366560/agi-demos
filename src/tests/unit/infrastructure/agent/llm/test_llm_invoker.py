@@ -693,7 +693,7 @@ class TestStreamEventProcessing:
             events.append(e)
 
         assert len(events) == 1
-        assert events[0].__class__.__name__ == "AgentThoughtEvent"
+        assert events[0].__class__.__name__ == "AgentThoughtStartEvent"
 
         # REASONING_DELTA
         event_delta = MagicMock()
@@ -718,6 +718,30 @@ class TestStreamEventProcessing:
         assert len(events) == 1
         assert events[0].__class__.__name__ == "AgentThoughtDeltaEvent"
         assert result.reasoning == "Thinking..."
+
+        # REASONING_END
+        event_end = MagicMock()
+        event_end.type = StreamEventType.REASONING_END
+        event_end.data = {"full_text": "Thinking..."}
+
+        events = []
+        async for e in invoker._process_stream_event(
+            event=event_end,
+            result=result,
+            config=invocation_config,
+            context=invocation_context,
+            current_message=mock_message,
+            pending_tool_calls={},
+            work_plan_steps=[],
+            tool_to_step_mapping={},
+            execute_tool_callback=AsyncMock(),
+            current_plan_step_holder=[None],
+        ):
+            events.append(e)
+
+        assert len(events) == 1
+        assert events[0].__class__.__name__ == "AgentThoughtEvent"
+        mock_message.add_reasoning.assert_called_once_with("Thinking...")
 
 
 # ============================================================================

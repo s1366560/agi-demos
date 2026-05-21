@@ -50,6 +50,7 @@ class IterationReviewContext:
     iteration_index: int
     goal_title: str
     goal_description: str
+    linked_workspace_task_id: str | None = None
     completed_tasks: tuple[dict[str, object], ...] = field(default_factory=tuple)
     deliverables: tuple[str, ...] = field(default_factory=tuple)
     feedback_items: tuple[str, ...] = field(default_factory=tuple)

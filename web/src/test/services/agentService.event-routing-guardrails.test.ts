@@ -96,4 +96,17 @@ describe('agentService event routing guardrails', () => {
     const handler: AgentStreamHandler = {};
     expect(() => route('unknown_event_type', {}, handler)).not.toThrow();
   });
+
+  it('routes thought_start to the thought start handler', () => {
+    const onThoughtStart = vi.fn();
+    const handler: AgentStreamHandler = { onThoughtStart };
+
+    route('thought_start', { thought_level: 'reasoning' }, handler);
+
+    expect(onThoughtStart).toHaveBeenCalledTimes(1);
+    expect(onThoughtStart).toHaveBeenCalledWith({
+      type: 'thought_start',
+      data: { thought_level: 'reasoning' },
+    });
+  });
 });

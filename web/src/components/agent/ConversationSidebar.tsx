@@ -36,7 +36,6 @@ import type { LabelColor } from '@/stores/conversationLabelsStore';
 
 import {
   LazyButton,
-  LazyTooltip,
   LazyDropdown,
   LazyModal,
   LazyInput,
@@ -84,7 +83,6 @@ interface ConversationItemProps {
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onRename?: (() => void) | undefined;
-  compact?: boolean | undefined;
   /** Status for this conversation */
   status?: ConversationStatus | undefined;
 }
@@ -239,7 +237,7 @@ LabelManager.displayName = 'LabelManager';
 
 // Memoized ConversationItem
 const ConversationItem = memo<ConversationItemProps>(
-  ({ conversation, isActive, onSelect, onDelete, onRename, compact = false, status }) => {
+  ({ conversation, isActive, onSelect, onDelete, onRename, status }) => {
     const { t } = useTranslation();
     const getLabelsForConversation = useConversationLabelsStore(
       (state) => state.getLabelsForConversation
@@ -294,61 +292,6 @@ const ConversationItem = memo<ConversationItemProps>(
     const hasHITL = status?.pendingHITL != null;
     const isStreaming = status?.isStreaming ?? false;
     const conversationTitle = conversation.title || t('agent.sidebar.untitled', 'Untitled');
-    const openConversationLabel = t('agent.sidebar.openConversation', {
-      title: conversationTitle,
-      defaultValue: 'Open {{title}}',
-    });
-
-    if (compact) {
-      return (
-        <LazyTooltip
-          title={
-            <div>
-              <div className="font-medium">{conversationTitle}</div>
-              {hasHITL && (
-                <div className="text-amber-400 text-xs mt-1 flex items-center gap-1">
-                  <AlertCircle size={10} /> {t('agent.sidebar.needsInput', 'Needs input')}
-                </div>
-              )}
-              {isStreaming && (
-                <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
-                  <Loader2 size={10} className="animate-spin motion-reduce:animate-none" />{' '}
-                  {t('agent.sidebar.processing', 'Processing')}
-                </div>
-              )}
-            </div>
-          }
-          placement="right"
-        >
-          <button
-            type="button"
-            onClick={onSelect}
-            aria-label={openConversationLabel}
-            title={openConversationLabel}
-            className={`
-            w-full p-3 rounded-xl mb-1 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset
-            flex items-center justify-center relative
-            ${
-              isActive
-                ? 'bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700 text-primary'
-                : 'text-slate-500 hover:bg-white/50 dark:hover:bg-slate-800/50'
-            }
-          `}
-          >
-            <MessageSquare size={20} />
-            {isActive && <span className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />}
-            {/* HITL indicator badge */}
-            {hasHITL && (
-              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-amber-500 rounded-full animate-pulse motion-reduce:animate-none ring-2 ring-white dark:ring-slate-900" />
-            )}
-            {/* Streaming indicator */}
-            {!hasHITL && isStreaming && (
-              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full animate-pulse motion-reduce:animate-none ring-2 ring-white dark:ring-slate-900" />
-            )}
-          </button>
-        </LazyTooltip>
-      );
-    }
 
     return (
       <button
@@ -679,28 +622,28 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
               </span>
             </button>
           )}
-          {conversations.map((conv) => (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              isActive={conv.id === activeId}
-              onSelect={() => {
-                onSelect(conv.id);
-              }}
-              onDelete={(e) => {
-                onDelete(conv.id, e);
-              }}
-              onRename={
-                onRename
-                  ? () => {
-                      handleRenameClick(conv);
-                    }
-                  : undefined
-              }
-              compact={collapsed}
-              status={conversationStatuses?.get(conv.id)}
-            />
-          ))}
+          {!collapsed &&
+            conversations.map((conv) => (
+              <ConversationItem
+                key={conv.id}
+                conversation={conv}
+                isActive={conv.id === activeId}
+                onSelect={() => {
+                  onSelect(conv.id);
+                }}
+                onDelete={(e) => {
+                  onDelete(conv.id, e);
+                }}
+                onRename={
+                  onRename
+                    ? () => {
+                        handleRenameClick(conv);
+                      }
+                    : undefined
+                }
+                status={conversationStatuses?.get(conv.id)}
+              />
+            ))}
         </div>
 
         {/* Empty state */}

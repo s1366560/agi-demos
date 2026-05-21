@@ -4,8 +4,10 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Protocol
 
+from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_message import (
     MessageSenderType,
@@ -35,6 +37,68 @@ logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[Any]] = set()
 _MAX_MENTION_CHAIN_DEPTH = 3
+
+
+class _WorkspaceConversationProjection(Protocol):
+    workspace_id: str | None
+    linked_workspace_task_id: str | None
+    agent_config: dict[str, object]
+    metadata: dict[str, object]
+    updated_at: datetime | None
+
+
+def _text_or_none(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _patch_workspace_conversation_linkage(
+    conversation: _WorkspaceConversationProjection,
+    *,
+    workspace_id: str,
+    agent_id: str,
+    linked_workspace_task_id: str | None = None,
+    source: str | None = None,
+    workspace_llm_stage: str | None = None,
+) -> bool:
+    changed = False
+    if conversation.workspace_id != workspace_id:
+        conversation.workspace_id = workspace_id
+        changed = True
+    if (
+        linked_workspace_task_id
+        and conversation.linked_workspace_task_id != linked_workspace_task_id
+    ):
+        conversation.linked_workspace_task_id = linked_workspace_task_id
+        changed = True
+    agent_config = dict(conversation.agent_config or {})
+    if agent_config.get("selected_agent_id") != agent_id:
+        agent_config["selected_agent_id"] = agent_id
+        conversation.agent_config = agent_config
+        changed = True
+    metadata = dict(conversation.metadata or {})
+    if metadata.get("workspace_id") != workspace_id:
+        metadata["workspace_id"] = workspace_id
+        changed = True
+    if linked_workspace_task_id:
+        if metadata.get("workspace_task_id") != linked_workspace_task_id:
+            metadata["workspace_task_id"] = linked_workspace_task_id
+            changed = True
+        if metadata.get("linked_workspace_task_id") != linked_workspace_task_id:
+            metadata["linked_workspace_task_id"] = linked_workspace_task_id
+            changed = True
+    if source and metadata.get("source") != source:
+        metadata["source"] = source
+        changed = True
+    if workspace_llm_stage and metadata.get("workspace_llm_stage") != workspace_llm_stage:
+        metadata["workspace_llm_stage"] = workspace_llm_stage
+        changed = True
+    if changed:
+        conversation.metadata = metadata
+    if changed:
+        conversation.updated_at = datetime.now(UTC)
+    return changed
 
 
 async def _resolve_workspace_authority_context(
@@ -251,39 +315,31 @@ class WorkspaceMentionRouter:
                 WORKSPACE_TOOL_MODE_KEY: WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
             }
 
+        linked_workspace_task_id = (
+            _text_or_none(app_model_context.get(ROOT_GOAL_TASK_ID))
+            if app_model_context is not None
+            else None
+        )
+        conversation_source = "workspace_leader_mention" if linked_workspace_task_id else None
+        conversation_stage = "leader_mention" if linked_workspace_task_id else None
+
         conversation_id = self.workspace_conversation_id(
             workspace_id,
             agent.agent_id,
             conversation_scope=conversation_scope,
         )
-
-        async with self._db_session_factory() as db:
-            conversation_repo = self._conversation_repo_factory(db)
-            existing = await conversation_repo.find_by_id(conversation_id)
-
-            if existing is None:
-                from datetime import UTC, datetime
-
-                from src.domain.model.agent import Conversation, ConversationStatus
-
-                conversation = Conversation(
-                    id=conversation_id,
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    title=f"Workspace Chat - {agent_name}",
-                    status=ConversationStatus.ACTIVE,
-                    agent_config={},
-                    metadata={
-                        "workspace_id": workspace_id,
-                        "agent_id": agent.agent_id,
-                        "created_at": datetime.now(UTC).isoformat(),
-                    },
-                    message_count=0,
-                    created_at=datetime.now(UTC),
-                )
-                await conversation_repo.save(conversation)
-                await db.commit()
+        await self._ensure_agent_conversation(
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            agent=agent,
+            agent_name=agent_name,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            user_id=user_id,
+            linked_workspace_task_id=linked_workspace_task_id,
+            source=conversation_source,
+            workspace_llm_stage=conversation_stage,
+        )
 
         llm = await create_llm_client(tenant_id)
 
@@ -505,3 +561,63 @@ class WorkspaceMentionRouter:
                 f"workspace:{workspace_id}:agent:{agent_id}{scope_suffix}",
             )
         )
+
+    async def _ensure_agent_conversation(
+        self,
+        *,
+        conversation_id: str,
+        workspace_id: str,
+        agent: WorkspaceAgent,
+        agent_name: str,
+        tenant_id: str,
+        project_id: str,
+        user_id: str,
+        linked_workspace_task_id: str | None = None,
+        source: str | None = None,
+        workspace_llm_stage: str | None = None,
+    ) -> None:
+        async with self._db_session_factory() as db:
+            conversation_repo = self._conversation_repo_factory(db)
+            existing = await conversation_repo.find_by_id(conversation_id)
+
+            if existing is None:
+                metadata: dict[str, object] = {
+                    "workspace_id": workspace_id,
+                    "agent_id": agent.agent_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                }
+                if linked_workspace_task_id:
+                    metadata["workspace_task_id"] = linked_workspace_task_id
+                    metadata["linked_workspace_task_id"] = linked_workspace_task_id
+                if source:
+                    metadata["source"] = source
+                if workspace_llm_stage:
+                    metadata["workspace_llm_stage"] = workspace_llm_stage
+                conversation = Conversation(
+                    id=conversation_id,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    title=f"Workspace Chat - {agent_name}",
+                    status=ConversationStatus.ACTIVE,
+                    agent_config={"selected_agent_id": agent.agent_id},
+                    metadata=metadata,
+                    message_count=0,
+                    created_at=datetime.now(UTC),
+                    workspace_id=workspace_id,
+                    linked_workspace_task_id=linked_workspace_task_id,
+                )
+                await conversation_repo.save(conversation)
+                await db.commit()
+                return
+
+            if _patch_workspace_conversation_linkage(
+                existing,
+                workspace_id=workspace_id,
+                agent_id=agent.agent_id,
+                linked_workspace_task_id=linked_workspace_task_id,
+                source=source,
+                workspace_llm_stage=workspace_llm_stage,
+            ):
+                await conversation_repo.save(existing)
+                await db.commit()

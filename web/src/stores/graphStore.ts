@@ -36,6 +36,7 @@ export interface GraphHandoffRecord {
 
 export interface GraphRunState {
   graphRunId: string;
+  conversationId?: string | undefined;
   graphId: string;
   graphName: string;
   pattern?: string | undefined;
@@ -63,7 +64,8 @@ interface GraphState {
     graphId: string,
     graphName: string,
     pattern: string,
-    entryNodeIds: string[]
+    entryNodeIds: string[],
+    conversationId?: string | null
   ) => void;
   runCompleted: (graphRunId: string, totalSteps: number, durationSeconds: number | null) => void;
   runFailed: (graphRunId: string, errorMessage: string, failedNodeId: string | null) => void;
@@ -129,11 +131,12 @@ export const useGraphStore = create<GraphState>()(
       panelOpen: false,
       activeRunId: null,
 
-      runStarted: (graphRunId, graphId, graphName, pattern, entryNodeIds) => {
+      runStarted: (graphRunId, graphId, graphName, pattern, entryNodeIds, conversationId) => {
         set((state) => {
           const next = new Map(state.runs);
           next.set(graphRunId, {
             graphRunId,
+            conversationId: conversationId ?? undefined,
             graphId,
             graphName,
             pattern,
@@ -303,6 +306,21 @@ export const useActiveGraphRun = () =>
   useGraphStore((state) =>
     state.activeRunId ? (state.runs.get(state.activeRunId) ?? null) : null
   );
+
+export const useActiveGraphRunForConversation = (conversationId?: string | null) =>
+  useGraphStore((state) => {
+    const activeRun = state.activeRunId ? (state.runs.get(state.activeRunId) ?? null) : null;
+    if (!conversationId) {
+      return activeRun;
+    }
+    if (activeRun?.conversationId === conversationId) {
+      return activeRun;
+    }
+    const scopedRuns = Array.from(state.runs.values())
+      .filter((run) => run.conversationId === conversationId)
+      .sort((left, right) => right.startedAt - left.startedAt);
+    return scopedRuns[0] ?? null;
+  });
 
 export const useGraphPanel = () => useGraphStore((state) => state.panelOpen);
 

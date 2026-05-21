@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -1096,8 +1097,73 @@ def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
     assert 'echo "generated_dirty_cleaned=true"' in command
     assert "git hash-object --stdin" in command
     assert "git merge --no-edit abc1234" in command
+    assert "refusing to merge unrelated histories" in command
+    assert "git merge --no-edit --allow-unrelated-histories -X theirs abc1234" in command
     assert 'echo "reason=merge_failed_aborted"' in command
     assert "git merge --abort" in command
+
+
+def test_worktree_integration_command_merges_unrelated_history_with_attempt_preference(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    attempt = tmp_path / "attempt-worktree"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str, check: bool = True) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=check,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / "shared.txt").write_text("main\n", encoding="utf-8")
+    (repo / "main-only.txt").write_text("main only\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "main")
+
+    git(repo, "checkout", "--orphan", "attempt")
+    for path in repo.iterdir():
+        if path.name == ".git":
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    (repo / "shared.txt").write_text("attempt\n", encoding="utf-8")
+    (repo / "attempt-only.txt").write_text("attempt only\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "attempt")
+    commit_ref = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "main")
+    git(repo, "worktree", "add", str(attempt), "attempt")
+
+    command = _worktree_integration_command(
+        sandbox_code_root=str(repo),
+        worktree_path=str(attempt),
+        commit_ref=commit_ref,
+    )
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "unrelated_history_retry=true" in result.stdout
+    assert "status=merged" in result.stdout
+    assert (repo / "shared.txt").read_text(encoding="utf-8") == "attempt\n"
+    assert (repo / "attempt-only.txt").read_text(encoding="utf-8") == "attempt only\n"
+    assert (repo / "main-only.txt").read_text(encoding="utf-8") == "main only\n"
+    assert git(repo, "status", "--short") == ""
 
 
 def test_worktree_integration_command_cleans_generated_artifacts_before_merge(
@@ -4274,6 +4340,146 @@ async def test_supervisor_tick_uses_accepted_attempt_when_current_attempt_was_pa
 
 
 @pytest.mark.asyncio
+async def test_supervisor_tick_retries_parent_done_attempt_that_already_has_output(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="parent-done-output-task",
+            workspace_id="workspace-1",
+            title="Accepted projection",
+            description="",
+            created_by="worker-user-1",
+            status="done",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "cancelled-after-parent-done",
+            },
+        )
+    )
+    db_session.add_all(
+        [
+            WorkspaceTaskSessionAttemptModel(
+                id="accepted-before-parent-done",
+                workspace_task_id="parent-done-output-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="accepted",
+                conversation_id="accepted-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                leader_feedback="accepted before recovery sweep",
+                candidate_artifacts_json=["docs/OLD.md", "commit_ref:20a9cefe"],
+                candidate_verifications_json=["test_run:pytest old", "commit_ref:20a9cefe"],
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="cancelled-after-parent-done",
+                workspace_task_id="parent-done-output-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=2,
+                status="cancelled",
+                conversation_id="cancelled-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                leader_feedback="recovery:parent_done",
+                adjudication_reason="recovery:parent_done",
+                candidate_artifacts_json=["docs/NEW.md", "commit_ref:766ebce"],
+                candidate_verifications_json=["test_run:pytest new", "commit_ref:766ebce"],
+            ),
+        ]
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="accepted-before-parent-done",
+            workspace_task_id="parent-done-output-task",
+            metadata={
+                "terminal_attempt_status": "accepted",
+                "terminal_attempt_superseded_attempt_id": "cancelled-after-parent-done",
+                "terminal_attempt_superseded_status": "cancelled",
+                "terminal_attempt_superseded_reason": "recovery:parent_done",
+                "last_verification_attempt_id": "accepted-before-parent-done",
+                "last_verification_passed": True,
+                "verified_commit_ref": "20a9cefe",
+                "worktree_integration_status": "failed",
+                "worktree_integration_summary": "fatal: refusing to merge unrelated histories",
+                "worktree_integration_worktree_path": (
+                    "/workspace/.memstack/worktrees/accepted-before-parent-done"
+                ),
+                "worktree_integration_dirty_signature": None,
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    dispatched: list[str] = []
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return [WorkspaceAgent(agent_id="agent-1", display_name="Agent One")]
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        node: PlanNode,
+    ) -> str:
+        dispatched.append(node.id)
+        return f"retry-{node.id}"
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    retried_leaf = loaded.leaf_tasks()[0]
+    assert dispatched == [retried_leaf.id]
+    assert retried_leaf.intent is TaskIntent.IN_PROGRESS
+    assert retried_leaf.execution is TaskExecution.DISPATCHED
+    assert retried_leaf.current_attempt_id == f"retry-{retried_leaf.id}"
+    assert retried_leaf.metadata["terminal_attempt_retry_reason"] == (
+        "superseded_parent_done_attempt_has_output"
+    )
+    assert "terminal_attempt_status" not in retried_leaf.metadata
+
+
+@pytest.mark.asyncio
 async def test_supervisor_tick_rejects_stale_parent_done_accepted_attempt(
     db_session: AsyncSession,
 ) -> None:
@@ -4606,6 +4812,114 @@ async def test_terminal_reconcile_uses_last_verified_attempt_when_checkpoint_is_
         "changed_file:frontend/src/app/(app)/swarm/page.tsx",
     ]
     assert "terminal_attempt_retry_reason" not in reconciled_leaf.metadata
+
+
+@pytest.mark.asyncio
+async def test_terminal_reconcile_accepts_no_output_attempt_verified_with_expected_commit(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="no-output-accepted-task",
+            workspace_id="workspace-1",
+            title="Accepted projection",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "accepted-no-output",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="accepted-no-output",
+            workspace_task_id="no-output-accepted-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="accepted",
+            conversation_id="no-output-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="accepted after runtime-infra verification",
+            candidate_artifacts_json=[],
+            candidate_verifications_json=[],
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="accepted-no-output",
+            workspace_task_id="no-output-accepted-task",
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-no-output",
+                sequence=1,
+                title="Verify deploy",
+                worktree_path="/workspace/.memstack/worktrees/accepted-no-output",
+                branch_name="workspace/no-output",
+                base_ref="old-base",
+                commit_ref="2d146b0",
+            ),
+            metadata={
+                **dict(leaf.metadata or {}),
+                "last_verification_attempt_id": "accepted-no-output",
+                "last_verification_passed": True,
+                "verified_commit_ref": "2d146b0",
+                "worktree_integration_status": "failed",
+                "worktree_integration_worktree_path": (
+                    "/workspace/.memstack/worktrees/accepted-no-output"
+                ),
+                "terminal_attempt_retry_reason": "accepted_attempt_commit_mismatch",
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    changed = await outbox_handlers._reconcile_plan_nodes_with_terminal_attempts(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed is True
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.leaf_tasks()[0]
+    assert reconciled_leaf.intent is TaskIntent.DONE
+    assert reconciled_leaf.execution is TaskExecution.IDLE
+    assert reconciled_leaf.current_attempt_id == "accepted-no-output"
+    assert reconciled_leaf.feature_checkpoint is not None
+    assert reconciled_leaf.feature_checkpoint.worktree_path is None
+    assert reconciled_leaf.feature_checkpoint.branch_name is None
+    assert reconciled_leaf.feature_checkpoint.base_ref == "HEAD"
+    assert reconciled_leaf.feature_checkpoint.commit_ref is None
+    assert reconciled_leaf.metadata["terminal_attempt_status"] == "accepted"
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == "accepted-no-output"
+    assert "terminal_attempt_retry_reason" not in reconciled_leaf.metadata
+    assert "verified_commit_ref" not in reconciled_leaf.metadata
+    assert "worktree_integration_status" not in reconciled_leaf.metadata
 
 
 @pytest.mark.asyncio

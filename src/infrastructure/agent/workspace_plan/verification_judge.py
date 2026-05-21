@@ -50,6 +50,7 @@ class WorkspaceVerifierAgentTurnRunner(Protocol):
         workspace_id: str,
         node_id: str,
         attempt_id: str | None,
+        linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None: ...
 
 
@@ -83,6 +84,7 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
         workspace_id: str,
         node_id: str,
         attempt_id: str | None,
+        linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None:
         from src.infrastructure.agent.core.project_react_agent import (
             ProjectAgentConfig,
@@ -91,6 +93,9 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
         from src.infrastructure.agent.workspace.runtime_role_contract import (
             WORKSPACE_ROLE_WORKER,
             WORKSPACE_SESSION_ROLE_KEY,
+        )
+        from src.infrastructure.agent.workspace.session_conversations import (
+            ensure_workspace_llm_conversation,
         )
 
         turn_id = uuid.uuid4().hex
@@ -103,6 +108,22 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
             "observed_tools": [],
             "judgment_submitted": False,
         }
+        diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
+            conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            workspace_id=workspace_id,
+            linked_workspace_task_id=linked_workspace_task_id,
+            agent_id=verifier_agent.id,
+            title=f"Workspace Verification Gate - {node_id}",
+            stage="verification_judge",
+            metadata={
+                "current_plan_node_id": node_id,
+                "current_attempt_id": attempt_id or "",
+                "linked_workspace_task_id": linked_workspace_task_id or "",
+                "conversation_scope": f"verification:{node_id}:{attempt_id or 'none'}",
+            },
+        )
         agent = ProjectReActAgent(
             ProjectAgentConfig(
                 tenant_id=self._tenant_id,
@@ -129,6 +150,7 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
                         WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
                         "workspace_binding": {
                             "workspace_id": workspace_id,
+                            "linked_workspace_task_id": linked_workspace_task_id or "",
                             "current_plan_node_id": node_id,
                             "current_attempt_id": attempt_id or "",
                         },
@@ -172,9 +194,11 @@ class WorkspaceVerifierAgentJudge:
         *,
         tenant_id: str,
         project_id: str,
+        linked_workspace_task_id: str | None = None,
         turn_runner: WorkspaceVerifierAgentTurnRunner | None = None,
     ) -> None:
         super().__init__()
+        self._linked_workspace_task_id = linked_workspace_task_id
         self._verifier_agent = build_builtin_workspace_verifier_agent(
             tenant_id=tenant_id,
             project_id=project_id,
@@ -194,6 +218,9 @@ class WorkspaceVerifierAgentJudge:
             workspace_id=request.workspace_id,
             node_id=request.node_id,
             attempt_id=request.attempt_id,
+            linked_workspace_task_id=(
+                request.linked_workspace_task_id or self._linked_workspace_task_id
+            ),
         )
         parsed = _parse_judge_response({"content": json.dumps(payload or {}, ensure_ascii=False)})
         if parsed is None:
@@ -249,6 +276,7 @@ def _build_agent_user_prompt(request: WorkspaceVerificationJudgeRequest) -> str:
 def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
     payload = {
         "workspace_id": request.workspace_id,
+        "linked_workspace_task_id": request.linked_workspace_task_id,
         "node": {
             "id": request.node_id,
             "title": request.node_title,

@@ -687,6 +687,7 @@ class LLMStream:
             if is_reasoning:
                 yield from self._handle_reasoning_delta(segment)
             else:
+                yield from self._close_reasoning_stream()
                 if not self._in_text:
                     self._in_text = True
                     yield StreamEvent.text_start()
@@ -776,6 +777,12 @@ class LLMStream:
         self._reasoning_buffer += reasoning
         yield StreamEvent.reasoning_delta(reasoning)
 
+    def _close_reasoning_stream(self) -> Iterator[StreamEvent]:
+        """Close an active reasoning stream before visible output starts."""
+        if self._in_reasoning:
+            yield StreamEvent.reasoning_end(self._reasoning_buffer)
+            self._in_reasoning = False
+
     async def _process_chunk(  # noqa: C901, PLR0912
         self,
         chunk: Any,
@@ -820,12 +827,6 @@ class LLMStream:
             tool_call_count,
         )
 
-        # Check for content (text)
-        content = getattr(delta, "content", None)
-        if content:
-            for event in self._handle_content_delta(content):
-                yield event
-
         # Check for reasoning content (o1, Claude extended thinking)
         reasoning = (
             getattr(delta, "reasoning_content", None)
@@ -836,9 +837,17 @@ class LLMStream:
             for event in self._handle_reasoning_delta(reasoning):
                 yield event
 
+        # Check for content (text)
+        content = getattr(delta, "content", None)
+        if content:
+            for event in self._handle_content_delta(content):
+                yield event
+
         # Check for tool calls
         tool_calls = getattr(delta, "tool_calls", None)
         if tool_calls:
+            for event in self._close_reasoning_stream():
+                yield event
             async for event in self._process_tool_calls(tool_calls):
                 yield event
 
@@ -1007,6 +1016,7 @@ class LLMStream:
                 yield from self._handle_reasoning_delta(pending)
             else:
                 # Was outside <think>, flush as text
+                yield from self._close_reasoning_stream()
                 if not self._in_text:
                     self._in_text = True
                     yield StreamEvent.text_start()
@@ -1016,9 +1026,7 @@ class LLMStream:
         # Reasoning (thought) should logically complete before the final response (text)
         # This ensures correct timeline ordering in the frontend:
         # thought -> response (not response -> thought)
-        if self._in_reasoning:
-            yield StreamEvent.reasoning_end(self._reasoning_buffer)
-            self._in_reasoning = False
+        yield from self._close_reasoning_stream()
         if self._in_text:
             yield StreamEvent.text_end(self._text_buffer)
             self._in_text = False
