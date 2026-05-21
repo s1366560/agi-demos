@@ -1607,7 +1607,7 @@ def _to_iteration_summary(
             nodes=list(plan.nodes.values()),
         ),
         history=_iteration_history(loop, event_items),
-        actions=_iteration_actions(plan, loop_status),
+        actions=_iteration_actions(plan, loop_status, iteration_nodes=iteration_nodes),
         findings=_iteration_review_findings(loop),
         rejected_finding_count=_metadata_int(
             loop.get("last_review_rejected_finding_count"), fallback=0
@@ -1766,11 +1766,20 @@ def _iteration_review_findings(
     return findings
 
 
+_NEXT_ITERATION_UNFINISHED_REASON = (
+    "Finish or unblock the current iteration before planning the next one. "
+    "Use Run or Force to continue active work."
+)
+
+
 def _iteration_actions(
     plan: Plan,
     loop_status: str,
+    *,
+    iteration_nodes: list[PlanNode],
 ) -> dict[str, WorkspacePlanActionCapabilityResponse]:
     is_terminal = plan.status is PlanStatus.COMPLETED
+    next_iteration_ready = _current_iteration_ready_for_next(iteration_nodes)
     return {
         "pause_auto_loop": WorkspacePlanActionCapabilityResponse(
             enabled=not is_terminal and loop_status not in {"paused", "completed"},
@@ -1787,11 +1796,46 @@ def _iteration_actions(
             else None,
         ),
         "trigger_next_iteration": WorkspacePlanActionCapabilityResponse(
-            enabled=not is_terminal,
+            enabled=not is_terminal and next_iteration_ready,
             label="Plan next iteration",
-            reason="The plan is already complete." if is_terminal else None,
+            reason=_next_iteration_action_reason(
+                is_terminal=is_terminal,
+                next_iteration_ready=next_iteration_ready,
+            ),
         ),
     }
+
+
+def _next_iteration_action_reason(
+    *, is_terminal: bool, next_iteration_ready: bool
+) -> str | None:
+    if is_terminal:
+        return "The plan is already complete."
+    if not next_iteration_ready:
+        return _NEXT_ITERATION_UNFINISHED_REASON
+    return None
+
+
+def _current_iteration_ready_for_next(iteration_nodes: list[PlanNode]) -> bool:
+    return bool(iteration_nodes) and all(node.intent is TaskIntent.DONE for node in iteration_nodes)
+
+
+def _plan_ready_for_next_iteration(plan: Plan) -> bool:
+    runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
+    if not runnable_nodes:
+        return False
+    nodes_by_id = {node.id: node for node in runnable_nodes}
+    loop = _goal_iteration_loop_metadata(plan)
+    current_iteration = _metadata_int(
+        loop.get("current_iteration"),
+        fallback=_current_iteration(runnable_nodes, nodes_by_id=nodes_by_id),
+    )
+    iteration_nodes = [
+        node
+        for node in runnable_nodes
+        if _node_iteration_index(node, nodes_by_id=nodes_by_id) == current_iteration
+    ]
+    return _current_iteration_ready_for_next(iteration_nodes)
 
 
 def _current_iteration(
@@ -3208,6 +3252,7 @@ async def _update_iteration_loop_for_operator(
     plan_status: PlanStatus,
     message: str,
     enqueue_tick: bool,
+    require_next_iteration_ready: bool = False,
 ) -> WorkspacePlanActionResultResponse:
     await _ensure_workspace_access(
         workspace_id=workspace_id,
@@ -3217,6 +3262,13 @@ async def _update_iteration_loop_for_operator(
     )
     plan = await _load_plan_for_workspace(db, workspace_id)
     goal_node = plan.goal_node
+    if require_next_iteration_ready and not _plan_ready_for_next_iteration(plan):
+        return WorkspacePlanActionResultResponse(
+            ok=False,
+            message=_(_NEXT_ITERATION_UNFINISHED_REASON),
+            plan_id=plan.id,
+            node_id=goal_node.id,
+        )
     metadata = dict(goal_node.metadata or {})
     raw_loop = metadata.get("iteration_loop")
     loop = dict(raw_loop) if isinstance(raw_loop, dict) else {}
@@ -3249,7 +3301,7 @@ async def _update_iteration_loop_for_operator(
     plan.replace_node(replace(goal_node, metadata=metadata, updated_at=datetime.now(UTC)))
     plan = replace(plan, status=plan_status, updated_at=datetime.now(UTC))
     await SqlPlanRepository(db).save(plan)
-    _ = await SqlWorkspacePlanEventRepository(db).append(
+    await SqlWorkspacePlanEventRepository(db).append(
         plan_id=plan.id,
         workspace_id=workspace_id,
         node_id=goal_node.id,
@@ -4548,6 +4600,7 @@ async def trigger_workspace_plan_next_iteration(
             plan_status=PlanStatus.ACTIVE,
             message="Next iteration review requested.",
             enqueue_tick=True,
+            require_next_iteration_ready=True,
         )
     except Exception as exc:
         raise _map_error(exc) from exc
