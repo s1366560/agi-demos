@@ -7,13 +7,15 @@
  * - Draggable resize support
  */
 
-import { useCallback, memo } from 'react';
+import { useCallback, useEffect, memo, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Filter, GitBranch, ListTodo, Route, X } from 'lucide-react';
 
 import { useActiveGraphRunForConversation } from '@/stores/graphStore';
+
+import { workspacePlanService, workspaceTaskService } from '@/services/workspaceService';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
 
@@ -24,6 +26,12 @@ import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { ResizeHandle } from './RightPanelComponents';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';
+import {
+  buildWorkspaceTaskPlanRows,
+  WorkspaceTaskPlanPanel,
+} from './workspace/WorkspaceTaskPlanPanel';
+
+import type { WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
 
 import type {
   AgentTask,
@@ -289,8 +297,29 @@ export const RightPanel = memo<RightPanelProps>(
     const activeGraphRun = useActiveGraphRunForConversation(conversationId);
     const isWorkspaceActive = Boolean(workspaceId);
     const hasGraph = Boolean(activeGraphRun) || isWorkspaceActive;
-    const initialTab: PanelTab =
-      hasGraph && tasks.length === 0
+    const [workspaceTasks, setWorkspaceTasks] = useState<WorkspaceTask[]>([]);
+    const [workspaceSnapshot, setWorkspaceSnapshot] = useState<WorkspacePlanSnapshot | null>(null);
+    const [workspaceLoading, setWorkspaceLoading] = useState(false);
+    const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+    const [workspaceDataId, setWorkspaceDataId] = useState<string | null>(null);
+    const activeWorkspaceTasks = workspaceDataId === workspaceId ? workspaceTasks : [];
+    const activeWorkspaceSnapshot = workspaceDataId === workspaceId ? workspaceSnapshot : null;
+    const activeWorkspaceLoading =
+      isWorkspaceActive && (workspaceLoading || workspaceDataId !== workspaceId);
+    const activeWorkspaceError = workspaceDataId === workspaceId ? workspaceError : null;
+    const workspaceRows = useMemo(
+      () =>
+        buildWorkspaceTaskPlanRows(
+          activeWorkspaceTasks,
+          activeWorkspaceSnapshot,
+          currentWorkspaceTaskId
+        ),
+      [activeWorkspaceTasks, activeWorkspaceSnapshot, currentWorkspaceTaskId]
+    );
+    const visibleTaskCount = isWorkspaceActive ? workspaceRows.length : tasks.length;
+    const initialTab: PanelTab = isWorkspaceActive
+      ? 'tasks'
+      : hasGraph && tasks.length === 0
         ? 'graph'
         : hasInsights && tasks.length === 0
           ? 'insights'
@@ -309,6 +338,49 @@ export const RightPanel = memo<RightPanelProps>(
           : preferredTab === 'graph' && !hasGraph
             ? 'tasks'
             : preferredTab;
+
+    useEffect(() => {
+      if (!workspaceId) return;
+
+      let cancelled = false;
+
+      void Promise.resolve().then(async () => {
+        if (cancelled) return;
+        setWorkspaceLoading(true);
+        setWorkspaceError(null);
+
+        const [tasksResult, snapshotResult] = await Promise.allSettled([
+          workspaceTaskService.list(workspaceId),
+          workspacePlanService.getSnapshot(workspaceId, { outboxLimit: 8, eventLimit: 20 }),
+        ]);
+
+        if (cancelled) return;
+
+        setWorkspaceDataId(workspaceId);
+        if (tasksResult.status === 'fulfilled') {
+          setWorkspaceTasks(tasksResult.value);
+        } else {
+          setWorkspaceTasks([]);
+        }
+
+        if (snapshotResult.status === 'fulfilled') {
+          setWorkspaceSnapshot(snapshotResult.value);
+        } else {
+          setWorkspaceSnapshot(null);
+        }
+
+        setWorkspaceError(
+          tasksResult.status === 'rejected' || snapshotResult.status === 'rejected'
+            ? 'workspace-load-failed'
+            : null
+        );
+        setWorkspaceLoading(false);
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [workspaceId]);
 
     const handleResize = useCallback(
       (delta: number) => {
@@ -346,7 +418,7 @@ export const RightPanel = memo<RightPanelProps>(
                 <span className="text-xs text-slate-500 dark:text-slate-400">
                   {t('agent.rightPanel.taskCount', {
                     defaultValue: '{{count}} item',
-                    count: tasks.length,
+                    count: visibleTaskCount,
                   })}
                 </span>
               </div>
@@ -478,7 +550,19 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              {taskView === 'lanes' ? <TaskLanePanel tasks={tasks} /> : <TaskList tasks={tasks} />}
+              {isWorkspaceActive ? (
+                <WorkspaceTaskPlanPanel
+                  rows={workspaceRows}
+                  snapshot={activeWorkspaceSnapshot}
+                  loading={activeWorkspaceLoading}
+                  error={activeWorkspaceError}
+                  view={taskView}
+                />
+              ) : taskView === 'lanes' ? (
+                <TaskLanePanel tasks={tasks} />
+              ) : (
+                <TaskList tasks={tasks} />
+              )}
             </div>
           )}
         </div>

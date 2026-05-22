@@ -1,10 +1,8 @@
 /**
  * useWorkspaceConversations — lists conversations filtered by workspace.
  *
- * Uses the existing ``GET /agent/conversations`` endpoint (filtered by
- * project) and filters client-side by ``workspace_id``. Workspaces
- * typically hold a small number of conversations, so this is adequate
- * without a dedicated backend filter.
+ * Uses the workspace-aware ``GET /agent/conversations`` filter so large
+ * workspaces are loaded completely instead of relying on the first project page.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -39,10 +37,34 @@ export function useWorkspaceConversations(
     setLoading(true);
     setError(null);
     try {
-      const response = await agentService.listConversations(projectId, 'active', 100, 0);
+      const items: Conversation[] = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await agentService.listConversations(
+          projectId,
+          'active',
+          100,
+          offset,
+          undefined,
+          { workspaceId }
+        );
+        const pageItems = Array.isArray(response.items) ? response.items : [];
+        items.push(
+          ...pageItems.filter((conversation) => conversation.workspace_id === workspaceId)
+        );
+
+        const nextOffset =
+          typeof response.next_offset === 'number'
+            ? response.next_offset
+            : offset + pageItems.length;
+        hasMore = Boolean(response.has_more) && nextOffset > offset;
+        offset = nextOffset;
+      }
+
       if (activeKey.current === key) {
-        const items = Array.isArray(response.items) ? response.items : [];
-        setConversations(items.filter((c) => c.workspace_id === workspaceId));
+        setConversations(items);
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));

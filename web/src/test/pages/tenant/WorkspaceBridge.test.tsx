@@ -8,6 +8,10 @@ import { WorkspaceBlackboardRedirect } from '../../../pages/project/WorkspaceBla
 import { buildAgentWorkspacePath } from '../../../utils/agentWorkspacePath';
 
 const agentChatContentProps = vi.fn();
+const localStorageMock = vi.hoisted(() => ({
+  values: new Map<string, string | null>(),
+  setValue: vi.fn(),
+}));
 
 let projectState: any;
 let tenantState: any;
@@ -38,9 +42,11 @@ vi.mock('../../../components/workspace/TopologyBoard', () => ({
 }));
 
 vi.mock('../../../hooks/useLocalStorage', () => ({
-  useLocalStorage: () => ({
-    value: null,
-    setValue: vi.fn(),
+  useLocalStorage: <T,>(key: string, initialValue: T) => ({
+    value: (localStorageMock.values.has(key)
+      ? localStorageMock.values.get(key)
+      : initialValue) as T,
+    setValue: localStorageMock.setValue,
   }),
 }));
 
@@ -102,6 +108,8 @@ vi.mock('../../../stores/workspace', () => {
 describe('workspace/agent workspace bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorageMock.values.clear();
+    localStorageMock.setValue.mockReset();
 
     authState = {
       user: { tenant_id: 'tenant-1' },
@@ -146,6 +154,48 @@ describe('workspace/agent workspace bridge', () => {
         expect.objectContaining({
           externalProjectId: 'project-2',
           navigationQuery: 'projectId=project-2&workspaceId=ws-9',
+        })
+      );
+    });
+  });
+
+  it('restores saved workspace context on base agent workspace URLs', () => {
+    localStorageMock.values.set('agent:tenant-1:lastWorkspaceId', 'ws-remembered');
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1',
+    });
+
+    return waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+      expect(agentChatContentProps).toHaveBeenCalledWith(
+        expect.objectContaining({
+          navigationQuery: 'projectId=project-1&workspaceId=ws-remembered',
+        })
+      );
+    });
+  });
+
+  it('does not restore saved workspace context on conversation URLs without workspace query', () => {
+    localStorageMock.values.set('agent:tenant-1:lastWorkspaceId', 'ws-remembered');
+
+    render(
+      <Routes>
+        <Route
+          path="/tenant/:tenantId/agent-workspace/:conversation"
+          element={<AgentWorkspace />}
+        />
+      </Routes>,
+      {
+        route: '/tenant/tenant-1/agent-workspace/conv-plain?projectId=project-1',
+      }
+    );
+
+    return waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+      expect(agentChatContentProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          navigationQuery: 'projectId=project-1',
         })
       );
     });

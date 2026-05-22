@@ -28,3 +28,25 @@ def test_conversation_response_from_domain_includes_participation_projection() -
     assert response.participant_agents == ["agent-a", "agent-b"]
     assert response.coordinator_agent_id == "agent-a"
     assert response.focused_agent_id == "agent-b"
+
+
+def test_conversation_response_from_domain_includes_workspace_projection() -> None:
+    conversation = Conversation(
+        id="workspace-verifier:ws-from-id:task-from-id:agent-a:attempt-1",
+        project_id="proj-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Workspace Verification Gate - task-from-id",
+        created_at=datetime.now(UTC),
+    )
+
+    response = ConversationResponse.from_domain(
+        conversation,
+        workspace_id="ws-from-id",
+        linked_workspace_task_id="task-from-id",
+        workspace_name="Workspace From API",
+    )
+
+    assert response.workspace_id == "ws-from-id"
+    assert response.linked_workspace_task_id == "task-from-id"
+    assert response.workspace_name == "Workspace From API"

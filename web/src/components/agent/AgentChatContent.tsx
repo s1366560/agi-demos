@@ -199,6 +199,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       navigationQuery || (queryProjectId ? `projectId=${queryProjectId}` : undefined);
     const navigationSuffix = effectiveNavigationQuery ? `?${effectiveNavigationQuery}` : '';
     const projectId = externalProjectId || queryProjectId || urlProjectId;
+    const newConversationNavigationSuffix = useMemo(() => {
+      if (!projectId) return '';
+      const params = new URLSearchParams();
+      params.set('projectId', projectId);
+      return `?${params.toString()}`;
+    }, [projectId]);
 
     // Determine base path for navigation
     const basePath = useMemo(() => {
@@ -560,9 +566,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       if (!projectId) return;
       const newId = await createNewConversation(projectId);
       if (newId) {
-        void navigate(`${basePath}/${newId}${navigationSuffix}`);
+        void navigate(`${basePath}/${newId}${newConversationNavigationSuffix}`);
       }
-    }, [projectId, createNewConversation, navigate, basePath, navigationSuffix]);
+    }, [projectId, createNewConversation, navigate, basePath, newConversationNavigationSuffix]);
 
     const handleSend = useCallback(
       async (

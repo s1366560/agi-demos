@@ -78,7 +78,34 @@ Current task details.
 
 
 @pytest.mark.unit
-async def test_recall_keeps_workspace_task_memory_when_query_has_no_workspace_binding() -> None:
+async def test_recall_filters_workspace_task_memory_when_query_has_no_workspace_binding() -> None:
+    workspace_memory = """[workspace-task-binding]
+workspace_id=some-workspace
+workspace_task_id=task-1
+[/workspace-task-binding]
+
+Prior task content.
+"""
+    generic_memory = "User prefers concise greetings."
+    preprocessor = MemoryRecallPreprocessor(
+        chunk_search=_ChunkSearch(
+            [
+                _ChunkResult(content=workspace_memory, score=0.99, source_id="workspace"),
+                _ChunkResult(content=generic_memory, score=0.5, source_id="generic"),
+            ]
+        )
+    )
+
+    context = await preprocessor.recall("hi", "project-1")
+
+    assert context is not None
+    assert "Prior task content" not in context
+    assert generic_memory in context
+    assert {result["source_id"] for result in preprocessor.last_results} == {"generic"}
+
+
+@pytest.mark.unit
+async def test_recall_returns_none_when_unbound_query_only_matches_workspace_task_memory() -> None:
     workspace_memory = """[workspace-task-binding]
 workspace_id=some-workspace
 workspace_task_id=task-1
@@ -90,10 +117,10 @@ Prior task content.
         chunk_search=_ChunkSearch([_ChunkResult(content=workspace_memory)])
     )
 
-    context = await preprocessor.recall("summarize prior workspace work", "project-1")
+    context = await preprocessor.recall("hi", "project-1")
 
-    assert context is not None
-    assert "Prior task content" in context
+    assert context is None
+    assert preprocessor.last_results == []
 
 
 @pytest.mark.unit

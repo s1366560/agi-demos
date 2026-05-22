@@ -533,6 +533,69 @@ async def test_drone_pipeline_provider_records_successful_deploy_stage(
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_accepts_running_container_evidence_without_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "success",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "success",
+                    "steps": [
+                        {
+                            "name": "deploy",
+                            "status": "success",
+                            "exit_code": 0,
+                            "image": "docker:27-cli",
+                        },
+                    ],
+                }
+            ],
+        },
+        logs={
+            ("workspace-ci", "deploy"): [
+                {
+                    "out": (
+                        "Container my-evo-app is running\n"
+                        "CONTAINER ID   IMAGE                         STATUS    PORTS    NAMES\n"
+                        "abc123         my-evo:drone-docker-e2e      Up 1 sec  8080/tcp my-evo-app\n"
+                    ),
+                },
+            ],
+        },
+    )
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "deploy_services": [
+                        {
+                            "service_id": "my-evo-app",
+                            "container_name": "my-evo-app",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "success"
+    assert result.deployment_status == "deployed"
+    assert result.metadata["deploy_validation"] == DRONE_DOCKER_DEPLOY_VALIDATION
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_rejects_multi_service_deploy_missing_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -599,9 +662,15 @@ async def test_drone_pipeline_provider_rejects_multi_service_deploy_missing_serv
 
     assert result.status == "failed"
     assert result.deployment_status == "invalid"
-    assert result.reason == (
+    assert result.reason is not None
+    assert result.reason.startswith(
         "Drone build octo/hello#42 deploy stage deploy did not implement "
         "docker deployment semantics"
+    )
+    assert "missing required deploy services: my-evo-frontend" in result.reason
+    assert "missing built image deploy references: frontend" in result.reason
+    assert "missing required deploy services: my-evo-frontend" in str(
+        result.metadata["deploy_validation_failure"]
     )
     assert "deployment:invalid:docker" in result.evidence_refs
     assert "deploy_validation" not in result.metadata
@@ -663,10 +732,16 @@ async def test_drone_pipeline_provider_rejects_deploy_missing_built_image_withou
 
     assert result.status == "failed"
     assert result.deployment_status == "invalid"
-    assert result.reason == (
+    assert result.reason is not None
+    assert result.reason.startswith(
         "Drone build octo/hello#42 deploy stage deploy did not implement "
         "docker deployment semantics"
     )
+    assert (
+        "missing built image deploy references: my-evo-frontend:drone-docker-e2e"
+        in result.reason
+    )
+    assert "deploy_validation_issues" in result.metadata
     assert "deployment:invalid:docker" in result.evidence_refs
 
 
@@ -796,6 +871,67 @@ async def test_drone_pipeline_provider_preserves_failure_signal_lines_in_long_de
     assert "Connection refused" in preview
     assert "Exited (0)" in preview
     assert "No migration found" in preview
+    assert len(preview) <= 4000
+
+
+@pytest.mark.asyncio
+async def test_drone_pipeline_provider_prioritizes_docker_port_conflict_in_failure_signals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    noisy_prisma_output = "\n".join(
+        (
+            f'#{index} RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" '
+            "npx prisma generate"
+        )
+        for index in range(80)
+    )
+    port_conflict = (
+        "docker: Error response from daemon: failed to set up container networking: "
+        "Bind for 0.0.0.0:18080 failed: port is already allocated"
+    )
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "failure",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "failure",
+                    "steps": [
+                        {
+                            "name": "deploy",
+                            "status": "failure",
+                            "exit_code": 1,
+                            "image": "docker:cli",
+                        },
+                    ],
+                }
+            ],
+        },
+        logs={
+            ("workspace-ci", "deploy"): [
+                {"out": f"{noisy_prisma_output}\n"},
+                {"out": f"{port_conflict}\n"},
+                {"out": "ERROR: Container my-evo-app failed to start\n"},
+            ],
+        },
+    )
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(enabled=True, mode="docker"),
+        )
+    )
+
+    preview = result.stage_results[0].stderr_preview
+    assert result.status == "failed"
+    assert "failure_signals:" in preview
+    assert "Bind for 0.0.0.0:18080 failed: port is already allocated" in preview
+    assert "ERROR: Container my-evo-app failed to start" in preview
     assert len(preview) <= 4000
 
 
@@ -1036,10 +1172,12 @@ async def test_drone_pipeline_provider_rejects_masked_docker_deploy_failures(
 
     assert result.status == "failed"
     assert result.deployment_status == "invalid"
-    assert result.reason == (
+    assert result.reason is not None
+    assert result.reason.startswith(
         "Drone build octo/hello#42 deploy stage deploy did not implement "
         "docker deployment semantics"
     )
+    assert "deploy output contains failure markers" in result.reason
     assert "deploy_validation" not in result.metadata
     assert "deployment:invalid:docker" in result.evidence_refs
 
@@ -1258,10 +1396,12 @@ async def test_drone_pipeline_provider_rejects_host_daemon_local_registry_pull(
 
     assert result.status == "failed"
     assert result.deployment_status == "invalid"
-    assert result.reason == (
+    assert result.reason is not None
+    assert result.reason.startswith(
         "Drone build octo/hello#42 deploy stage deploy did not implement "
         "docker deployment semantics"
     )
+    assert "local-registry images through the mounted host Docker daemon" in result.reason
     assert "deploy_validation" not in result.metadata
     assert "deployment:invalid:docker" in result.evidence_refs
 
@@ -1398,10 +1538,12 @@ async def test_drone_pipeline_provider_rejects_docker_deploy_without_deploy_sema
 
     assert result.status == "failed"
     assert result.deployment_status == "invalid"
-    assert result.reason == (
+    assert result.reason is not None
+    assert result.reason.startswith(
         "Drone build octo/hello#42 deploy stage deploy did not implement "
         "docker deployment semantics"
     )
+    assert "missing docker run/compose/stack/service deploy command" in result.reason
     assert "deployment:invalid:docker" in result.evidence_refs
 
 

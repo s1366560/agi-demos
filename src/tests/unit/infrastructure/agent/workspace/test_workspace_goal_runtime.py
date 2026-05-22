@@ -14,6 +14,7 @@ from src.infrastructure.agent.workspace.workspace_goal_runtime import (
     _background_tasks,
     _ensure_execution_attempt,
     _launch_workspace_retry_attempt,
+    _mark_workspace_plan_node_reported,
     _schedule_workspace_retry_attempt,
     adjudicate_workspace_worker_report,
     apply_workspace_worker_report,
@@ -64,6 +65,65 @@ def _attempt(
 
 @pytest.mark.unit
 class TestWorkspaceGoalRuntime:
+    async def test_mark_plan_node_reported_updates_visible_progress(self) -> None:
+        node = MagicMock()
+        node.progress = {"percent": 0.0, "confidence": 1.0, "note": "old progress"}
+        node.metadata_json = {"progress_events": []}
+
+        class _Db:
+            async def get(self, *_args: object) -> object:
+                return node
+
+        event_repo = MagicMock()
+        event_repo.append = AsyncMock(return_value=None)
+        outbox_repo = MagicMock()
+        outbox_repo.enqueue = AsyncMock(return_value=None)
+        orchestrator = MagicMock()
+        orchestrator.mark_worker_reported = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events."
+                "SqlWorkspacePlanEventRepository",
+                return_value=event_repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox."
+                "SqlWorkspacePlanOutboxRepository",
+                return_value=outbox_repo,
+            ),
+            patch(
+                "src.infrastructure.agent.workspace_plan."
+                "build_sql_orchestrator",
+                return_value=orchestrator,
+            ),
+        ):
+            await _mark_workspace_plan_node_reported(
+                db=_Db(),
+                workspace_id="ws-1",
+                root_goal_task_id="root-1",
+                actor_user_id="user-1",
+                task_metadata={
+                    "workspace_plan_id": "plan-1",
+                    "workspace_plan_node_id": "node-1",
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": "Final report summary",
+                    "last_worker_reported_at": "2026-05-21T20:00:00Z",
+                    "last_worker_report_artifacts": [],
+                    "last_worker_report_verifications": [],
+                },
+                attempt_id="attempt-1",
+                worker_agent_id="worker-1",
+                leader_agent_id="leader-1",
+            )
+
+        assert node.progress["note"] == "Final report summary"
+        assert node.metadata_json["latest_worker_progress"]["summary"] == (
+            "Final report summary"
+        )
+        event_repo.append.assert_awaited_once()
+        orchestrator.mark_worker_reported.assert_awaited_once()
+
     async def test_ensure_execution_attempt_does_not_persist_system_actor_marker(
         self,
     ) -> None:
@@ -1188,7 +1248,12 @@ class TestWorkspaceGoalRuntime:
         saved_conversation = conversation_repo.save.await_args.args[0]
         assert saved_conversation.metadata["attempt_id"] == "attempt-9"
         assert saved_conversation.metadata["workspace_task_id"] == "child-1"
+        assert saved_conversation.metadata["linked_workspace_task_id"] == "child-1"
+        assert saved_conversation.metadata["root_goal_task_id"] == "root-1"
+        assert saved_conversation.metadata["source"] == "workspace_retry_launch"
+        assert saved_conversation.metadata["workspace_llm_stage"] == "retry_leader"
         assert saved_conversation.metadata["retry_launch"] is True
+        assert saved_conversation.agent_config["selected_agent_id"] == "leader-agent"
         assert saved_conversation.workspace_id == "ws-1"
         assert saved_conversation.linked_workspace_task_id == "child-1"
         assert captured["conversation_id"] == expected_conversation_id

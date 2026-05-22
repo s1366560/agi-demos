@@ -673,7 +673,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       })(),
       workspaceName: (() => {
         const workspaceId = workspaceIdFromConversation(conv);
-        return workspaceId ? (workspaceNameById.get(workspaceId) ?? null) : null;
+        return (
+          conv.workspace_name ?? (workspaceId ? (workspaceNameById.get(workspaceId) ?? null) : null)
+        );
       })(),
     }));
   }, [
@@ -806,11 +808,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           tenantId,
           conversationId: newId,
           projectId: selectedProjectId,
-          workspaceId: workspaceIdFromQuery,
         })
       );
     }
-  }, [selectedProjectId, createNewConversation, navigate, tenantId, workspaceIdFromQuery]);
+  }, [selectedProjectId, createNewConversation, navigate, tenantId]);
 
   const handleDeleteConversation = useCallback(
     (id: string, e: React.MouseEvent) => {

@@ -891,6 +891,8 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
 
 
 def _reported_node_has_pipeline_result_pending_verification(node: PlanNode, status: str) -> bool:
+    if _node_has_pipeline_gate_in_flight(node, status):
+        return True
     if node.execution is not TaskExecution.REPORTED:
         return False
     if status == WorkspaceTaskSessionAttemptStatus.ACCEPTED.value:
@@ -903,6 +905,21 @@ def _reported_node_has_pipeline_result_pending_verification(node: PlanNode, stat
         _metadata_string(metadata.get("pipeline_run_id"))
         or _metadata_string(metadata.get("external_id"))
     )
+
+
+def _node_has_pipeline_gate_in_flight(node: PlanNode, status: str) -> bool:
+    if status == WorkspaceTaskSessionAttemptStatus.ACCEPTED.value:
+        return False
+    if node.intent is not TaskIntent.IN_PROGRESS:
+        return False
+    metadata = node.metadata or {}
+    pipeline_status = (_metadata_string(metadata.get("pipeline_status")) or "").lower()
+    gate_status = (_metadata_string(metadata.get("pipeline_gate_status")) or "").lower()
+    return pipeline_status in {"requested", "running", "processing"} or gate_status in {
+        "requested",
+        "running",
+        "processing",
+    }
 
 
 async def _reconcile_plan_nodes_with_reported_attempts(
@@ -1006,9 +1023,8 @@ async def _project_accepted_terminal_attempt_to_task(
         return {}
     evidence_refs = _accepted_attempt_evidence_refs(attempt)
     commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:")
-    if (
-        not commit_ref
-        and not _accepted_attempt_has_same_verified_no_output_projection(node, attempt)
+    if not commit_ref and not _accepted_attempt_has_same_verified_no_output_projection(
+        node, attempt
     ):
         commit_ref = _feature_checkpoint_commit_ref(node)
     git_diff_summary = _first_prefixed_ref(evidence_refs, "git_diff_summary:")
@@ -3447,6 +3463,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             },
         )
         await _mark_pipeline_running(session=session, plan=plan, node=node, run_id=run.id)
+        await session.commit()
 
         if contract.provider == DRONE_PROVIDER:
             if source_publish_result is not None:
@@ -4374,7 +4391,8 @@ def _is_non_fast_forward_push_rejection(result: Mapping[str, object]) -> bool:
 
 def _is_unrelated_history_merge_rejection(result: Mapping[str, object]) -> bool:
     text = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr", "reason"))
-    return "refusing to merge unrelated histories" in text.lower()
+    normalized = text.lower()
+    return "refusing to merge unrelated histories" in normalized or "拒绝合并无关的历史" in text
 
 
 async def _run_git_command(
@@ -4481,7 +4499,11 @@ async def _run_drone_pipeline(
     plan_id: str,
     node_id: str,
 ) -> None:
-    result = await DronePipelineProvider().run(contract)
+    try:
+        result = await DronePipelineProvider().run(contract)
+    except Exception as exc:
+        logger.exception("workspace drone pipeline provider failed")
+        result = _drone_provider_exception_result(exc)
     await _persist_external_pipeline_result(
         session=session,
         pipeline_repo=pipeline_repo,
@@ -4493,6 +4515,38 @@ async def _run_drone_pipeline(
         workspace_id=workspace_id,
         plan_id=plan_id,
         node_id=node_id,
+    )
+
+
+def _drone_provider_exception_result(exc: Exception) -> PipelineRunResult:
+    message = str(exc).strip() or exc.__class__.__name__
+    preview = _manager_compact_command_output(
+        f"Drone pipeline provider failed: {message}",
+        limit=1200,
+    )
+    metadata = {
+        "external_provider": DRONE_PROVIDER,
+        "provider_exception": exc.__class__.__name__,
+    }
+    return PipelineRunResult(
+        status="failed",
+        reason=preview,
+        stage_results=(
+            PipelineStageResult(
+                stage="drone_api",
+                status="failed",
+                command="drone:api",
+                exit_code=1,
+                stdout_preview="",
+                stderr_preview=preview,
+                metadata=metadata,
+            ),
+        ),
+        evidence_refs=("ci_pipeline:failed", "drone:api_failed"),
+        metadata={
+            **metadata,
+            "provider_error": preview,
+        },
     )
 
 
@@ -6168,10 +6222,106 @@ def _node_worker_brief(node: PlanNode) -> str:
     ]
     lines.extend(_feature_checkpoint_brief_lines(node))
     lines.extend(_handoff_package_brief_lines(node))
+    lines.extend(_verification_feedback_brief_lines(node))
     lines.extend(_rehydration_guidance_lines())
     if node.description:
         lines.extend(["", str(node.description)])
     return "\n".join(lines)
+
+
+def _verification_feedback_brief_lines(node: PlanNode) -> list[str]:
+    metadata = dict(node.metadata or {})
+    lines: list[str] = []
+    for label, key in (
+        ("last_verification_attempt_id", "last_verification_attempt_id"),
+        ("pipeline_status", "pipeline_status"),
+        ("pipeline_failed_stage", "pipeline_failed_stage"),
+        ("pipeline_run_id", "pipeline_run_id"),
+        ("source_publish_status", "source_publish_status"),
+        ("source_publish_reason", "source_publish_reason"),
+        ("last_verification_judge_verdict", "last_verification_judge_verdict"),
+        ("last_verification_judge_next_action_kind", "last_verification_judge_next_action_kind"),
+    ):
+        value = _brief_metadata_text(metadata.get(key), limit=320)
+        if value:
+            lines.append(f"{label}={value}")
+
+    for label, key in (
+        ("pipeline_last_summary", "pipeline_last_summary"),
+        ("pipeline_failure_summary", "pipeline_failure_summary"),
+        ("last_verification_summary", "last_verification_summary"),
+        (
+            "last_verification_judge_required_next_action",
+            "last_verification_judge_required_next_action",
+        ),
+        ("retry_last_reason", "retry_last_reason"),
+    ):
+        value = _brief_metadata_text(metadata.get(key), limit=900)
+        if value:
+            lines.append(f"{label}={value}")
+
+    failed_criteria = list(
+        dict.fromkeys(_iter_config_strings(metadata.get("last_verification_judge_failed_criteria")))
+    )
+    if failed_criteria:
+        lines.append("last_verification_judge_failed_criteria=" + ", ".join(failed_criteria[:8]))
+
+    feedback_items = _worker_feedback_items(metadata)
+    if not feedback_items:
+        raw_feedback_items = metadata.get("last_verification_feedback_items")
+        if isinstance(raw_feedback_items, list):
+            feedback_items = [
+                dict(item) for item in raw_feedback_items if isinstance(item, Mapping)
+            ]
+    for index, item in enumerate(feedback_items[:5], start=1):
+        rendered = _feedback_item_brief(item)
+        if rendered:
+            lines.append(f"feedback_item_{index}={rendered}")
+
+    if not lines:
+        return []
+    return [
+        "",
+        "[verification-feedback]",
+        (
+            "This is the latest durable verifier/pipeline feedback for this node. "
+            "Use it as the active repair target before repeating prior fixes."
+        ),
+        *lines,
+        "[/verification-feedback]",
+    ]
+
+
+def _feedback_item_brief(item: Mapping[str, Any]) -> str:
+    parts: list[str] = []
+    for key in (
+        "target_layer",
+        "feedback_kind",
+        "severity",
+        "recommended_action",
+        "failure_signature",
+    ):
+        value = _brief_metadata_text(item.get(key), limit=120)
+        if value:
+            parts.append(f"{key}={value}")
+    summary = _brief_metadata_text(item.get("summary"), limit=700)
+    if summary:
+        parts.append(f"summary={summary}")
+    evidence_refs = list(dict.fromkeys(_iter_config_strings(item.get("evidence_refs"))))
+    if evidence_refs:
+        parts.append("evidence_refs=" + ", ".join(evidence_refs[:6]))
+    return "; ".join(parts)
+
+
+def _brief_metadata_text(value: object, *, limit: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.strip().split())
+    if not text:
+        return None
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 15)].rstrip() + " ...[truncated]"
 
 
 def _feature_checkpoint_brief_lines(node: PlanNode) -> list[str]:

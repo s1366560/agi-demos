@@ -95,6 +95,7 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
             WORKSPACE_SESSION_ROLE_KEY,
         )
         from src.infrastructure.agent.workspace.session_conversations import (
+            append_workspace_llm_turn_messages,
             ensure_workspace_llm_conversation,
         )
 
@@ -159,6 +160,8 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
                 ),
             }
         ]
+        output_parts: list[str] = []
+        streamed_text_seen = False
         try:
             async for event in agent.execute_chat(
                 conversation_id=conversation_id,
@@ -175,13 +178,53 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
                     observed_tools = diagnostics["observed_tools"]
                     if tool_name not in observed_tools:
                         observed_tools.append(tool_name)
+                output_text = _assistant_text_from_event(
+                    event,
+                    allow_terminal_snapshot=not streamed_text_seen,
+                )
+                if output_text:
+                    output_parts.append(output_text)
+                    if event.get("type") == "text_delta":
+                        streamed_text_seen = True
                 payload = _verification_judgment_from_event(event)
                 if payload is not None:
                     diagnostics["judgment_submitted"] = True
+                    diagnostics["messages_persisted"] = (
+                        await append_workspace_llm_turn_messages(
+                            conversation_id=conversation_id,
+                            user_prompt=user_prompt,
+                            assistant_content=_verification_turn_message_content(
+                                output_parts=output_parts,
+                                judgment=payload,
+                            ),
+                            agent_id=verifier_agent.id,
+                            stage="verification_judge",
+                            metadata={
+                                "current_plan_node_id": node_id,
+                                "current_attempt_id": attempt_id or "",
+                                "linked_workspace_task_id": linked_workspace_task_id or "",
+                            },
+                        )
+                    )
                     self._last_diagnostics = diagnostics
                     return payload
         finally:
             await agent.stop()
+        diagnostics["messages_persisted"] = await append_workspace_llm_turn_messages(
+            conversation_id=conversation_id,
+            user_prompt=user_prompt,
+            assistant_content=_verification_turn_message_content(
+                output_parts=output_parts,
+                judgment=None,
+            ),
+            agent_id=verifier_agent.id,
+            stage="verification_judge",
+            metadata={
+                "current_plan_node_id": node_id,
+                "current_attempt_id": attempt_id or "",
+                "linked_workspace_task_id": linked_workspace_task_id or "",
+            },
+        )
         self._last_diagnostics = diagnostics
         return None
 
@@ -451,6 +494,45 @@ def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
         return None
     tool_name = data.get("tool_name") or data.get("name")
     return tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else None
+
+
+def _assistant_text_from_event(
+    event: Mapping[str, Any],
+    *,
+    allow_terminal_snapshot: bool,
+) -> str:
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return ""
+    event_type = event.get("type")
+    if event_type == "text_delta":
+        return str(data.get("delta") or "")
+    if not allow_terminal_snapshot:
+        return ""
+    if event_type == "text_end":
+        return str(data.get("full_text") or "")
+    if event_type == "complete":
+        return str(data.get("content") or "")
+    return ""
+
+
+def _verification_turn_message_content(
+    *,
+    output_parts: list[str],
+    judgment: Mapping[str, Any] | None,
+) -> str:
+    text = "".join(output_parts).strip()
+    sections: list[str] = []
+    if text:
+        sections.append(text)
+    if judgment is not None:
+        sections.append(
+            "Submitted verification judgment:\n"
+            + json.dumps(judgment, ensure_ascii=False, indent=2, default=str)
+        )
+    if not sections:
+        sections.append("Verifier turn ended without submitting a verification judgment.")
+    return "\n\n".join(sections)
 
 
 def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudgeResult | None:

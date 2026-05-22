@@ -48,6 +48,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceAgentModel,
     WorkspaceMemberModel,
     WorkspaceModel,
+    WorkspacePipelineRunModel,
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
@@ -96,12 +97,14 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     _integration_status_from_output,
     _is_structural_sandbox_command,
     _node_allowed_sandbox_commands,
+    _node_worker_brief,
     _persisted_attempt_leader_agent_id,
     _prepare_attempt_worktree_if_available,
     _WorkspaceSandboxCommandRunner,
     _worktree_integration_command,
     _worktree_setup_command,
     make_handoff_resume_handler,
+    make_pipeline_run_requested_handler,
     make_supervisor_tick_handler,
     make_worker_launch_handler,
 )
@@ -115,6 +118,85 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
     PipelineDeploySpec,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+
+
+def test_node_worker_brief_surfaces_latest_verification_feedback() -> None:
+    node = PlanNode(
+        id="node-feedback",
+        plan_id="plan-feedback",
+        parent_id=PlanNodeId("goal-feedback"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy through Drone",
+        description="Trigger docker deploy and verify health.",
+        metadata={
+            "last_verification_attempt_id": "attempt-132",
+            "pipeline_status": "failed",
+            "pipeline_failed_stage": "workspace-ci/deploy",
+            "pipeline_last_summary": (
+                "Drone build #120 failed in deploy; wget cannot connect to health endpoint; "
+                "container logs report missing field `enableTracing`."
+            ),
+            "last_verification_judge_required_next_action": (
+                "Reproduce container startup in the attempt worktree, inspect container logs, "
+                "and fix runtime config before rerunning Drone."
+            ),
+            "last_verification_feedback_items": [
+                {
+                    "target_layer": "worker",
+                    "feedback_kind": "product_code_failure",
+                    "severity": "blocking",
+                    "recommended_action": "retry_worker",
+                    "failure_signature": "drone-docker-deploy-missing-runtime-env",
+                    "summary": "Container starts without required runtime environment.",
+                    "evidence_refs": ["drone_error:deploy_runtime_env_missing"],
+                }
+            ],
+        },
+    )
+
+    brief = _node_worker_brief(node)
+
+    assert "[verification-feedback]" in brief
+    assert "pipeline_failed_stage=workspace-ci/deploy" in brief
+    assert "missing field `enableTracing`" in brief
+    assert "last_verification_judge_required_next_action=Reproduce container startup" in brief
+    assert "failure_signature=drone-docker-deploy-missing-runtime-env" in brief
+    assert "[/verification-feedback]" in brief
+
+
+def test_node_worker_brief_surfaces_retry_reason_and_runtime_feedback() -> None:
+    node = PlanNode(
+        id="node-feedback",
+        plan_id="plan-feedback",
+        parent_id=PlanNodeId("goal-feedback"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy through Drone",
+        description="Trigger docker deploy and verify health.",
+        metadata={
+            "retry_last_reason": (
+                "harness-native CI pipeline failed: Drone build #127 deploy stage exited 1; "
+                "wget: can't connect to remote host (192.168.65.254): Connection refused"
+            ),
+            "last_verification_feedback_items": [
+                {
+                    "target_layer": "runtime",
+                    "feedback_kind": "runtime_infra_failure",
+                    "severity": "blocking",
+                    "recommended_action": "retry_infra",
+                    "failure_signature": "drone-health-host-network-refused",
+                    "summary": "host.docker.internal health probe failed after container start.",
+                }
+            ],
+        },
+    )
+
+    brief = _node_worker_brief(node)
+
+    assert "[verification-feedback]" in brief
+    assert "retry_last_reason=harness-native CI pipeline failed" in brief
+    assert "Drone build #127 deploy stage exited 1" in brief
+    assert "target_layer=runtime" in brief
+    assert "failure_signature=drone-health-host-network-refused" in brief
 
 
 async def _seed_plan(db_session: AsyncSession, workspace_id: str, plan_id: str) -> None:
@@ -271,6 +353,127 @@ def _session_factory(db_session: AsyncSession) -> WorkspacePlanSessionFactory:
             raise
 
     return factory
+
+
+@pytest.mark.asyncio
+async def test_pipeline_handler_commits_running_state_before_drone_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, session_maker = await _file_backed_outbox_session_maker(tmp_path)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingDroneProvider:
+        async def run(self, contract: PipelineContractSpec) -> outbox_handlers.PipelineRunResult:
+            _ = contract
+            entered.set()
+            await release.wait()
+            return outbox_handlers.PipelineRunResult(
+                status="success",
+                reason="Drone build octo/my-evo#1 finished with status success",
+                stage_results=(
+                    outbox_handlers.PipelineStageResult(
+                        stage="workspace-ci/build",
+                        status="success",
+                        command="drone:workspace-ci/build",
+                        exit_code=0,
+                        stdout_preview="build passed",
+                    ),
+                ),
+                evidence_refs=("ci_pipeline:passed",),
+                external_id="octo/my-evo#1",
+                metadata={"external_provider": DRONE_PROVIDER, "drone_build_number": "1"},
+            )
+
+    monkeypatch.setattr(outbox_handlers, "DronePipelineProvider", BlockingDroneProvider)
+
+    async with session_maker() as seed_session:
+        await _seed_workspace_only(seed_session)
+        workspace = await seed_session.get(WorkspaceModel, "workspace-1")
+        assert workspace is not None
+        workspace.metadata_json = {
+            "workspace_type": "software_development",
+            "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            "delivery_cicd": {
+                "provider": DRONE_PROVIDER,
+                "auto_deploy": False,
+                "agent_managed": False,
+                "timeout_seconds": 60,
+            },
+        }
+        plan = Plan(
+            id="pipeline-plan-1",
+            workspace_id="workspace-1",
+            goal_id=PlanNodeId("pipeline-goal-1"),
+            status=PlanStatus.ACTIVE,
+        )
+        plan.add_node(
+            PlanNode(
+                id="pipeline-goal-1",
+                plan_id=plan.id,
+                parent_id=None,
+                kind=PlanNodeKind.GOAL,
+                title="Ship pipeline",
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="pipeline-node-1",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Run Drone",
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-pipeline-1",
+                metadata={"iteration_phase": "deploy"},
+            )
+        )
+        await SqlPlanRepository(seed_session).save(plan)
+        item = await SqlWorkspacePlanOutboxRepository(seed_session).enqueue(
+            plan_id=plan.id,
+            workspace_id="workspace-1",
+            event_type="pipeline_run_requested",
+            payload={
+                "workspace_id": "workspace-1",
+                "plan_id": plan.id,
+                "node_id": "pipeline-node-1",
+                "attempt_id": "attempt-pipeline-1",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+            },
+        )
+        item_id = item.id
+        await seed_session.commit()
+
+    handler = make_pipeline_run_requested_handler()
+    async with session_maker() as handler_session:
+        item = await handler_session.get(WorkspacePlanOutboxModel, item_id)
+        assert item is not None
+        task = asyncio.create_task(handler(item, handler_session))
+        await asyncio.wait_for(entered.wait(), timeout=2)
+
+        async with session_maker() as inspect_session:
+            run = (
+                await inspect_session.execute(
+                    select(WorkspacePipelineRunModel).where(
+                        WorkspacePipelineRunModel.attempt_id == "attempt-pipeline-1"
+                    )
+                )
+            ).scalar_one()
+            assert run.status == "running"
+            assert run.provider == DRONE_PROVIDER
+            visible_plan = await SqlPlanRepository(inspect_session).get("pipeline-plan-1")
+            assert visible_plan is not None
+            visible_node = visible_plan.nodes[PlanNodeId("pipeline-node-1")]
+            assert visible_node.metadata["pipeline_status"] == "running"
+            assert visible_node.metadata["pipeline_run_id"] == run.id
+
+        release.set()
+        await task
+        await handler_session.commit()
+
+    await engine.dispose()
 
 
 def _with_stale_attempt_metadata(
@@ -547,12 +750,253 @@ async def test_pipeline_required_verification_waits_for_pipeline_before_acceptin
     assert attempt.status == "awaiting_leader_adjudication"
     assert attempt.completed_at is None
     assert attempt.adjudication_reason == "pipeline_gate_pending"
+    assert (
+        attempt.leader_feedback
+        == "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+    )
     task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
     assert task is not None
     assert task.status == "in_progress"
     assert task.metadata_json["durable_plan_verdict"] == "pipeline_pending"
+    assert (
+        task.metadata_json["durable_plan_verification_summary"]
+        == "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+    )
+    assert task.metadata_json["durable_plan_raw_verification_summary"] == "verified before pipeline"
     assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
     assert task.metadata_json["pipeline_candidate_commit_ref"] == "abc1234"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_missing_evidence_judge_keeps_attempt_pending_pipeline(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_plan_verification",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Committed deploy changes.",
+            candidate_verifications_json=["commit_ref:def5678", "test_run:npm test"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={"pipeline_required": True},
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": False,
+            "summary": (
+                "verification failed: missing harness-native CI pipeline evidence; "
+                "judge verdict=needs_rework; next_action_kind=retry_same_node"
+            ),
+            "results": [
+                {
+                    "kind": "ci_pipeline",
+                    "name": None,
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.7,
+                    "message": "missing harness-native CI pipeline evidence",
+                    "evidence": [{"kind": "artifact", "ref": "commit_ref:def5678"}],
+                },
+                {
+                    "kind": "custom",
+                    "name": "workspace_verification_judge",
+                    "judge_verdict": "needs_rework",
+                    "next_action_kind": "retry_same_node",
+                    "required_next_action": "request pipeline and wait",
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.7,
+                    "message": (
+                        "judge verdict=needs_rework; missing harness-native CI pipeline "
+                        "evidence; next_action_kind=retry_same_node"
+                    ),
+                    "evidence": [],
+                },
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "awaiting_leader_adjudication"
+    assert attempt.completed_at is None
+    assert attempt.adjudication_reason == "pipeline_gate_pending"
+    assert (
+        attempt.leader_feedback
+        == "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+    )
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "in_progress"
+    assert task.metadata_json["durable_plan_verdict"] == "pipeline_pending"
+    assert (
+        task.metadata_json["durable_plan_verification_summary"]
+        == "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+    )
+    assert "verification failed" in task.metadata_json["durable_plan_raw_verification_summary"]
+    assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
+    assert task.metadata_json["pipeline_candidate_commit_ref"] == "def5678"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_missing_evidence_retry_infra_keeps_attempt_pending_pipeline(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_plan_verification",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Committed deploy changes.",
+            candidate_verifications_json=["commit_ref:ghi9012", "test_run:npm test"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={"pipeline_required": True},
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": False,
+            "summary": (
+                "verification failed: missing harness-native CI pipeline evidence; "
+                "judge verdict=retry_infrastructure; next_action_kind=retry_same_node"
+            ),
+            "results": [
+                {
+                    "kind": "ci_pipeline",
+                    "name": None,
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.7,
+                    "message": "missing harness-native CI pipeline evidence",
+                    "evidence": [{"kind": "artifact", "ref": "commit_ref:ghi9012"}],
+                },
+                {
+                    "kind": "custom",
+                    "name": "retryable_infrastructure_failure",
+                    "judge_verdict": "retry_infrastructure",
+                    "next_action_kind": "retry_same_node",
+                    "required_next_action": "request pipeline and wait",
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.7,
+                    "message": (
+                        "judge verdict=retry_infrastructure; missing harness-native CI "
+                        "pipeline evidence; next_action_kind=retry_same_node"
+                    ),
+                    "evidence": [],
+                },
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "awaiting_leader_adjudication"
+    assert attempt.completed_at is None
+    assert attempt.adjudication_reason == "pipeline_gate_pending"
+    assert (
+        attempt.leader_feedback
+        == "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+    )
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "in_progress"
+    assert task.metadata_json["durable_plan_verdict"] == "pipeline_pending"
+    assert (
+        task.metadata_json["durable_plan_verification_summary"]
+        == "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+    )
+    assert "verification failed" in task.metadata_json["durable_plan_raw_verification_summary"]
+    assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
+    assert task.metadata_json["pipeline_candidate_commit_ref"] == "ghi9012"
 
 
 @pytest.mark.asyncio
@@ -2046,6 +2490,12 @@ def test_source_publish_metadata_preserves_worker_commit_after_merge_publish() -
 
     assert metadata["source_publish_commit_ref"] == "6d2c2848"
     assert metadata["source_publish_source_commit_ref"] == "bce4286b"
+
+
+def test_unrelated_history_rejection_detector_accepts_localized_git_output() -> None:
+    assert outbox_handlers._is_unrelated_history_merge_rejection(
+        {"stderr": "致命错误：拒绝合并无关的历史"}
+    )
 
 
 def test_reported_pipeline_result_guard_ignores_missing_pipeline_status() -> None:
@@ -3976,6 +4426,69 @@ async def test_terminal_attempt_reconcile_preserves_reported_pipeline_result_for
     preserved_leaf = loaded.leaf_tasks()[0]
     assert preserved_leaf.execution is TaskExecution.REPORTED
     assert preserved_leaf.current_attempt_id == "reported-pipeline-failed-attempt"
+    assert "terminal_attempt_retry_reason" not in preserved_leaf.metadata
+
+
+@pytest.mark.asyncio
+async def test_terminal_attempt_reconcile_preserves_inflight_pipeline_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="pipeline-running-terminal-attempt",
+            workspace_task_id="workspace-task-pipeline",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="rejected",
+            conversation_id="pipeline-running-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            leader_feedback="waiting for current pipeline result",
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="pipeline-running-terminal-attempt",
+            workspace_task_id="workspace-task-pipeline",
+            metadata={
+                **dict(leaf.metadata or {}),
+                "pipeline_status": "running",
+                "pipeline_gate_status": "running",
+                "pipeline_run_id": "drone-running-43",
+                "pipeline_started_at": "2026-05-21T15:40:07Z",
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    changed = await outbox_handlers._reconcile_plan_nodes_with_terminal_attempts(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed is False
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    preserved_leaf = loaded.leaf_tasks()[0]
+    assert preserved_leaf.execution is TaskExecution.IDLE
+    assert preserved_leaf.current_attempt_id == "pipeline-running-terminal-attempt"
     assert "terminal_attempt_retry_reason" not in preserved_leaf.metadata
 
 

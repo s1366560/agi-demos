@@ -442,6 +442,13 @@ class PipelineCriterionRunner(CriterionRunner):
                     f"{reported_commit}; previous pipeline evidence belongs to {pipeline_commit}"
                 ),
             )
+        if _pipeline_result_pending_for_current_report(ctx):
+            return CriterionResult(
+                criterion=criterion,
+                passed=False,
+                confidence=0.85,
+                message=_pending_pipeline_message(ctx),
+            )
         values = _pipeline_evidence_values(ctx)
         pipeline_status = _current_pipeline_status(ctx)
         if pipeline_status == "failed" or (
@@ -874,15 +881,7 @@ def _build_judge_request(
             )[:24]
         ),
         task_evidence_refs=tuple(
-            _bounded_text(value, limit=600)
-            for value in sorted(
-                _attempt_scoped_artifact_text_values(
-                    ctx,
-                    "evidence_refs",
-                    "pipeline_evidence_refs",
-                    "verification_evidence_refs",
-                )
-            )[:24]
+            _bounded_text(value, limit=600) for value in sorted(_judge_task_evidence_refs(ctx))[:24]
         ),
         latest_verification_results=result_payloads,
         guard_failures=failed_messages,
@@ -896,6 +895,18 @@ def _build_judge_request(
         recent_git_status=_recent_git_status_from_results(results),
         task_metadata=_metadata_summary(ctx),
     )
+
+
+def _judge_task_evidence_refs(ctx: VerificationContext) -> set[str]:
+    values = _attempt_scoped_artifact_text_values(
+        ctx,
+        "evidence_refs",
+        "pipeline_evidence_refs",
+        "verification_evidence_refs",
+    )
+    if _pipeline_terminal_result_unavailable_for_current_report(ctx):
+        return {value for value in values if not _is_pipeline_terminal_evidence_ref(value)}
+    return values
 
 
 def _criterion_result_payload(result: CriterionResult) -> dict[str, Any]:
@@ -955,8 +966,11 @@ def _metadata_summary(ctx: VerificationContext) -> dict[str, Any]:
     )
     metadata: dict[str, Any] = {}
     stale_pipeline = _stale_pipeline_result_for_current_report(ctx) is not None
+    pending_pipeline = _pipeline_result_pending_for_current_report(ctx)
     for key in allowed_keys:
         if stale_pipeline and key in _STALE_PIPELINE_METADATA_KEYS:
+            continue
+        if pending_pipeline and key in _PENDING_PIPELINE_TERMINAL_METADATA_KEYS:
             continue
         if has_attempt_candidate_evidence and key in _ATTEMPT_AGGREGATE_EVIDENCE_KEYS:
             continue
@@ -1036,7 +1050,7 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             feedback_items=(yaml_config_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
-    deploy_coverage_feedback = _drone_docker_deploy_missing_service_feedback(results)
+    deploy_coverage_feedback = _drone_docker_deploy_missing_service_feedback(ctx, results)
     if deploy_coverage_feedback is not None:
         return WorkspaceVerificationJudgeResult(
             verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
@@ -1055,13 +1069,44 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
                 "Fix `.drone.yml` docker deploy so it starts or updates every service from "
                 "delivery_cicd.drone.deploy.docker.deploy_services. For multi-service "
                 "workspaces, do not deploy only the backend API when frontend/backend images "
-                "were both built. Preserve deploy-local image tags, stale container cleanup, "
-                "port mappings, runtime env, dependency sidecars, and health-log diagnostics. "
-                "Commit and rerun Drone."
+                "were both built. If deploy validation lists names such as `my-evo-app`, "
+                "align the docker run --name/service name and docker ps/log diagnostics with "
+                "those required service names. Preserve deploy-local image tags, stale "
+                "container cleanup, port mappings, runtime env, dependency sidecars, and "
+                "health-log diagnostics. Commit and rerun Drone."
             ),
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
             feedback_items=(deploy_coverage_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
+    deploy_semantics_feedback = _drone_docker_deploy_invalid_semantics_feedback(ctx, results)
+    if deploy_semantics_feedback is not None:
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone completed but platform deploy validation rejected the docker deploy "
+                "semantics. The repair must target the deploy stage contract instead of "
+                f"generic CI evidence collection. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_deploy_invalid_semantics",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Fix `.drone.yml` docker-deploy to satisfy the host-socket deploy contract: "
+                "do not docker pull/run host.docker.internal:<port>, localhost:<port>, or "
+                "127.0.0.1:<port> local-registry images through the host Docker daemon. "
+                "Keep plugins/docker build/push on the runner-reachable registry, then in "
+                "the deploy step build or load a deploy-local image tag into the mounted "
+                "daemon and docker run that local tag. Preserve sidecars, runtime env, "
+                "health-log diagnostics, and service coverage; commit and rerun Drone."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(deploy_semantics_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
     external_registry_feedback = _drone_external_registry_transient_failure_feedback(results)
@@ -1193,7 +1238,11 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             required_next_action=(
                 "Fix .drone.yml docker-deploy so `docker run -p` binds the host side to "
                 "docker.deploy_host_port from the workspace delivery context, not platform "
-                "reserved ports such as 8080, 3001, or 5001. Keep the container-side port "
+                "reserved ports such as 8080, 3001, or 5001. If the host side is already "
+                "the workspace deploy port, treat `port is already allocated` as a stale "
+                "container/port-owner failure: print `docker ps -a` and `docker inspect "
+                "<container> --format '{{json .State}}'`, remove stale app containers from "
+                "old and current deploy names before retrying, keep the container-side port "
                 "matched to the Dockerfile/app, update the Drone health check to "
                 "docker.deploy_health_url, commit, and rerun Drone."
             ),
@@ -1260,6 +1309,34 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
             feedback_items=(container_name_conflict_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
+    created_container_feedback = _drone_docker_deploy_created_container_feedback(results)
+    if created_container_feedback is not None:
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone docker-deploy created the app container but Docker never started it. "
+                "The next repair needs Docker state diagnostics, not only application log "
+                f"tailing. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_deploy_container_created_not_running",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Fix .drone.yml docker-deploy so failed docker run attempts print "
+                "`docker inspect <container> --format '{{json .State}}'` before exit. "
+                "If `.State.Error` reports `port is already allocated`, remove stale app "
+                "containers from old and current deploy names before retrying, then keep the "
+                "health check pointed at the workspace deploy health URL. Commit and rerun "
+                "Drone."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(created_container_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
     missing_probe_tool_feedback = _drone_docker_deploy_missing_health_probe_tool_feedback(results)
@@ -1421,34 +1498,6 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             feedback_items=(unhealthy_container_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
-    docker_build_stage_feedback = _drone_docker_build_stage_failure_feedback(results)
-    if docker_build_stage_feedback is not None:
-        return WorkspaceVerificationJudgeResult(
-            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
-            rationale=(
-                "Drone failed in a docker-build stage while building a repository image. "
-                "This requires CI/Dockerfile or application build changes in the worktree, "
-                "not blind pipeline retries. "
-                f"Judge rationale: {result.rationale}"
-            ),
-            failed_criteria=(
-                "ci_pipeline",
-                "drone_docker_build_stage_failed",
-                *result.failed_criteria,
-            ),
-            satisfied_guard_failures=result.satisfied_guard_failures,
-            required_next_action=(
-                "Inspect the failing Drone docker-build stage logs, reproduce the same docker "
-                "build or app build locally in the attempt worktree, and fix the repository build "
-                "path. For frontend stages, run the package build outside Docker when useful, then "
-                "repair Dockerfile/.dockerignore/package scripts or build-time environment. "
-                "Preserve the docker deploy contract for every service, commit, and rerun Drone."
-            ),
-            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
-            repair_brief=result.repair_brief,
-            feedback_items=(docker_build_stage_feedback, *result.feedback_items),
-            confidence=max(result.confidence, 0.9),
-        )
     docker_build_feedback = _drone_docker_build_timeout_feedback(results)
     if docker_build_feedback is not None:
         return WorkspaceVerificationJudgeResult(
@@ -1474,6 +1523,31 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
             feedback_items=(docker_build_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
+    docker_build_stage_feedback = _drone_docker_build_stage_failure_feedback(results)
+    if docker_build_stage_feedback is not None:
+        required_next_action, failed_criterion = _drone_docker_build_stage_repair_instruction(
+            docker_build_stage_feedback
+        )
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone failed in a docker-build stage while building a repository image. "
+                "This requires CI/Dockerfile or application build changes in the worktree, "
+                "not blind pipeline retries. "
+                f"Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                failed_criterion,
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=required_next_action,
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(docker_build_stage_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
     if (
@@ -1564,9 +1638,40 @@ def _drone_yaml_configuration_failure_feedback(
 
 
 def _drone_docker_deploy_missing_service_feedback(
+    ctx: VerificationContext,
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
-    text = "\n".join(result.message for result in results if result.message).lower()
+    raw_validation_issues = ctx.node.metadata.get("deploy_validation_issues")
+    validation_issues = raw_validation_issues if isinstance(raw_validation_issues, list) else []
+    text = "\n".join(
+        (
+            *(result.message for result in results if result.message),
+            str(ctx.node.metadata.get("deploy_validation_failure") or ""),
+            *(str(issue) for issue in validation_issues),
+        )
+    ).lower()
+    services = _drone_docker_deploy_missing_services(text)
+    if services:
+        service_text = ", ".join(services)
+        return WorkspaceVerificationFeedbackItem(
+            target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+            feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+            severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+            recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+            summary=(
+                "Drone completed, but deploy validation did not observe required docker "
+                f"service coverage for: {service_text}. Update `.drone.yml` deploy commands "
+                "so the host-socket deploy starts or reports containers/services using the "
+                "required deploy service names. Preserve the deploy-local image tag, stale "
+                "container cleanup, sidecars, runtime env, port mappings, and health-log "
+                "diagnostics."
+            ),
+            evidence_refs=(
+                "deployment:invalid:missing-required-service",
+                "drone_error:docker_deploy_missing_required_service",
+            ),
+            failure_signature="drone-docker-deploy-missing-required-service",
+        )
     if not (
         "drone build .drone.yml preflight failed" in text
         and "docker deploy stage" in text
@@ -1590,6 +1695,17 @@ def _drone_docker_deploy_missing_service_feedback(
         ),
         failure_signature="drone-docker-deploy-missing-required-service",
     )
+
+
+def _drone_docker_deploy_missing_services(text: str) -> tuple[str, ...]:
+    match = re.search(r"missing required deploy services?:\s*([^\n;]+)", text)
+    if match is None:
+        return ()
+    raw = match.group(1)
+    services = tuple(
+        dict.fromkeys(service.strip(" `\"'") for service in raw.split(",") if service.strip())
+    )
+    return services
 
 
 def _drone_external_registry_transient_failure_feedback(
@@ -1723,6 +1839,69 @@ def _drone_host_socket_registry_failure_feedback(
     )
 
 
+def _drone_docker_deploy_invalid_semantics_feedback(
+    ctx: VerificationContext,
+    results: list[CriterionResult],
+) -> WorkspaceVerificationFeedbackItem | None:
+    text = "\n".join(result.message for result in results if result.message).lower()
+    deployment_status = str(ctx.node.metadata.get("deployment_status") or "").strip().lower()
+    deploy_mode = str(ctx.node.metadata.get("deploy_mode") or "").strip().lower()
+    has_invalid_semantics_message = "did not implement docker deployment semantics" in text
+    has_invalid_deploy_metadata = deployment_status == "invalid" and deploy_mode == "docker"
+    if not (has_invalid_semantics_message or has_invalid_deploy_metadata):
+        return None
+    validation_details = _drone_docker_deploy_validation_details(ctx, results)
+    detail_suffix = (
+        " Current validation details: " + "; ".join(validation_details[:4]) + "."
+        if validation_details
+        else ""
+    )
+    return WorkspaceVerificationFeedbackItem(
+        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+        feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+        summary=(
+            "Drone completed, but deploy validation marked the docker deploy semantics "
+            "invalid. In host-socket deploy mode, the deploy step must not pull or run "
+            "host.docker.internal/localhost/127.0.0.1 local-registry images through the host "
+            "daemon. Build or load a deploy-local image tag inside deploy and run that local "
+            "tag, while preserving sidecars, runtime env, health checks, and required service "
+            "coverage." + detail_suffix
+        ),
+        evidence_refs=(
+            "deployment:invalid:docker",
+            "drone_deploy_semantics:invalid",
+        ),
+        failure_signature="drone-docker-deploy-invalid-semantics",
+    )
+
+
+def _drone_docker_deploy_validation_details(
+    ctx: VerificationContext,
+    results: list[CriterionResult],
+) -> list[str]:
+    details: list[str] = []
+    raw_issues = ctx.node.metadata.get("deploy_validation_issues")
+    if isinstance(raw_issues, list):
+        details.extend(str(issue).strip() for issue in raw_issues if str(issue).strip())
+    raw_failure = str(ctx.node.metadata.get("deploy_validation_failure") or "").strip()
+    if raw_failure:
+        details.append(raw_failure)
+
+    marker = "docker deployment semantics:"
+    for result in results:
+        message = result.message or ""
+        index = message.lower().find(marker)
+        if index < 0:
+            continue
+        detail = message[index + len(marker) :].strip()
+        detail = detail.split("; route through recovery", 1)[0].strip()
+        if detail:
+            details.append(detail)
+    return list(dict.fromkeys(details))
+
+
 def _drone_host_socket_localhost_registry_timeout_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
@@ -1777,16 +1956,47 @@ def _drone_docker_host_port_conflict_feedback(
         severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
         recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
         summary=(
-            "The deploy step binds a host port already owned by platform infrastructure. "
-            "Use docker.deploy_host_port from the workspace delivery context for the host "
-            "side of `docker run -p`, keep the app's container port on the container side, "
-            "and update the Drone health check to docker.deploy_health_url."
+            "The deploy step could not bind the host port because Docker reports it is "
+            "already allocated. Confirm the host side uses docker.deploy_host_port, then "
+            "make the deploy step print `docker inspect <container> --format '{{json "
+            ".State}}'` and remove stale containers from old and current app names before "
+            "retrying the bind."
         ),
         evidence_refs=(
             "drone_error:docker_host_port_allocated",
             "drone_deploy:reserved_host_port",
         ),
         failure_signature="drone-docker-deploy-host-port-conflict",
+    )
+
+
+def _drone_docker_deploy_created_container_feedback(
+    results: list[CriterionResult],
+) -> WorkspaceVerificationFeedbackItem | None:
+    text = "\n".join(result.message for result in results if result.message).lower()
+    if not (
+        "failing stage" in text
+        and "deploy" in text
+        and "failed to start" in text
+        and " created " in text
+    ):
+        return None
+    return WorkspaceVerificationFeedbackItem(
+        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+        feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+        summary=(
+            "Docker created the deploy container but did not start it. The deploy failure "
+            "block must print `docker inspect <container> --format '{{json .State}}'` so "
+            "worker feedback includes `.State.Error`. Also clean stale containers from "
+            "previous deploy names before binding the host health port."
+        ),
+        evidence_refs=(
+            "drone_error:container_created_not_running",
+            "drone_deploy:missing_docker_state_error",
+        ),
+        failure_signature="drone-docker-deploy-container-created-not-running",
     )
 
 
@@ -1837,10 +2047,16 @@ def _drone_docker_deploy_unhealthy_container_feedback(
     has_health_probe = (
         "wget" in text or "curl" in text or "health" in text or "deployment_health:failed" in text
     )
+    container_started = (
+        "docker run" in text
+        or ("container " in text and " is running" in text)
+        or "health: starting" in text
+        or "0.0.0.0:" in text
+    )
     if not (
         "failing stage" in text
         and "deploy" in text
-        and "docker run" in text
+        and container_started
         and has_health_probe
         and health_connection_failed
     ):
@@ -2073,6 +2289,35 @@ def _drone_docker_build_timeout_feedback(
     )
 
 
+def _drone_docker_build_stage_repair_instruction(
+    feedback: WorkspaceVerificationFeedbackItem,
+) -> tuple[str, str]:
+    if feedback.failure_signature == "drone-docker-build-prisma-schema-missing":
+        return (
+            (
+                "Fix the Dockerfile/Prisma build path that failed inside the Drone "
+                "`docker-build` stage. Fix the Dockerfile `COPY`/WORKDIR order so the "
+                "Prisma schema is present before every `npx prisma generate` invocation, "
+                "either by copying the matching `prisma/` or `backend/prisma/` directory "
+                "before the RUN step, running the command from the directory that owns "
+                "the schema, or passing an explicit `--schema <path>` argument. Reproduce "
+                "the Docker build or the exact `npm ci && npx prisma generate` command "
+                "in the attempt worktree, commit, then rerun Drone."
+            ),
+            "drone_docker_build_prisma_schema_missing",
+        )
+    return (
+        (
+            "Inspect the failing Drone docker-build stage logs, reproduce the same docker "
+            "build or app build locally in the attempt worktree, and fix the repository build "
+            "path. For frontend stages, run the package build outside Docker when useful, then "
+            "repair Dockerfile/.dockerignore/package scripts or build-time environment. "
+            "Preserve the docker deploy contract for every service, commit, and rerun Drone."
+        ),
+        "drone_docker_build_stage_failed",
+    )
+
+
 def _drone_docker_build_stage_failure_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
@@ -2106,6 +2351,9 @@ def _drone_docker_build_stage_failure_feedback(
         marker in text
         for marker in (
             "npm run build",
+            "npx prisma generate",
+            "could not find prisma schema",
+            "prisma/schema.prisma: file not found",
             "yarn build",
             "pnpm build",
             "next build",
@@ -2120,6 +2368,23 @@ def _drone_docker_build_stage_failure_feedback(
     )
     if retryable_external_registry and not app_or_image_build_signal:
         return None
+    if "could not find prisma schema" in text or "prisma/schema.prisma: file not found" in text:
+        return WorkspaceVerificationFeedbackItem(
+            target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+            feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+            severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+            recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+            summary=(
+                "Drone failed in `docker-build` because `npx prisma generate` could not "
+                "find a Prisma schema. The worker must repair Dockerfile COPY/WORKDIR order "
+                "or pass an explicit `--schema` path before rerunning the pipeline."
+            ),
+            evidence_refs=(
+                "drone_error:prisma_schema_missing",
+                "drone_stage:docker-build",
+            ),
+            failure_signature="drone-docker-build-prisma-schema-missing",
+        )
     return WorkspaceVerificationFeedbackItem(
         target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
         feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
@@ -2349,10 +2614,7 @@ def _preflight_evidence_guard(ctx: VerificationContext) -> CriterionResult | Non
         passed=True,
         confidence=1.0,
         message="preflight evidence recorded",
-        evidence=tuple(
-            EvidenceRef(kind="verification", ref=ref)
-            for ref in recorded_refs
-        ),
+        evidence=tuple(EvidenceRef(kind="verification", ref=ref) for ref in recorded_refs),
     )
 
 
@@ -2442,11 +2704,7 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         "execution_verifications",
     )
     failed_value = next(
-        (
-            value
-            for value in sorted(values)
-            if any(pattern.search(value) for pattern in _FAILED_TEST_EVIDENCE_PATTERNS)
-        ),
+        (value for value in sorted(values) if _artifact_value_reports_failed_tests(value)),
         None,
     )
     if failed_value is None:
@@ -2468,6 +2726,28 @@ def _failed_test_evidence_guard(ctx: VerificationContext) -> CriterionResult | N
         message=f"test evidence reports failing tests: {_bounded_text(failed_value, limit=360)}",
         evidence=(EvidenceRef(kind="verification", ref=_bounded_text(failed_value, limit=500)),),
     )
+
+
+def _artifact_value_reports_failed_tests(value: str) -> bool:
+    if not any(pattern.search(value) for pattern in _FAILED_TEST_EVIDENCE_PATTERNS):
+        return False
+    normalized = value.strip().casefold()
+    if normalized.startswith(
+        (
+            "test_run:",
+            "test:",
+            "tests:",
+            "pytest:",
+            "npm test",
+            "yarn test",
+            "pnpm test",
+            "vitest:",
+            "jest:",
+            "playwright:",
+        )
+    ):
+        return True
+    return _summary_line_reports_current_failed_tests(value)
 
 
 def _missing_test_execution_evidence_guard(ctx: VerificationContext) -> CriterionResult | None:
@@ -3015,7 +3295,7 @@ def _looks_like_test_command(command: str) -> bool:
 
 
 def _pipeline_evidence_values(ctx: VerificationContext) -> set[str]:
-    return _artifact_text_values(
+    values = _artifact_text_values(
         ctx,
         "pipeline_evidence_refs",
         "pipeline_evidence",
@@ -3027,10 +3307,13 @@ def _pipeline_evidence_values(ctx: VerificationContext) -> set[str]:
         "candidate_artifacts",
         "candidate_verifications",
     )
+    if _pipeline_terminal_result_unavailable_for_current_report(ctx):
+        return {value for value in values if not _is_pipeline_terminal_evidence_ref(value)}
+    return values
 
 
 def _has_pipeline_success_evidence(ctx: VerificationContext) -> bool:
-    if _stale_pipeline_result_for_current_report(ctx) is not None:
+    if _pipeline_terminal_result_unavailable_for_current_report(ctx):
         return False
     values = _pipeline_evidence_values(ctx)
     return (
@@ -3040,7 +3323,7 @@ def _has_pipeline_success_evidence(ctx: VerificationContext) -> bool:
 
 
 def _has_pipeline_failure_evidence(ctx: VerificationContext) -> bool:
-    if _stale_pipeline_result_for_current_report(ctx) is not None:
+    if _pipeline_terminal_result_unavailable_for_current_report(ctx):
         return False
     values = _pipeline_evidence_values(ctx)
     return (
@@ -3050,6 +3333,8 @@ def _has_pipeline_failure_evidence(ctx: VerificationContext) -> bool:
 
 
 def _pipeline_failure_message(ctx: VerificationContext) -> str:
+    if _pipeline_result_pending_for_current_report(ctx):
+        return _pending_pipeline_message(ctx)
     summary = str(
         ctx.node.metadata.get("pipeline_failure_summary")
         or ctx.artifacts.get("pipeline_failure_summary")
@@ -3066,13 +3351,28 @@ def _pipeline_failure_message(ctx: VerificationContext) -> str:
 
 
 def _current_pipeline_status(ctx: VerificationContext) -> str | None:
-    if _stale_pipeline_result_for_current_report(ctx) is not None:
+    if _pipeline_terminal_result_unavailable_for_current_report(ctx):
         return None
     for key in ("pipeline_status", "pipeline_gate_status"):
         value = str(ctx.node.metadata.get(key) or "").strip().lower()
         if value in {"success", "failed"}:
             return value
     return None
+
+
+_PIPELINE_PENDING_STATUSES = frozenset(
+    {"pending", "queued", "requested", "running", "processing", "in_progress"}
+)
+
+
+_PIPELINE_TERMINAL_EVIDENCE_PREFIXES = (
+    "ci_pipeline:",
+    "deployment:",
+    "deployment_health:",
+    "pipeline_run:",
+    "pipeline_stage:",
+    "preview_url:",
+)
 
 
 _STALE_PIPELINE_METADATA_KEYS = frozenset(
@@ -3091,6 +3391,40 @@ _STALE_PIPELINE_METADATA_KEYS = frozenset(
         "pipeline_status",
     }
 )
+
+
+_PENDING_PIPELINE_TERMINAL_METADATA_KEYS = frozenset(
+    key
+    for key in _STALE_PIPELINE_METADATA_KEYS
+    if key not in {"pipeline_gate_status", "pipeline_run_id", "pipeline_status"}
+)
+
+
+def _pipeline_terminal_result_unavailable_for_current_report(ctx: VerificationContext) -> bool:
+    return _stale_pipeline_result_for_current_report(
+        ctx
+    ) is not None or _pipeline_result_pending_for_current_report(ctx)
+
+
+def _pipeline_result_pending_for_current_report(ctx: VerificationContext) -> bool:
+    return any(
+        str(ctx.node.metadata.get(key) or "").strip().lower() in _PIPELINE_PENDING_STATUSES
+        or str(ctx.artifacts.get(key) or "").strip().lower() in _PIPELINE_PENDING_STATUSES
+        for key in ("pipeline_status", "pipeline_gate_status")
+    )
+
+
+def _is_pipeline_terminal_evidence_ref(value: str) -> bool:
+    return value.startswith(_PIPELINE_TERMINAL_EVIDENCE_PREFIXES)
+
+
+def _pending_pipeline_message(ctx: VerificationContext) -> str:
+    run_id = str(
+        ctx.node.metadata.get("pipeline_run_id") or ctx.artifacts.get("pipeline_run_id") or ""
+    ).strip()
+    if run_id:
+        return f"harness-native CI pipeline is running ({run_id}); awaiting current run evidence"
+    return "harness-native CI pipeline is running; awaiting current run evidence"
 
 
 def _stale_pipeline_result_for_current_report(ctx: VerificationContext) -> tuple[str, str] | None:

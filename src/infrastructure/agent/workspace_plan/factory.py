@@ -69,6 +69,8 @@ from src.infrastructure.agent.workspace_plan.verifier import AcceptanceCriterion
 logger = logging.getLogger(__name__)
 
 _RETRYABLE_INFRASTRUCTURE_CRITERION = "retryable_infrastructure_failure"
+_WORKSPACE_VERIFICATION_JUDGE_CRITERION = "workspace_verification_judge"
+_PIPELINE_PAYLOAD_KINDS = frozenset({"ci_pipeline", "deployment_health"})
 _TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
     {
         WorkspaceTaskSessionAttemptStatus.ACCEPTED.value,
@@ -210,9 +212,9 @@ async def _project_verification_to_workspace_task(
     ]
     retry_verification_only = _verification_payload_requests_verification_retry(payload)
     pipeline_pending = (
-        passed
-        and _node_requires_pipeline_gate(node)
-        and not _verification_payload_has_pipeline_success(evidence_refs)
+        _node_requires_pipeline_gate(node)
+        and not (_verification_payload_has_pipeline_success(evidence_refs))
+        and (passed or _verification_payload_waiting_for_pipeline_gate(payload))
     )
 
     if attempt_id:
@@ -281,6 +283,56 @@ def _node_requires_pipeline_gate(node: PlanNode) -> bool:
 def _verification_payload_has_pipeline_success(evidence_refs: list[str]) -> bool:
     return "ci_pipeline:passed" in evidence_refs or any(
         ref.startswith("pipeline_run:success:") for ref in evidence_refs
+    )
+
+
+def _verification_payload_waiting_for_pipeline_gate(payload: dict[str, Any]) -> bool:
+    if bool(payload.get("hard_fail")):
+        return False
+    raw_results_obj = payload.get("results")
+    if not isinstance(raw_results_obj, list):
+        return False
+    raw_results = [item for item in raw_results_obj if isinstance(item, Mapping)]
+    pipeline_missing = False
+    for result_obj in raw_results:
+        result = cast(Mapping[str, object], result_obj)
+        if not bool(result.get("required")) or bool(result.get("passed")):
+            continue
+        kind = str(result.get("kind") or "")
+        name = str(result.get("name") or "")
+        message = str(result.get("message") or "")
+        if kind in _PIPELINE_PAYLOAD_KINDS:
+            if _pipeline_missing_evidence_message(message):
+                pipeline_missing = True
+                continue
+            return False
+        if name in {
+            _WORKSPACE_VERIFICATION_JUDGE_CRITERION,
+            _RETRYABLE_INFRASTRUCTURE_CRITERION,
+        } and (
+            _pipeline_missing_evidence_message(message)
+            or _pipeline_gate_pending_judge_message(message)
+        ):
+            continue
+        return False
+    return pipeline_missing
+
+
+def _pipeline_missing_evidence_message(message: str) -> bool:
+    normalized = " ".join(message.lower().split())
+    return (
+        "missing harness-native ci pipeline evidence" in normalized
+        or "missing preview deployment health evidence" in normalized
+    )
+
+
+def _pipeline_gate_pending_judge_message(message: str) -> bool:
+    normalized = " ".join(message.lower().split())
+    return "pipeline_criterion_missing" in normalized or (
+        "pipeline" in normalized
+        and "missing" in normalized
+        and "evidence" in normalized
+        and "next_action_kind=retry_same_node" in normalized
     )
 
 
@@ -361,8 +413,9 @@ async def _project_verification_pipeline_pending_to_attempt(
     attempt = await db.get(WorkspaceTaskSessionAttemptModel, attempt_id)
     if attempt is None:
         return
+    feedback = _pipeline_pending_user_feedback()
     attempt.status = WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION.value
-    attempt.leader_feedback = summary or "durable plan verifier passed; awaiting pipeline gate"
+    attempt.leader_feedback = feedback
     attempt.adjudication_reason = "pipeline_gate_pending"
     attempt.completed_at = None
     attempt.updated_at = now
@@ -433,9 +486,12 @@ def _project_verification_pipeline_pending_to_task(
     now: datetime,
 ) -> None:
     metadata = dict(task.metadata_json or {})
+    feedback = _pipeline_pending_user_feedback()
     metadata[PENDING_LEADER_ADJUDICATION] = False
     metadata["durable_plan_verdict"] = "pipeline_pending"
-    metadata["durable_plan_verification_summary"] = summary
+    if summary:
+        metadata["durable_plan_raw_verification_summary"] = summary
+    metadata["durable_plan_verification_summary"] = feedback
     metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
     metadata["last_attempt_status"] = "awaiting_pipeline"
     metadata["pipeline_gate_status"] = "requested"
@@ -447,6 +503,10 @@ def _project_verification_pipeline_pending_to_task(
     task.metadata_json = metadata
     task.status = "in_progress"
     task.updated_at = now
+
+
+def _pipeline_pending_user_feedback() -> str:
+    return "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
 
 
 def _project_verification_retry_to_task(

@@ -18,6 +18,7 @@ from src.infrastructure.agent.workspace.workspace_attempt_recovery import (
     RECOVERY_SUMMARY_RESTART,
     RECOVERY_SUMMARY_STALE,
     WorkspaceAttemptRecoveryService,
+    _append_recovery_progress_context,
     _should_defer_error_event_recovery,
     _should_recover_finished_stream,
 )
@@ -124,6 +125,103 @@ def test_finished_stream_recovery_requires_finished_marker_and_no_running_key() 
         now=now,
         finished_stream_grace_seconds=15,
     )
+
+
+def test_appends_recovery_progress_context() -> None:
+    summary = _append_recovery_progress_context(
+        "recovered_agent_error_event: provider failed",
+        "bash completed: Total: 20 | Passed: 20 | Failed: 0",
+    )
+
+    assert summary == (
+        "recovered_agent_error_event: provider failed; "
+        "latest_progress=bash completed: Total: 20 | Passed: 20 | Failed: 0"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_finished_stream_attempts_recovers_without_terminal_event() -> None:
+    now = datetime.now(UTC)
+    attempt = _make_attempt(attempt_id="att-finished", conversation_id="conv-finished")
+    attempt.created_at = now - timedelta(minutes=10)
+    attempt.updated_at = now - timedelta(minutes=10)
+    attempt_model = object()
+
+    class _ScalarResult:
+        def __init__(self, values: list[object]) -> None:
+            self._values = values
+
+        def scalars(self) -> _ScalarResult:
+            return self
+
+        def all(self) -> list[object]:
+            return self._values
+
+    class _RowResult:
+        def __init__(self, row: Any | None) -> None:
+            self._row = row
+
+        def one_or_none(self) -> Any | None:
+            return self._row
+
+    fake_session = MagicMock()
+    fake_session.execute = AsyncMock(
+        side_effect=[
+            _ScalarResult([attempt_model]),
+            _RowResult(
+                (
+                    "observe",
+                    {"result": "build worker exited with SIGKILL"},
+                    now - timedelta(seconds=30),
+                )
+            ),
+            _RowResult(
+                (
+                    {
+                        "latest_worker_progress": {
+                            "summary": "bash completed: Total: 20 | Passed: 20 | Failed: 0"
+                        }
+                    },
+                    {"note": "older note"},
+                )
+            ),
+        ]
+    )
+    fake_redis = MagicMock()
+    fake_redis.get = AsyncMock(return_value="msg-finished")
+    fake_redis.exists = AsyncMock(return_value=0)
+    fake_repo = MagicMock()
+    fake_repo._to_domain.return_value = attempt
+
+    service = WorkspaceAttemptRecoveryService(
+        session_factory=lambda: _SessionContext(fake_session),
+        apply_report=AsyncMock(),
+        schedule_tick=MagicMock(),
+        stale_seconds=60,
+    )
+
+    with (
+        patch(
+            "src.infrastructure.agent.workspace.workspace_attempt_recovery."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            return_value=fake_repo,
+        ),
+        patch(
+            "src.infrastructure.agent.workspace.workspace_attempt_recovery.get_redis_client",
+            AsyncMock(return_value=fake_redis),
+        ),
+    ):
+        recovered = await service._fetch_finished_stream_attempts(
+            older_than=now - timedelta(seconds=15)
+        )
+
+    assert len(recovered) == 1
+    recovered_attempt, summary = recovered[0]
+    assert recovered_attempt.id == "att-finished"
+    assert "stream_event=observe" in summary
+    assert "message_id=msg-finished" in summary
+    assert "build worker exited with SIGKILL" in summary
+    assert "latest_progress=bash completed: Total: 20 | Passed: 20 | Failed: 0" in summary
 
 
 def _make_service(

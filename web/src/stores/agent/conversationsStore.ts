@@ -48,6 +48,7 @@ interface ConversationsState {
   isNewConversationPending: boolean;
   hasMoreConversations: boolean;
   conversationsTotal: number;
+  conversationsNextOffset: number;
 
   // Actions
   listConversations: (
@@ -103,7 +104,36 @@ export const initialState = {
   isNewConversationPending: false,
   hasMoreConversations: false,
   conversationsTotal: 0,
+  conversationsNextOffset: 0,
 };
+
+const groupedConversationListOptions = { groupByWorkspace: true };
+
+function mergeUniqueConversations(
+  existing: Conversation[],
+  incoming: Conversation[]
+): Conversation[] {
+  const byId = new Map(existing.map((conversation) => [conversation.id, conversation]));
+  for (const conversation of incoming) {
+    byId.set(conversation.id, conversation);
+  }
+  return Array.from(byId.values());
+}
+
+function responseNextOffset(
+  response: {
+    next_offset?: number | null | undefined;
+    offset?: number | undefined;
+    items: Conversation[];
+  },
+  fallbackOffset: number
+): number {
+  if (typeof response.next_offset === 'number') {
+    return response.next_offset;
+  }
+  const responseOffset = typeof response.offset === 'number' ? response.offset : fallbackOffset;
+  return responseOffset + response.items.length;
+}
 
 /**
  * Conversations Store
@@ -140,12 +170,27 @@ export const useConversationsStore = create<ConversationsState>()(
         }
         try {
           const response = signal
-            ? await agentService.listConversations(projectId, status, limit, 0, signal)
-            : await agentService.listConversations(projectId, status, limit, 0);
+            ? await agentService.listConversations(
+                projectId,
+                status,
+                limit,
+                0,
+                signal,
+                groupedConversationListOptions
+              )
+            : await agentService.listConversations(
+                projectId,
+                status,
+                limit,
+                0,
+                undefined,
+                groupedConversationListOptions
+              );
           set({
-            conversations: response.items,
+            conversations: mergeUniqueConversations([], response.items),
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
+            conversationsNextOffset: responseNextOffset(response, 0),
             ...(!silent ? { conversationsLoading: false } : {}),
           });
         } catch (error: unknown) {
@@ -179,12 +224,20 @@ export const useConversationsStore = create<ConversationsState>()(
 
         set({ conversationsLoadingMore: true, conversationsError: null });
         try {
-          const offset = state.conversations.length;
-          const response = await agentService.listConversations(projectId, status, 10, offset);
+          const offset = state.conversationsNextOffset || state.conversations.length;
+          const response = await agentService.listConversations(
+            projectId,
+            status,
+            10,
+            offset,
+            undefined,
+            groupedConversationListOptions
+          );
           set({
-            conversations: [...state.conversations, ...response.items],
+            conversations: mergeUniqueConversations(state.conversations, response.items),
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
+            conversationsNextOffset: responseNextOffset(response, offset),
             conversationsLoadingMore: false,
           });
         } catch (error: unknown) {

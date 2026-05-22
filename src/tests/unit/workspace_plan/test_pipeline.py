@@ -450,6 +450,94 @@ async def test_verifier_hides_stale_pipeline_metadata_from_judge() -> None:
 
 
 @pytest.mark.asyncio
+async def test_verifier_treats_running_pipeline_as_pending_current_evidence() -> None:
+    verifier = AcceptanceCriterionVerifier()
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "running",
+            "pipeline_gate_status": "running",
+            "pipeline_run_id": "run-new",
+            "source_publish_source_commit_ref": "c24521e0fc4da720d19893901cd4d04773782de1",
+            "pipeline_failure_summary": "Drone #129 failed: Cannot find module '/app/dist/index.js'",
+            "pipeline_last_summary": "Drone #129 failed: Cannot find module '/app/dist/index.js'",
+            "pipeline_evidence_refs": ["ci_pipeline:failed", "pipeline_run:failed:old-run"],
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-3",
+            stdout="worker completed",
+            artifacts={
+                "candidate_artifacts": ["commit_ref:c24521e"],
+                "candidate_verifications": ["worker_report:completed"],
+            },
+        )
+    )
+
+    pipeline_results = [
+        result for result in report.results if result.criterion.kind is CriterionKind.CI_PIPELINE
+    ]
+    assert pipeline_results
+    assert any("pipeline is running (run-new)" in result.message for result in pipeline_results)
+    assert all("Cannot find module" not in result.message for result in pipeline_results)
+
+
+@pytest.mark.asyncio
+async def test_verifier_hides_pending_pipeline_terminal_metadata_from_judge() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="pipeline is still running",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="wait for current pipeline evidence",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "running",
+            "pipeline_gate_status": "running",
+            "pipeline_run_id": "run-new",
+            "source_publish_source_commit_ref": "c24521e0fc4da720d19893901cd4d04773782de1",
+            "pipeline_failure_summary": "Drone #129 failed: Cannot find module '/app/dist/index.js'",
+            "pipeline_last_summary": "Drone #129 failed: Cannot find module '/app/dist/index.js'",
+            "pipeline_evidence_refs": ["ci_pipeline:failed", "pipeline_run:failed:old-run"],
+        }
+    )
+
+    await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-3",
+            stdout="worker completed",
+            artifacts={
+                "candidate_artifacts": ["commit_ref:c24521e"],
+                "candidate_verifications": ["worker_report:completed"],
+            },
+        )
+    )
+
+    assert judge.requests
+    request = judge.requests[0]
+    assert request.task_metadata["pipeline_status"] == "running"
+    assert request.task_metadata["pipeline_run_id"] == "run-new"
+    assert "pipeline_failure_summary" not in request.task_metadata
+    assert "pipeline_last_summary" not in request.task_metadata
+    assert "ci_pipeline:failed" not in request.task_evidence_refs
+    assert "pipeline_run:failed:old-run" not in request.task_evidence_refs
+    assert "Cannot find module" not in str(request.latest_verification_results)
+
+
+@pytest.mark.asyncio
 async def test_verifier_times_out_slow_verification_judge(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS", "0.01")
     judge = _SlowVerificationJudge()
@@ -739,6 +827,72 @@ async def test_verifier_routes_drone_multi_service_deploy_coverage_to_worker() -
 
 
 @pytest.mark.asyncio
+async def test_verifier_routes_drone_invalid_deploy_semantics_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale="pipeline failed; pull the registry image",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="Pull host.docker.internal:5001/my-evo and rerun.",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+            "deploy_mode": "docker",
+            "deployment_status": "invalid",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "deploy_validation_failure": "missing required deploy services: my-evo-app",
+            "deploy_validation_issues": [
+                "missing required deploy services: my-evo-app",
+                "missing docker run/compose/stack/service deploy command",
+            ],
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#131 deploy stage deploy did not implement "
+                "docker deployment semantics"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert (
+        "align the docker run --name/service name"
+        in (judge_result.criterion.spec["required_next_action"])
+    )
+    assert (
+        "my-evo-app"
+        in (judge_result.criterion.spec["required_next_action"])
+    )
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-missing-required-service"
+    assert "did not observe required docker service coverage" in feedback["summary"]
+    assert "my-evo-app" in feedback["summary"]
+
+
+@pytest.mark.asyncio
 async def test_verifier_routes_host_socket_registry_failure_to_worker() -> None:
     judge = _FakeVerificationJudge(
         WorkspaceVerificationJudgeResult(
@@ -895,8 +1049,135 @@ async def test_verifier_routes_docker_host_port_conflict_to_worker() -> None:
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
     assert "docker.deploy_host_port" in judge_result.criterion.spec["required_next_action"]
+    assert "stale app containers" in judge_result.criterion.spec["required_next_action"]
+    assert "docker inspect <container>" in judge_result.criterion.spec["required_next_action"]
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-host-port-conflict"
+    assert "stale containers" in feedback["summary"]
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_created_container_without_state_error_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="container did not start",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#134 finished with status failure; "
+                "failing stage workspace-ci/deploy exited 1; "
+                "ERROR: Container my-evo-app failed to start; "
+                "CONTAINER ID IMAGE COMMAND CREATED STATUS PORTS NAMES "
+                'a5a61726b3a1 my-evo:drone-docker-e2e "dumb-init -- sh -c" '
+                "3 seconds ago Created my-evo-app"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert "docker inspect <container>" in judge_result.criterion.spec["required_next_action"]
+    assert "stale app" in judge_result.criterion.spec["required_next_action"]
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-container-created-not-running"
+
+
+@pytest.mark.asyncio
+async def test_verifier_does_not_treat_diff_failure_word_as_failed_test() -> None:
+    verifier = AcceptanceCriterionVerifier()
+    node = _node(
+        metadata={
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "candidate_artifacts": [
+                "commit_ref:3df5e5a",
+                "git_diff_summary:.drone.yml +3 lines (port cleanup, docker inspect on 2 failure paths)",
+            ],
+            "candidate_verifications": ["commit_ref:3df5e5a"],
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            artifacts={
+                "candidate_artifacts": [
+                    "commit_ref:3df5e5a",
+                    "git_diff_summary:.drone.yml +3 lines (port cleanup, docker inspect on 2 failure paths)",
+                ],
+                "candidate_verifications": ["commit_ref:3df5e5a"],
+            },
+            stdout="worker completed",
+        )
+    )
+
+    failed_guard = [
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "failed_test_evidence"
+    ]
+    assert failed_guard == []
+
+
+@pytest.mark.asyncio
+async def test_verifier_still_flags_failed_test_run_evidence() -> None:
+    verifier = AcceptanceCriterionVerifier()
+    node = _node(
+        metadata={
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "candidate_verifications": ["test_run:npm test - 1 failed, 35 passed"],
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            artifacts={
+                "candidate_verifications": ["test_run:npm test - 1 failed, 35 passed"],
+            },
+            stdout="worker completed",
+        )
+    )
+
+    failed_guard = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "failed_test_evidence"
+    )
+    assert not failed_guard.passed
+    assert "1 failed" in failed_guard.message
 
 
 @pytest.mark.asyncio
@@ -1005,6 +1286,62 @@ async def test_verifier_routes_deploy_unhealthy_container_to_worker() -> None:
     assert "docker logs <container>" in judge_result.criterion.spec["required_next_action"]
     assert "sidecar" in judge_result.criterion.spec["required_next_action"]
     assert "DATABASE_URL" in judge_result.criterion.spec["required_next_action"]
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-unhealthy-container"
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_started_container_health_refused_without_docker_run_to_worker() -> (
+    None
+):
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="deploy health failed",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#127 finished with status failure; "
+                "failing stage workspace-ci/deploy exited 1; "
+                "Container my-evo-deploy is running; "
+                "CONTAINER ID IMAGE STATUS PORTS NAMES "
+                "5a06b7897173 my-evo:drone-docker-e2e Up Less than a second "
+                "(health: starting) 0.0.0.0:18080->3000/tcp my-evo-deploy; "
+                "+ wget --timeout=10 -q -O- http://host.docker.internal:18080/health; "
+                "wget: can't connect to remote host (192.168.65.254): Connection refused"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-unhealthy-container"
 
@@ -1495,6 +1832,61 @@ async def test_verifier_routes_drone_docker_build_timeout_to_worker() -> None:
     assert "Node 20+" in judge_result.criterion.spec["required_next_action"]
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-build-timeout-context-or-node"
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_drone_docker_build_prisma_schema_missing_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="docker build failed",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#139 finished with status failure; "
+                "failing stage workspace-ci/docker-build exited 1; "
+                "Error: Could not find Prisma Schema that is required for this command. "
+                "Checked following paths: schema.prisma: file not found; "
+                "prisma/schema.prisma: file not found; "
+                "The command '/bin/sh -c npm ci --include=dev --ignore-scripts "
+                "&& npx prisma generate' returned a non-zero code: 1"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert "COPY" in judge_result.criterion.spec["required_next_action"]
+    assert "--schema" in judge_result.criterion.spec["required_next_action"]
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-build-prisma-schema-missing"
 
 
 @pytest.mark.asyncio

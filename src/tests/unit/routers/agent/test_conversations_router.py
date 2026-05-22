@@ -1,12 +1,16 @@
 """Tests for conversation route hardening."""
 
+import inspect
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.conversation.errors import (
     ConversationDomainError,
     ParticipantNotPresentError,
@@ -19,6 +23,10 @@ from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
     UpdateConversationConfigRequest,
     UpdateConversationModeRequest,
     UpdateConversationTitleRequest,
+)
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation as DBConversation,
+    WorkspaceModel,
 )
 
 
@@ -37,6 +45,18 @@ class FailingAgentService:
 class FailingDb:
     get = AsyncMock(side_effect=RuntimeError("internal direct db secret"))
     rollback = AsyncMock()
+
+
+class ListUseCase:
+    def __init__(self, conversations: list[Conversation], total: int) -> None:
+        self._conversations = conversations
+        self._total = total
+
+    async def execute(self, **_kwargs: Any) -> list[Conversation]:
+        return self._conversations
+
+    async def count(self, **_kwargs: Any) -> int:
+        return self._total
 
 
 def _request_with_container(container: object) -> MagicMock:
@@ -168,6 +188,83 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_conversations_expands_workspace_group_and_names(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = WorkspaceModel(
+        id="ws-group",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="Grouped Workspace",
+        created_by="user-1",
+    )
+    grouped_row = DBConversation(
+        id="workspace-worker:ws-group:task-2:agent-1:attempt-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Workspace Worker - task-2",
+        status=ConversationStatus.ACTIVE.value,
+        agent_config={},
+        meta={},
+        message_count=0,
+        created_at=datetime.now(UTC),
+        current_mode="build",
+        participant_agents=[],
+    )
+    db_session.add_all([workspace, grouped_row])
+    await db_session.flush()
+
+    base_conversation = Conversation(
+        id="workspace-verifier:ws-group:task-1:agent-1:attempt-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Workspace Verification Gate - task-1",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    use_case = ListUseCase([base_conversation], total=2)
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    request = _request_with_container(container)
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+
+    response = await conversations_router.list_conversations(
+        request=request,
+        project_id="project-1",
+        status="active",
+        limit=1,
+        offset=0,
+        workspace_id=None,
+        group_by_workspace=True,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db_session,
+    )
+
+    assert [item.id for item in response.items] == [
+        "workspace-verifier:ws-group:task-1:agent-1:attempt-1",
+        "workspace-worker:ws-group:task-2:agent-1:attempt-1",
+    ]
+    assert {item.workspace_name for item in response.items} == {"Grouped Workspace"}
+    assert {item.workspace_id for item in response.items} == {"ws-group"}
+    assert response.next_offset == 1
+    assert response.has_more is False
+
+
+def test_list_conversations_accepts_large_workspace_refresh_pages() -> None:
+    limit_param = inspect.signature(conversations_router.list_conversations).parameters[
+        "limit"
+    ].default
+
+    assert any(getattr(metadata, "le", None) == 500 for metadata in limit_param.metadata)
 
 
 @pytest.mark.unit

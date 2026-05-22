@@ -3311,6 +3311,54 @@ class _StalePipelineWithBlockingWorkerFeedbackVerifier:
         )
 
 
+class _MissingPipelineEvidenceWithWorkerFeedbackVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message="missing harness-native CI pipeline evidence",
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "failed_criteria": [
+                                "missing harness-native CI pipeline evidence",
+                                "Drone build #124 failed at workspace-ci/deploy",
+                            ],
+                            "feedback_items": [
+                                {
+                                    "target_layer": "worker",
+                                    "feedback_kind": "product_code_failure",
+                                    "severity": "blocking",
+                                    "recommended_action": "retry_worker",
+                                    "summary": "Cannot find module '/app/dist/index.js'",
+                                    "failure_signature": "module_not_found_dist_index",
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message=(
+                        "judge verdict=needs_rework; previous Drone deploy failed with "
+                        "Cannot find module '/app/dist/index.js'"
+                    ),
+                ),
+            ),
+        )
+
+
 class _PipelineWorkerActionFailureVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -3873,6 +3921,10 @@ class TestSupervisorTick:
         assert report2.verifications_ran == 1
         assert report2.nodes_completed == 1
         assert report2.allocations_made == 1  # b now dispatched
+        reloaded_after_verify = await repo.get_by_workspace("ws-1")
+        assert reloaded_after_verify is not None
+        verified_a = reloaded_after_verify.nodes[PlanNodeId("a")]
+        assert verified_a.progress.note == "verified (0 criteria passed)"
 
     async def test_tick_defers_ready_nodes_with_overlapping_write_sets(self) -> None:
         repo = InMemoryPlanRepository()
@@ -4912,6 +4964,11 @@ class TestSupervisorTick:
         assert retry_node.current_attempt_id is None
         assert retry_node.metadata["retry_count"] == 1
         assert retry_node.metadata["retry_not_before"].endswith("Z")
+        assert retry_node.metadata["last_verification_attempt_id"] == "attempt-a"
+        assert "retryable infrastructure failure" in retry_node.metadata[
+            "last_verification_summary"
+        ]
+        assert retry_node.metadata["last_verification_passed"] is False
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_count"] == 1
@@ -6301,6 +6358,78 @@ class TestSupervisorTick:
         assert node.execution is TaskExecution.IDLE
         assert node.metadata["pipeline_gate_status"] == "requested"
         assert node.metadata["verified_commit_ref"] == "c817fbc8"
+
+    async def test_missing_pipeline_evidence_with_worker_feedback_requests_pipeline(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_failed_stage": "workspace-ci/deploy",
+                    "pipeline_failure_summary": (
+                        "Drone build #124 failed with Cannot find module '/app/dist/index.js'"
+                    ),
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("current candidate needs a pipeline run before worker retry")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:f649b2a"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_MissingPipelineEvidenceWithWorkerFeedbackVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 0
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["verified_commit_ref"] == "f649b2a"
 
     async def test_pipeline_required_node_ignores_stale_success_when_current_pipeline_failed(
         self,

@@ -37,6 +37,7 @@ import type {
   SandboxStateData,
   PendingHITLResponse,
   SubscribeOptions,
+  ListConversationsRequestOptions,
 } from '../types/agent';
 
 function generateSessionId(): string {
@@ -249,9 +250,10 @@ class AgentServiceImpl implements AgentService {
     status?: 'active' | 'archived' | 'deleted',
     limit?: number,
     offset?: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: ListConversationsRequestOptions
   ): Promise<PaginatedConversationsResponse> {
-    return restApi.listConversations(projectId, status, limit, offset, signal);
+    return restApi.listConversations(projectId, status, limit, offset, signal, options);
   }
 
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null> {

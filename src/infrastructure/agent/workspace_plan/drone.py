@@ -45,6 +45,11 @@ _DOCKER_BUILD_STEP_SERVICE_RE = re.compile(
     r"(?:^|[-_/])docker[-_]?build[-_/](?P<service>[a-z0-9][a-z0-9_.-]*)$",
     re.I,
 )
+_DOCKER_DEPLOY_CONTAINER_RUNNING_RE = re.compile(
+    r"\bcontainer\s+[a-z0-9_.-]+\s+is\s+running\b",
+    re.I,
+)
+_DOCKER_PS_RUNNING_ROW_RE = re.compile(r"\bup\s+(?:less than|about|\d)", re.I)
 _FAILURE_SIGNAL_MARKERS = (
     "http: server gave http response to https client",
     "connection refused",
@@ -67,6 +72,25 @@ _FAILURE_SIGNAL_MARKERS = (
     "port is already allocated",
     "container name",
     "already in use",
+)
+_HIGH_VALUE_FAILURE_SIGNAL_MARKERS = (
+    "docker:",
+    "error response from daemon",
+    "failed to set up container networking",
+    "bind for 0.0.0.0",
+    "port is already allocated",
+    "already in use",
+    "connection refused",
+    "can't connect to remote host",
+    "cannot connect to remote host",
+    "no route to host",
+    "exited (",
+    "cannot find module",
+    "module_not_found",
+    "environment variable not found",
+    "no migration found",
+    "prisma schema validation",
+    "error code:",
 )
 
 
@@ -562,6 +586,11 @@ async def _result_from_build(
         deploy=config.deploy,
     )
     deploy_state = _deploy_state(stage_results, config.deploy)
+    deploy_validation_issues = (
+        _deploy_validation_issues(stage_results, config.deploy)
+        if deploy_state == "invalid"
+        else []
+    )
     if (
         config.deploy is not None
         and deploy_state in {"failed", "missing", "invalid"}
@@ -569,7 +598,12 @@ async def _result_from_build(
         and run_status == "success"
     ):
         run_status = "failed"
-        reason = _deploy_failure_reason(config.deploy, external_id, deploy_state)
+        reason = _deploy_failure_reason(
+            config.deploy,
+            external_id,
+            deploy_state,
+            validation_issues=deploy_validation_issues,
+        )
     evidence_refs = [
         f"ci_pipeline:{'passed' if run_status == 'success' else 'failed'}",
         f"drone_build:{drone_status}:{external_id}",
@@ -600,7 +634,11 @@ async def _result_from_build(
             "drone_status": drone_status,
             "drone_link": _string(build.get("link")),
             **_drone_timeout_metadata(build),
-            **_deploy_metadata(config.deploy, deploy_state),
+            **_deploy_metadata(
+                config.deploy,
+                deploy_state,
+                validation_issues=deploy_validation_issues,
+            ),
         },
     )
 
@@ -798,9 +836,9 @@ def _compact_failure_preview(value: str, *, limit: int = 4000) -> str:
 
 
 def _failure_signal_preview(value: str, *, limit: int = 900) -> str:
-    selected: list[str] = []
+    candidates: list[tuple[int, int, str]] = []
     seen: set[str] = set()
-    for line in value.splitlines():
+    for index, line in enumerate(value.splitlines()):
         normalized = line.strip()
         if not normalized:
             continue
@@ -811,11 +849,20 @@ def _failure_signal_preview(value: str, *, limit: int = 900) -> str:
         if capped in seen:
             continue
         seen.add(capped)
-        selected.append(capped)
+        candidates.append((_failure_signal_rank(lower), index, capped))
+    selected: list[str] = []
+    for _, _, line in sorted(candidates):
+        selected.append(line)
         joined = "\n".join(selected)
         if len(joined) >= limit:
             return joined[:limit]
     return "\n".join(selected)
+
+
+def _failure_signal_rank(lower_line: str) -> int:
+    if any(marker in lower_line for marker in _HIGH_VALUE_FAILURE_SIGNAL_MARKERS):
+        return 0
+    return 1
 
 
 def _add_deploy_params(params: dict[str, str], deploy: PipelineDeploySpec | None) -> None:
@@ -892,10 +939,18 @@ def _deploy_failure_reason(
     deploy: PipelineDeploySpec,
     external_id: str,
     deploy_state: str,
+    *,
+    validation_issues: list[str] | None = None,
 ) -> str:
     if deploy_state == "missing":
         return f"Drone build {external_id} did not report deploy stage {deploy.stage}"
     if deploy_state == "invalid":
+        if validation_issues:
+            issue_text = "; ".join(validation_issues[:4])
+            return (
+                f"Drone build {external_id} deploy stage {deploy.stage} did not implement "
+                f"{deploy.mode} deployment semantics: {issue_text}"
+            )
         return (
             f"Drone build {external_id} deploy stage {deploy.stage} did not implement "
             f"{deploy.mode} deployment semantics"
@@ -914,6 +969,8 @@ def _deployment_status(deploy_state: str | None) -> str | None:
 def _deploy_metadata(
     deploy: PipelineDeploySpec | None,
     deploy_state: str | None,
+    *,
+    validation_issues: list[str] | None = None,
 ) -> dict[str, Any]:
     if deploy is None:
         return {}
@@ -927,6 +984,9 @@ def _deploy_metadata(
         metadata["deploy_target"] = deploy.target
     if deploy.mode == "docker" and deploy_state == "passed":
         metadata["deploy_validation"] = DRONE_DOCKER_DEPLOY_VALIDATION
+    if validation_issues:
+        metadata["deploy_validation_failure"] = "; ".join(validation_issues[:4])
+        metadata["deploy_validation_issues"] = validation_issues[:8]
     return metadata
 
 
@@ -975,16 +1035,73 @@ def _docker_deploy_evidence(
     deploy: PipelineDeploySpec,
     stage_results: list[PipelineStageResult],
 ) -> bool:
+    return not _docker_deploy_validation_issues(
+        result,
+        deploy=deploy,
+        stage_results=stage_results,
+    )
+
+
+def _docker_deploy_validation_issues(
+    result: PipelineStageResult,
+    *,
+    deploy: PipelineDeploySpec,
+    stage_results: list[PipelineStageResult],
+) -> list[str]:
     output = _result_output(result).lower()
+    issues: list[str] = []
     if _docker_deploy_output_masks_failure(output):
-        return False
+        issues.append("deploy output contains failure markers despite a successful Drone step")
     if _docker_deploy_uses_forbidden_local_registry_pull(output):
-        return False
-    if not _docker_deploy_covers_required_services(output, deploy=deploy):
-        return False
-    if not _docker_deploy_covers_built_images(output, deploy=deploy, stage_results=stage_results):
-        return False
-    return any(
+        issues.append(
+            "deploy step pulls or runs host.docker.internal/localhost local-registry images "
+            "through the mounted host Docker daemon"
+        )
+
+    missing_services = _missing_docker_deploy_required_services(output, deploy=deploy)
+    if missing_services:
+        issues.append("missing required deploy services: " + ", ".join(missing_services))
+
+    missing_images = _missing_docker_deploy_built_images(
+        output,
+        deploy=deploy,
+        stage_results=stage_results,
+    )
+    if missing_images:
+        issues.append("missing built image deploy references: " + ", ".join(missing_images))
+
+    if not _docker_deploy_has_run_marker(output):
+        issues.append("missing docker run/compose/stack/service deploy command")
+    return list(dict.fromkeys(issues))
+
+
+def _deploy_validation_issues(
+    stage_results: list[PipelineStageResult],
+    deploy: PipelineDeploySpec | None,
+) -> list[str]:
+    if deploy is None or deploy.mode != "docker":
+        return []
+    deploy_results = [
+        result
+        for result in stage_results
+        if result.metadata.get("drone_step_kind") == "deploy"
+        or _is_deploy_label(result.stage, deploy=deploy)
+    ]
+    issues: list[str] = []
+    for result in deploy_results:
+        result_issues = _docker_deploy_validation_issues(
+            result,
+            deploy=deploy,
+            stage_results=stage_results,
+        )
+        if not result_issues:
+            return []
+        issues.extend(result_issues)
+    return list(dict.fromkeys(issues))
+
+
+def _docker_deploy_has_run_marker(output: str) -> bool:
+    if any(
         marker in output
         for marker in (
             "docker run",
@@ -995,30 +1112,50 @@ def _docker_deploy_evidence(
             "docker service create",
             "docker service update",
         )
+    ):
+        return True
+    return _docker_deploy_has_running_container_evidence(output)
+
+
+def _docker_deploy_has_running_container_evidence(output: str) -> bool:
+    if _DOCKER_DEPLOY_CONTAINER_RUNNING_RE.search(output):
+        return True
+    return (
+        "container id" in output
+        and "names" in output
+        and _DOCKER_PS_RUNNING_ROW_RE.search(output) is not None
     )
 
 
-def _docker_deploy_covers_required_services(
+def _missing_docker_deploy_required_services(
     output: str,
     *,
     deploy: PipelineDeploySpec,
-) -> bool:
+) -> list[str]:
     requirements = _docker_deploy_service_requirements(deploy)
     if not requirements:
-        return True
-    return all(any(marker in output for marker in markers) for markers in requirements)
+        return []
+    return [
+        _service_requirement_label(markers)
+        for markers in requirements
+        if not any(marker in output for marker in markers)
+    ]
 
 
-def _docker_deploy_covers_built_images(
+def _missing_docker_deploy_built_images(
     output: str,
     *,
     deploy: PipelineDeploySpec,
     stage_results: list[PipelineStageResult],
-) -> bool:
+) -> list[str]:
     requirements = _docker_build_service_requirements(stage_results, deploy=deploy)
     if not requirements:
-        return True
-    return all(any(marker in output for marker in markers) for markers in requirements)
+        return []
+    return [
+        _service_requirement_label(markers)
+        for markers in requirements
+        if not any(marker in output for marker in markers)
+    ]
 
 
 def _docker_deploy_service_requirements(deploy: PipelineDeploySpec) -> list[tuple[str, ...]]:

@@ -39,6 +39,7 @@ from src.domain.model.workspace_plan import (
     PlanNodeId,
     PlanNodeKind,
     PlanStatus,
+    Progress,
     TaskExecution,
     TaskIntent,
     VerificationReport,
@@ -2378,6 +2379,10 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
     pipeline_can_request_run = pipeline_missing_evidence or pipeline_runtime_retryable
     return all(
         _is_pipeline_only_judge_failure(result)
+        or (
+            pipeline_missing_evidence
+            and _is_pipeline_missing_evidence_judge_failure(result)
+        )
         or _is_pipeline_trigger_infrastructure_failure(result)
         or (pipeline_can_request_run and _is_verification_judge_inconclusive_failure(result))
         for result in non_pipeline_failures
@@ -2476,6 +2481,16 @@ def _is_pipeline_only_judge_failure(result: CriterionResult) -> bool:
         _is_pipeline_failure_marker(item) for item in feedback_signatures
     )
     return feedback_signatures_match and (not failed or failed_is_pipeline_only)
+
+
+def _is_pipeline_missing_evidence_judge_failure(result: CriterionResult) -> bool:
+    spec = result.criterion.spec
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if spec.get("name") != "workspace_verification_judge":
+        return False
+    failed = set(_string_list(spec.get("failed_criteria")))
+    return bool(failed) and all(_is_pipeline_failure_marker(item) for item in failed)
 
 
 def _feedback_items_require_worker_retry(feedback_items: list[object]) -> bool:
@@ -2672,7 +2687,8 @@ def _node_with_pipeline_request(node: PlanNode, report: VerificationReport) -> P
 
 
 def _node_with_retry_backoff(node: PlanNode, report: VerificationReport) -> PlanNode:
-    metadata = dict(node.metadata)
+    evidenced = _node_with_verification_evidence(node, report)
+    metadata = dict(evidenced.metadata)
     retry_count = _coerce_positive_int(metadata.get("retry_count")) + 1
     delay_seconds = min(
         _RETRY_BACKOFF_BASE_SECONDS * (2 ** (retry_count - 1)),
@@ -2683,7 +2699,7 @@ def _node_with_retry_backoff(node: PlanNode, report: VerificationReport) -> Plan
     metadata["retry_not_before"] = retry_at.isoformat().replace("+00:00", "Z")
     metadata["retry_last_reason"] = report.summary()
     return replace(
-        node,
+        evidenced,
         intent=TaskIntent.TODO,
         execution=TaskExecution.IDLE,
         current_attempt_id=None,
@@ -2913,7 +2929,17 @@ def _node_with_verification_evidence(
         metadata=metadata,
         feature_checkpoint=feature_checkpoint,
         handoff_package=handoff_package,
+        progress=_progress_with_note(node, report.summary()),
         updated_at=datetime.now(UTC),
+    )
+
+
+def _progress_with_note(node: PlanNode, note: str) -> Progress:
+    compact_note = " ".join(note.split())[:500]
+    return Progress(
+        percent=node.progress.percent,
+        confidence=node.progress.confidence,
+        note=compact_note,
     )
 
 

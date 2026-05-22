@@ -110,9 +110,14 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     persist_calls: list[dict[str, Any]] = []
+    message_calls: list[dict[str, Any]] = []
 
     async def fake_ensure_workspace_llm_conversation(**kwargs: Any) -> bool:
         persist_calls.append(kwargs)
+        return True
+
+    async def fake_append_workspace_llm_turn_messages(**kwargs: Any) -> bool:
+        message_calls.append(kwargs)
         return True
 
     class FakeProjectReActAgent:
@@ -148,6 +153,11 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
         "ensure_workspace_llm_conversation",
         fake_ensure_workspace_llm_conversation,
     )
+    monkeypatch.setattr(
+        session_conversations,
+        "append_workspace_llm_turn_messages",
+        fake_append_workspace_llm_turn_messages,
+    )
     monkeypatch.setattr(project_react_agent, "ProjectReActAgent", FakeProjectReActAgent)
 
     runner = RuntimeWorkspaceVerifierAgentTurnRunner(tenant_id="tenant-1", project_id="project-1")
@@ -164,6 +174,12 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
     assert result == {"verdict": "accepted", "rationale": "Evidence passes."}
     assert persist_calls[0]["linked_workspace_task_id"] == "task-1"
     assert persist_calls[0]["metadata"]["linked_workspace_task_id"] == "task-1"
+    assert message_calls[0]["conversation_id"].startswith("workspace-verifier:ws-1:node-1")
+    assert message_calls[0]["user_prompt"] == "judge"
+    assert message_calls[0]["agent_id"] == BUILTIN_WORKSPACE_VERIFIER_ID
+    assert message_calls[0]["stage"] == "verification_judge"
+    assert '"verdict": "accepted"' in message_calls[0]["assistant_content"]
+    assert message_calls[0]["metadata"]["linked_workspace_task_id"] == "task-1"
 
 
 async def test_iteration_review_agent_provider_uses_builtin_agent_turn_runner() -> None:
@@ -213,9 +229,14 @@ async def test_runtime_iteration_reviewer_persists_linked_workspace_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     persist_calls: list[dict[str, Any]] = []
+    message_calls: list[dict[str, Any]] = []
 
     async def fake_ensure_workspace_llm_conversation(**kwargs: Any) -> bool:
         persist_calls.append(kwargs)
+        return True
+
+    async def fake_append_workspace_llm_turn_messages(**kwargs: Any) -> bool:
+        message_calls.append(kwargs)
         return True
 
     class FakeProjectReActAgent:
@@ -252,6 +273,11 @@ async def test_runtime_iteration_reviewer_persists_linked_workspace_task(
         "ensure_workspace_llm_conversation",
         fake_ensure_workspace_llm_conversation,
     )
+    monkeypatch.setattr(
+        session_conversations,
+        "append_workspace_llm_turn_messages",
+        fake_append_workspace_llm_turn_messages,
+    )
     monkeypatch.setattr(project_react_agent, "ProjectReActAgent", FakeProjectReActAgent)
 
     runner = RuntimeWorkspaceIterationReviewAgentTurnRunner(
@@ -271,6 +297,12 @@ async def test_runtime_iteration_reviewer_persists_linked_workspace_task(
     assert result == {"verdict": "complete_goal", "confidence": 0.9, "summary": "Done."}
     assert persist_calls[0]["linked_workspace_task_id"] == "root-task-1"
     assert persist_calls[0]["metadata"]["linked_workspace_task_id"] == "root-task-1"
+    assert message_calls[0]["conversation_id"].startswith("workspace-review:ws-1:plan-1:3")
+    assert message_calls[0]["user_prompt"] == "review"
+    assert message_calls[0]["agent_id"] == BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID
+    assert message_calls[0]["stage"] == "iteration_review"
+    assert '"verdict": "complete_goal"' in message_calls[0]["assistant_content"]
+    assert message_calls[0]["metadata"]["linked_workspace_task_id"] == "root-task-1"
 
 
 def test_iteration_review_event_parser_accepts_tool_result_metadata() -> None:

@@ -108,11 +108,14 @@ from src.infrastructure.agent.workspace_plan.system_actor import persisted_attem
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
+_RETRY_CONVERSATION_SOURCE = "workspace_retry_launch"
+_RETRY_CONVERSATION_STAGE = "retry_leader"
 
 
 class _RetryConversationProjection(Protocol):
     workspace_id: str | None
     linked_workspace_task_id: str | None
+    agent_config: dict[str, object]
     metadata: dict[str, object]
     updated_at: datetime | None
 
@@ -735,6 +738,9 @@ async def _mark_workspace_plan_node_reported(
         return
 
     try:
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            PlanNodeModel,
+        )
         from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
             SqlWorkspacePlanEventRepository,
         )
@@ -746,6 +752,8 @@ async def _mark_workspace_plan_node_reported(
             SUPERVISOR_TICK_EVENT,
         )
 
+        summary = task_metadata.get(LAST_WORKER_REPORT_SUMMARY)
+        reported_at = task_metadata.get("last_worker_reported_at")
         await SqlWorkspacePlanEventRepository(db).append(
             plan_id=plan_id,
             workspace_id=workspace_id,
@@ -756,12 +764,38 @@ async def _mark_workspace_plan_node_reported(
             source="worker_report",
             payload={
                 "report_type": task_metadata.get("last_worker_report_type"),
-                "summary": task_metadata.get(LAST_WORKER_REPORT_SUMMARY),
+                "summary": summary,
                 "artifacts": task_metadata.get("last_worker_report_artifacts", []),
                 "verifications": task_metadata.get("last_worker_report_verifications", []),
-                "reported_at": task_metadata.get("last_worker_reported_at"),
+                "reported_at": reported_at,
             },
         )
+        node = await db.get(PlanNodeModel, node_id)
+        if node is not None:
+            existing_progress = dict(node.progress or {})
+            note = summary if isinstance(summary, str) and summary.strip() else None
+            if note:
+                node.progress = {
+                    "percent": float(existing_progress.get("percent") or 0.0),
+                    "confidence": float(existing_progress.get("confidence") or 1.0),
+                    "note": note.strip(),
+                }
+            metadata = dict(node.metadata_json or {})
+            report_event = {
+                "event_type": "worker_report_terminal",
+                "source_event_type": "worker_report_terminal",
+                "summary": note or "",
+                "attempt_id": attempt_id,
+                "worker_agent_id": worker_agent_id,
+                "reported_at": reported_at,
+            }
+            progress_events = metadata.get("progress_events")
+            if not isinstance(progress_events, list):
+                progress_events = []
+            progress_events.append(report_event)
+            metadata["progress_events"] = progress_events[-25:]
+            metadata["latest_worker_progress"] = report_event
+            node.metadata_json = metadata
         orchestrator = build_sql_orchestrator(db)
         await orchestrator.mark_worker_reported(
             workspace_id=workspace_id,
@@ -976,6 +1010,10 @@ def _patch_retry_conversation_linkage(
     *,
     workspace_id: str,
     workspace_task_id: str,
+    root_goal_task_id: str,
+    attempt_id: str,
+    leader_agent_id: str,
+    conversation_scope: str,
 ) -> bool:
     changed = False
     if conversation.workspace_id != workspace_id:
@@ -985,11 +1023,24 @@ def _patch_retry_conversation_linkage(
         conversation.linked_workspace_task_id = workspace_task_id
         changed = True
     metadata = dict(conversation.metadata or {})
-    if metadata.get("workspace_id") != workspace_id:
-        metadata["workspace_id"] = workspace_id
-        changed = True
-    if metadata.get("workspace_task_id") != workspace_task_id:
-        metadata["workspace_task_id"] = workspace_task_id
+    metadata_updates = {
+        "workspace_id": workspace_id,
+        "workspace_task_id": workspace_task_id,
+        "linked_workspace_task_id": workspace_task_id,
+        ROOT_GOAL_TASK_ID: root_goal_task_id,
+        "attempt_id": attempt_id,
+        "conversation_scope": conversation_scope,
+        "source": _RETRY_CONVERSATION_SOURCE,
+        "workspace_llm_stage": _RETRY_CONVERSATION_STAGE,
+    }
+    for key, value in metadata_updates.items():
+        if metadata.get(key) != value:
+            metadata[key] = value
+            changed = True
+    agent_config = dict(conversation.agent_config or {})
+    if agent_config.get("selected_agent_id") != leader_agent_id:
+        agent_config["selected_agent_id"] = leader_agent_id
+        conversation.agent_config = agent_config
         changed = True
     if changed:
         conversation.metadata = metadata
@@ -1010,10 +1061,13 @@ async def _ensure_retry_conversation(
             "agent_id": request.leader_agent_id,
             "workspace_agent_binding_id": request.worker_binding_id,
             "workspace_task_id": request.workspace_task_id,
+            "linked_workspace_task_id": request.workspace_task_id,
             ROOT_GOAL_TASK_ID: request.root_goal_task_id,
             "attempt_id": request.attempt_id,
             "conversation_scope": request.conversation_scope,
             "retry_launch": True,
+            "source": _RETRY_CONVERSATION_SOURCE,
+            "workspace_llm_stage": _RETRY_CONVERSATION_STAGE,
             "created_at": datetime.now(UTC).isoformat(),
         }
         if request.attempt_number is not None:
@@ -1042,6 +1096,10 @@ async def _ensure_retry_conversation(
         conversation,
         workspace_id=request.workspace_id,
         workspace_task_id=request.workspace_task_id,
+        root_goal_task_id=request.root_goal_task_id,
+        attempt_id=request.attempt_id,
+        leader_agent_id=request.leader_agent_id,
+        conversation_scope=request.conversation_scope,
     ):
         _ = await conversation_repo.save(conversation)
 

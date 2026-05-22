@@ -96,6 +96,7 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
             WORKSPACE_SESSION_ROLE_KEY,
         )
         from src.infrastructure.agent.workspace.session_conversations import (
+            append_workspace_llm_turn_messages,
             ensure_workspace_llm_conversation,
         )
 
@@ -158,6 +159,8 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
                 ),
             }
         ]
+        output_parts: list[str] = []
+        streamed_text_seen = False
         try:
             async for event in agent.execute_chat(
                 conversation_id=conversation_id,
@@ -174,13 +177,53 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
                     observed_tools = diagnostics["observed_tools"]
                     if tool_name not in observed_tools:
                         observed_tools.append(tool_name)
+                output_text = _assistant_text_from_event(
+                    event,
+                    allow_terminal_snapshot=not streamed_text_seen,
+                )
+                if output_text:
+                    output_parts.append(output_text)
+                    if event.get("type") == "text_delta":
+                        streamed_text_seen = True
                 payload = _iteration_review_from_event(event)
                 if payload is not None:
                     diagnostics["review_submitted"] = True
+                    diagnostics["messages_persisted"] = (
+                        await append_workspace_llm_turn_messages(
+                            conversation_id=conversation_id,
+                            user_prompt=user_prompt,
+                            assistant_content=_iteration_review_turn_message_content(
+                                output_parts=output_parts,
+                                review=payload,
+                            ),
+                            agent_id=reviewer_agent.id,
+                            stage="iteration_review",
+                            metadata={
+                                "plan_id": plan_id,
+                                "iteration_index": iteration_index,
+                                "linked_workspace_task_id": linked_workspace_task_id or "",
+                            },
+                        )
+                    )
                     self._last_diagnostics = diagnostics
                     return payload
         finally:
             await agent.stop()
+        diagnostics["messages_persisted"] = await append_workspace_llm_turn_messages(
+            conversation_id=conversation_id,
+            user_prompt=user_prompt,
+            assistant_content=_iteration_review_turn_message_content(
+                output_parts=output_parts,
+                review=None,
+            ),
+            agent_id=reviewer_agent.id,
+            stage="iteration_review",
+            metadata={
+                "plan_id": plan_id,
+                "iteration_index": iteration_index,
+                "linked_workspace_task_id": linked_workspace_task_id or "",
+            },
+        )
         self._last_diagnostics = diagnostics
         return None
 
@@ -435,6 +478,45 @@ def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
         return None
     tool_name = data.get("tool_name") or data.get("name")
     return tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else None
+
+
+def _assistant_text_from_event(
+    event: Mapping[str, Any],
+    *,
+    allow_terminal_snapshot: bool,
+) -> str:
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return ""
+    event_type = event.get("type")
+    if event_type == "text_delta":
+        return str(data.get("delta") or "")
+    if not allow_terminal_snapshot:
+        return ""
+    if event_type == "text_end":
+        return str(data.get("full_text") or "")
+    if event_type == "complete":
+        return str(data.get("content") or "")
+    return ""
+
+
+def _iteration_review_turn_message_content(
+    *,
+    output_parts: list[str],
+    review: Mapping[str, Any] | None,
+) -> str:
+    text = "".join(output_parts).strip()
+    sections: list[str] = []
+    if text:
+        sections.append(text)
+    if review is not None:
+        sections.append(
+            "Submitted iteration review:\n"
+            + json.dumps(review, ensure_ascii=False, indent=2, default=str)
+        )
+    if not sections:
+        sections.append("Iteration review turn ended without submitting a review.")
+    return "\n\n".join(sections)
 
 
 def _parse_review_response(

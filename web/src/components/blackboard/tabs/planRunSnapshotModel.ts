@@ -536,6 +536,9 @@ export function criterionSummary(node: WorkspacePlanNode): string {
 }
 
 export function eventLabel(event: WorkspacePlanEvent): string {
+  if (event.event_type === 'worker_progress') {
+    return 'Worker progress';
+  }
   if (event.event_type === 'worker_report_terminal') {
     return 'Worker submitted result';
   }

@@ -166,7 +166,9 @@ describe('ConversationsStore', () => {
       expect(conversations).toEqual(mockConversations);
       expect(conversationsLoading).toBe(false);
       expect(conversationsError).toBe(null);
-      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 0);
+      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 0, undefined, {
+        groupByWorkspace: true,
+      });
     });
 
     it('should fetch conversations with status filter', async () => {
@@ -182,7 +184,9 @@ describe('ConversationsStore', () => {
 
       await useConversationsStore.getState().listConversations('proj-1', 'active');
 
-      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', 'active', 10, 0);
+      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', 'active', 10, 0, undefined, {
+        groupByWorkspace: true,
+      });
     });
 
     it('should fetch conversations with custom limit', async () => {
@@ -195,7 +199,9 @@ describe('ConversationsStore', () => {
 
       await useConversationsStore.getState().listConversations('proj-1', undefined, 100);
 
-      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 100, 0);
+      expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 100, 0, undefined, {
+        groupByWorkspace: true,
+      });
     });
 
     it('should set loading state during fetch', async () => {

@@ -9,9 +9,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
+from sqlalchemy import BigInteger, desc, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement, Select, Subquery
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.application.services.conversation_events import publish_conversation_created
@@ -24,10 +25,15 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent as AgentExecutionEventModel,
     Conversation as ConversationModel,
     Message as MessageModel,
     ToolExecutionRecord,
     User,
+    WorkspaceModel,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+    SqlConversationRepository,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -47,6 +53,204 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _workspace_id_from_conversation_id(conversation_id: str) -> str | None:
+    if not conversation_id.startswith("workspace-"):
+        return None
+    parts = conversation_id.split(":")
+    if len(parts) < 2:
+        return None
+    workspace_id = parts[1].strip()
+    return workspace_id or None
+
+
+def _linked_workspace_task_id_from_conversation_id(conversation_id: str) -> str | None:
+    if conversation_id.startswith("workspace-chat:"):
+        return None
+    if not conversation_id.startswith("workspace-"):
+        return None
+    parts = conversation_id.split(":")
+    if len(parts) < 3:
+        return None
+    task_id = parts[2].strip()
+    return task_id or None
+
+
+def _workspace_id_for_response(conversation: "Conversation") -> str | None:
+    return conversation.workspace_id or _workspace_id_from_conversation_id(conversation.id)
+
+
+def _linked_workspace_task_id_for_response(conversation: "Conversation") -> str | None:
+    return conversation.linked_workspace_task_id or _linked_workspace_task_id_from_conversation_id(
+        conversation.id
+    )
+
+
+def _last_activity_subquery() -> Subquery:
+    return (
+        select(
+            AgentExecutionEventModel.conversation_id,
+            func.max(AgentExecutionEventModel.event_time_us).label("last_event_time_us"),
+        )
+        .group_by(AgentExecutionEventModel.conversation_id)
+        .subquery("last_activity")
+    )
+
+
+def _ordered_conversation_query() -> Select[tuple[ConversationModel]]:
+    last_activity_subq = _last_activity_subquery()
+    created_at_us = func.cast(
+        func.extract("epoch", ConversationModel.created_at) * 1_000_000,
+        BigInteger,
+    )
+    return (
+        select(ConversationModel)
+        .outerjoin(
+            last_activity_subq,
+            ConversationModel.id == last_activity_subq.c.conversation_id,
+        )
+        .order_by(desc(func.coalesce(last_activity_subq.c.last_event_time_us, created_at_us)))
+    )
+
+
+def _workspace_link_filter(workspace_ids: set[str]) -> ColumnElement[bool]:
+    conditions = [
+        ConversationModel.workspace_id.in_(workspace_ids),
+        ConversationModel.meta["workspace_id"].as_string().in_(workspace_ids),
+    ]
+    conditions.extend(
+        ConversationModel.id.like(f"workspace-%:{workspace_id}:%") for workspace_id in workspace_ids
+    )
+    return or_(*conditions)
+
+
+async def _workspace_name_by_id(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    tenant_id: str,
+    workspace_ids: set[str],
+) -> dict[str, str]:
+    if not workspace_ids:
+        return {}
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceModel.id, WorkspaceModel.name).where(
+                WorkspaceModel.project_id == project_id,
+                WorkspaceModel.tenant_id == tenant_id,
+                WorkspaceModel.id.in_(workspace_ids),
+            )
+        )
+    )
+    return {workspace_id: name for workspace_id, name in result.all()}
+
+
+async def _list_workspace_conversations(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    tenant_id: str,
+    workspace_ids: set[str],
+    status: ConversationStatus | None,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list["Conversation"]:
+    if not workspace_ids:
+        return []
+
+    query = _ordered_conversation_query().where(
+        ConversationModel.project_id == project_id,
+        ConversationModel.tenant_id == tenant_id,
+        _workspace_link_filter(workspace_ids),
+    )
+    if status is not None:
+        query = query.where(ConversationModel.status == status.value)
+    if limit is not None:
+        query = query.offset(offset).limit(limit)
+
+    result = await db.execute(refresh_select_statement(query))
+    repo = SqlConversationRepository(db)
+    return [d for c in result.scalars().all() if (d := repo._to_domain(c)) is not None]
+
+
+async def _count_workspace_conversations(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    tenant_id: str,
+    workspace_id: str,
+    status: ConversationStatus | None,
+) -> int:
+    query = (
+        select(func.count())
+        .select_from(ConversationModel)
+        .where(
+            ConversationModel.project_id == project_id,
+            ConversationModel.tenant_id == tenant_id,
+            _workspace_link_filter({workspace_id}),
+        )
+    )
+    if status is not None:
+        query = query.where(ConversationModel.status == status.value)
+    result = await db.execute(refresh_select_statement(query))
+    return result.scalar() or 0
+
+
+def _merge_workspace_groups(
+    base_conversations: list["Conversation"],
+    workspace_conversations: list["Conversation"],
+) -> list["Conversation"]:
+    conversations_by_workspace: dict[str, list[Conversation]] = {}
+    for conversation in workspace_conversations:
+        workspace_id = _workspace_id_for_response(conversation)
+        if workspace_id is None:
+            continue
+        conversations_by_workspace.setdefault(workspace_id, []).append(conversation)
+
+    merged: list[Conversation] = []
+    seen_conversation_ids: set[str] = set()
+    expanded_workspace_ids: set[str] = set()
+
+    def append_once(conversation: "Conversation") -> None:
+        if conversation.id in seen_conversation_ids:
+            return
+        merged.append(conversation)
+        seen_conversation_ids.add(conversation.id)
+
+    for conversation in base_conversations:
+        workspace_id = _workspace_id_for_response(conversation)
+        if workspace_id is None:
+            append_once(conversation)
+            continue
+        if workspace_id in expanded_workspace_ids:
+            append_once(conversation)
+            continue
+
+        group = conversations_by_workspace.get(workspace_id, [])
+        if not any(group_conversation.id == conversation.id for group_conversation in group):
+            append_once(conversation)
+        for group_conversation in group:
+            append_once(group_conversation)
+        expanded_workspace_ids.add(workspace_id)
+
+    return merged
+
+
+def _conversation_responses(
+    conversations: list["Conversation"],
+    *,
+    workspace_names: dict[str, str],
+) -> list[ConversationResponse]:
+    return [
+        ConversationResponse.from_domain(
+            conversation,
+            workspace_id=_workspace_id_for_response(conversation),
+            linked_workspace_task_id=_linked_workspace_task_id_for_response(conversation),
+            workspace_name=workspace_names.get(_workspace_id_for_response(conversation) or ""),
+        )
+        for conversation in conversations
+    ]
 
 
 async def _enforce_conversation_invariants(
@@ -160,8 +364,13 @@ async def list_conversations(
     request: Request,
     project_id: str = Query(..., description="Project ID to filter by"),
     status: str | None = Query(None, description="Filter by status"),
-    limit: int = Query(50, ge=1, le=100, description="Maximum number to return"),
+    limit: int = Query(50, ge=1, le=500, description="Maximum number to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
+    workspace_id: str | None = Query(None, description="Filter by workspace ID"),
+    group_by_workspace: bool = Query(
+        False,
+        description="Expand paged workspace entries so each returned workspace group is complete",
+    ),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
@@ -170,33 +379,83 @@ async def list_conversations(
     try:
         engine = db.get_bind()
         pool = engine.pool  # type: ignore[union-attr]
+        pool_size = getattr(pool, "size", lambda: 0)()
+        checked_out = getattr(pool, "checkedout", lambda: 0)()
+        overflow = getattr(pool, "overflow", lambda: 0)()
         logger.debug(
-            f"[Connection Pool] size={pool.size()}, checked_out={pool.checkedout()}, "  # type: ignore[union-attr]
-            f"overflow={pool.overflow()}, queue_size={pool.size() - pool.checkedout()}"  # type: ignore[union-attr]
+            f"[Connection Pool] size={pool_size}, checked_out={checked_out}, "
+            f"overflow={overflow}, queue_size={pool_size - checked_out}"
         )
 
         assert request is not None
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        use_case = container.list_conversations_use_case(llm)
         conv_status = ConversationStatus(status) if status else None
+        requested_workspace_id = workspace_id.strip() if workspace_id else None
 
-        conversations = await use_case.execute(
+        if requested_workspace_id:
+            conversations = await _list_workspace_conversations(
+                db,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                workspace_ids={requested_workspace_id},
+                status=conv_status,
+                limit=limit,
+                offset=offset,
+            )
+            total = await _count_workspace_conversations(
+                db,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                workspace_id=requested_workspace_id,
+                status=conv_status,
+            )
+        else:
+            container = get_container_with_db(request, db)
+            llm = await create_llm_client(tenant_id)
+            use_case = container.list_conversations_use_case(llm)
+            conversations = await use_case.execute(
+                project_id=project_id,
+                user_id=current_user.id,
+                limit=limit,
+                offset=offset,
+                status=conv_status,
+            )
+
+            total = await use_case.count(
+                project_id=project_id,
+                user_id=current_user.id,
+                status=conv_status,
+            )
+
+            workspace_ids: set[str] = set()
+            for conversation in conversations:
+                conversation_workspace_id = _workspace_id_for_response(conversation)
+                if conversation_workspace_id is not None:
+                    workspace_ids.add(conversation_workspace_id)
+            if group_by_workspace and workspace_ids:
+                workspace_conversations = await _list_workspace_conversations(
+                    db,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    workspace_ids=workspace_ids,
+                    status=conv_status,
+                )
+                conversations = _merge_workspace_groups(conversations, workspace_conversations)
+
+        response_workspace_ids: set[str] = set()
+        for conversation in conversations:
+            conversation_workspace_id = _workspace_id_for_response(conversation)
+            if conversation_workspace_id is not None:
+                response_workspace_ids.add(conversation_workspace_id)
+        workspace_names = await _workspace_name_by_id(
+            db,
             project_id=project_id,
-            user_id=current_user.id,
-            limit=limit,
-            offset=offset,
-            status=conv_status,
+            tenant_id=tenant_id,
+            workspace_ids=response_workspace_ids,
         )
-
-        total = await use_case.count(
-            project_id=project_id,
-            user_id=current_user.id,
-            status=conv_status,
-        )
-
-        items = [ConversationResponse.from_domain(c) for c in conversations]
-        has_more = offset + limit < total
+        items = _conversation_responses(conversations, workspace_names=workspace_names)
+        next_offset = min(offset + limit, total)
+        unique_item_count = len({item.id for item in items})
+        has_more = next_offset < total and unique_item_count < total
 
         return PaginatedConversationsResponse(
             items=items,
@@ -204,6 +463,7 @@ async def list_conversations(
             has_more=has_more,
             offset=offset,
             limit=limit,
+            next_offset=next_offset,
         )
 
     except Exception as exc:

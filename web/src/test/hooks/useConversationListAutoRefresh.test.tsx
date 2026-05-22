@@ -156,6 +156,29 @@ describe('useConversationListAutoRefresh', () => {
     visibilitySpy.mockRestore();
   });
 
+  it('caps auto-refresh requests to the conversations API page limit', async () => {
+    const visibilitySpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    mocks.conversations = Array.from({ length: 314 }, (_, index) => ({
+      id: `conversation-${index}`,
+      project_id: 'project-1',
+    }));
+
+    renderHook(() => useConversationListAutoRefresh('project-1'));
+
+    await flushTimers(30000);
+
+    expect(mocks.loadConversations).toHaveBeenCalledWith(
+      'project-1',
+      expect.objectContaining({
+        force: true,
+        silent: true,
+        limit: 100,
+      })
+    );
+
+    visibilitySpy.mockRestore();
+  });
+
   it('clears pending event refresh timers on unmount', async () => {
     const { unmount } = renderHook(() => useConversationListAutoRefresh('project-1'));
 

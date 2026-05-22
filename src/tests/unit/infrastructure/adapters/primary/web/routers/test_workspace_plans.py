@@ -342,6 +342,30 @@ def test_iteration_summary_prefers_loop_current_iteration_over_old_active_nodes(
     assert summary.task_count == 1
 
 
+def test_iteration_summary_enables_plan_next_after_current_iteration_done() -> None:
+    plan = _make_plan("workspace-plan-api")
+    task = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            task,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            completed_at=datetime.now(UTC),
+        )
+    )
+
+    summary = workspace_plans._to_iteration_summary(
+        plan=plan,
+        root_goal=None,
+        blackboard_entries=[],
+        outbox_items=[],
+        event_items=[],
+    )
+
+    assert summary.actions["trigger_next_iteration"].enabled is True
+    assert summary.actions["trigger_next_iteration"].reason is None
+
+
 @pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     db_session: AsyncSession,
@@ -421,6 +445,11 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
     assert "src/runtime/supervisor.py" in response.iteration.deliverables
     assert response.iteration.actions["pause_auto_loop"].enabled is True
     assert response.iteration.actions["resume_auto_loop"].enabled is False
+    assert response.iteration.actions["trigger_next_iteration"].enabled is False
+    assert (
+        response.iteration.actions["trigger_next_iteration"].reason
+        == workspace_plans._NEXT_ITERATION_UNFINISHED_REASON
+    )
     assert response.iteration.history[0].verdict == "continue_next_iteration"
     task_node = next(node for node in response.plan.nodes if node.id == "task-api")
     assert task_node.feature_checkpoint is not None
@@ -2426,6 +2455,89 @@ async def test_retry_workspace_plan_outbox_item_queues_failed_job(
 
 
 @pytest.mark.asyncio
+async def test_retry_workspace_plan_outbox_item_runs_delayed_pending_job_now(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-retry-delayed"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    retry_at = datetime.now(UTC) + timedelta(minutes=15)
+    task = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            task,
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            metadata={**task.metadata, "retry_not_before": retry_at.isoformat()},
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    outbox_repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await outbox_repo.enqueue(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        event_type="supervisor_tick",
+        payload={
+            "workspace_id": workspace_id,
+            "retry_node_id": "task-api",
+            "retry_reason": "verification_retry_scheduled",
+        },
+        metadata={"source_event_type": "verification_retry_scheduled"},
+        next_attempt_at=retry_at,
+    )
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    snapshot = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert snapshot.outbox[0].actions["retry_outbox"].enabled is True
+    assert snapshot.iteration is not None
+    assert "waiting for backoff" in snapshot.iteration.next_action
+
+    result = await workspace_plans.retry_workspace_plan_outbox_item(
+        workspace_id=workspace_id,
+        outbox_id=item.id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="continue immediately"),
+        request=cast(Request, SimpleNamespace()),
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert result.ok is True
+    loaded = await outbox_repo.get_by_id(item.id)
+    assert loaded is not None
+    assert loaded.status == "pending"
+    assert loaded.next_attempt_at is None
+    assert loaded.metadata_json["operator_retry"]["previous_status"] == "pending"
+    assert loaded.metadata_json["operator_retry"]["previous_next_attempt_at"] == retry_at.isoformat()
+    reloaded_plan = await SqlPlanRepository(db_session).get(plan.id)
+    assert reloaded_plan is not None
+    reloaded_task = reloaded_plan.nodes[PlanNodeId("task-api")]
+    assert "retry_not_before" not in reloaded_task.metadata
+    assert reloaded_task.metadata["operator_retry_outbox"]["outbox_id"] == item.id
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=5)
+    assert events[0].event_type == "operator_retry_outbox"
+    assert events[0].payload["cleared_node_retry_delay"] == {
+        "node_id": "task-api",
+        "previous_retry_not_before": retry_at.isoformat(),
+    }
+
+
+@pytest.mark.asyncio
 async def test_iteration_loop_pause_resume_and_trigger_update_goal_metadata(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -2486,6 +2598,20 @@ async def test_iteration_loop_pause_resume_and_trigger_update_goal_metadata(
     assert outbox[0].event_type == "supervisor_tick"
     assert outbox[0].payload_json["operator_action"] == "operator_iteration_loop_resumed"
 
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    task = loaded.nodes[PlanNodeId("task-api")]
+    loaded.replace_node(
+        replace(
+            task,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            completed_at=datetime.now(UTC),
+        )
+    )
+    await SqlPlanRepository(db_session).save(loaded)
+    await db_session.commit()
+
     triggered = await workspace_plans.trigger_workspace_plan_next_iteration(
         workspace_id=workspace_id,
         body=workspace_plans.WorkspacePlanActionRequest(reason="manual sprint review"),
@@ -2503,6 +2629,43 @@ async def test_iteration_loop_pause_resume_and_trigger_update_goal_metadata(
         item.payload_json["operator_action"] == "operator_iteration_next_requested"
         for item in outbox
     )
+
+
+@pytest.mark.asyncio
+async def test_trigger_next_iteration_does_not_enqueue_when_current_iteration_unfinished(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-next-not-ready"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    result = await workspace_plans.trigger_workspace_plan_next_iteration(
+        workspace_id=workspace_id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="too early"),
+        request=cast(Request, SimpleNamespace()),
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert result.ok is False
+    assert result.message == workspace_plans._NEXT_ITERATION_UNFINISHED_REASON
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(plan.id, limit=3)
+    assert events == []
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox == []
 
 
 @pytest.mark.asyncio
@@ -2526,6 +2689,15 @@ async def test_trigger_next_reopens_current_reviewed_iteration(
     )
     metadata["iteration_loop"] = loop
     plan.replace_node(replace(goal, metadata=metadata))
+    task = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            task,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            completed_at=datetime.now(UTC),
+        )
+    )
     await SqlPlanRepository(db_session).save(plan)
     await db_session.commit()
 
@@ -2577,6 +2749,16 @@ async def test_trigger_next_extends_iteration_limit_when_max_reached(
     )
     metadata["iteration_loop"] = loop
     plan.replace_node(replace(goal, metadata=metadata))
+    task = plan.nodes[PlanNodeId("task-api")]
+    plan.replace_node(
+        replace(
+            task,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            completed_at=datetime.now(UTC),
+            metadata={**task.metadata, "iteration_index": 8},
+        )
+    )
     await SqlPlanRepository(db_session).save(plan)
     await db_session.commit()
 

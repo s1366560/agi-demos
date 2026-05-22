@@ -188,9 +188,7 @@ class PromptMixin:
         effective_skills = available_skills if available_skills is not None else self.skills
         # Strip workspace-scoped skills from non-workspace conversations.
         if effective_skills and not is_workspace_conversation:
-            effective_skills = [
-                s for s in effective_skills if not s.name.startswith("workspace-")
-            ]
+            effective_skills = [s for s in effective_skills if not s.name.startswith("workspace-")]
         if effective_skills:
             skills_data = [
                 {
@@ -267,8 +265,7 @@ class PromptMixin:
         # tagged via runtime_context). Project-scoped chats in projects that
         # happen to host a workspace must NOT see this content.
         workspace_context: str | None = None
-        workspace_scope_active = bool(is_workspace_conversation or active_workspace_manager)
-        if workspace_scope_active and project_id and tenant_id:
+        if is_workspace_conversation and project_id and tenant_id:
             from src.infrastructure.agent.workspace.workspace_context_builder import (
                 build_workspace_context,
             )

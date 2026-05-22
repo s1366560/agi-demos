@@ -16,6 +16,7 @@ Migration Benefits:
 
 import logging
 import re
+import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import cast, override
@@ -33,11 +34,53 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent as DBAgentExecutionEvent,
     Conversation as DBConversation,
+    PlanNodeModel,
+    WorkspacePlanEventModel,
 )
 
 logger = logging.getLogger(__name__)
 
 _MESSAGE_EVENT_TYPES = ("user_message", "assistant_message")
+_WORKSPACE_PROGRESS_SOURCE_EVENT_TYPES = frozenset(
+    {"assistant_message", "act", "observe", "error", "complete"}
+)
+_WORKSPACE_PROGRESS_NOTE_MAX = 320
+_WORKSPACE_PROGRESS_MARKER_CONTEXT = 180
+_WORKSPACE_PROGRESS_MARKER_LEAD = 80
+_NOOP_OBSERVATIONS = frozenset({"(no output)", "no output"})
+_LOW_SIGNAL_OBSERVATION_TOOLS = frozenset(
+    {"edit", "glob", "grep", "read", "workspace_report_progress", "write"}
+)
+_LOW_SIGNAL_BASH_OBSERVATIONS = frozenset(
+    {
+        "finished",
+        "killed",
+        "killed old servers 000port free",
+        "stopped old processes",
+        "to address all issues, run: npm audit fix run `npm audit` for details.",
+    }
+)
+_HIGH_SIGNAL_BASH_MARKERS = frozenset(
+    {
+        "=== SUMMARY ===",
+        "DEPENDENCIES_VALIDATED",
+        "First Load JS shared by all",
+        "INSTALLATION_COMPLETE",
+        "Route Status Report",
+        "Routes returning 200",
+        "[HTTP404]",
+        "[OK]",
+    }
+)
+_WORKSPACE_HARNESS_HEARTBEAT_MARKER = "[workspace_harness_heartbeat]"
+_PROGRESS_ERROR_MARKERS = (
+    "failed to compile",
+    "type error",
+    "error occurred",
+    "should be wrapped",
+    "exit code",
+    "traceback",
+)
 type JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 
 _JWT_PATTERN = re.compile(
@@ -90,7 +133,8 @@ async def apply_conversation_event_projection_delta(
         latest_event_at = datetime.fromtimestamp(latest_event_time_us / 1_000_000, tz=UTC)
         values["updated_at"] = case(
             (DBConversation.updated_at.is_(None), latest_event_at),
-            else_=func.greatest(DBConversation.updated_at, latest_event_at),
+            (DBConversation.updated_at < latest_event_at, latest_event_at),
+            else_=DBConversation.updated_at,
         )
 
     if not values:
@@ -99,6 +143,409 @@ async def apply_conversation_event_projection_delta(
     _ = await session.execute(
         refresh_select_statement(update(DBConversation).where(DBConversation.id == conversation_id).values(**values))
     )
+
+
+async def apply_workspace_event_progress_projection(
+    session: AsyncSession,
+    *,
+    conversation_id: str,
+    event_id: str,
+    event_type: str,
+    event_data: Mapping[str, JsonValue],
+    event_time_us: int | None,
+    created_at: datetime,
+) -> None:
+    """Mirror live workspace agent events into the durable plan progress surface."""
+    if event_type not in _WORKSPACE_PROGRESS_SOURCE_EVENT_TYPES:
+        return
+    summary = _workspace_progress_summary(event_type, event_data)
+    if not summary:
+        return
+
+    try:
+        async with session.begin_nested():
+            await _apply_workspace_event_progress_projection(
+                session,
+                conversation_id=conversation_id,
+                event_id=event_id,
+                event_type=event_type,
+                event_time_us=event_time_us,
+                created_at=created_at,
+                summary=summary,
+            )
+    except Exception:
+        logger.warning(
+            "Failed to project workspace agent event progress "
+            "(conversation_id=%s event_id=%s event_type=%s)",
+            conversation_id,
+            event_id,
+            event_type,
+            exc_info=True,
+        )
+
+
+async def _apply_workspace_event_progress_projection(
+    session: AsyncSession,
+    *,
+    conversation_id: str,
+    event_id: str,
+    event_type: str,
+    event_time_us: int | None,
+    created_at: datetime,
+    summary: str,
+) -> None:
+    conversation = await _workspace_projection_conversation(session, conversation_id)
+    if conversation is None:
+        return
+    conversation_meta = _mapping_or_empty(conversation.meta)
+    workspace_id = _string_or_none(conversation.workspace_id) or _string_or_none(
+        conversation_meta.get("workspace_id")
+    )
+    task_id = _string_or_none(conversation.linked_workspace_task_id) or _string_or_none(
+        conversation_meta.get("linked_workspace_task_id")
+        or conversation_meta.get("workspace_task_id")
+    )
+    if not workspace_id or not task_id:
+        return
+
+    attempt_id = _string_or_none(
+        conversation_meta.get("attempt_id") or conversation_meta.get("current_attempt_id")
+    )
+    node = await _workspace_projection_node(
+        session,
+        task_id=task_id,
+        attempt_id=attempt_id,
+    )
+    if node is None:
+        return
+
+    node_metadata = dict(node.metadata_json or {})
+    if node_metadata.get("latest_agent_event_progress_id") == event_id:
+        return
+
+    now = _aware_datetime(created_at)
+    existing_progress = dict(node.progress or {})
+    percent = _bounded_percent(existing_progress.get("percent"))
+    actor_id = _workspace_projection_actor_id(conversation, conversation_meta)
+    progress_event = {
+        "event_type": "worker_progress",
+        "source": "agent_execution_event_projection",
+        "source_event_id": event_id,
+        "source_event_type": event_type,
+        "source_conversation_id": conversation_id,
+        "source_event_time_us": event_time_us,
+        "workspace_task_id": task_id,
+        "attempt_id": attempt_id or node.current_attempt_id,
+        "actor_id": actor_id,
+        "phase": event_type,
+        "percent": percent,
+        "summary": summary,
+        "created_at": now.isoformat(),
+    }
+
+    progress_events = node_metadata.get("progress_events")
+    if not isinstance(progress_events, list):
+        progress_events = []
+    progress_events.append(progress_event)
+    node_metadata["progress_events"] = progress_events[-25:]
+    node_metadata["latest_agent_event_progress_id"] = event_id
+    if _should_promote_workspace_progress_note(event_type, existing_progress, node_metadata):
+        node.progress = {
+            "percent": percent,
+            "confidence": _bounded_confidence(existing_progress.get("confidence")),
+            "note": summary,
+        }
+        node_metadata["latest_worker_progress"] = progress_event
+    node.metadata_json = node_metadata
+    node.updated_at = now
+
+    session.add(
+        WorkspacePlanEventModel(
+            id=str(uuid.uuid4()),
+            plan_id=node.plan_id,
+            workspace_id=workspace_id,
+            node_id=node.id,
+            attempt_id=progress_event["attempt_id"],
+            event_type="worker_progress",
+            source="agent_execution_event_projection",
+            actor_id=actor_id,
+            payload_json=progress_event,
+            created_at=now,
+        )
+    )
+
+
+async def _workspace_projection_conversation(
+    session: AsyncSession,
+    conversation_id: str,
+) -> DBConversation | None:
+    result = await session.execute(
+        refresh_select_statement(
+            select(DBConversation).where(DBConversation.id == conversation_id)
+        )
+    )
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
+        return None
+    meta = _mapping_or_empty(conversation.meta)
+    if not _string_or_none(conversation.workspace_id) and not _string_or_none(
+        meta.get("workspace_id")
+    ):
+        return None
+    return conversation
+
+
+async def _workspace_projection_node(
+    session: AsyncSession,
+    *,
+    task_id: str,
+    attempt_id: str | None,
+) -> PlanNodeModel | None:
+    base_stmt = select(PlanNodeModel).where(PlanNodeModel.workspace_task_id == task_id)
+    if attempt_id:
+        result = await session.execute(
+            refresh_select_statement(
+                base_stmt.where(PlanNodeModel.current_attempt_id == attempt_id)
+                .order_by(PlanNodeModel.updated_at.desc(), PlanNodeModel.created_at.desc())
+                .limit(1)
+            )
+        )
+        node = result.scalar_one_or_none()
+        if node is not None:
+            return node
+    result = await session.execute(
+        refresh_select_statement(
+            base_stmt.order_by(
+                PlanNodeModel.updated_at.desc(),
+                PlanNodeModel.created_at.desc(),
+            ).limit(1)
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _workspace_projection_actor_id(
+    conversation: DBConversation,
+    metadata: Mapping[str, object],
+) -> str | None:
+    agent_config = _mapping_or_empty(conversation.agent_config)
+    return _string_or_none(
+        agent_config.get("selected_agent_id")
+        or metadata.get("selected_agent_id")
+        or metadata.get("agent_id")
+    )
+
+
+def _workspace_progress_summary(
+    event_type: str,
+    event_data: Mapping[str, JsonValue],
+) -> str:
+    summary = ""
+    if event_type == "assistant_message":
+        summary = (
+            _string_or_none(event_data.get("content"))
+            or _string_or_none(event_data.get("full_text"))
+            or ""
+        )
+    elif event_type == "act":
+        tool_name = _string_or_none(event_data.get("tool_name")) or "tool"
+        summary = f"Running tool: {tool_name}"
+    elif event_type == "observe":
+        tool_name = _string_or_none(event_data.get("tool_name")) or "tool"
+        status = _string_or_none(event_data.get("status")) or "completed"
+        error = _string_or_none(event_data.get("error"))
+        observation = _string_or_none(
+            event_data.get("observation") or event_data.get("result")
+        )
+        if not error and (
+            _is_noop_observation(observation)
+            or _is_low_signal_observation(tool_name=tool_name, observation=observation)
+        ):
+            return ""
+        heartbeat_summary = _workspace_harness_heartbeat_summary(
+            tool_name=tool_name,
+            observation=observation,
+        )
+        detail = error or heartbeat_summary or observation or ""
+        if detail:
+            status_label = "running" if not error and heartbeat_summary else status
+            summary = f"{tool_name} {status_label}: {detail}"
+        else:
+            summary = f"{tool_name} {status}"
+    elif event_type == "error":
+        summary = (
+            _string_or_none(event_data.get("message"))
+            or _string_or_none(event_data.get("error"))
+            or "Worker reported an error."
+        )
+    elif event_type == "complete":
+        summary = (
+            _string_or_none(event_data.get("content"))
+            or _string_or_none(event_data.get("result"))
+            or "Agent turn completed."
+        )
+    return _trim_progress_text(summary)
+
+
+def _should_promote_workspace_progress_note(
+    event_type: str,
+    existing_progress: Mapping[str, object],
+    node_metadata: Mapping[str, object],
+) -> bool:
+    if event_type != "act":
+        return True
+    existing_note = _string_or_none(existing_progress.get("note"))
+    latest_progress = _mapping_or_empty(node_metadata.get("latest_worker_progress"))
+    latest_event_type = _string_or_none(latest_progress.get("source_event_type"))
+    return not existing_note or latest_event_type in {None, "act"}
+
+
+def _trim_progress_text(value: str) -> str:
+    collapsed = " ".join(str(value or "").split())
+    if len(collapsed) <= _WORKSPACE_PROGRESS_NOTE_MAX:
+        return collapsed
+    marker_index = _progress_focus_index(collapsed)
+    if marker_index > _WORKSPACE_PROGRESS_NOTE_MAX:
+        prefix = collapsed[: _WORKSPACE_PROGRESS_NOTE_MAX - _WORKSPACE_PROGRESS_MARKER_CONTEXT - 8]
+        detail = collapsed[
+            marker_index : marker_index + _WORKSPACE_PROGRESS_MARKER_CONTEXT
+        ]
+        return f"{prefix.rstrip()} ... {detail.rstrip()}..."
+    return f"{collapsed[: _WORKSPACE_PROGRESS_NOTE_MAX - 3].rstrip()}..."
+
+
+def _progress_focus_index(value: str) -> int:
+    lowered = value.casefold()
+    indexes = [lowered.rfind(marker) for marker in _PROGRESS_ERROR_MARKERS]
+    marker_index = max(indexes)
+    if marker_index < 0:
+        return -1
+    return max(0, marker_index - _WORKSPACE_PROGRESS_MARKER_LEAD)
+
+
+def _is_noop_observation(value: str | None) -> bool:
+    if value is None:
+        return True
+    return " ".join(value.split()).casefold() in _NOOP_OBSERVATIONS
+
+
+def _is_low_signal_observation(*, tool_name: str, observation: str | None) -> bool:
+    if tool_name in _LOW_SIGNAL_OBSERVATION_TOOLS:
+        return True
+    if tool_name == "bash" and _has_high_signal_bash_marker(observation):
+        return False
+    return tool_name == "bash" and (
+        _looks_like_plain_listing(observation) or _is_low_signal_bash_observation(observation)
+    )
+
+
+def _has_high_signal_bash_marker(value: str | None) -> bool:
+    if not value:
+        return False
+    return any(marker in value for marker in _HIGH_SIGNAL_BASH_MARKERS)
+
+
+def _workspace_harness_heartbeat_summary(
+    *,
+    tool_name: str,
+    observation: str | None,
+) -> str | None:
+    if tool_name != "bash" or not _is_workspace_harness_heartbeat(observation):
+        return None
+    if observation is None:
+        return None
+    if _progress_focus_index(observation) >= 0 or _has_high_signal_bash_marker(
+        observation
+    ):
+        return None
+    return "command still running (workspace harness heartbeat)"
+
+
+def _is_workspace_harness_heartbeat(value: str | None) -> bool:
+    return bool(value and _WORKSPACE_HARNESS_HEARTBEAT_MARKER in value)
+
+
+def _is_low_signal_bash_observation(value: str | None) -> bool:
+    if not value:
+        return False
+    normalized = " ".join(value.split()).casefold()
+    return (
+        _is_pure_workspace_harness_heartbeat(normalized)
+        or re.fullmatch(r"(?:[a-z0-9_-]+\s+)?(?:pid=)?\d+", normalized) is not None
+        or (
+            normalized.startswith("tool execution failed ")
+            and normalized.endswith("(no output)")
+        )
+        or ".next/build_id" in normalized
+        or _looks_like_search_result_listing(value)
+        or normalized in _LOW_SIGNAL_BASH_OBSERVATIONS
+    )
+
+
+def _is_pure_workspace_harness_heartbeat(normalized: str) -> bool:
+    heartbeat = _WORKSPACE_HARNESS_HEARTBEAT_MARKER.casefold()
+    remainder = normalized.replace(heartbeat, "").replace("bash command still running", "")
+    return not remainder.strip()
+
+
+def _looks_like_search_result_listing(value: str | None) -> bool:
+    if not value:
+        return False
+    if _progress_focus_index(value) >= 0 or _has_high_signal_bash_marker(value):
+        return False
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if len(lines) < 3:
+        return False
+    sample = lines[:12]
+    matches = sum(
+        1
+        for line in sample
+        if re.match(r"^\d+:", line)
+        or re.match(r"^(?:[./A-Za-z0-9_@+-]+/)+[^:\s]+[-:]\d+[-:]", line)
+    )
+    return matches >= min(3, len(sample))
+
+
+def _looks_like_plain_listing(value: str | None) -> bool:
+    if not value:
+        return False
+    tokens = value.split()
+    if len(tokens) < 2:
+        return False
+    return all(re.fullmatch(r"[A-Za-z0-9._@+-]+", token) for token in tokens)
+
+
+def _string_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _mapping_or_empty(value: object) -> Mapping[str, object]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _bounded_percent(value: object) -> float:
+    try:
+        numeric = float(str(value))
+    except (TypeError, ValueError):
+        numeric = 0.0
+    return max(0.0, min(100.0, numeric))
+
+
+def _bounded_confidence(value: object) -> float:
+    try:
+        numeric = float(str(value))
+    except (TypeError, ValueError):
+        numeric = 1.0
+    return max(0.0, min(1.0, numeric))
+
+
+def _aware_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class SqlAgentExecutionEventRepository(
@@ -160,6 +607,15 @@ class SqlAgentExecutionEventRepository(
                 inserted_message_count=1 if inserted_event_type in _MESSAGE_EVENT_TYPES else 0,
                 latest_event_time_us=int(inserted_event_time_us),
             )
+            await apply_workspace_event_progress_projection(
+                self._session,
+                conversation_id=domain_entity.conversation_id,
+                event_id=domain_entity.id,
+                event_type=str(inserted_event_type),
+                event_data=event_data,
+                event_time_us=int(inserted_event_time_us),
+                created_at=domain_entity.created_at,
+            )
         await self._session.flush()
         return domain_entity
 
@@ -195,14 +651,17 @@ class SqlAgentExecutionEventRepository(
                 index_elements=["conversation_id", "event_time_us", "event_counter"]
             )
             .returning(
+                DBAgentExecutionEvent.id,
                 DBAgentExecutionEvent.conversation_id,
                 DBAgentExecutionEvent.event_type,
                 DBAgentExecutionEvent.event_time_us,
+                DBAgentExecutionEvent.created_at,
             )
         )
         insert_result = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
         projection_deltas: dict[str, dict[str, int]] = {}
-        for conversation_id, event_type, event_time_us in insert_result.all():
+        event_data_by_id = {str(item["id"]): item["event_data"] for item in values_list}
+        for event_id, conversation_id, event_type, event_time_us, created_at in insert_result.all():
             delta = projection_deltas.setdefault(
                 str(conversation_id),
                 {"inserted_message_count": 0, "latest_event_time_us": 0},
@@ -210,6 +669,16 @@ class SqlAgentExecutionEventRepository(
             if event_type in _MESSAGE_EVENT_TYPES:
                 delta["inserted_message_count"] += 1
             delta["latest_event_time_us"] = max(delta["latest_event_time_us"], int(event_time_us))
+            event_data = event_data_by_id.get(str(event_id)) or {}
+            await apply_workspace_event_progress_projection(
+                self._session,
+                conversation_id=str(conversation_id),
+                event_id=str(event_id),
+                event_type=str(event_type),
+                event_data=event_data if isinstance(event_data, Mapping) else {},
+                event_time_us=int(event_time_us),
+                created_at=created_at,
+            )
 
         for conversation_id, delta in projection_deltas.items():
             await apply_conversation_event_projection_delta(

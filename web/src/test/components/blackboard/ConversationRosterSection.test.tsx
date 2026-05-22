@@ -68,6 +68,9 @@ describe('ConversationRosterSection', () => {
     renderAt();
 
     await waitFor(() => expect(listConversations).toHaveBeenCalled());
+    expect(listConversations).toHaveBeenCalledWith('p1', 'active', 100, 0, undefined, {
+      workspaceId: 'ws1',
+    });
     expect(await screen.findByText('In WS')).toBeInTheDocument();
     expect(screen.queryByText('Other WS')).not.toBeInTheDocument();
   });

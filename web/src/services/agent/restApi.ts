@@ -12,6 +12,7 @@ import type {
   ToolExecutionsResponse,
   ToolsListResponse,
   PendingHITLResponse,
+  ListConversationsRequestOptions,
 } from '../../types/agent';
 
 const api = httpClient;
@@ -44,15 +45,22 @@ export const restApi = {
     status?: 'active' | 'archived' | 'deleted',
     limit = 10,
     offset = 0,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: ListConversationsRequestOptions
   ): Promise<PaginatedConversationsResponse> {
-    const params: Record<string, string | number> = {
+    const params: Record<string, string | number | boolean> = {
       project_id: projectId,
       limit,
       offset,
     };
     if (status) {
       params.status = status;
+    }
+    if (options?.workspaceId) {
+      params.workspace_id = options.workspaceId;
+    }
+    if (options?.groupByWorkspace) {
+      params.group_by_workspace = true;
     }
     return await api.get<PaginatedConversationsResponse>('/agent/conversations', {
       params,

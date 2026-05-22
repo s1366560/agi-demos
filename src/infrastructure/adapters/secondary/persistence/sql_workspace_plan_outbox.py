@@ -249,14 +249,20 @@ class SqlWorkspacePlanOutboxRepository:
     ) -> WorkspacePlanOutboxModel | None:
         """Release a failed/dead-letter item for immediate operator retry."""
         item = await self.get_by_id(outbox_id)
+        current_time = now or datetime.now(UTC)
         if item is None or item.workspace_id != workspace_id:
             return None
-        if item.status not in {"failed", "dead_letter"}:
+        delayed_pending = (
+            item.status == "pending"
+            and item.next_attempt_at is not None
+            and _as_utc(item.next_attempt_at) > _as_utc(current_time)
+        )
+        if item.status not in {"failed", "dead_letter"} and not delayed_pending:
             raise ValueError(f"outbox item {outbox_id} is not retryable from {item.status}")
 
-        current_time = now or datetime.now(UTC)
         previous_status = item.status
         previous_error = item.last_error
+        previous_next_attempt_at = item.next_attempt_at
         item.status = "pending"
         if previous_status == "dead_letter":
             item.attempt_count = 0
@@ -273,10 +279,21 @@ class SqlWorkspacePlanOutboxRepository:
                 "retried_at": current_time.isoformat(),
                 "previous_status": previous_status,
                 "previous_error": previous_error,
+                "previous_next_attempt_at": (
+                    _as_utc(previous_next_attempt_at).isoformat()
+                    if previous_next_attempt_at
+                    else None
+                ),
             },
         }
         await self._db.flush()
         return item
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 __all__ = ["SqlWorkspacePlanOutboxRepository"]

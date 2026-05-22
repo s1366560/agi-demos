@@ -77,6 +77,10 @@ WORKER_LAUNCH_HEARTBEAT_SECONDS = int(os.getenv("WORKSPACE_WORKER_LAUNCH_HEARTBE
 WORKER_STREAM_FINISH_POLL_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_STREAM_FINISH_POLL_SECONDS", "15")
 )
+WORKER_STREAM_IDLE_PROGRESS_SECONDS = int(
+    os.getenv("WORKSPACE_WORKER_STREAM_IDLE_PROGRESS_SECONDS", "180")
+)
+WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS = 700
 WORKER_STREAM_ORPHAN_GRACE_SECONDS = int(
     os.getenv("WORKSPACE_WORKER_STREAM_ORPHAN_GRACE_SECONDS", "900")
 )
@@ -86,6 +90,7 @@ WORKER_MAX_SINGLE_WRITE_CHARS = 900
 WORKER_RECOMMENDED_WRITE_CHUNK_CHARS = 700
 WORKER_MAX_SINGLE_BASH_COMMAND_CHARS = 900
 WORKER_REPAIR_SOURCE_METADATA_MAX_DEPTH = 12
+WORKER_LAUNCH_PIPELINE_EVIDENCE_LIMIT = 3
 WORKER_COMPLETION_REQUIRED_PREFLIGHT_REFS = (
     "preflight:read-progress",
     "preflight:git-status",
@@ -97,6 +102,8 @@ _VERIFICATION_SCRIPT_SCOPE_PATH_PATTERN = re.compile(
 )
 
 _WORKSPACE_APP_CONTEXT_TYPE = "workspace_worker_runtime"
+_LATEST_PIPELINE_EVIDENCE_KEY = "latest_workspace_pipeline_evidence"
+_RECENT_PIPELINE_EVIDENCE_KEY = "recent_workspace_pipeline_evidence"
 _WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
 _WORKER_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
 _TERMINAL_REPORT_TOOLS = frozenset({"workspace_report_complete", "workspace_report_blocked"})
@@ -1448,6 +1455,75 @@ def _render_delivery_cicd_brief(context: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _pipeline_evidence_from_metadata(
+    plan_node_metadata: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(plan_node_metadata, Mapping):
+        return None
+    value = plan_node_metadata.get(_LATEST_PIPELINE_EVIDENCE_KEY)
+    if isinstance(value, Mapping):
+        return dict(value)
+    recent = plan_node_metadata.get(_RECENT_PIPELINE_EVIDENCE_KEY)
+    if isinstance(recent, list):
+        for item in recent:
+            if isinstance(item, Mapping):
+                return dict(item)
+    return None
+
+
+def _render_pipeline_evidence_brief(evidence: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(evidence, Mapping) or not evidence:
+        return None
+
+    lines = [
+        "## Latest platform pipeline evidence",
+        "Source: `workspace_pipeline_runs` (platform-persisted, current CI/CD evidence)",
+    ]
+    for key, label in (
+        ("id", "Pipeline run"),
+        ("provider", "Provider"),
+        ("status", "Status"),
+        ("commit_ref", "Commit"),
+        ("reason", "Reason"),
+        ("created_at", "Created at"),
+        ("completed_at", "Completed at"),
+    ):
+        value = _metadata_display_value(evidence.get(key))
+        if value:
+            lines.append(f"{label}: `{value}`")
+
+    metadata = evidence.get("metadata")
+    if isinstance(metadata, Mapping):
+        for key, label in (
+            ("external_id", "External run"),
+            ("external_url", "External URL"),
+            ("drone_build_number", "Drone build"),
+            ("drone_repo", "Drone repo"),
+            ("drone_status", "Drone status"),
+            ("deployment_status", "Deployment status"),
+            ("deploy_validation", "Deploy validation"),
+            ("deploy_validation_failure", "Deploy validation failure"),
+            ("pipeline_failure_summary", "Pipeline failure summary"),
+            ("pipeline_last_summary", "Pipeline summary"),
+        ):
+            value = _metadata_display_value(metadata.get(key))
+            if value:
+                lines.append(f"{label}: `{value}`")
+
+    lines.extend(
+        [
+            "Evidence rule: treat this platform-persisted pipeline evidence as the current "
+            "CI/CD state for this workspace. Older pipeline_failure_summary, "
+            "pipeline_failed_stage, handoff notes, or recalled Drone failures are historical "
+            "unless they reference this same run id, external run, or commit.",
+            "Secret rule: do not retrieve, echo, or print CI/CD tokens just to confirm this "
+            "pipeline state. Query external logs only when this evidence is insufficient, and "
+            "never include token values in shell commands or reports.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _append_delivery_drone_lines(lines: list[str], drone: object) -> None:
     if not isinstance(drone, Mapping):
         return
@@ -1936,6 +2012,8 @@ def _build_worker_system_context(
     )
     if delivery_cicd is not None:
         context["delivery_cicd"] = delivery_cicd
+    if pipeline_evidence := _pipeline_evidence_from_metadata(plan_node_metadata):
+        context[_LATEST_PIPELINE_EVIDENCE_KEY] = pipeline_evidence
     harness_context = _task_harness_context(task)
     if harness_context:
         context["harness"] = harness_context
@@ -2037,6 +2115,86 @@ def _task_harness_context(task: WorkspaceTask) -> dict[str, Any] | None:
     }
 
 
+async def _latest_pipeline_evidence_for_task(
+    db: AsyncSession,
+    task: WorkspaceTask,
+    *,
+    plan_id: str | None,
+) -> list[dict[str, Any]]:
+    from sqlalchemy import select
+
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        WorkspacePipelineRunModel,
+    )
+
+    stmt = select(WorkspacePipelineRunModel).where(
+        WorkspacePipelineRunModel.workspace_id == task.workspace_id
+    )
+    if plan_id:
+        stmt = stmt.where(WorkspacePipelineRunModel.plan_id == plan_id)
+    result = await db.execute(
+        stmt.order_by(
+            WorkspacePipelineRunModel.created_at.desc(),
+            WorkspacePipelineRunModel.id.desc(),
+        ).limit(WORKER_LAUNCH_PIPELINE_EVIDENCE_LIMIT)
+    )
+    return [_pipeline_run_evidence_payload(run) for run in result.scalars().all()]
+
+
+def _pipeline_run_evidence_payload(run: object) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in {
+            "id": _metadata_text(getattr(run, "id", None)),
+            "provider": _metadata_text(getattr(run, "provider", None)),
+            "status": _metadata_text(getattr(run, "status", None)),
+            "commit_ref": _metadata_text(getattr(run, "commit_ref", None)),
+            "reason": _metadata_text(getattr(run, "reason", None)),
+            "created_at": _pipeline_datetime(getattr(run, "created_at", None)),
+            "started_at": _pipeline_datetime(getattr(run, "started_at", None)),
+            "completed_at": _pipeline_datetime(getattr(run, "completed_at", None)),
+            "metadata": _safe_pipeline_metadata(getattr(run, "metadata_json", None)),
+        }.items()
+        if value not in (None, "", {})
+    }
+
+
+def _pipeline_datetime(value: object) -> str | None:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return None
+
+
+def _safe_pipeline_metadata(metadata: object) -> dict[str, Any]:
+    if not isinstance(metadata, Mapping):
+        return {}
+    safe_keys = {
+        "deploy_enabled",
+        "deploy_mode",
+        "deploy_stage",
+        "deploy_validation",
+        "deploy_validation_failure",
+        "deploy_validation_issues",
+        "deployment_status",
+        "drone_build_number",
+        "drone_link",
+        "drone_repo",
+        "drone_status",
+        "external_id",
+        "external_provider",
+        "external_url",
+        "pipeline_failed_stage",
+        "pipeline_failure_summary",
+        "pipeline_last_summary",
+        "service_count",
+        "source_publish_branch",
+        "source_publish_commit_ref",
+        "source_publish_source_commit_ref",
+        "stage_count",
+    }
+    return {key: value for key, value in metadata.items() if key in safe_keys}
+
+
 async def _load_plan_node_metadata_for_task(
     db: AsyncSession,
     task: WorkspaceTask,
@@ -2077,7 +2235,29 @@ async def _load_plan_node_metadata_for_task(
             break
         source_metadata = candidate
         source_node_id = _metadata_text(candidate.get("repair_for_node_id"))
-    return _effective_repair_plan_node_metadata(node_metadata, source_metadata)
+    effective_metadata = _effective_repair_plan_node_metadata(node_metadata, source_metadata)
+    try:
+        pipeline_evidence = await _latest_pipeline_evidence_for_task(
+            db,
+            task,
+            plan_id=plan_id if isinstance(plan_id, str) else None,
+        )
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.pipeline_evidence_context_failed",
+            extra={
+                "event": "workspace_worker_launch.pipeline_evidence_context_failed",
+                "workspace_id": task.workspace_id,
+                "task_id": task.id,
+                "plan_id": plan_id,
+            },
+            exc_info=True,
+        )
+    else:
+        if pipeline_evidence:
+            effective_metadata[_LATEST_PIPELINE_EVIDENCE_KEY] = pipeline_evidence[0]
+            effective_metadata[_RECENT_PIPELINE_EVIDENCE_KEY] = pipeline_evidence
+    return effective_metadata
 
 
 def _effective_repair_plan_node_metadata(
@@ -2271,6 +2451,10 @@ def _build_worker_brief(
     )
     if delivery_cicd is not None:
         sections.append(_render_delivery_cicd_brief(delivery_cicd))
+    if pipeline_evidence_brief := _render_pipeline_evidence_brief(
+        _pipeline_evidence_from_metadata(plan_node_metadata)
+    ):
+        sections.append(pipeline_evidence_brief)
     sections.append(
         "## Artifact write discipline\n"
         "Never use bash heredocs, inline Python scripts, or one-shot write calls to create "
@@ -2579,6 +2763,38 @@ def _should_stop_orphaned_worker_stream(
     return False, None
 
 
+def _should_publish_idle_stream_progress(
+    *,
+    idle_seconds: float,
+    last_published_at: float,
+    now: float,
+    interval_seconds: int = WORKER_STREAM_IDLE_PROGRESS_SECONDS,
+) -> bool:
+    interval = max(1, int(interval_seconds))
+    if idle_seconds < interval:
+        return False
+    return last_published_at <= 0 or now - last_published_at >= interval
+
+
+def _stream_idle_progress_summary(
+    *,
+    idle_seconds: float,
+    last_stream_event_type: str | None,
+    running_exists: bool,
+    finished_message_id: str | None,
+) -> str:
+    marker_state = "agent:running present" if running_exists else "agent:running missing"
+    parts = [
+        f"Worker stream still active; no new visible stream event for {int(idle_seconds)}s",
+        marker_state,
+    ]
+    if last_stream_event_type:
+        parts.append(f"last_event={last_stream_event_type}")
+    if finished_message_id:
+        parts.append(f"agent:finished={finished_message_id}")
+    return "; ".join(parts)
+
+
 async def _publish_worker_launch_heartbeat(
     *,
     workspace_id: str,
@@ -2632,6 +2848,92 @@ async def _publish_worker_launch_heartbeat(
             },
             exc_info=True,
         )
+
+
+async def _publish_worker_launch_progress(
+    *,
+    workspace_id: str,
+    task_id: str,
+    attempt_id: str | None,
+    root_goal_task_id: str,
+    conversation_id: str | None,
+    actor_user_id: str,
+    worker_agent_id: str,
+    leader_agent_id: str | None,
+    summary: str,
+    phase: str,
+) -> None:
+    """Publish an objective launcher-side progress update for visible feedback."""
+
+    if not attempt_id:
+        return
+    summary = summary.strip()
+    if not summary:
+        return
+    try:
+        from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpVerb
+        from src.infrastructure.agent.workspace.workspace_supervisor import (
+            publish_envelope_default,
+        )
+
+        metadata: dict[str, Any] = {
+            "actor_user_id": actor_user_id,
+            "worker_agent_id": worker_agent_id,
+            "source": "workspace_worker_launch",
+        }
+        if leader_agent_id:
+            metadata["leader_agent_id"] = leader_agent_id
+        if conversation_id:
+            metadata["worker_conversation_id"] = conversation_id
+
+        envelope = WtpEnvelope(
+            verb=WtpVerb.TASK_PROGRESS,
+            workspace_id=workspace_id,
+            task_id=task_id,
+            attempt_id=attempt_id,
+            root_goal_task_id=root_goal_task_id or None,
+            payload={"summary": summary, "phase": phase},
+            extra_metadata=metadata,
+        )
+        await publish_envelope_default(envelope)
+    except Exception:
+        logger.debug(
+            "workspace_worker_launch.progress_publish_failed",
+            extra={
+                "event": "workspace_worker_launch.progress_publish_failed",
+                "workspace_id": workspace_id,
+                "task_id": task_id,
+                "attempt_id": attempt_id,
+                "phase": phase,
+            },
+            exc_info=True,
+        )
+
+
+def _worker_launch_started_summary(
+    *,
+    attempt_number: int | str | None,
+    repair_brief_prompt: str | None,
+) -> str:
+    attempt_label = f"attempt #{attempt_number}" if attempt_number else "attempt"
+    repair_summary = _compact_worker_launch_progress_text(repair_brief_prompt)
+    if repair_summary:
+        return (
+            f"Worker {attempt_label} started from verifier feedback: "
+            f"{repair_summary}"
+        )
+    return f"Worker {attempt_label} started; session is bound and streaming."
+
+
+def _compact_worker_launch_progress_text(value: str | None) -> str:
+    if not isinstance(value, str):
+        return ""
+    collapsed = re.sub(r"\s+", " ", value).strip()
+    if not collapsed:
+        return ""
+    if len(collapsed) <= WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS:
+        return collapsed
+    return f"{collapsed[: WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS - 1].rstrip()}..."
 
 
 async def _worker_launch_heartbeat_loop(
@@ -2802,6 +3104,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     # --- Stage 1: attempt lifecycle + deterministic conversation binding ---
     resolved_attempt_id = attempt_id
+    resolved_attempt_number: int | str | None = None
     resolved_conversation_id: str | None = None
     code_context: WorkspaceCodeContext | None = None
     plan_node_metadata: dict[str, Any] = {}
@@ -3021,6 +3324,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 leader_agent_id=leader_agent_id,
             )
             resolved_attempt_id = attempt.id
+            resolved_attempt_number = attempt.attempt_number
 
             resolved_conversation_id = reuse_conversation_id or _conversation_id_for_worker(
                 workspace_id=workspace_id,
@@ -3151,6 +3455,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 attempt = await attempt_service.bind_conversation(
                     attempt.id, resolved_conversation_id
                 )
+                resolved_attempt_number = attempt.attempt_number
             except ValueError:
                 logger.warning(
                     "workspace_worker_launch.bind_conversation_failed",
@@ -3227,6 +3532,21 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 )
 
             await db.commit()
+            await _publish_worker_launch_progress(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                attempt_id=resolved_attempt_id,
+                root_goal_task_id=root_goal_task_id,
+                conversation_id=resolved_conversation_id,
+                actor_user_id=actor_user_id,
+                worker_agent_id=worker_agent_id,
+                leader_agent_id=leader_agent_id,
+                summary=_worker_launch_started_summary(
+                    attempt_number=resolved_attempt_number,
+                    repair_brief_prompt=repair_brief_prompt,
+                ),
+                phase="retry_started" if repair_brief_prompt else "attempt_started",
+            )
     except Exception as exc:
         logger.warning(
             "workspace_worker_launch.setup_failed",
@@ -3347,6 +3667,8 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 preferred_language=resolved_preferred_language,
             ).__aiter__()
             last_stream_event_seen = time.monotonic()
+            last_idle_progress_published = 0.0
+            last_stream_event_type: str | None = None
             while True:
                 if next_event_task is None:
                     next_event_task = asyncio.create_task(stream_iter.__anext__())
@@ -3355,7 +3677,8 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     timeout=max(1, WORKER_STREAM_FINISH_POLL_SECONDS),
                 )
                 if not done:
-                    idle_seconds = time.monotonic() - last_stream_event_seen
+                    now_monotonic = time.monotonic()
+                    idle_seconds = now_monotonic - last_stream_event_seen
                     finished_message_id = await _agent_finished_message_id(
                         redis_client,
                         resolved_conversation_id,
@@ -3371,6 +3694,29 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                         idle_seconds=idle_seconds,
                     )
                     if not should_stop:
+                        if _should_publish_idle_stream_progress(
+                            idle_seconds=idle_seconds,
+                            last_published_at=last_idle_progress_published,
+                            now=now_monotonic,
+                        ):
+                            await _publish_worker_launch_progress(
+                                workspace_id=workspace_id,
+                                task_id=task.id,
+                                attempt_id=resolved_attempt_id,
+                                root_goal_task_id=root_goal_task_id,
+                                conversation_id=resolved_conversation_id,
+                                actor_user_id=actor_user_id,
+                                worker_agent_id=worker_agent_id,
+                                leader_agent_id=leader_agent_id,
+                                summary=_stream_idle_progress_summary(
+                                    idle_seconds=idle_seconds,
+                                    last_stream_event_type=last_stream_event_type,
+                                    running_exists=running_exists,
+                                    finished_message_id=finished_message_id,
+                                ),
+                                phase="stream_idle",
+                            )
+                            last_idle_progress_published = now_monotonic
                         continue
                     next_event_task.cancel()
                     with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
@@ -3408,6 +3754,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 last_stream_event_seen = time.monotonic()
                 stream_message_id = stream_message_id or _stream_message_id_from_event(event)
                 event_type = event.get("type")
+                last_stream_event_type = str(event_type or "unknown")
                 if event_type == "text_delta":
                     accumulated_text += event.get("data", {}).get("text", "")
                 elif event_type == "observe":

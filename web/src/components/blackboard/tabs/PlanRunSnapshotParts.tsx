@@ -53,6 +53,7 @@ export function NodeRow({
   onSelect: () => void;
 }) {
   const progress = Math.max(0, Math.min(100, node.progress.percent || 0));
+  const progressNote = node.progress.note.trim();
   const writeSet = nodeWriteSet(node);
   return (
     <button
@@ -83,6 +84,11 @@ export function NodeRow({
             {node.acceptance_criteria.length > 0 && <span>checks {criterionSummary(node)}</span>}
             {writeSet.length > 0 && <span>write {String(writeSet.length)}</span>}
           </div>
+          {progressNote && (
+            <p className="mt-2 line-clamp-2 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
+              {progressNote}
+            </p>
+          )}
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-dark/10 dark:bg-surface-light/10">
             <div
               className="h-full rounded-full bg-status-text-info transition-[width] motion-reduce:transition-none"

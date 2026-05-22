@@ -145,9 +145,15 @@ export interface Conversation {
   // Workspace linkage (Track G2).
   workspace_id?: string | null | undefined;
   linked_workspace_task_id?: string | null | undefined;
+  workspace_name?: string | null | undefined;
   participant_agents?: string[] | undefined;
   coordinator_agent_id?: string | null | undefined;
   focused_agent_id?: string | null | undefined;
+}
+
+export interface ListConversationsRequestOptions {
+  groupByWorkspace?: boolean | undefined;
+  workspaceId?: string | null | undefined;
 }
 
 /**
@@ -159,6 +165,7 @@ export interface PaginatedConversationsResponse {
   has_more: boolean;
   offset: number;
   limit: number;
+  next_offset?: number | null | undefined;
 }
 
 /**

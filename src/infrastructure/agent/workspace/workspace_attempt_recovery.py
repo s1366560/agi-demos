@@ -71,6 +71,7 @@ DEFAULT_STARTUP_SWEEP_BATCHES = 5
 DEFAULT_ERROR_EVENT_GRACE_SECONDS = 5
 DEFAULT_FINISHED_STREAM_GRACE_SECONDS = 15
 DEFAULT_TRANSIENT_PROVIDER_ERROR_GRACE_SECONDS = 300
+RECOVERY_PROGRESS_CONTEXT_MAX_CHARS = 700
 RECOVERY_SUMMARY_RESTART = "recovered_after_restart_no_heartbeat"
 RECOVERY_SUMMARY_STALE = "recovered_stale_no_heartbeat"
 RECOVERY_SUMMARY_AGENT_ERROR_EVENT = "recovered_agent_error_event"
@@ -147,6 +148,8 @@ def _stream_event_message(event_data: object) -> str:
         or event_data.get("error")
         or event_data.get("reason")
         or event_data.get("detail")
+        or event_data.get("result")
+        or event_data.get("observation")
     )
     return raw.strip() if isinstance(raw, str) else ""
 
@@ -171,6 +174,15 @@ def _finished_stream_recovery_summary(
     if message:
         details.append(f"last_event={message}")
     return f"{base}: {'; '.join(details)}"
+
+
+def _append_recovery_progress_context(summary: str, progress_summary: str | None) -> str:
+    progress = (progress_summary or "").replace("\r", "\n").strip()
+    if not progress:
+        return summary
+    if len(progress) > RECOVERY_PROGRESS_CONTEXT_MAX_CHARS:
+        progress = progress[: RECOVERY_PROGRESS_CONTEXT_MAX_CHARS - 15] + "...[truncated]"
+    return f"{summary}; latest_progress={progress}"
 
 
 def _is_transient_provider_error_event(event_data: object) -> bool:
@@ -521,34 +533,19 @@ class WorkspaceAttemptRecoveryService:
             repo = SqlWorkspaceTaskSessionAttemptRepository(session)
             now = datetime.now(UTC)
             stmt = (
-                select(
-                    WorkspaceTaskSessionAttemptModel,
-                    AgentExecutionEvent.event_type,
-                    AgentExecutionEvent.event_data,
-                    AgentExecutionEvent.created_at,
-                )
-                .join(
-                    AgentExecutionEvent,
-                    AgentExecutionEvent.conversation_id
-                    == WorkspaceTaskSessionAttemptModel.conversation_id,
-                )
+                select(WorkspaceTaskSessionAttemptModel)
                 .where(WorkspaceTaskSessionAttemptModel.status.in_(non_terminal))
                 .where(WorkspaceTaskSessionAttemptModel.conversation_id.is_not(None))
-                .where(AgentExecutionEvent.event_type.in_(("complete", "error")))
-                .where(
-                    AgentExecutionEvent.created_at >= WorkspaceTaskSessionAttemptModel.created_at
-                )
-                .where(AgentExecutionEvent.created_at < older_than)
+                .where(WorkspaceTaskSessionAttemptModel.updated_at < older_than)
             )
             if workspace_id:
                 stmt = stmt.where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
             stmt = stmt.order_by(
                 WorkspaceTaskSessionAttemptModel.updated_at.asc(),
-                AgentExecutionEvent.created_at.desc(),
-            ).limit(self._max_attempts_per_sweep * 4)
+            ).limit(self._max_attempts_per_sweep * 8)
             result = await session.execute(stmt)
-            rows = result.all()
-            if not rows:
+            attempt_models = list(result.scalars().all())
+            if not attempt_models:
                 return []
             try:
                 redis_client = await get_redis_client()
@@ -564,7 +561,7 @@ class WorkspaceAttemptRecoveryService:
 
             recovered: list[tuple[WorkspaceTaskSessionAttempt, str]] = []
             seen: set[str] = set()
-            for attempt_model, event_type, event_data, event_created_at in rows:
+            for attempt_model in attempt_models:
                 attempt = repo._to_domain(attempt_model)
                 if attempt is None or attempt.id in seen:
                     continue
@@ -592,6 +589,17 @@ class WorkspaceAttemptRecoveryService:
                         },
                     )
                     continue
+                latest_event = await self._latest_finished_stream_event(
+                    session,
+                    conversation_id=conversation_id,
+                    attempt_created_at=attempt.created_at,
+                )
+                if latest_event is None:
+                    event_type = "none"
+                    event_data: object = {}
+                    event_created_at = attempt.updated_at or attempt.created_at
+                else:
+                    event_type, event_data, event_created_at = latest_event
                 if not _should_recover_finished_stream(
                     finished_message_id=finished_message_id,
                     running_exists=running_exists,
@@ -600,20 +608,54 @@ class WorkspaceAttemptRecoveryService:
                     finished_stream_grace_seconds=self._finished_stream_grace_seconds,
                 ):
                     continue
+                if event_created_at > older_than:
+                    continue
                 seen.add(attempt.id)
+                progress_summary = await self._latest_attempt_progress_summary(
+                    session,
+                    attempt.id,
+                )
+                recovery_summary = _finished_stream_recovery_summary(
+                    event_type=str(event_type or "unknown"),
+                    event_data=event_data,
+                    finished_message_id=finished_message_id or "",
+                )
                 recovered.append(
                     (
                         attempt,
-                        _finished_stream_recovery_summary(
-                            event_type=str(event_type or "unknown"),
-                            event_data=event_data,
-                            finished_message_id=finished_message_id or "",
+                        _append_recovery_progress_context(
+                            recovery_summary,
+                            progress_summary,
                         ),
                     )
                 )
                 if len(recovered) >= self._max_attempts_per_sweep:
                     break
             return recovered
+
+    async def _latest_finished_stream_event(
+        self,
+        session: AsyncSession,
+        *,
+        conversation_id: str,
+        attempt_created_at: datetime,
+    ) -> tuple[str, object, datetime] | None:
+        result = await session.execute(
+            select(
+                AgentExecutionEvent.event_type,
+                AgentExecutionEvent.event_data,
+                AgentExecutionEvent.created_at,
+            )
+            .where(AgentExecutionEvent.conversation_id == conversation_id)
+            .where(AgentExecutionEvent.created_at >= attempt_created_at)
+            .order_by(AgentExecutionEvent.created_at.desc())
+            .limit(1)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        event_type, event_data, event_created_at = row
+        return str(event_type or "unknown"), event_data or {}, event_created_at
 
     async def _fetch_error_terminated_attempts(
         self,
@@ -680,10 +722,49 @@ class WorkspaceAttemptRecoveryService:
                     )
                     continue
                 seen.add(attempt.id)
-                recovered.append((attempt, _error_event_recovery_summary(event_data)))
+                progress_summary = await self._latest_attempt_progress_summary(
+                    session,
+                    attempt.id,
+                )
+                recovered.append(
+                    (
+                        attempt,
+                        _append_recovery_progress_context(
+                            _error_event_recovery_summary(event_data),
+                            progress_summary,
+                        ),
+                    )
+                )
                 if len(recovered) >= self._max_attempts_per_sweep:
                     break
             return recovered
+
+    async def _latest_attempt_progress_summary(
+        self,
+        session: AsyncSession,
+        attempt_id: str,
+    ) -> str | None:
+        result = await session.execute(
+            select(PlanNodeModel.metadata_json, PlanNodeModel.progress)
+            .where(PlanNodeModel.current_attempt_id == attempt_id)
+            .order_by(PlanNodeModel.updated_at.desc(), PlanNodeModel.created_at.desc())
+            .limit(1)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        metadata, progress = row
+        metadata_map = metadata if isinstance(metadata, Mapping) else {}
+        latest_progress = metadata_map.get("latest_worker_progress")
+        if isinstance(latest_progress, Mapping):
+            summary = latest_progress.get("summary")
+            if isinstance(summary, str) and summary.strip():
+                return summary.strip()
+        progress_map = progress if isinstance(progress, Mapping) else {}
+        note = progress_map.get("note")
+        if isinstance(note, str) and note.strip():
+            return note.strip()
+        return None
 
     async def _recover_all(
         self,

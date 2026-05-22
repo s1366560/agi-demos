@@ -60,6 +60,10 @@ vi.mock('@/services/workspaceService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/workspaceService')>();
   return {
     ...actual,
+    workspaceTaskService: {
+      ...actual.workspaceTaskService,
+      list: vi.fn(),
+    },
     workspacePlanService: {
       ...actual.workspacePlanService,
       getSnapshot: vi.fn(),
@@ -82,7 +86,7 @@ vi.mock('@/components/agent/SandboxSection', () => ({
 // eslint-disable-next-line no-restricted-imports
 import { agentGraphApi } from '@/services/agent/graph/agentGraphApi';
 // eslint-disable-next-line no-restricted-imports
-import { workspacePlanService } from '@/services/workspaceService';
+import { workspacePlanService, workspaceTaskService } from '@/services/workspaceService';
 // eslint-disable-next-line no-restricted-imports
 import { useGraphStore } from '@/stores/graphStore';
 // eslint-disable-next-line no-restricted-imports
@@ -219,6 +223,7 @@ describe('RightPanel (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGraphStore.getState().clearAll();
+    vi.mocked(workspaceTaskService.list).mockResolvedValue([]);
     vi.mocked(workspacePlanService.getSnapshot).mockResolvedValue(mockWorkspaceSnapshot() as any);
     vi.mocked(agentGraphApi.getGraph).mockResolvedValue({
       id: 'graph-1',
@@ -338,6 +343,31 @@ describe('RightPanel (Refactored)', () => {
     expect(screen.getByText('Graph').closest('button')).toBeDisabled();
   });
 
+  it('should render current workspace tasks and plan nodes in the task panel', async () => {
+    vi.mocked(workspaceTaskService.list).mockResolvedValueOnce([]);
+
+    renderRightPanel(
+      <RightPanel
+        tasks={[]}
+        conversationId="conv-1"
+        workspaceId="ws-1"
+        currentWorkspaceTaskId="workspace-task-1"
+      />
+    );
+
+    expect(await screen.findByText('Workspace deploy task')).toBeInTheDocument();
+    expect(screen.getByText('1 item')).toBeInTheDocument();
+    expect(screen.getByTestId('workspace-task-plan-row-task-1')).toHaveAttribute(
+      'data-current-workspace-task',
+      'true'
+    );
+    expect(workspaceTaskService.list).toHaveBeenCalledWith('ws-1');
+    expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
+      outboxLimit: 8,
+      eventLimit: 20,
+    });
+  });
+
   it('should render workspace execution graph when the current conversation is workspace-active', async () => {
     useGraphStore
       .getState()
@@ -353,6 +383,7 @@ describe('RightPanel (Refactored)', () => {
     );
 
     expect(screen.getByText('Graph').closest('button')).not.toBeDisabled();
+    fireEvent.click(screen.getByText('Graph'));
     expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
     expect(screen.getAllByText('Workspace deploy task').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('execution-dag-node-task-1')).toHaveAttribute(

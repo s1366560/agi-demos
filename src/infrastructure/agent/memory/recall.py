@@ -96,6 +96,10 @@ class MemoryRecallPreprocessor:
                 for r in safe_results
                 if not _is_other_workspace_task_memory(r["content"], current_workspace_id)
             ]
+        else:
+            safe_results = [
+                r for r in safe_results if _extract_workspace_binding_id(r["content"]) is None
+            ]
 
         if not safe_results:
             self.last_results = []
@@ -115,7 +119,9 @@ class MemoryRecallPreprocessor:
 
         return self._format_context(unique_results)
 
-    async def _search_chunks(self, query: str, project_id: str, max_results: int) -> list[dict[str, Any]]:
+    async def _search_chunks(
+        self, query: str, project_id: str, max_results: int
+    ) -> list[dict[str, Any]]:
         """Search chunk index (PostgreSQL) for relevant memories."""
         if not self._chunk_search:
             return []
@@ -140,7 +146,9 @@ class MemoryRecallPreprocessor:
             logger.warning(f"Chunk search failed during recall: {e}")
             return []
 
-    async def _search_graph(self, query: str, project_id: str, max_results: int) -> list[dict[str, Any]]:
+    async def _search_graph(
+        self, query: str, project_id: str, max_results: int
+    ) -> list[dict[str, Any]]:
         """Search knowledge graph (Neo4j) for relevant entities."""
         if not self._graph_search:
             return []

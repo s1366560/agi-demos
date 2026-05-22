@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 const EVENT_REFRESH_DEBOUNCE_MS = 300;
 const POLL_INTERVAL_MS = 30000;
 const MIN_CONVERSATION_REFRESH_LIMIT = 10;
+const MAX_CONVERSATION_REFRESH_LIMIT = 100;
 
 type ConversationCreatedPayload = {
   conversation_id?: string | undefined;
@@ -59,9 +60,12 @@ function isConversationAlreadyLoaded(conversationId: string | undefined): boolea
 }
 
 function getRefreshLimit(): number {
-  return Math.max(
-    useConversationsStore.getState().conversations.length,
-    MIN_CONVERSATION_REFRESH_LIMIT
+  return Math.min(
+    Math.max(
+      useConversationsStore.getState().conversations.length,
+      MIN_CONVERSATION_REFRESH_LIMIT
+    ),
+    MAX_CONVERSATION_REFRESH_LIMIT
   );
 }
 

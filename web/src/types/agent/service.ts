@@ -5,6 +5,7 @@ import type {
   PaginatedConversationsResponse,
   Conversation,
   ChatRequest,
+  ListConversationsRequestOptions,
   ConversationMessagesResponse,
   ExecutionHistoryResponse,
   ExecutionStatsResponse,
@@ -28,7 +29,8 @@ export interface AgentService {
     status?: ConversationStatus,
     limit?: number,
     offset?: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: ListConversationsRequestOptions
   ): Promise<PaginatedConversationsResponse>;
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null>;
   chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void>;

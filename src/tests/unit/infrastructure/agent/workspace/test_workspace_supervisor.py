@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -46,7 +47,9 @@ def _progress_envelope() -> WtpEnvelope:
         workspace_id="ws-1",
         task_id="task-1",
         attempt_id="attempt-1",
-        payload={"summary": "halfway"},
+        correlation_id="progress-1",
+        payload={"summary": "halfway", "phase": "build", "percent": 50},
+        extra_metadata={"worker_agent_id": "worker", "worker_conversation_id": "conv-1"},
     )
 
 
@@ -83,6 +86,39 @@ class _FakeRedis:
         self._delivered = True
         stream_name = next(iter(streams.keys()))
         return [(stream_name, list(self.entries))]
+
+
+class _FakeResult:
+    def __init__(self, value: Any) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> Any:
+        return self._value
+
+
+class _FakeSession:
+    def __init__(self, node: Any) -> None:
+        self.node = node
+        self.added: list[Any] = []
+        self.committed = False
+
+    async def __aenter__(self) -> _FakeSession:
+        return self
+
+    async def __aexit__(self, *_exc: Any) -> None:
+        return None
+
+    async def execute(self, _stmt: Any) -> _FakeResult:
+        return _FakeResult(self.node)
+
+    def add(self, value: Any) -> None:
+        self.added.append(value)
+
+    async def flush(self) -> None:
+        return None
+
+    async def commit(self) -> None:
+        self.committed = True
 
 
 class TestPublishEnvelope:
@@ -191,6 +227,7 @@ class TestSupervisorDispatch:
 
         supervisor = WorkspaceSupervisor(redis, block_ms=1)
         supervisor._last_id = "0"
+        supervisor._apply_progress = AsyncMock()  # type: ignore[method-assign]
 
         with patch(
             "src.infrastructure.agent.workspace.workspace_goal_runtime."
@@ -202,6 +239,47 @@ class TestSupervisorDispatch:
             await supervisor.stop()
 
         apply_mock.assert_not_awaited()
+        supervisor._apply_progress.assert_awaited_once()  # type: ignore[attr-defined]
+
+    async def test_progress_verb_updates_plan_node_and_event(self) -> None:
+        node = SimpleNamespace(
+            id="node-1",
+            plan_id="plan-1",
+            workspace_task_id="task-1",
+            current_attempt_id="attempt-1",
+            progress={"percent": 0, "confidence": 0.7, "note": ""},
+            metadata_json={},
+            updated_at=None,
+            created_at=None,
+        )
+        fake_session = _FakeSession(node)
+
+        def fake_session_factory() -> _FakeSession:
+            return fake_session
+
+        supervisor = WorkspaceSupervisor(None)
+
+        with patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            new=fake_session_factory,
+        ):
+            await supervisor._apply_progress(_progress_envelope())
+
+        assert fake_session.committed is True
+        assert node.progress == {"percent": 50.0, "confidence": 0.7, "note": "halfway"}
+        assert node.metadata_json["latest_worker_progress"] == {
+            "event_id": "progress-1",
+            "event_type": "worker_progress",
+            "summary": "halfway",
+            "task_id": "task-1",
+            "attempt_id": "attempt-1",
+            "percent": 50.0,
+            "created_at": node.metadata_json["latest_worker_progress"]["created_at"],
+            "phase": "build",
+            "conversation_id": "conv-1",
+        }
+        assert node.metadata_json["progress_events"][-1]["summary"] == "halfway"
+        assert fake_session.added[0].event_type == "worker_progress"
 
     async def test_unparseable_entry_is_skipped(self) -> None:
         redis = _FakeRedis()

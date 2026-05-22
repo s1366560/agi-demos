@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useLocation } from 'react-router-dom';
 
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 
@@ -86,11 +87,21 @@ vi.mock('@/utils/agentWorkspacePath', () => ({
     tenantId,
     projectId,
     conversationId,
+    workspaceId,
   }: {
     tenantId?: string;
     projectId?: string;
     conversationId?: string;
-  }) => `/tenant/${tenantId}/project/${projectId}/agent-workspace/${conversationId ?? ''}`,
+    workspaceId?: string | null;
+  }) => {
+    const basePath = tenantId ? `/tenant/${tenantId}/agent-workspace` : '/tenant/agent-workspace';
+    const conversationPath = conversationId ? `${basePath}/${conversationId}` : basePath;
+    const params = new URLSearchParams();
+    if (projectId) params.set('projectId', projectId);
+    if (workspaceId) params.set('workspaceId', workspaceId);
+    const query = params.toString();
+    return query ? `${conversationPath}?${query}` : conversationPath;
+  },
 }));
 
 vi.mock('@/utils/date', () => ({
@@ -152,6 +163,11 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   ),
   LazyInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+}
 
 describe('TenantChatSidebar', () => {
   beforeEach(() => {
@@ -259,6 +275,33 @@ describe('TenantChatSidebar', () => {
     });
   });
 
+  it('does not carry workspace context when creating a new conversation', async () => {
+    render(
+      <>
+        <TenantChatSidebar tenantId="tenant-1" mobile />
+        <LocationProbe />
+      </>,
+      {
+        route: '/tenant/tenant-1/agent-workspace?projectId=project-1&workspaceId=ws-current',
+      }
+    );
+
+    const newChatButton = await screen.findByRole('button', { name: 'New Chat' });
+    await waitFor(() => {
+      expect(newChatButton).toBeEnabled();
+    });
+
+    fireEvent.click(newChatButton);
+
+    await waitFor(() => {
+      expect(agentState.createNewConversation).toHaveBeenCalledWith('project-1');
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/tenant/tenant-1/agent-workspace/conv-new?projectId=project-1'
+      );
+    });
+    expect(screen.getByTestId('location-probe')).not.toHaveTextContent('workspaceId=');
+  });
+
   it('groups workspace conversations by workspace only with collapsible sections', () => {
     conversationsState.conversations = [
       {
@@ -306,5 +349,25 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByText('Workspace task')).not.toBeInTheDocument();
     expect(screen.queryByText('Verifier')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+  });
+
+  it('uses workspace names returned by the conversation API', () => {
+    conversationsState.conversations = [
+      {
+        id: 'workspace-chat:ws-api:agent-1',
+        title: 'Workspace Chat - Verifier',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-api',
+        workspace_name: 'API Workspace',
+      },
+    ];
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1',
+    });
+
+    expect(screen.getByRole('button', { name: /API Workspace/ })).toBeInTheDocument();
+    expect(screen.queryByText('Unknown workspace')).not.toBeInTheDocument();
   });
 });

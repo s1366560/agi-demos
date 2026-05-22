@@ -8,8 +8,13 @@ bound to a workspace turn.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import ClassVar
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
+from src.infrastructure.agent.core.react_agent_prompt_mixin import PromptMixin
 from src.infrastructure.agent.core.react_agent_tool_policy import (
     filter_non_workspace_conversation_tools,
 )
@@ -28,6 +33,44 @@ class _Tool:
         self.name = name
 
 
+class _PromptTool:
+    def __init__(self, name: str, description: str) -> None:
+        self.name = name
+        self.description = description
+
+
+class _ProjectWorkspaceManager:
+    root_goal_task_id = None
+
+    async def build_persona(self) -> None:
+        return None
+
+
+class _ProjectPromptAgent(PromptMixin):
+    model = "claude-3"
+    skills: ClassVar[list[object]] = []
+    subagents: ClassVar[list[object]] = []
+    project_root = Path("/tmp/memstack-project")
+    max_steps = 5
+    max_tokens = 4000
+    agent_mode = "build"
+    prompt_manager = SystemPromptManager()
+    _enable_subagent_as_tool = False
+    _workspace_manager = _ProjectWorkspaceManager()
+    _session_factory = None
+    _sisyphus_prompt_builder = None
+    _tool_policy_layers: ClassVar[dict[str, dict[str, object]]] = {}
+    _tool_selection_max_tools = 40
+    _tool_selection_semantic_backend = "disabled"
+    _stream_memory_context = None
+
+    def _get_current_tools(
+        self,
+        selection_context: object | None = None,
+    ) -> tuple[dict[str, object], list[_PromptTool]]:
+        return {}, [_PromptTool("read", "read file")]
+
+
 pytestmark = pytest.mark.unit
 
 
@@ -40,16 +83,13 @@ class TestIsWorkspaceConversationPredicate:
         # The historical leaky gate (project_id + tenant_id) must not flip
         # the new authoritative predicate.
         assert (
-            is_workspace_conversation(
-                {"runtime_context": {"project_id": "p1", "tenant_id": "t1"}}
-            )
+            is_workspace_conversation({"runtime_context": {"project_id": "p1", "tenant_id": "t1"}})
             is False
         )
 
     def test_task_authority_workspace_marks_conversation(self) -> None:
         assert (
-            is_workspace_conversation({"runtime_context": {"task_authority": "workspace"}})
-            is True
+            is_workspace_conversation({"runtime_context": {"task_authority": "workspace"}}) is True
         )
 
     def test_workspace_id_with_role_marks_conversation(self) -> None:
@@ -66,9 +106,7 @@ class TestIsWorkspaceConversationPredicate:
         )
 
     def test_workspace_id_without_role_does_not_mark(self) -> None:
-        assert (
-            is_workspace_conversation({"runtime_context": {"workspace_id": "ws-1"}}) is False
-        )
+        assert is_workspace_conversation({"runtime_context": {"workspace_id": "ws-1"}}) is False
 
     def test_accepts_raw_runtime_context_mapping(self) -> None:
         assert is_workspace_conversation({"task_authority": "workspace"}) is True
@@ -99,16 +137,12 @@ class TestNonWorkspaceConversationToolFilter:
             _Tool("workspace_chat_send"),
             _Tool("agent_spawn"),
         ]
-        filtered = filter_non_workspace_conversation_tools(
-            tools, is_workspace_conversation=False
-        )
+        filtered = filter_non_workspace_conversation_tools(tools, is_workspace_conversation=False)
         assert [t.name for t in filtered] == ["read", "agent_spawn"]
 
     def test_keeps_all_when_workspace(self) -> None:
         tools = [_Tool("read"), _Tool("workspace_report_complete")]
-        filtered = filter_non_workspace_conversation_tools(
-            tools, is_workspace_conversation=True
-        )
+        filtered = filter_non_workspace_conversation_tools(tools, is_workspace_conversation=True)
         assert [t.name for t in filtered] == ["read", "workspace_report_complete"]
 
 
@@ -166,6 +200,51 @@ class TestSystemPromptIsolation:
         assert "<workspace>" in prompt
         assert "Workspace Authority Contract" in prompt
         assert "Work Plan & Task Lifecycle" in prompt
+
+
+class TestPromptMixinWorkspaceContextIsolation:
+    @pytest.mark.asyncio
+    async def test_project_chat_with_workspace_manager_omits_dynamic_workspace_context(
+        self,
+    ) -> None:
+        agent = _ProjectPromptAgent()
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_context_builder.build_workspace_context",
+            new_callable=AsyncMock,
+        ) as build_context:
+            build_context.return_value = '<cyber-workspace name="leaked" />'
+
+            prompt = await agent._build_system_prompt(
+                user_query="hi",
+                conversation_context=[],
+                project_id="project-1",
+                tenant_id="tenant-1",
+                is_workspace_conversation=False,
+            )
+
+        build_context.assert_not_awaited()
+        assert "<cyber-workspace" not in prompt
+
+    @pytest.mark.asyncio
+    async def test_workspace_chat_injects_dynamic_workspace_context(self) -> None:
+        agent = _ProjectPromptAgent()
+        workspace_context = '<cyber-workspace name="workspace" />'
+        with patch(
+            "src.infrastructure.agent.workspace.workspace_context_builder.build_workspace_context",
+            new_callable=AsyncMock,
+        ) as build_context:
+            build_context.return_value = workspace_context
+
+            prompt = await agent._build_system_prompt(
+                user_query="hi",
+                conversation_context=[],
+                project_id="project-1",
+                tenant_id="tenant-1",
+                is_workspace_conversation=True,
+            )
+
+        build_context.assert_awaited_once_with("project-1", "tenant-1")
+        assert workspace_context in prompt
 
 
 class TestBaseSystemPromptFilesAreClean:

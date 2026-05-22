@@ -58,7 +58,7 @@ function WorkspacePanelFallback() {
 export const AgentWorkspace: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { tenantId: urlTenantId } = useParams<{
+  const { tenantId: urlTenantId, conversation: routeConversationId } = useParams<{
     tenantId?: string | undefined;
     conversation?: string | undefined;
   }>();
@@ -101,8 +101,7 @@ export const AgentWorkspace: FC = () => {
   const [initializing, setInitializing] = useState(true);
   const queryProjectId = searchParams.get('projectId');
   const queryWorkspaceId = searchParams.get('workspaceId');
-  // Persist workspace ID when present in URL; restore from localStorage otherwise
-  const effectiveWorkspaceId = queryWorkspaceId || lastWorkspaceId;
+  const effectiveWorkspaceId = queryWorkspaceId || (routeConversationId ? null : lastWorkspaceId);
   useEffect(() => {
     if (queryWorkspaceId) {
       setLastWorkspaceId(queryWorkspaceId);

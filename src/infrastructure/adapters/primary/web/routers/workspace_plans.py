@@ -682,12 +682,14 @@ def _node_actions(node: PlanNode) -> dict[str, WorkspacePlanActionCapabilityResp
 def _outbox_actions(
     item: WorkspacePlanOutboxModel,
 ) -> dict[str, WorkspacePlanActionCapabilityResponse]:
-    retryable = item.status in {"failed", "dead_letter"}
+    retryable = item.status in {"failed", "dead_letter"} or _outbox_pending_retry_delayed(item)
     return {
         "retry_outbox": _action(
             enabled=retryable,
             label="Retry now",
-            reason=None if retryable else "Only failed or dead-letter jobs can be retried.",
+            reason=None
+            if retryable
+            else "Only failed, dead-letter, or delayed pending jobs can be retried.",
         )
     }
 
@@ -1607,7 +1609,7 @@ def _to_iteration_summary(
             nodes=list(plan.nodes.values()),
         ),
         history=_iteration_history(loop, event_items),
-        actions=_iteration_actions(plan, loop_status, iteration_nodes=iteration_nodes),
+        actions=_iteration_actions(plan, loop_status, runnable_nodes=runnable_nodes),
         findings=_iteration_review_findings(loop),
         rejected_finding_count=_metadata_int(
             loop.get("last_review_rejected_finding_count"), fallback=0
@@ -1767,7 +1769,7 @@ def _iteration_review_findings(
 
 
 _NEXT_ITERATION_UNFINISHED_REASON = (
-    "Finish or unblock the current iteration before planning the next one. "
+    "Finish or unblock all active plan nodes before planning the next iteration. "
     "Use Run or Force to continue active work."
 )
 
@@ -1776,10 +1778,10 @@ def _iteration_actions(
     plan: Plan,
     loop_status: str,
     *,
-    iteration_nodes: list[PlanNode],
+    runnable_nodes: list[PlanNode],
 ) -> dict[str, WorkspacePlanActionCapabilityResponse]:
     is_terminal = plan.status is PlanStatus.COMPLETED
-    next_iteration_ready = _current_iteration_ready_for_next(iteration_nodes)
+    next_iteration_ready = _runnable_nodes_ready_for_next(runnable_nodes)
     return {
         "pause_auto_loop": WorkspacePlanActionCapabilityResponse(
             enabled=not is_terminal and loop_status not in {"paused", "completed"},
@@ -1816,26 +1818,13 @@ def _next_iteration_action_reason(
     return None
 
 
-def _current_iteration_ready_for_next(iteration_nodes: list[PlanNode]) -> bool:
-    return bool(iteration_nodes) and all(node.intent is TaskIntent.DONE for node in iteration_nodes)
+def _runnable_nodes_ready_for_next(runnable_nodes: list[PlanNode]) -> bool:
+    return bool(runnable_nodes) and all(node.intent == TaskIntent.DONE for node in runnable_nodes)
 
 
 def _plan_ready_for_next_iteration(plan: Plan) -> bool:
     runnable_nodes = [node for node in plan.nodes.values() if node.kind.value in {"task", "verify"}]
-    if not runnable_nodes:
-        return False
-    nodes_by_id = {node.id: node for node in runnable_nodes}
-    loop = _goal_iteration_loop_metadata(plan)
-    current_iteration = _metadata_int(
-        loop.get("current_iteration"),
-        fallback=_current_iteration(runnable_nodes, nodes_by_id=nodes_by_id),
-    )
-    iteration_nodes = [
-        node
-        for node in runnable_nodes
-        if _node_iteration_index(node, nodes_by_id=nodes_by_id) == current_iteration
-    ]
-    return _current_iteration_ready_for_next(iteration_nodes)
+    return _runnable_nodes_ready_for_next(runnable_nodes)
 
 
 def _current_iteration(
@@ -2051,6 +2040,13 @@ def _iteration_next_action(  # noqa: PLR0911
         return "The iteration loop completed the root goal."
     if any(item.status in {"failed", "dead_letter"} for item in outbox_items):
         return "Recover failed queue work before advancing the sprint."
+    delayed = _earliest_delayed_pending_outbox(outbox_items)
+    if delayed is not None:
+        return (
+            "A workspace retry is waiting for backoff until "
+            f"{delayed.next_attempt_at.isoformat()}. Use Retry now on the delayed queue item "
+            "to continue immediately."
+        )
     if any(node.intent is TaskIntent.BLOCKED for node in nodes):
         return f"Resolve blockers in {phase_label}, then re-run the supervisor tick."
     if root_goal and root_goal.completion_blocker_reason:
@@ -2069,6 +2065,34 @@ def _iteration_next_action(  # noqa: PLR0911
     if any(node.intent is TaskIntent.TODO for node in nodes):
         return f"Dispatch the next {phase_label} task in the current sprint."
     return "Review feedback and create the next bounded sprint if the goal is not done."
+
+
+def _outbox_pending_retry_delayed(item: WorkspacePlanOutboxModel) -> bool:
+    return (
+        item.status == "pending"
+        and item.next_attempt_at is not None
+        and _datetime_as_utc(item.next_attempt_at) > datetime.now(UTC)
+    )
+
+
+def _earliest_delayed_pending_outbox(
+    outbox_items: list[WorkspacePlanOutboxModel],
+) -> WorkspacePlanOutboxModel | None:
+    delayed = [item for item in outbox_items if _outbox_pending_retry_delayed(item)]
+    if not delayed:
+        return None
+    return min(
+        delayed,
+        key=lambda item: _datetime_as_utc(item.next_attempt_at)
+        if item.next_attempt_at
+        else datetime.max.replace(tzinfo=UTC),
+    )
+
+
+def _datetime_as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _iteration_deliverables(
@@ -4496,6 +4520,12 @@ async def retry_workspace_plan_outbox_item(
         if item.plan_id is None:
             raise ValueError(f"outbox item {outbox_id} is not associated with a workspace plan")
         plan_id = item.plan_id
+        cleared_node_retry_delay = await _clear_node_retry_delay_for_outbox_retry(
+            db=db,
+            item=item,
+            actor_id=current_user.id,
+            reason=body.reason,
+        )
         _ = await SqlWorkspacePlanEventRepository(db).append(
             plan_id=plan_id,
             workspace_id=workspace_id,
@@ -4506,6 +4536,11 @@ async def retry_workspace_plan_outbox_item(
                 "outbox_id": outbox_id,
                 "event_type": item.event_type,
                 "reason": body.reason,
+                **(
+                    {"cleared_node_retry_delay": cleared_node_retry_delay}
+                    if cleared_node_retry_delay is not None
+                    else {}
+                ),
             },
         )
         await db.commit()
@@ -4525,6 +4560,54 @@ async def retry_workspace_plan_outbox_item(
         )
     except Exception as exc:
         raise _map_error(exc) from exc
+
+
+async def _clear_node_retry_delay_for_outbox_retry(
+    *,
+    db: AsyncSession,
+    item: WorkspacePlanOutboxModel,
+    actor_id: str,
+    reason: str | None,
+) -> dict[str, Any] | None:
+    if (
+        item.event_type != SUPERVISOR_TICK_EVENT
+        or item.plan_id is None
+        or not _outbox_retry_had_delayed_attempt(item)
+    ):
+        return None
+    payload = dict(item.payload_json or {})
+    node_id = _metadata_text(payload, "retry_node_id") or _metadata_text(payload, "node_id")
+    if not node_id:
+        return None
+    plan = await SqlPlanRepository(db).get(item.plan_id)
+    node = plan.nodes.get(PlanNodeId(value=node_id)) if plan is not None else None
+    if plan is None or plan.workspace_id != item.workspace_id or node is None:
+        return None
+    metadata = dict(node.metadata or {})
+    previous_retry_not_before = metadata.pop("retry_not_before", None)
+    if previous_retry_not_before is None:
+        return None
+    now = datetime.now(UTC)
+    metadata["operator_retry_outbox"] = {
+        "outbox_id": item.id,
+        "actor_id": actor_id,
+        "reason": reason,
+        "created_at": now.isoformat(),
+        "previous_retry_not_before": previous_retry_not_before,
+    }
+    plan.replace_node(replace(node, metadata=metadata, updated_at=now))
+    await SqlPlanRepository(db).save(plan)
+    return {
+        "node_id": node_id,
+        "previous_retry_not_before": previous_retry_not_before,
+    }
+
+
+def _outbox_retry_had_delayed_attempt(item: WorkspacePlanOutboxModel) -> bool:
+    operator_retry = item.metadata_json.get("operator_retry")
+    return isinstance(operator_retry, Mapping) and bool(
+        operator_retry.get("previous_next_attempt_at")
+    )
 
 
 @router.post("/iteration/pause", response_model=WorkspacePlanActionResultResponse)

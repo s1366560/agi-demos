@@ -309,6 +309,67 @@ class TestWorkerLaunchHeartbeat:
 
         publish.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_publish_worker_launch_progress_emits_wtp_progress(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish = AsyncMock(return_value="1-0")
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
+            publish,
+        )
+
+        await wl._publish_worker_launch_progress(
+            workspace_id="ws-1",
+            task_id="task-1",
+            attempt_id="attempt-1",
+            root_goal_task_id="root-1",
+            conversation_id="conv-1",
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+            summary="Worker stream still active; no new visible stream event for 180s",
+            phase="stream_idle",
+        )
+
+        publish.assert_awaited_once()
+        envelope = publish.await_args.args[0]
+        assert envelope.verb is WtpVerb.TASK_PROGRESS
+        assert envelope.workspace_id == "ws-1"
+        assert envelope.task_id == "task-1"
+        assert envelope.attempt_id == "attempt-1"
+        assert envelope.payload == {
+            "summary": "Worker stream still active; no new visible stream event for 180s",
+            "phase": "stream_idle",
+        }
+        assert envelope.extra_metadata["worker_conversation_id"] == "conv-1"
+        assert envelope.extra_metadata["source"] == "workspace_worker_launch"
+
+    @pytest.mark.asyncio
+    async def test_publish_worker_launch_progress_skips_without_attempt_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish = AsyncMock()
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
+            publish,
+        )
+
+        await wl._publish_worker_launch_progress(
+            workspace_id="ws-1",
+            task_id="task-1",
+            attempt_id=None,
+            root_goal_task_id="root-1",
+            conversation_id="conv-1",
+            actor_user_id="user-1",
+            worker_agent_id="worker-1",
+            leader_agent_id="leader-1",
+            summary="still active",
+            phase="stream_idle",
+        )
+
+        publish.assert_not_awaited()
+
 
 class TestWorkerStreamOrphanDetection:
     def test_finished_marker_stops_matching_worker_stream(self) -> None:
@@ -349,6 +410,83 @@ class TestWorkerStreamOrphanDetection:
             idle_seconds=900,
             orphan_grace_seconds=900,
         ) == (True, "agent_not_running_stream_idle")
+
+    def test_idle_progress_is_thresholded_and_throttled(self) -> None:
+        assert (
+            wl._should_publish_idle_stream_progress(
+                idle_seconds=179,
+                last_published_at=0,
+                now=1000,
+                interval_seconds=180,
+            )
+            is False
+        )
+        assert (
+            wl._should_publish_idle_stream_progress(
+                idle_seconds=180,
+                last_published_at=0,
+                now=1000,
+                interval_seconds=180,
+            )
+            is True
+        )
+        assert (
+            wl._should_publish_idle_stream_progress(
+                idle_seconds=240,
+                last_published_at=900,
+                now=1000,
+                interval_seconds=180,
+            )
+            is False
+        )
+        assert (
+            wl._should_publish_idle_stream_progress(
+                idle_seconds=360,
+                last_published_at=800,
+                now=1000,
+                interval_seconds=180,
+            )
+            is True
+        )
+
+    def test_idle_progress_summary_uses_objective_stream_state(self) -> None:
+        summary = wl._stream_idle_progress_summary(
+            idle_seconds=185.6,
+            last_stream_event_type="observe",
+            running_exists=True,
+            finished_message_id=None,
+        )
+
+        assert summary == (
+            "Worker stream still active; no new visible stream event for 185s; "
+            "agent:running present; last_event=observe"
+        )
+
+    def test_launch_started_summary_includes_retry_feedback(self) -> None:
+        summary = wl._worker_launch_started_summary(
+            attempt_number=9,
+            repair_brief_prompt=(
+                "verification failed:\n"
+                "  - clean_worktree_after_commit: ?? .playwright-cache/; ?? logs/"
+            ),
+        )
+
+        assert summary == (
+            "Worker attempt #9 started from verifier feedback: verification failed: "
+            "- clean_worktree_after_commit: ?? .playwright-cache/; ?? logs/"
+        )
+
+    def test_launch_started_summary_trims_long_feedback(self) -> None:
+        summary = wl._worker_launch_started_summary(
+            attempt_number="10",
+            repair_brief_prompt="x" * (wl.WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 50),
+        )
+
+        assert summary.startswith(
+            "Worker attempt #10 started from verifier feedback: "
+        )
+        assert summary.endswith("...")
+        assert len(summary) < wl.WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 80
 
 
 class TestPreStreamLaunchFailure:
@@ -614,6 +752,52 @@ class TestBuildBrief:
         assert "E2E_BASE_URL" in shell_instructions
         assert "empty string" in shell_instructions
         assert "ss" in shell_instructions
+
+    def test_brief_surfaces_latest_platform_pipeline_evidence(self) -> None:
+        task = _make_task()
+        plan_node_metadata = {
+            "iteration_phase": "review",
+            "pipeline_failed_stage": "workspace-ci/deploy",
+            "pipeline_failure_summary": "Drone build #83 failed with stale network cleanup",
+            "latest_workspace_pipeline_evidence": {
+                "id": "run-141",
+                "provider": "drone",
+                "status": "success",
+                "commit_ref": "1b2d86b",
+                "reason": "harness-native CI/CD pipeline passed",
+                "metadata": {
+                    "external_id": "s1366560/my-evo#141",
+                    "external_url": "http://localhost:8080/s1366560/my-evo/141",
+                    "drone_status": "success",
+                    "deployment_status": "deployed",
+                    "deploy_validation": "explicit_deploy_step_v1",
+                },
+            },
+        }
+
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+
+        assert "## Latest platform pipeline evidence" in brief
+        assert "Pipeline run: `run-141`" in brief
+        assert "Status: `success`" in brief
+        assert "External run: `s1366560/my-evo#141`" in brief
+        assert "Deployment status: `deployed`" in brief
+        assert "Older pipeline_failure_summary" in brief
+        assert "Drone build #83 failed" not in brief
+        assert system_context["latest_workspace_pipeline_evidence"]["id"] == "run-141"
 
     def test_renders_repair_turn_prompt_without_worktree_override(self) -> None:
         task = _make_task()
